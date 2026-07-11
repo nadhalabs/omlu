@@ -1,0 +1,21 @@
+from app.routes.public_menu import router as public_menu_router
+from app.routes.orders import router as orders_router
+from app.routes.kitchen import router as kitchen_router
+from app.routes.auth import router as auth_router
+from app.routes.admin import router as admin_router
+from app.routes.service_request import router as service_request_router
+from app.routes.dashboard import router as dashboard_router
+from app.routes.settings import router as settings_router
+from app.routes.health import router as health_router
+
+__all__ = [
+    "public_menu_router",
+    "orders_router",
+    "kitchen_router",
+    "auth_router",
+    "admin_router",
+    "service_request_router",
+    "dashboard_router",
+    "settings_router",
+    "health_router",
+]

@@ -1,0 +1,215 @@
+import secrets
+from datetime import datetime
+from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, status as fastapi_status
+from sqlalchemy.orm import Session, selectinload, joinedload
+from app.database import get_db
+from app.models.restaurant import Restaurant
+from app.models.order import Order, OrderStatusHistory
+from app.models.staff_user import StaffUser
+from app.schemas.kitchen import KitchenOrderResponse, KitchenStatusUpdateRequest
+from app.utils.auth import get_current_staff_user, RoleChecker
+
+router = APIRouter()
+
+# Setup Role Checking dependency for kitchen actions
+kitchen_access_dependency = RoleChecker(["owner", "manager", "kitchen"])
+
+ALLOWED_STATUSES = {"pending", "accepted", "preparing", "ready", "served", "rejected"}
+DEFAULT_ACTIVE_STATUSES = ["pending", "accepted", "preparing", "ready"]
+
+@router.get(
+    "/kitchen/restaurants/{restaurant_slug}/orders",
+    response_model=List[KitchenOrderResponse]
+)
+def get_kitchen_orders(
+    restaurant_slug: str,
+    status: Optional[str] = None,
+    limit: int = 100,
+    since: Optional[str] = None,
+    current_user: StaffUser = Depends(kitchen_access_dependency),
+    db: Session = Depends(get_db)
+):
+    # 1. Enforce Restaurant Tenant Isolation
+    if current_user.restaurant.slug != restaurant_slug:
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_403_FORBIDDEN,
+            detail="Access denied for this restaurant"
+        )
+
+    # 2. Validate restaurant
+    restaurant = db.query(Restaurant).filter(Restaurant.slug == restaurant_slug).first()
+    if not restaurant or not restaurant.is_active:
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_404_NOT_FOUND,
+            detail="Restaurant not found"
+        )
+
+    # 3. Limit validations
+    if limit <= 0 or limit > 200:
+        limit = 100
+
+    # 4. Status filter validation
+    status_list = DEFAULT_ACTIVE_STATUSES
+    if status:
+        individual_statuses = [s.strip() for s in status.split(",") if s.strip()]
+        for s in individual_statuses:
+            if s not in ALLOWED_STATUSES:
+                raise HTTPException(
+                    status_code=fastapi_status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid status filter value: {s}"
+                )
+        status_list = individual_statuses
+
+    # 5. Build query
+    query = db.query(Order).options(
+        joinedload(Order.table),
+        selectinload(Order.items),
+        selectinload(Order.status_history)
+    ).filter(
+        Order.restaurant_id == restaurant.id,
+        Order.status.in_(status_list)
+    )
+
+    # 6. Parse since filter (ISO 8601 timezone aware)
+    if since:
+        try:
+            since_dt = datetime.fromisoformat(since)
+            # Filter using created_at as requested in limitation
+            query = query.filter(Order.created_at >= since_dt)
+        except ValueError:
+            raise HTTPException(
+                status_code=fastapi_status.HTTP_400_BAD_REQUEST,
+                detail="Invalid 'since' ISO 8601 timestamp format."
+            )
+
+    # Sort oldest first (created_at ascending)
+    orders = query.order_by(Order.created_at.asc()).limit(limit).all()
+
+    # Sort status history records by changed_at ascending
+    for order in orders:
+        order.status_history = sorted(order.status_history, key=lambda h: h.changed_at)
+
+    # Map responses to format table number correctly
+    response = []
+    for order in orders:
+        response.append({
+            "order_number": order.order_number,
+            "public_token": order.public_token,
+            "table_number": order.table.table_number,
+            "status": order.status,
+            "subtotal": order.subtotal,
+            "customer_note": order.customer_note,
+            "created_at": order.created_at,
+            "status_history": order.status_history,
+            "items": order.items
+        })
+
+    return response
+
+
+@router.patch(
+    "/kitchen/restaurants/{restaurant_slug}/orders/{public_token}/status",
+    response_model=KitchenOrderResponse
+)
+def update_kitchen_order_status(
+    restaurant_slug: str,
+    public_token: str,
+    update_req: KitchenStatusUpdateRequest,
+    current_user: StaffUser = Depends(kitchen_access_dependency),
+    db: Session = Depends(get_db)
+):
+    # 1. Enforce Restaurant Tenant Isolation
+    if current_user.restaurant.slug != restaurant_slug:
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_403_FORBIDDEN,
+            detail="Access denied for this restaurant"
+        )
+
+    # 2. Validate restaurant
+    restaurant = db.query(Restaurant).filter(Restaurant.slug == restaurant_slug).first()
+    if not restaurant or not restaurant.is_active:
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_404_NOT_FOUND,
+            detail="Restaurant not found"
+        )
+
+    # Allowed state transition map
+    ALLOWED_TRANSITIONS = {
+        "pending": {"accepted", "rejected"},
+        "accepted": {"preparing", "rejected"},
+        "preparing": {"ready"},
+        "ready": {"served"}
+    }
+
+    try:
+        # Start of Row Lock / Update transaction block
+        # Find order using both restaurant and public token to enforce isolation.
+        order = db.query(Order).filter(
+            Order.restaurant_id == restaurant.id,
+            Order.public_token == public_token
+        ).with_for_update().first()
+
+        if not order:
+            raise HTTPException(
+                status_code=fastapi_status.HTTP_404_NOT_FOUND,
+                detail="Order not found"
+            )
+
+        old_status = order.status
+        new_status = update_req.status
+
+        # Transition validation
+        if old_status not in ALLOWED_TRANSITIONS or new_status not in ALLOWED_TRANSITIONS[old_status]:
+            raise HTTPException(
+                status_code=fastapi_status.HTTP_409_CONFLICT,
+                detail=f"Invalid transition from '{old_status}' to '{new_status}'."
+            )
+
+        # Update order status
+        order.status = new_status
+
+        # Insert status history entry
+        history_entry = OrderStatusHistory(
+            order_id=order.id,
+            old_status=old_status,
+            new_status=new_status,
+            changed_by_staff_id=None
+        )
+        db.add(history_entry)
+
+        db.commit()
+
+        # Load committed order with relationships loaded separately
+        full_order = db.query(Order).options(
+            joinedload(Order.table),
+            selectinload(Order.items),
+            selectinload(Order.status_history)
+        ).filter(
+            Order.id == order.id
+        ).first()
+
+        # Sort history for response
+        full_order.status_history = sorted(full_order.status_history, key=lambda h: h.changed_at)
+
+        return {
+            "order_number": full_order.order_number,
+            "public_token": full_order.public_token,
+            "table_number": full_order.table.table_number,
+            "status": full_order.status,
+            "subtotal": full_order.subtotal,
+            "customer_note": full_order.customer_note,
+            "created_at": full_order.created_at,
+            "status_history": full_order.status_history,
+            "items": full_order.items
+        }
+
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Internal database update failure: {str(e)}"
+        )

@@ -1,0 +1,12 @@
+backend/.env
+frontend/.env.local
+backend/venv/
+frontend/.next/
+__pycache__/
+*.pyc
+*.db
+*.sqlite3
+*.pem
+*.key
+*.jks
+.DS_Store

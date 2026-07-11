@@ -1,0 +1,59 @@
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
+from typing import List, Optional
+from decimal import Decimal
+from datetime import datetime
+
+class OrderItemRequest(BaseModel):
+    menu_item_id: int
+    quantity: int = Field(..., ge=1, le=50)
+    item_note: Optional[str] = Field(None, max_length=300)
+
+class PublicOrderCreateRequest(BaseModel):
+    items: List[OrderItemRequest] = Field(..., min_length=1, max_length=50)
+    customer_note: Optional[str] = Field(None, max_length=500)
+
+class PublicOrderResponseItem(BaseModel):
+    menu_item_id: Optional[int] = None
+    item_name: str
+    quantity: int
+    unit_price: Decimal
+    total_price: Decimal
+    item_note: Optional[str] = None
+
+    @field_serializer("unit_price")
+    def serialize_unit_price(self, price: Decimal) -> str:
+        return f"{price:.2f}"
+
+    @field_serializer("total_price")
+    def serialize_total_price(self, price: Decimal) -> str:
+        return f"{price:.2f}"
+
+    model_config = ConfigDict(from_attributes=True)
+
+class OrderStatusHistoryResponse(BaseModel):
+    old_status: Optional[str] = None
+    new_status: str
+    changed_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+class PublicOrderResponse(BaseModel):
+    order_number: str
+    public_token: str
+    status: str
+    subtotal: Decimal
+    table_number: str
+    table_code: Optional[str] = None          # Added for service request routing
+    restaurant_name: Optional[str] = None
+    restaurant_slug: Optional[str] = None     # Added for service request routing
+    created_at: datetime
+    customer_note: Optional[str] = None
+    items: List[PublicOrderResponseItem]
+    status_history: List[OrderStatusHistoryResponse]
+    service_requests_enabled: Optional[bool] = True  # Pass through restaurant setting
+
+    @field_serializer("subtotal")
+    def serialize_subtotal(self, subtotal: Decimal) -> str:
+        return f"{subtotal:.2f}"
+
+    model_config = ConfigDict(from_attributes=True)
