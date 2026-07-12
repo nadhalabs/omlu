@@ -2,23 +2,40 @@ import Link from "next/link";
 
 export default function Home() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center min-h-screen bg-zinc-50 dark:bg-zinc-950 px-6 py-12 text-center">
-      <main className="max-w-md w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-8 shadow-sm">
-        <h1 className="text-3xl font-extrabold text-amber-600 tracking-tight mb-2">
-          Nadha Serve
-        </h1>
-        <p className="text-base text-zinc-500 dark:text-zinc-400 font-medium mb-8">
-          Restaurant QR Ordering System
-        </p>
+    <div className="flex min-h-screen flex-col bg-zinc-50 px-6 py-10 text-zinc-950">
+      <main className="mx-auto flex w-full max-w-5xl flex-1 items-center">
+        <section className="w-full max-w-xl">
+          <p className="mb-3 text-sm font-black uppercase tracking-widest text-amber-700">
+            Nadha Serve
+          </p>
+          <h1 className="text-4xl font-black tracking-tight text-zinc-950 sm:text-5xl">
+            Nadha Serve
+          </h1>
+          <p className="mt-5 text-lg leading-8 text-zinc-700">
+            Restaurant ordering, table service, kitchen, billing, and staff
+            management in one system.
+          </p>
 
-        <div className="flex flex-col gap-4">
-          <Link
-            href="/menu/nadha-demo-cafe/T1-DEMO"
-            className="flex items-center justify-center gap-2 h-12 w-full rounded-2xl bg-amber-600 hover:bg-amber-700 text-white font-bold shadow-sm transition cursor-pointer"
-          >
-            🚀 Open Demo Menu (Table 1)
-          </Link>
-        </div>
+          <div className="mt-9 flex flex-col gap-3 sm:flex-row">
+            <Link
+              href="/login"
+              className="inline-flex h-12 items-center justify-center rounded-lg bg-zinc-950 px-6 text-sm font-bold text-white transition hover:bg-zinc-800"
+            >
+              Restaurant Login
+            </Link>
+            <Link
+              href="/register"
+              className="inline-flex h-12 items-center justify-center rounded-lg border border-zinc-300 bg-white px-6 text-sm font-bold text-zinc-950 transition hover:border-zinc-500"
+            >
+              Create Restaurant
+            </Link>
+          </div>
+
+          <p className="mt-8 max-w-lg text-sm leading-6 text-zinc-500">
+            Customers should scan the QR code placed on their table to view the
+            menu and order.
+          </p>
+        </section>
       </main>
     </div>
   );

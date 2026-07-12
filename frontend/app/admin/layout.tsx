@@ -14,7 +14,7 @@ export default async function AdminLayout({
 
   // Redirect to login if token cookie is missing
   if (!tokenCookie || !tokenCookie.value) {
-    redirect("/staff/login");
+    redirect("/login");
   }
 
   const backendBaseUrl = process.env.BACKEND_API_BASE_URL || "http://localhost:8000";
@@ -31,13 +31,13 @@ export default async function AdminLayout({
 
     if (!res.ok) {
       // Token is invalid/expired
-      redirect("/staff/login");
+      redirect("/login");
     }
 
     staffInfo = await res.json();
   } catch {
     // If backend connection fails, redirect to login
-    redirect("/staff/login");
+    redirect("/login");
   }
 
   // Only owner and admin roles are permitted to access administrative tools.
@@ -57,7 +57,7 @@ export default async function AdminLayout({
             You do not have administrative permissions to access the admin panel.
           </p>
           <a
-            href="/staff/login"
+            href="/login"
             className="inline-block px-6 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-semibold rounded-xl transition"
           >
             Return to Login
@@ -86,6 +86,7 @@ export default async function AdminLayout({
           {/* Navigation Links */}
           <nav className="flex flex-col gap-2">
             <AdminSidebarLink href="/admin/dashboard" label="📊 Dashboard" />
+            <AdminSidebarLink href="/admin/setup" label="Setup" />
             <AdminSidebarLink href="/admin/menu" label="🍔 Menu Items" />
             <AdminSidebarLink href="/admin/tables" label="📋 Tables Map" />
             <AdminSidebarLink href="/admin/staff" label="👥 Staff Management" />

@@ -11,12 +11,19 @@ class Restaurant(Base):
     name: Mapped[str] = mapped_column(String(255))
     slug: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     logo_url: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    contact_email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    phone_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    city: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     # Restaurant settings
     timezone: Mapped[str] = mapped_column(String(100), default="Asia/Kolkata", server_default="Asia/Kolkata")
     currency: Mapped[str] = mapped_column(String(10), default="INR", server_default="INR")
     order_prefix: Mapped[str] = mapped_column(String(10), default="NS", server_default="NS")
     service_requests_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    plan: Mapped[str] = mapped_column(String(50), default="free_pilot", server_default="free_pilot", nullable=False)
+    subscription_status: Mapped[str] = mapped_column(String(50), default="active", server_default="active", nullable=False)
+    trial_started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    trial_ends_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

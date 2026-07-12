@@ -197,6 +197,26 @@ export interface StaffLoginRequest {
   restaurant_slug: string;
 }
 
+export interface RestaurantRegistrationRequest {
+  restaurant_name: string;
+  restaurant_slug: string;
+  contact_email: string;
+  phone_number: string;
+  city: string;
+  owner_full_name: string;
+  owner_username: string;
+  owner_email: string;
+  password: string;
+  confirm_password: string;
+  accept_terms: boolean;
+}
+
+export interface RestaurantRegistrationResponse {
+  success: boolean;
+  restaurant_slug: string;
+  next_path: string;
+}
+
 export interface StaffSummaryResponse {
   name: string;
   username: string | null;

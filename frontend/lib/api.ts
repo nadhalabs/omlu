@@ -9,6 +9,8 @@ import {
   PublicOrderResponse,
   KitchenOrderResponse,
   StaffLoginRequest,
+  RestaurantRegistrationRequest,
+  RestaurantRegistrationResponse,
   StaffSummaryResponse,
   CurrentStaffResponse,
   AdminCategoryResponse,
@@ -478,6 +480,38 @@ export async function staffLogin(
 
     if (!response.ok) {
       let message = "Login failed.";
+      try {
+        const errorData = await response.json();
+        if (errorData && typeof errorData.detail === "string") {
+          message = errorData.detail;
+        }
+      } catch {}
+      throw new ApiError(response.status, message);
+    }
+
+    return await response.json();
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
+    }
+    throw new ApiError(500, "Could not connect to the Next.js API server.");
+  }
+}
+
+export async function registerRestaurant(
+  body: RestaurantRegistrationRequest
+): Promise<RestaurantRegistrationResponse> {
+  try {
+    const response = await fetch("/api/restaurants/register", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      let message = "Registration failed.";
       try {
         const errorData = await response.json();
         if (errorData && typeof errorData.detail === "string") {

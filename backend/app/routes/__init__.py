@@ -10,6 +10,7 @@ from app.routes.health import router as health_router
 from app.routes.bills import router as bills_router
 from app.routes.sessions import router as sessions_router
 from app.routes.staff_management import router as staff_management_router
+from app.routes.registration import router as registration_router
 
 __all__ = [
     "public_menu_router",
@@ -24,4 +25,5 @@ __all__ = [
     "bills_router",
     "sessions_router",
     "staff_management_router",
+    "registration_router",
 ]

@@ -9,7 +9,7 @@ export async function requireStaffRole(
   const cookieStore = await cookies();
   const tokenCookie = cookieStore.get("staff_token");
   if (!tokenCookie?.value) {
-    redirect("/staff/login");
+    redirect("/login");
   }
 
   const backendBaseUrl = process.env.BACKEND_API_BASE_URL || "http://localhost:8000";
@@ -22,17 +22,17 @@ export async function requireStaffRole(
       },
       cache: "no-store",
     });
-    if (!res.ok) redirect("/staff/login");
+    if (!res.ok) redirect("/login");
     staffInfo = await res.json();
   } catch {
-    redirect("/staff/login");
+    redirect("/login");
   }
 
   if (staffInfo.must_change_password && !options.allowPasswordChange) {
     redirect("/staff/change-password");
   }
   if (!allowedRoles.includes(staffInfo.role)) {
-    redirect("/staff/login");
+    redirect("/login");
   }
   return staffInfo;
 }
