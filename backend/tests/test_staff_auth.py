@@ -35,33 +35,46 @@ def setup_auth_test_data():
     owner = StaffUser(
         restaurant_id=restaurant.id,
         name="Test Owner",
+        username="test_owner",
         email="owner@test.local",
         password_hash=hash_password("owner123"),
         role="owner",
         is_active=True
     )
     # 2. Kitchen (Active)
+    admin = StaffUser(
+        restaurant_id=restaurant.id,
+        name="Test Admin",
+        username="test_admin",
+        email="admin@test.local",
+        password_hash=hash_password("admin123"),
+        role="admin",
+        is_active=True
+    )
     kitchen = StaffUser(
         restaurant_id=restaurant.id,
         name="Test Kitchen",
+        username="test_kitchen",
         email="kitchen@test.local",
         password_hash=hash_password("kitchen123"),
         role="kitchen",
         is_active=True
     )
     # 3. Waiter (Active)
-    waiter = StaffUser(
+    staff_legacy_waiter = StaffUser(
         restaurant_id=restaurant.id,
-        name="Test Waiter",
-        email="waiter@test.local",
-        password_hash=hash_password("waiter123"),
-        role="waiter",
+        name="Test Staff",
+        username="test_staff",
+        email="staff@test.local",
+        password_hash=hash_password("staff123"),
+        role="staff",
         is_active=True
     )
     # 4. Inactive Staff
     inactive_staff = StaffUser(
         restaurant_id=restaurant.id,
         name="Inactive Staff",
+        username="inactive_staff",
         email="inactive@test.local",
         password_hash=hash_password("inactive123"),
         role="kitchen",
@@ -71,6 +84,7 @@ def setup_auth_test_data():
     inactive_res_staff = StaffUser(
         restaurant_id=inactive_restaurant.id,
         name="Inactive Res Staff",
+        username="inactive_res_staff",
         email="resinactive@test.local",
         password_hash=hash_password("resinactive123"),
         role="owner",
@@ -80,29 +94,33 @@ def setup_auth_test_data():
     other_staff = StaffUser(
         restaurant_id=other_restaurant.id,
         name="Other Res Staff",
+        username="other_staff",
         email="other@test.local",
         password_hash=hash_password("other123"),
         role="kitchen",
         is_active=True
     )
 
-    db.add_all([owner, kitchen, waiter, inactive_staff, inactive_res_staff, other_staff])
+    db.add_all([owner, admin, kitchen, staff_legacy_waiter, inactive_staff, inactive_res_staff, other_staff])
     db.commit()
 
     data = {
         "restaurant_id": restaurant.id,
+        "other_restaurant_id": other_restaurant.id,
         "restaurant_slug": restaurant.slug,
         "other_restaurant_slug": other_restaurant.slug,
         "inactive_restaurant_slug": inactive_restaurant.slug,
         "owner_email": owner.email,
+        "admin_email": admin.email,
         "kitchen_email": kitchen.email,
-        "waiter_email": waiter.email,
+        "staff_email": staff_legacy_waiter.email,
         "inactive_email": inactive_staff.email,
         "inactive_res_email": inactive_res_staff.email,
         "other_email": other_staff.email,
         "owner_id": owner.id,
+        "admin_id": admin.id,
         "kitchen_id": kitchen.id,
-        "waiter_id": waiter.id,
+        "staff_id": staff_legacy_waiter.id,
         "other_id": other_staff.id,
     }
     
@@ -118,7 +136,7 @@ def setup_auth_test_data():
 def test_valid_login(setup_auth_test_data):
     data = setup_auth_test_data
     payload = {
-        "email": data["owner_email"],
+        "login": data["owner_email"],
         "password": "owner123",
         "restaurant_slug": data["restaurant_slug"]
     }
@@ -129,12 +147,60 @@ def test_valid_login(setup_auth_test_data):
     assert res_data["token_type"] == "bearer"
     assert res_data["staff"]["name"] == "Test Owner"
     assert res_data["staff"]["role"] == "owner"
+    assert res_data["staff"]["status"] == "active"
+
+
+def test_valid_username_login_is_case_insensitive_for_restaurant(setup_auth_test_data):
+    data = setup_auth_test_data
+    payload = {
+        "login": "test_owner",
+        "password": "owner123",
+        "restaurant_slug": data["restaurant_slug"].upper()
+    }
+    response = client.post("/auth/staff/login", json=payload)
+    assert response.status_code == 200
+    assert response.json()["staff"]["username"] == "test_owner"
+
+
+@pytest.mark.parametrize(
+    ("login_key", "password", "role"),
+    [
+        ("admin_email", "admin123", "admin"),
+        ("staff_email", "staff123", "staff"),
+        ("kitchen_email", "kitchen123", "kitchen"),
+    ],
+)
+def test_role_logins(setup_auth_test_data, login_key, password, role):
+    data = setup_auth_test_data
+    response = client.post(
+        "/auth/staff/login",
+        json={
+            "login": data[login_key],
+            "password": password,
+            "restaurant_slug": data["restaurant_slug"],
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["staff"]["role"] == role
+
+
+def test_correct_credentials_wrong_restaurant_denied(setup_auth_test_data):
+    data = setup_auth_test_data
+    response = client.post(
+        "/auth/staff/login",
+        json={
+            "login": data["owner_email"],
+            "password": "owner123",
+            "restaurant_slug": data["other_restaurant_slug"],
+        },
+    )
+    assert response.status_code == 401
 
 
 def test_wrong_password(setup_auth_test_data):
     data = setup_auth_test_data
     payload = {
-        "email": data["owner_email"],
+        "login": data["owner_email"],
         "password": "wrong-password",
         "restaurant_slug": data["restaurant_slug"]
     }
@@ -146,7 +212,7 @@ def test_wrong_password(setup_auth_test_data):
 def test_unknown_restaurant(setup_auth_test_data):
     data = setup_auth_test_data
     payload = {
-        "email": data["owner_email"],
+        "login": data["owner_email"],
         "password": "owner123",
         "restaurant_slug": "unknown-restaurant-slug"
     }
@@ -157,7 +223,7 @@ def test_unknown_restaurant(setup_auth_test_data):
 def test_unknown_email(setup_auth_test_data):
     data = setup_auth_test_data
     payload = {
-        "email": "unknown-email@test.local",
+        "login": "unknown-email@test.local",
         "password": "owner123",
         "restaurant_slug": data["restaurant_slug"]
     }
@@ -168,7 +234,7 @@ def test_unknown_email(setup_auth_test_data):
 def test_inactive_staff_login_denied(setup_auth_test_data):
     data = setup_auth_test_data
     payload = {
-        "email": data["inactive_email"],
+        "login": data["inactive_email"],
         "password": "inactive123",
         "restaurant_slug": data["restaurant_slug"]
     }
@@ -179,7 +245,7 @@ def test_inactive_staff_login_denied(setup_auth_test_data):
 def test_inactive_restaurant_login_denied(setup_auth_test_data):
     data = setup_auth_test_data
     payload = {
-        "email": data["inactive_res_email"],
+        "login": data["inactive_res_email"],
         "password": "resinactive123",
         "restaurant_slug": data["inactive_restaurant_slug"]
     }
@@ -254,10 +320,10 @@ def test_kitchen_role_access_allowed(setup_auth_test_data):
     assert response.status_code == 200
 
 
-def test_waiter_denied_kitchen_access(setup_auth_test_data):
+def test_staff_denied_kitchen_access(setup_auth_test_data):
     data = setup_auth_test_data
     token = create_access_token(
-        data={"sub": str(data["waiter_id"]), "restaurant_id": data["restaurant_id"], "role": "waiter"}
+        data={"sub": str(data["staff_id"]), "restaurant_id": data["restaurant_id"], "role": "staff"}
     )
     response = client.get(
         f"/kitchen/restaurants/{data['restaurant_slug']}/orders",
@@ -271,7 +337,7 @@ def test_cross_restaurant_access_denied(setup_auth_test_data):
     data = setup_auth_test_data
     # Other staff token attempts to access restaurant slug of test restaurant
     token = create_access_token(
-        data={"sub": str(data["other_id"]), "restaurant_id": 9999, "role": "kitchen"} # Fake restaurant ID
+        data={"sub": str(data["other_id"]), "restaurant_id": data["other_restaurant_id"], "role": "kitchen"}
     )
     response = client.get(
         f"/kitchen/restaurants/{data['restaurant_slug']}/orders",
@@ -292,7 +358,7 @@ def test_password_hash_is_not_plain_text(setup_auth_test_data):
 def test_login_rate_limiting(setup_auth_test_data):
     data = setup_auth_test_data
     payload = {
-        "email": data["owner_email"],
+        "login": data["owner_email"],
         "password": "owner123",
         "restaurant_slug": data["restaurant_slug"]
     }
@@ -305,3 +371,238 @@ def test_login_rate_limiting(setup_auth_test_data):
     res = client.post("/auth/staff/login", json=payload)
     assert res.status_code == 429
     assert "too many login attempts" in res.json()["detail"].lower()
+
+
+def test_owner_can_create_staff_account_and_staff_can_login(setup_auth_test_data):
+    data = setup_auth_test_data
+    owner_token = create_access_token(
+        data={"sub": str(data["owner_id"]), "restaurant_id": data["restaurant_id"], "role": "owner"}
+    )
+    response = client.post(
+        "/admin/staff",
+        headers={"Authorization": f"Bearer {owner_token}"},
+        json={
+            "name": "Created Staff",
+            "username": "created_staff",
+            "email": "created-staff@test.local",
+            "role": "staff",
+            "temporary_password": "temporary123",
+        },
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["role"] == "staff"
+    assert body["status"] == "active"
+    assert "password_hash" not in body
+
+    login_response = client.post(
+        "/auth/staff/login",
+        json={
+            "login": "created_staff",
+            "password": "temporary123",
+            "restaurant_slug": data["restaurant_slug"],
+        },
+    )
+    assert login_response.status_code == 200
+
+
+def test_admin_staff_management_cannot_cross_restaurants(setup_auth_test_data):
+    data = setup_auth_test_data
+    owner_token = create_access_token(
+        data={"sub": str(data["owner_id"]), "restaurant_id": data["restaurant_id"], "role": "owner"}
+    )
+    response = client.patch(
+        f"/admin/staff/{data['other_id']}",
+        headers={"Authorization": f"Bearer {owner_token}"},
+        json={"status": "suspended", "reason": "isolation test"},
+    )
+    assert response.status_code == 404
+
+
+def test_suspend_staff_revokes_login_session(setup_auth_test_data):
+    data = setup_auth_test_data
+    owner_token = create_access_token(
+        data={"sub": str(data["owner_id"]), "restaurant_id": data["restaurant_id"], "role": "owner"}
+    )
+    login_response = client.post(
+        "/auth/staff/login",
+        json={
+            "login": data["staff_email"],
+            "password": "staff123",
+            "restaurant_slug": data["restaurant_slug"],
+        },
+    )
+    assert login_response.status_code == 200
+    staff_token = login_response.json()["access_token"]
+
+    suspend_response = client.patch(
+        f"/admin/staff/{data['staff_id']}",
+        headers={"Authorization": f"Bearer {owner_token}"},
+        json={"status": "suspended", "reason": "end of shift"},
+    )
+    assert suspend_response.status_code == 200
+    assert suspend_response.json()["status"] == "suspended"
+    assert suspend_response.json()["active_session_count"] == 0
+
+    me_response = client.get(
+        "/auth/staff/me",
+        headers={"Authorization": f"Bearer {staff_token}"},
+    )
+    assert me_response.status_code == 401
+
+
+def test_kitchen_denied_staff_endpoint(setup_auth_test_data):
+    data = setup_auth_test_data
+    login_response = client.post(
+        "/auth/staff/login",
+        json={
+            "login": data["kitchen_email"],
+            "password": "kitchen123",
+            "restaurant_slug": data["restaurant_slug"],
+        },
+    )
+    assert login_response.status_code == 200
+    token = login_response.json()["access_token"]
+    response = client.get("/staff/sessions", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 403
+
+
+def test_admin_cannot_remove_or_reset_owner(setup_auth_test_data):
+    data = setup_auth_test_data
+    admin_login = client.post(
+        "/auth/staff/login",
+        json={
+            "login": data["admin_email"],
+            "password": "admin123",
+            "restaurant_slug": data["restaurant_slug"],
+        },
+    )
+    assert admin_login.status_code == 200
+    admin_token = admin_login.json()["access_token"]
+    remove_response = client.delete(
+        f"/admin/staff/{data['owner_id']}",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert remove_response.status_code == 403
+    reset_response = client.post(
+        f"/admin/staff/{data['owner_id']}/reset-password",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={"temporary_password": "new-owner-temp"},
+    )
+    assert reset_response.status_code == 403
+
+
+def test_first_login_password_change_enforced(setup_auth_test_data):
+    data = setup_auth_test_data
+    owner_token = create_access_token(
+        data={"sub": str(data["owner_id"]), "restaurant_id": data["restaurant_id"], "role": "owner"}
+    )
+    create_response = client.post(
+        "/admin/staff",
+        headers={"Authorization": f"Bearer {owner_token}"},
+        json={
+            "name": "First Login Staff",
+            "username": "first_login_staff",
+            "email": "first-login-staff@test.local",
+            "role": "staff",
+            "temporary_password": "temporary123",
+        },
+    )
+    assert create_response.status_code == 201
+    login_response = client.post(
+        "/auth/staff/login",
+        json={
+            "login": "first_login_staff",
+            "password": "temporary123",
+            "restaurant_slug": data["restaurant_slug"],
+        },
+    )
+    assert login_response.status_code == 200
+    token = login_response.json()["access_token"]
+    blocked_response = client.get("/staff/sessions", headers={"Authorization": f"Bearer {token}"})
+    assert blocked_response.status_code == 403
+
+    change_response = client.post(
+        "/auth/staff/change-password",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"current_password": "temporary123", "new_password": "permanent123"},
+    )
+    assert change_response.status_code == 200
+    assert change_response.json()["staff"]["must_change_password"] is False
+    new_token = change_response.json()["access_token"]
+    allowed_response = client.get("/staff/sessions", headers={"Authorization": f"Bearer {new_token}"})
+    assert allowed_response.status_code == 200
+    old_token_response = client.get("/auth/staff/me", headers={"Authorization": f"Bearer {token}"})
+    assert old_token_response.status_code == 401
+
+
+def test_logout_revokes_current_session(setup_auth_test_data):
+    data = setup_auth_test_data
+    login_response = client.post(
+        "/auth/staff/login",
+        json={
+            "login": data["owner_email"],
+            "password": "owner123",
+            "restaurant_slug": data["restaurant_slug"],
+        },
+    )
+    assert login_response.status_code == 200
+    token = login_response.json()["access_token"]
+    logout_response = client.post("/auth/staff/logout", headers={"Authorization": f"Bearer {token}"})
+    assert logout_response.status_code == 200
+    me_response = client.get("/auth/staff/me", headers={"Authorization": f"Bearer {token}"})
+    assert me_response.status_code == 401
+
+
+def test_password_reset_revokes_existing_token(setup_auth_test_data):
+    data = setup_auth_test_data
+    owner_token = create_access_token(
+        data={"sub": str(data["owner_id"]), "restaurant_id": data["restaurant_id"], "role": "owner"}
+    )
+    create_response = client.post(
+        "/admin/staff",
+        headers={"Authorization": f"Bearer {owner_token}"},
+        json={
+            "name": "Reset Token Staff",
+            "username": "reset_token_staff",
+            "email": "reset-token-staff@test.local",
+            "role": "staff",
+            "temporary_password": "temporary123",
+        },
+    )
+    assert create_response.status_code == 201
+    staff_id = create_response.json()["id"]
+    change_login = client.post(
+        "/auth/staff/login",
+        json={
+            "login": "reset_token_staff",
+            "password": "temporary123",
+            "restaurant_slug": data["restaurant_slug"],
+        },
+    )
+    assert change_login.status_code == 200
+    change_response = client.post(
+        "/auth/staff/change-password",
+        headers={"Authorization": f"Bearer {change_login.json()['access_token']}"},
+        json={"current_password": "temporary123", "new_password": "permanent123"},
+    )
+    assert change_response.status_code == 200
+    staff_login = client.post(
+        "/auth/staff/login",
+        json={
+            "login": "reset_token_staff",
+            "password": "permanent123",
+            "restaurant_slug": data["restaurant_slug"],
+        },
+    )
+    assert staff_login.status_code == 200
+    staff_token = staff_login.json()["access_token"]
+    reset_response = client.post(
+        f"/admin/staff/{staff_id}/reset-password",
+        headers={"Authorization": f"Bearer {owner_token}"},
+        json={"temporary_password": "newtemporary123"},
+    )
+    assert reset_response.status_code == 200
+    assert reset_response.json()["must_change_password"] is True
+    me_response = client.get("/auth/staff/me", headers={"Authorization": f"Bearer {staff_token}"})
+    assert me_response.status_code == 401

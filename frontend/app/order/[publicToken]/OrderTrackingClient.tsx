@@ -135,7 +135,7 @@ export default function OrderTrackingClient({
 
   // Initial fetch and visibility change handler
   useEffect(() => {
-    fetchOrder(true);
+    const timeout = window.setTimeout(() => fetchOrder(true), 0);
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
@@ -145,6 +145,7 @@ export default function OrderTrackingClient({
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => {
+      window.clearTimeout(timeout);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [publicToken]);

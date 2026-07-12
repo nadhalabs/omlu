@@ -77,9 +77,11 @@ export default function MenuClient({
   };
 
   useEffect(() => {
-    fetchMenu();
-    // Initialize idempotency key once on page load
-    setIdempotencyKey(crypto.randomUUID());
+    const timeout = window.setTimeout(() => {
+      fetchMenu();
+      setIdempotencyKey(crypto.randomUUID());
+    }, 0);
+    return () => window.clearTimeout(timeout);
   }, [restaurantSlug, tableCode]);
 
   useEffect(() => {

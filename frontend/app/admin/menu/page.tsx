@@ -11,9 +11,12 @@ import {
   updateAdminMenuItem,
   deleteAdminMenuItem,
   updateAdminMenuItemAvailability,
-  ApiError,
 } from "@/lib/api";
 import { AdminCategoryResponse, AdminMenuItemResponse } from "@/lib/types";
+
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
 
 export default function AdminMenuPage() {
   // Categories States
@@ -80,8 +83,8 @@ export default function AdminMenuPage() {
       if (catsData.length > 0) {
         setItemCategoryId(String(catsData[0].id));
       }
-    } catch (e: any) {
-      setCatError(e.message || "Failed to load categories.");
+    } catch (e) {
+      setCatError(getErrorMessage(e, "Failed to load categories."));
     } finally {
       setCatLoading(false);
     }
@@ -90,15 +93,16 @@ export default function AdminMenuPage() {
       const itemsData = await getAdminMenuItems();
       setItems(itemsData);
       setItemsError(null);
-    } catch (e: any) {
-      setItemsError(e.message || "Failed to load menu items.");
+    } catch (e) {
+      setItemsError(getErrorMessage(e, "Failed to load menu items."));
     } finally {
       setItemsLoading(false);
     }
   };
 
   useEffect(() => {
-    loadData();
+    const timeout = window.setTimeout(() => loadData(), 0);
+    return () => window.clearTimeout(timeout);
   }, []);
 
   // Filter items based on Category Selection & Search Query
@@ -166,8 +170,8 @@ export default function AdminMenuPage() {
       setCategories(catsData);
       const itemsData = await getAdminMenuItems();
       setItems(itemsData);
-    } catch (err: any) {
-      setCatFormError(err.message || "Failed to save category.");
+    } catch (err) {
+      setCatFormError(getErrorMessage(err, "Failed to save category."));
     } finally {
       setCatSaving(false);
     }
@@ -202,8 +206,8 @@ export default function AdminMenuPage() {
       // Reload categories list
       const catsData = await getAdminCategories();
       setCategories(catsData);
-    } catch (err: any) {
-      alert(`Delete rejected: ${err.message}`);
+    } catch (err) {
+      alert(`Delete rejected: ${getErrorMessage(err, "Delete failed.")}`);
     }
   };
 
@@ -282,8 +286,8 @@ export default function AdminMenuPage() {
       setItems(itemsData);
       const catsData = await getAdminCategories();
       setCategories(catsData);
-    } catch (err: any) {
-      setItemFormError(err.message || "Failed to save menu item.");
+    } catch (err) {
+      setItemFormError(getErrorMessage(err, "Failed to save menu item."));
     } finally {
       setItemSaving(false);
     }
@@ -336,8 +340,8 @@ export default function AdminMenuPage() {
       setItems((prev) =>
         prev.map((i) => (i.id === item.id ? { ...i, is_available: nextAvail } : i))
       );
-    } catch (err: any) {
-      alert(`Failed to update availability: ${err.message}`);
+    } catch (err) {
+      alert(`Failed to update availability: ${getErrorMessage(err, "Update failed.")}`);
     } finally {
       setUpdatingAvail((prev) => ({ ...prev, [item.id]: false }));
     }
@@ -357,8 +361,8 @@ export default function AdminMenuPage() {
       setItems(itemsData);
       const catsData = await getAdminCategories();
       setCategories(catsData);
-    } catch (err: any) {
-      alert(`Delete rejected: ${err.message}`);
+    } catch (err) {
+      alert(`Delete rejected: ${getErrorMessage(err, "Delete failed.")}`);
     }
   };
 

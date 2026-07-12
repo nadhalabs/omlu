@@ -95,20 +95,20 @@ def bill_context():
         role="owner",
         is_active=True,
     )
-    manager = StaffUser(
+    staff_legacy_manager = StaffUser(
         restaurant_id=restaurant.id,
         name="Bill Manager",
-        email=f"manager-{uuid.uuid4().hex[:8]}@bill.local",
-        password_hash=hash_password("manager123"),
-        role="manager",
+        email=f"admin-{uuid.uuid4().hex[:8]}@bill.local",
+        password_hash=hash_password("admin123"),
+        role="admin",
         is_active=True,
     )
-    waiter = StaffUser(
+    staff_legacy_waiter = StaffUser(
         restaurant_id=restaurant.id,
         name="Bill Waiter",
-        email=f"waiter-{uuid.uuid4().hex[:8]}@bill.local",
-        password_hash=hash_password("waiter123"),
-        role="waiter",
+        email=f"staff-{uuid.uuid4().hex[:8]}@bill.local",
+        password_hash=hash_password("staff123"),
+        role="staff",
         is_active=True,
     )
     kitchen = StaffUser(
@@ -127,7 +127,7 @@ def bill_context():
         role="owner",
         is_active=True,
     )
-    db.add_all([owner, manager, waiter, kitchen, other_owner])
+    db.add_all([owner, staff_legacy_manager, staff_legacy_waiter, kitchen, other_owner])
     db.commit()
 
     data = {
@@ -140,11 +140,11 @@ def bill_context():
         "session_token": session.public_token,
         "item_id": item.id,
         "owner_id": owner.id,
-        "manager_id": manager.id,
-        "waiter_id": waiter.id,
+        "admin_id": staff_legacy_manager.id,
+        "staff_id": staff_legacy_waiter.id,
         "owner_token": create_access_token({"sub": str(owner.id), "restaurant_id": restaurant.id, "role": "owner"}),
-        "manager_token": create_access_token({"sub": str(manager.id), "restaurant_id": restaurant.id, "role": "manager"}),
-        "waiter_token": create_access_token({"sub": str(waiter.id), "restaurant_id": restaurant.id, "role": "waiter"}),
+        "admin_token": create_access_token({"sub": str(staff_legacy_manager.id), "restaurant_id": restaurant.id, "role": "admin"}),
+        "staff_token": create_access_token({"sub": str(staff_legacy_waiter.id), "restaurant_id": restaurant.id, "role": "staff"}),
         "kitchen_token": create_access_token({"sub": str(kitchen.id), "restaurant_id": restaurant.id, "role": "kitchen"}),
         "other_token": create_access_token({"sub": str(other_owner.id), "restaurant_id": other_restaurant.id, "role": "owner"}),
     }
@@ -314,7 +314,7 @@ def test_issue_bill(bill_context):
 
     response = client.post(
         f"/staff/bills/{bill['bill_number']}/issue",
-        headers={"Authorization": f"Bearer {bill_context['waiter_token']}"},
+        headers={"Authorization": f"Bearer {bill_context['staff_token']}"},
     )
 
     assert response.status_code == 200
@@ -328,8 +328,8 @@ def test_issue_bill(bill_context):
     db.close()
 
 
-@pytest.mark.parametrize("token_key", ["owner_token", "manager_token", "waiter_token"])
-def test_owner_manager_waiter_allowed_to_issue_bill(bill_context, token_key):
+@pytest.mark.parametrize("token_key", ["owner_token", "admin_token", "staff_token"])
+def test_owner_admin_staff_allowed_to_issue_bill(bill_context, token_key):
     add_order(bill_context)
     bill = create_bill(bill_context).json()
 
@@ -462,8 +462,8 @@ def test_repeated_customer_counter_payment_request_is_idempotent(bill_context):
     ("token_key", "staff_id_key"),
     [
         ("owner_token", "owner_id"),
-        ("manager_token", "manager_id"),
-        ("waiter_token", "waiter_id"),
+        ("admin_token", "admin_id"),
+        ("staff_token", "staff_id"),
     ],
 )
 def test_staff_can_confirm_counter_payment(bill_context, token_key, staff_id_key):
@@ -526,7 +526,7 @@ def test_repeated_confirmation_preserves_first_payment_time_and_staff(bill_conte
     second = confirm_counter_payment(
         bill_context,
         issued["bill_number"],
-        token_key="manager_token",
+        token_key="admin_token",
         method="counter_upi",
     )
 

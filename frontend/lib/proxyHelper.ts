@@ -19,7 +19,7 @@ export async function proxyAdminRequest(
   };
 
   const method = request.method;
-  let body: any = undefined;
+  let body: string | undefined = undefined;
 
   // Forward body if request has one
   if (method === "POST" || method === "PATCH" || method === "PUT") {
@@ -65,9 +65,13 @@ export async function proxyAdminRequest(
       return NextResponse.json({ detail: errDetail }, { status: res.status });
     }
 
+    if (res.status === 204) {
+      return new NextResponse(null, { status: 204 });
+    }
+
     const data = await res.json();
     return NextResponse.json(data);
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { detail: "Could not connect to the backend server." },
       { status: 500 }

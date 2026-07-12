@@ -26,6 +26,7 @@ export default async function AdminLayout({
       headers: {
         "Authorization": `Bearer ${tokenCookie.value}`,
       },
+      cache: "no-store",
     });
 
     if (!res.ok) {
@@ -34,13 +35,18 @@ export default async function AdminLayout({
     }
 
     staffInfo = await res.json();
-  } catch (error) {
+  } catch {
     // If backend connection fails, redirect to login
     redirect("/staff/login");
   }
 
-  // Only Owner and Manager roles are permitted to access administrative tools
-  const allowedRoles = ["owner", "manager"];
+  // Only owner and admin roles are permitted to access administrative tools.
+  if (staffInfo.must_change_password) {
+    redirect("/staff/change-password");
+  }
+
+  // Only owner and admin roles are permitted to access administrative tools.
+  const allowedRoles = ["owner", "admin"];
   if (!allowedRoles.includes(staffInfo.role)) {
     return (
       <div className="flex flex-col flex-1 items-center justify-center min-h-screen bg-zinc-950 p-6 text-center text-zinc-100">
@@ -82,6 +88,7 @@ export default async function AdminLayout({
             <AdminSidebarLink href="/admin/dashboard" label="📊 Dashboard" />
             <AdminSidebarLink href="/admin/menu" label="🍔 Menu Items" />
             <AdminSidebarLink href="/admin/tables" label="📋 Tables Map" />
+            <AdminSidebarLink href="/admin/staff" label="👥 Staff Management" />
             <AdminSidebarLink href="/admin/settings" label="⚙️ Settings" />
             <AdminSidebarLink href={`/kitchen/${staffInfo.restaurant_slug}`} label="🧑‍🍳 Kitchen Dashboard" />
             <AdminSidebarLink href="/staff/requests" label="🔔 Service Requests" />

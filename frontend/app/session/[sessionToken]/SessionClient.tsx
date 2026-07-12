@@ -161,7 +161,7 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
   );
 
   useEffect(() => {
-    fetchSession(true);
+    const timeout = window.setTimeout(() => fetchSession(true), 0);
 
     const handleVisibility = () => {
       if (document.visibilityState === "visible") {
@@ -170,7 +170,10 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
     };
 
     document.addEventListener("visibilitychange", handleVisibility);
-    return () => document.removeEventListener("visibilitychange", handleVisibility);
+    return () => {
+      window.clearTimeout(timeout);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
   }, [fetchSession]);
 
   const serviceTypes = [

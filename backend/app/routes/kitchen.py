@@ -13,7 +13,7 @@ from app.utils.auth import get_current_staff_user, RoleChecker
 router = APIRouter()
 
 # Setup Role Checking dependency for kitchen actions
-kitchen_access_dependency = RoleChecker(["owner", "manager", "kitchen"])
+kitchen_access_dependency = RoleChecker(["owner", "admin", "kitchen"])
 
 ALLOWED_STATUSES = {"pending", "accepted", "preparing", "ready", "served", "rejected"}
 DEFAULT_ACTIVE_STATUSES = ["pending", "accepted", "preparing", "ready"]

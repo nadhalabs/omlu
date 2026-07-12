@@ -10,13 +10,22 @@ from sqlalchemy import func, text
 from app.database import get_db
 from app.models.order import Order, OrderItem, OrderStatusHistory
 from app.models.service_request import ServiceRequest
-from app.schemas.dashboard import DashboardSummaryResponse, TopSellingItem, OrdersByHour
+from app.models.dining_session import ACTIVE_DINING_SESSION_STATUSES, DiningSession
+from app.models.restaurant_table import RestaurantTable
+from app.schemas.dashboard import (
+    DashboardActivityItem,
+    DashboardAttentionItem,
+    DashboardSummaryResponse,
+    DashboardTableOverview,
+    TopSellingItem,
+    OrdersByHour,
+)
 from app.utils.auth import RoleChecker
 from app.models.staff_user import StaffUser
 
 router = APIRouter(prefix="/admin/dashboard")
 
-_owner_manager = RoleChecker(["owner", "manager"])
+_owner_admin = RoleChecker(["owner", "admin"])
 
 
 def _get_local_day_bounds_utc(timezone_str: str):
@@ -46,11 +55,11 @@ def _get_local_day_bounds_utc(timezone_str: str):
 
 @router.get("/summary", response_model=DashboardSummaryResponse)
 def get_dashboard_summary(
-    current_user: StaffUser = Depends(_owner_manager),
+    current_user: StaffUser = Depends(_owner_admin),
     db: Session = Depends(get_db)
 ):
     """
-    Owner/manager dashboard summary. All metrics use the restaurant's configured timezone.
+    Owner/admin dashboard summary. All metrics use the restaurant's configured timezone.
 
     Metric definitions:
     - today_order_count: All orders created during the restaurant's current local day
@@ -99,10 +108,32 @@ def get_dashboard_summary(
         Order.status.in_(["pending", "accepted", "preparing", "ready"])
     ).scalar() or 0
 
+    accepted_order_count = db.query(func.count(Order.id)).filter(
+        Order.restaurant_id == restaurant_id,
+        Order.status == "accepted"
+    ).scalar() or 0
+    preparing_order_count = db.query(func.count(Order.id)).filter(
+        Order.restaurant_id == restaurant_id,
+        Order.status == "preparing"
+    ).scalar() or 0
+    ready_order_count = db.query(func.count(Order.id)).filter(
+        Order.restaurant_id == restaurant_id,
+        Order.status == "ready"
+    ).scalar() or 0
+
     # 4. Active service requests
     active_service_request_count = db.query(func.count(ServiceRequest.id)).filter(
         ServiceRequest.restaurant_id == restaurant_id,
         ServiceRequest.status == "pending"
+    ).scalar() or 0
+
+    open_session_count = db.query(func.count(DiningSession.id)).filter(
+        DiningSession.restaurant_id == restaurant_id,
+        DiningSession.status.in_(ACTIVE_DINING_SESSION_STATUSES)
+    ).scalar() or 0
+    payment_pending_count = db.query(func.count(DiningSession.id)).filter(
+        DiningSession.restaurant_id == restaurant_id,
+        DiningSession.status.in_(["payment_requested", "payment_pending"])
     ).scalar() or 0
 
     # 5. Rejected orders count (created today, status=rejected)
@@ -153,14 +184,118 @@ def get_dashboard_summary(
         for h, c in sorted(hour_counts.items())
     ]
 
+    active_sessions = db.query(DiningSession).filter(
+        DiningSession.restaurant_id == restaurant_id,
+        DiningSession.status.in_(ACTIVE_DINING_SESSION_STATUSES),
+    ).all()
+    session_by_table_id = {session.table_id: session for session in active_sessions}
+
+    pending_requests = db.query(ServiceRequest).filter(
+        ServiceRequest.restaurant_id == restaurant_id,
+        ServiceRequest.status == "pending",
+    ).order_by(ServiceRequest.created_at.asc()).all()
+    request_by_table_id = {}
+    for req in pending_requests:
+        request_by_table_id.setdefault(req.table_id, req)
+
+    tables = db.query(RestaurantTable).filter(
+        RestaurantTable.restaurant_id == restaurant_id,
+        RestaurantTable.is_active == True,
+    ).order_by(RestaurantTable.table_number.asc()).all()
+
+    table_overview = []
+    for table in tables:
+        session = session_by_table_id.get(table.id)
+        request = request_by_table_id.get(table.id)
+        status_label = "Available"
+        order_count = 0
+        bill_total = Decimal("0.00")
+        last_activity_at = None
+        payment_status = None
+        session_token = None
+
+        if session:
+            session_token = session.public_token
+            order_count = len(session.orders)
+            bill_total = session.bill.total_amount if session.bill else session.subtotal
+            payment_status = session.bill.status if session.bill else None
+            last_candidates = [session.opened_at]
+            if session.payment_requested_at:
+                last_candidates.append(session.payment_requested_at)
+            last_candidates.extend([order.created_at for order in session.orders])
+            last_activity_at = max(last_candidates).isoformat() if last_candidates else None
+            if request:
+                status_label = "Needs Attention"
+            elif session.status == "payment_requested":
+                status_label = "Bill Requested"
+            elif session.status == "payment_pending":
+                status_label = "Payment Pending"
+            else:
+                status_label = "Active"
+
+        table_overview.append(DashboardTableOverview(
+            table_id=table.id,
+            table_number=table.table_number,
+            status=status_label,
+            session_token=session_token,
+            order_count=order_count,
+            bill_total=f"{bill_total:.2f}",
+            last_activity_at=last_activity_at,
+            pending_request=request.request_type if request else None,
+            payment_status=payment_status,
+        ))
+
+    attention_items = []
+    for order in db.query(Order).join(RestaurantTable, Order.table_id == RestaurantTable.id).filter(
+        Order.restaurant_id == restaurant_id,
+        Order.status.in_(["pending", "ready"]),
+    ).order_by(Order.created_at.asc()).limit(10).all():
+        label = "Unaccepted order" if order.status == "pending" else "Order ready to serve"
+        attention_items.append(DashboardAttentionItem(
+            type=order.status,
+            label=label,
+            table_number=order.table.table_number,
+            timestamp=order.created_at.isoformat(),
+        ))
+    for req in pending_requests[:10]:
+        attention_items.append(DashboardAttentionItem(
+            type=req.request_type,
+            label=f"{req.request_type.replace('_', ' ').title()} request",
+            table_number=req.table.table_number if req.table else None,
+            timestamp=req.created_at.isoformat(),
+        ))
+    attention_items = sorted(attention_items, key=lambda item: item.timestamp or "")[:12]
+
+    recent_activity = []
+    for hist in db.query(OrderStatusHistory).join(Order, OrderStatusHistory.order_id == Order.id).filter(
+        Order.restaurant_id == restaurant_id,
+    ).order_by(OrderStatusHistory.changed_at.desc()).limit(12).all():
+        recent_activity.append(DashboardActivityItem(
+            actor=f"Staff #{hist.changed_by_staff_id}" if hist.changed_by_staff_id else "System",
+            table_number=hist.order.table.table_number if hist.order and hist.order.table else None,
+            action=f"Order {hist.new_status}",
+            timestamp=hist.changed_at.isoformat(),
+        ))
+
     return DashboardSummaryResponse(
+        restaurant_name=current_user.restaurant.name,
+        restaurant_slug=current_user.restaurant.slug,
         today_order_count=today_order_count,
         today_revenue=f"{today_revenue:.2f}",
         average_order_value=f"{average_order_value:.2f}",
         pending_order_count=pending_order_count,
+        accepted_order_count=accepted_order_count,
+        preparing_order_count=preparing_order_count,
+        ready_order_count=ready_order_count,
+        active_table_count=len(active_sessions),
+        open_session_count=open_session_count,
+        payment_pending_count=payment_pending_count,
         active_service_request_count=active_service_request_count,
         rejected_order_count=rejected_order_count,
         top_selling_items=top_items_data,
         orders_by_hour=orders_by_hour,
+        tables=table_overview,
+        attention_items=attention_items,
+        recent_activity=recent_activity,
         timezone=timezone_str
     )

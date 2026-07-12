@@ -8,6 +8,8 @@ from app.routes.dashboard import router as dashboard_router
 from app.routes.settings import router as settings_router
 from app.routes.health import router as health_router
 from app.routes.bills import router as bills_router
+from app.routes.sessions import router as sessions_router
+from app.routes.staff_management import router as staff_management_router
 
 __all__ = [
     "public_menu_router",
@@ -20,4 +22,6 @@ __all__ = [
     "settings_router",
     "health_router",
     "bills_router",
+    "sessions_router",
+    "staff_management_router",
 ]

@@ -27,8 +27,8 @@ from app.schemas.admin import (
 
 router = APIRouter(prefix="/admin")
 
-# Protect all admin routes for owners and managers only
-admin_access_dependency = Depends(RoleChecker(["owner", "manager"]))
+# Protect all admin routes for owners and admins only
+admin_access_dependency = Depends(RoleChecker(["owner", "admin"]))
 
 def generate_table_code(table_number: str) -> str:
     # predictable URL-safe secure token format: T{table_number}-{random_token}

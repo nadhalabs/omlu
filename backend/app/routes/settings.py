@@ -10,7 +10,7 @@ from app.models.restaurant import Restaurant
 router = APIRouter(prefix="/admin/settings")
 
 _owner_only = RoleChecker(["owner"])
-_owner_or_manager = RoleChecker(["owner", "manager"])
+_owner_or_manager = RoleChecker(["owner", "admin"])
 
 
 @router.get("", response_model=RestaurantSettingsResponse)
@@ -18,7 +18,7 @@ def get_restaurant_settings(
     current_user: StaffUser = Depends(_owner_or_manager),
     db: Session = Depends(get_db)
 ):
-    """Owner/manager can view restaurant settings."""
+    """Owner/admin can view restaurant settings."""
     restaurant = db.query(Restaurant).filter(
         Restaurant.id == current_user.restaurant_id
     ).first()

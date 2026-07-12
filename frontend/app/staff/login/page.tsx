@@ -9,7 +9,7 @@ export default function StaffLoginPage() {
 
   // Form states
   const [restaurantSlug, setRestaurantSlug] = useState("");
-  const [email, setEmail] = useState("");
+  const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
   
   // UI states
@@ -21,7 +21,7 @@ export default function StaffLoginPage() {
     e.preventDefault();
     if (loading) return;
 
-    if (!restaurantSlug.trim() || !email.trim() || !password.trim()) {
+    if (!restaurantSlug.trim() || !login.trim() || !password.trim()) {
       setError("Please fill in all fields.");
       return;
     }
@@ -31,22 +31,24 @@ export default function StaffLoginPage() {
 
     try {
       const response = await staffLogin({
-        email: email.trim(),
+        login: login.trim(),
         password: password,
-        restaurant_slug: restaurantSlug.trim(),
+        restaurant_slug: restaurantSlug.trim().toLowerCase(),
       });
 
       const { role, restaurant_slug } = response.staff;
 
-      // Reject waiters from accessing the kitchen dashboard
-      if (role === "waiter") {
-        setError("Waiters do not have permission to access the kitchen dashboard.");
-        setLoading(false);
-        return;
+      if (response.staff.must_change_password) {
+        router.push("/staff/change-password");
+      } else if (role === "owner" || role === "admin") {
+        router.push("/admin/dashboard");
+      } else if (role === "staff") {
+        router.push("/staff");
+      } else if (role === "kitchen") {
+        router.push(`/kitchen/${restaurant_slug}`);
+      } else {
+        setError("Your account role is not allowed to access this system.");
       }
-
-      // Successful login redirect
-      router.push(`/kitchen/${restaurant_slug}`);
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.status === 401) {
@@ -75,7 +77,7 @@ export default function StaffLoginPage() {
           </span>
           <h1 className="text-2xl font-black text-white mt-1">Sign In</h1>
           <p className="text-zinc-500 text-xs mt-1.5">
-            Access your restaurant kitchen dashboard
+            Access your restaurant workspace
           </p>
         </div>
 
@@ -91,7 +93,7 @@ export default function StaffLoginPage() {
           {/* Restaurant Slug */}
           <div className="flex flex-col gap-1.5">
             <label className="text-[10px] font-black text-zinc-400 uppercase tracking-wider">
-              Restaurant ID / Slug
+              Restaurant Username
             </label>
             <input
               type="text"
@@ -103,16 +105,16 @@ export default function StaffLoginPage() {
             />
           </div>
 
-          {/* Email */}
+          {/* Personal login */}
           <div className="flex flex-col gap-1.5">
             <label className="text-[10px] font-black text-zinc-400 uppercase tracking-wider">
-              Email Address
+              Personal Username or Email
             </label>
             <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="e.g. kitchen@nadhaserve.local"
+              type="text"
+              value={login}
+              onChange={(e) => setLogin(e.target.value)}
+              placeholder="e.g. anjali or anjali@example.com"
               disabled={loading}
               className="w-full px-4 py-3 bg-zinc-950 border border-zinc-800 focus:border-amber-600 rounded-xl text-sm outline-none transition text-white placeholder-zinc-700"
             />

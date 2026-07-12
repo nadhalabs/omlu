@@ -39,12 +39,12 @@ def setup_admin_test_data():
         role="owner",
         is_active=True
     )
-    manager = StaffUser(
+    staff_legacy_manager = StaffUser(
         restaurant_id=restaurant.id,
         name="Test Manager",
-        email="manager@admin.local",
-        password_hash=hash_password("manager123"),
-        role="manager",
+        email="admin@admin.local",
+        password_hash=hash_password("admin123"),
+        role="admin",
         is_active=True
     )
     kitchen = StaffUser(
@@ -55,12 +55,12 @@ def setup_admin_test_data():
         role="kitchen",
         is_active=True
     )
-    waiter = StaffUser(
+    staff_legacy_waiter = StaffUser(
         restaurant_id=restaurant.id,
-        name="Test Waiter",
-        email="waiter@admin.local",
-        password_hash=hash_password("waiter123"),
-        role="waiter",
+        name="Test Staff",
+        email="staff@admin.local",
+        password_hash=hash_password("staff123"),
+        role="staff",
         is_active=True
     )
 
@@ -74,14 +74,14 @@ def setup_admin_test_data():
         is_active=True
     )
 
-    db.add_all([owner, manager, kitchen, waiter, other_owner])
+    db.add_all([owner, staff_legacy_manager, kitchen, staff_legacy_waiter, other_owner])
     db.flush()
 
     # Create tokens
     owner_token = create_access_token({"sub": str(owner.id), "restaurant_id": restaurant.id, "role": "owner"})
-    manager_token = create_access_token({"sub": str(manager.id), "restaurant_id": restaurant.id, "role": "manager"})
+    admin_token = create_access_token({"sub": str(staff_legacy_manager.id), "restaurant_id": restaurant.id, "role": "admin"})
     kitchen_token = create_access_token({"sub": str(kitchen.id), "restaurant_id": restaurant.id, "role": "kitchen"})
-    waiter_token = create_access_token({"sub": str(waiter.id), "restaurant_id": restaurant.id, "role": "waiter"})
+    staff_token = create_access_token({"sub": str(staff_legacy_waiter.id), "restaurant_id": restaurant.id, "role": "staff"})
     other_token = create_access_token({"sub": str(other_owner.id), "restaurant_id": other_restaurant.id, "role": "owner"})
 
     # Create tables
@@ -142,9 +142,9 @@ def setup_admin_test_data():
         "restaurant_slug": restaurant.slug,
         "other_restaurant_slug": other_restaurant.slug,
         "owner_token": owner_token,
-        "manager_token": manager_token,
+        "admin_token": admin_token,
         "kitchen_token": kitchen_token,
-        "waiter_token": waiter_token,
+        "staff_token": staff_token,
         "other_token": other_token,
         "table_id": table1.id,
         "table_code": table1.table_code,
@@ -172,20 +172,20 @@ def test_missing_authentication():
     assert response.status_code == 401
 
 
-def test_kitchen_and_waiter_denied(setup_admin_test_data):
+def test_kitchen_and_staff_legacy_waiter_denied(setup_admin_test_data):
     data = setup_admin_test_data
     # Test categories list denied
     res_k = client.get("/admin/categories", headers={"Authorization": f"Bearer {data['kitchen_token']}"})
     assert res_k.status_code == 403
-    res_w = client.get("/admin/categories", headers={"Authorization": f"Bearer {data['waiter_token']}"})
+    res_w = client.get("/admin/categories", headers={"Authorization": f"Bearer {data['staff_token']}"})
     assert res_w.status_code == 403
 
 
-def test_owner_and_manager_allowed(setup_admin_test_data):
+def test_owner_and_staff_legacy_manager_allowed(setup_admin_test_data):
     data = setup_admin_test_data
     res_o = client.get("/admin/categories", headers={"Authorization": f"Bearer {data['owner_token']}"})
     assert res_o.status_code == 200
-    res_m = client.get("/admin/categories", headers={"Authorization": f"Bearer {data['manager_token']}"})
+    res_m = client.get("/admin/categories", headers={"Authorization": f"Bearer {data['admin_token']}"})
     assert res_m.status_code == 200
 
 

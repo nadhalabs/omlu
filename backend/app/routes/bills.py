@@ -18,7 +18,7 @@ from app.utils.auth import RoleChecker
 
 router = APIRouter()
 
-_bill_issue_roles = RoleChecker(["owner", "manager", "waiter"])
+_bill_issue_roles = RoleChecker(["owner", "admin", "staff"])
 
 
 @router.post(

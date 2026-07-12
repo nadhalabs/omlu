@@ -7,9 +7,12 @@ import {
   updateAdminTable,
   regenerateAdminTableCode,
   getStaffMe,
-  ApiError,
 } from "@/lib/api";
 import { AdminTableResponse } from "@/lib/types";
+
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
 
 export default function AdminTablesPage() {
   const [tables, setTables] = useState<AdminTableResponse[]>([]);
@@ -40,8 +43,8 @@ export default function AdminTablesPage() {
       const data = await getAdminTables();
       setTables(data);
       setError(null);
-    } catch (e: any) {
-      setError(e.message || "Failed to load tables list.");
+    } catch (e) {
+      setError(getErrorMessage(e, "Failed to load tables list."));
     } finally {
       setLoading(false);
     }
@@ -55,7 +58,8 @@ export default function AdminTablesPage() {
   };
 
   useEffect(() => {
-    loadData();
+    const timeout = window.setTimeout(() => loadData(), 0);
+    return () => window.clearTimeout(timeout);
   }, []);
 
   // Handle Create Table
@@ -81,8 +85,8 @@ export default function AdminTablesPage() {
       // Reload from server to get new code and URL
       const data = await getAdminTables();
       setTables(data);
-    } catch (err: any) {
-      setFormError(err.message || "Failed to create table.");
+    } catch (err) {
+      setFormError(getErrorMessage(err, "Failed to create table."));
     } finally {
       setSaving(false);
     }
@@ -109,8 +113,8 @@ export default function AdminTablesPage() {
       // Reload tables
       const data = await getAdminTables();
       setTables(data);
-    } catch (err: any) {
-      setEditFormError(err.message || "Failed to edit table number.");
+    } catch (err) {
+      setEditFormError(getErrorMessage(err, "Failed to edit table number."));
     } finally {
       setEditSaving(false);
     }
@@ -133,8 +137,8 @@ export default function AdminTablesPage() {
       // Reload tables from API to refresh active status list
       const data = await getAdminTables();
       setTables(data);
-    } catch (err: any) {
-      alert(`Status update rejected: ${err.message}`);
+    } catch (err) {
+      alert(`Status update rejected: ${getErrorMessage(err, "Update failed.")}`);
     } finally {
       setUpdatingIds((prev) => ({ ...prev, [table.id]: false }));
     }
@@ -157,8 +161,8 @@ export default function AdminTablesPage() {
       const data = await getAdminTables();
       setTables(data);
       alert(`Success! Table ${table.table_number} code has been regenerated.`);
-    } catch (err: any) {
-      alert(`Regeneration failed: ${err.message}`);
+    } catch (err) {
+      alert(`Regeneration failed: ${getErrorMessage(err, "Regeneration failed.")}`);
     } finally {
       setUpdatingIds((prev) => ({ ...prev, [table.id]: false }));
     }

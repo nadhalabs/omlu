@@ -48,7 +48,8 @@ export default function AdminSettingsClient() {
   }, []);
 
   useEffect(() => {
-    loadSettings();
+    const timeout = window.setTimeout(() => loadSettings(), 0);
+    return () => window.clearTimeout(timeout);
   }, [loadSettings]);
 
   const handleSave = async () => {

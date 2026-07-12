@@ -8,6 +8,7 @@ Options:
     --name          Restaurant display name
     --slug          URL slug (lowercase, no spaces, e.g. demo-cafe)
     --owner-name    Owner's full name
+    --owner-username Owner's personal username
     --owner-email   Owner's login email
     --tables        Number of tables to create (default: 5)
 
@@ -33,8 +34,8 @@ os.environ.setdefault("ENV", "production")
 from app.database import SessionLocal
 from app.models.restaurant import Restaurant
 from app.models.restaurant_table import RestaurantTable
-from app.models.staff_user import StaffUser
-from app.utils.auth import hash_password
+from app.models.staff_user import AuditLog, StaffUser
+from app.utils.auth import hash_password, normalize_email, normalize_identifier, normalize_restaurant_slug
 
 
 def generate_table_code(table_number: str) -> str:
@@ -43,7 +44,11 @@ def generate_table_code(table_number: str) -> str:
 
 
 def validate_slug(slug: str) -> bool:
-    return bool(re.match(r'^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$', slug))
+    return bool(re.match(r'^[a-z0-9][a-z0-9_-]{1,62}[a-z0-9]$', slug))
+
+
+def validate_username(username: str) -> bool:
+    return bool(re.match(r'^[a-z0-9][a-z0-9_-]{1,62}[a-z0-9]$', username))
 
 
 def validate_email(email: str) -> bool:
@@ -70,6 +75,7 @@ def main():
     parser.add_argument("--name", help="Restaurant display name")
     parser.add_argument("--slug", help="Restaurant URL slug (e.g. demo-cafe)")
     parser.add_argument("--owner-name", help="Owner's full name")
+    parser.add_argument("--owner-username", help="Owner's personal username")
     parser.add_argument("--owner-email", help="Owner's login email")
     parser.add_argument("--tables", type=int, default=0, help="Number of tables to create (default: prompted)")
     args = parser.parse_args()
@@ -78,17 +84,22 @@ def main():
 
     # Collect all inputs
     name = prompt_if_missing(args.name, "Restaurant name (e.g. Demo Cafe)")
-    slug = prompt_if_missing(
+    slug = normalize_restaurant_slug(prompt_if_missing(
         args.slug,
-        "Restaurant slug (lowercase, hyphens only, e.g. demo-cafe)",
+        "Restaurant username/slug (lowercase, hyphens or underscores, e.g. demo-cafe)",
         validator=validate_slug
-    )
+    ))
     owner_name = prompt_if_missing(args.owner_name, "Owner full name")
-    owner_email = prompt_if_missing(
+    owner_username = normalize_identifier(prompt_if_missing(
+        args.owner_username,
+        "Owner personal username",
+        validator=validate_username,
+    ))
+    owner_email = normalize_email(prompt_if_missing(
         args.owner_email,
         "Owner email address",
         validator=validate_email
-    )
+    ))
 
     num_tables = args.tables
     while num_tables < 1:
@@ -132,20 +143,17 @@ def main():
 
 
     print(f"\n  Creating restaurant: {name!r} (slug: {slug!r})")
-    print(f"  Owner: {owner_name} ({owner_email})")
+    print(f"  Owner: {owner_name} ({owner_username}, {owner_email})")
     print(f"  Tables to create: {num_tables}")
 
     db = SessionLocal()
     try:
-        # Check for slug collision before starting transaction
-        existing = db.query(Restaurant).filter(Restaurant.slug == slug).first()
-        if existing:
-            print(f"\n✗ ERROR: A restaurant with slug {slug!r} already exists.")
-            print("  Please choose a unique slug and try again.")
-            sys.exit(1)
-
         # All-or-nothing: wrap in a single transaction
         try:
+            existing = db.query(Restaurant).filter(Restaurant.slug == slug).first()
+            if existing:
+                raise ValueError(f"A restaurant with slug {slug!r} already exists.")
+
             # Create restaurant
             restaurant = Restaurant(
                 name=name,
@@ -166,13 +174,26 @@ def main():
             owner = StaffUser(
                 restaurant_id=restaurant.id,
                 name=owner_name,
-                email=owner_email.strip().lower(),
+                username=owner_username,
+                email=owner_email,
                 password_hash=password_hash,
                 role="owner",
-                is_active=True
+                status="active",
+                is_active=True,
+                must_change_password=True,
             )
             db.add(owner)
             db.flush()
+
+            db.add(AuditLog(
+                restaurant_id=restaurant.id,
+                actor_user_id=owner.id,
+                actor_role="owner",
+                target_type="restaurant",
+                target_id=str(restaurant.id),
+                action="restaurant_bootstrapped",
+                new_value=f"restaurant={slug};owner={owner_username}",
+            ))
 
             # Create tables with secure unique codes
             tables_created = []

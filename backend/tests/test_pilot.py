@@ -387,10 +387,10 @@ class TestStaffServiceRequests:
         assert isinstance(r.json(), list)
 
     def test_list_requests_kitchen_role(self, restaurant, table, kitchen_token):
-        """Kitchen role should be able to view requests."""
+        """Kitchen role must not access staff request endpoints."""
         headers = {"Authorization": f"Bearer {kitchen_token}"}
         r = client.get("/staff/service-requests", headers=headers)
-        assert r.status_code == 200
+        assert r.status_code == 403
 
     def test_resolve_request(self, restaurant, table, owner_token, db):
         """Create a request then resolve it via staff endpoint."""

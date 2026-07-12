@@ -176,8 +176,8 @@ def create_public_service_request(
 
 # --- Staff Service Request Endpoints ---
 
-_staff_view_roles = RoleChecker(["owner", "manager", "waiter", "kitchen"])
-_staff_resolve_roles = RoleChecker(["owner", "manager", "waiter"])
+_staff_view_roles = RoleChecker(["owner", "admin", "staff"])
+_staff_resolve_roles = RoleChecker(["owner", "admin", "staff"])
 
 
 @router.get(

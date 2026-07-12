@@ -119,7 +119,8 @@ export default function BillClient({ sessionToken }: BillClientProps) {
   );
 
   useEffect(() => {
-    fetchBill(true);
+    const timeout = window.setTimeout(() => fetchBill(true), 0);
+    return () => window.clearTimeout(timeout);
   }, [fetchBill]);
 
   const billUrl =

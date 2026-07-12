@@ -192,23 +192,29 @@ export interface KitchenOrderResponse {
 }
 
 export interface StaffLoginRequest {
-  email: string;
+  login: string;
   password: string;
   restaurant_slug: string;
 }
 
 export interface StaffSummaryResponse {
   name: string;
+  username: string | null;
   email: string;
   role: string;
+  status: string;
+  must_change_password: boolean;
   restaurant_name: string;
   restaurant_slug: string;
 }
 
 export interface CurrentStaffResponse {
   name: string;
+  username: string | null;
   email: string;
   role: string;
+  status: string;
+  must_change_password: boolean;
   restaurant_name: string;
   restaurant_slug: string;
 }
@@ -288,15 +294,86 @@ export interface OrdersByHour {
 }
 
 export interface DashboardSummaryResponse {
+  restaurant_name: string;
+  restaurant_slug: string;
   today_order_count: number;
   today_revenue: string;
   average_order_value: string;
   pending_order_count: number;
+  accepted_order_count: number;
+  preparing_order_count: number;
+  ready_order_count: number;
+  active_table_count: number;
+  open_session_count: number;
+  payment_pending_count: number;
   active_service_request_count: number;
   rejected_order_count: number;
   top_selling_items: TopSellingItem[];
   orders_by_hour: OrdersByHour[];
+  tables: DashboardTableOverview[];
+  attention_items: DashboardAttentionItem[];
+  recent_activity: DashboardActivityItem[];
   timezone: string;
+}
+
+export interface DashboardTableOverview {
+  table_id: number;
+  table_number: string;
+  status: string;
+  session_token: string | null;
+  guest_count: number | null;
+  order_count: number;
+  bill_total: string;
+  last_activity_at: string | null;
+  pending_request: string | null;
+  payment_status: string | null;
+}
+
+export interface DashboardAttentionItem {
+  type: string;
+  label: string;
+  table_number: string | null;
+  timestamp: string | null;
+}
+
+export interface DashboardActivityItem {
+  actor: string;
+  table_number: string | null;
+  action: string;
+  timestamp: string;
+}
+
+export interface StaffAccountSession {
+  id: number;
+  device: string | null;
+  ip_address: string | null;
+  login_at: string;
+  last_active_at: string;
+  status: string;
+}
+
+export interface StaffAccountResponse {
+  id: number;
+  name: string;
+  username: string | null;
+  email: string;
+  role: "owner" | "admin" | "staff" | "kitchen";
+  status: "invited" | "pending" | "active" | "suspended" | "removed";
+  is_active: boolean;
+  must_change_password: boolean;
+  last_active_at: string | null;
+  created_at: string;
+  added_by_staff_id: number | null;
+  active_session_count: number;
+  sessions: StaffAccountSession[];
+}
+
+export interface StaffAccountCreateRequest {
+  name: string;
+  username: string;
+  email: string;
+  role: "admin" | "staff" | "kitchen";
+  temporary_password: string;
 }
 
 
@@ -314,4 +391,22 @@ export interface RestaurantSettingsUpdate {
   currency?: string;
   order_prefix?: string;
   service_requests_enabled?: boolean;
+}
+
+
+// ---- Staff Active Sessions ----
+
+export interface StaffSessionListItem {
+  session_token: string;
+  table_number: string;
+  status: "open" | "payment_requested" | "payment_pending";
+  opened_at: string;
+  last_activity_at: string;
+  order_count: number;
+  combined_subtotal: string;
+  latest_order_status: string | null;
+}
+
+export interface StaffSessionDetail extends StaffSessionListItem {
+  closed_at: string | null;
 }

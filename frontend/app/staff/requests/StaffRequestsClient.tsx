@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
+import Link from "next/link";
 import {
   getStaffServiceRequests,
   resolveStaffServiceRequest,
@@ -79,9 +80,12 @@ export default function StaffRequestsClient() {
   );
 
   useEffect(() => {
-    fetchRequests(true);
+    const timeout = window.setTimeout(() => fetchRequests(true), 0);
     const interval = setInterval(() => fetchRequests(false), 5_000);
-    return () => clearInterval(interval);
+    return () => {
+      window.clearTimeout(timeout);
+      clearInterval(interval);
+    };
   }, [fetchRequests]);
 
   const handleResolve = async (requestId: number) => {
@@ -208,6 +212,13 @@ export default function StaffRequestsClient() {
               />
               Show resolved
             </label>
+            {/* Active Tables link */}
+            <Link
+              href="/staff/sessions"
+              className="text-xs text-zinc-400 hover:text-emerald-400 font-semibold transition px-3 py-1.5 rounded-lg border border-zinc-800 hover:border-emerald-700/50"
+            >
+              Active Tables
+            </Link>
             <button
               onClick={() => fetchRequests(false)}
               className="text-xs text-amber-500 hover:text-amber-400 underline font-semibold transition cursor-pointer"

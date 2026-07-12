@@ -48,10 +48,13 @@ export default function KitchenDashboardClient({
 
   // Load sound preference
   useEffect(() => {
-    const saved = localStorage.getItem("kitchen_sound_enabled");
-    if (saved === "true") {
-      setSoundEnabled(true);
-    }
+    const timeout = window.setTimeout(() => {
+      const saved = localStorage.getItem("kitchen_sound_enabled");
+      if (saved === "true") {
+        setSoundEnabled(true);
+      }
+    }, 0);
+    return () => window.clearTimeout(timeout);
   }, []);
 
   // Set up timer for wait duration tick
@@ -66,7 +69,10 @@ export default function KitchenDashboardClient({
   const playNewOrderBeep = () => {
     if (!soundEnabled) return;
     try {
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      const audioWindow = window as Window & typeof globalThis & {
+        webkitAudioContext?: typeof AudioContext;
+      };
+      const AudioCtx = window.AudioContext || audioWindow.webkitAudioContext;
       if (!AudioCtx) return;
       const ctx = new AudioCtx();
       
@@ -106,7 +112,10 @@ export default function KitchenDashboardClient({
 
     if (nextVal) {
       try {
-        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        const audioWindow = window as Window & typeof globalThis & {
+          webkitAudioContext?: typeof AudioContext;
+        };
+        const AudioCtx = window.AudioContext || audioWindow.webkitAudioContext;
         if (AudioCtx) {
           const ctx = new AudioCtx();
           if (ctx.state === "suspended") {
@@ -181,7 +190,7 @@ export default function KitchenDashboardClient({
         }
 
         // 2. Enforce allowed roles
-        const allowedRoles = ["owner", "manager", "kitchen"];
+        const allowedRoles = ["owner", "admin", "kitchen"];
         if (!allowedRoles.includes(staff.role)) {
           setAuthError(`Access Denied: Role '${staff.role}' is not permitted to view the kitchen dashboard.`);
           setAuthLoading(false);
@@ -199,7 +208,8 @@ export default function KitchenDashboardClient({
       }
     };
 
-    checkAuth();
+    const timeout = window.setTimeout(() => checkAuth(), 0);
+    return () => window.clearTimeout(timeout);
   }, [restaurantSlug]);
 
   // Setup tab visible events and polling loop
@@ -590,7 +600,7 @@ function OrderCard({
             </div>
             {item.item_note && (
               <p className="text-[10px] text-amber-500 font-bold italic ml-5 mt-0.5">
-                ↳ "{item.item_note}"
+                ↳ &quot;{item.item_note}&quot;
               </p>
             )}
           </div>
@@ -603,7 +613,7 @@ function OrderCard({
           <span className="text-[9px] font-black text-zinc-500 uppercase tracking-wider block mb-0.5">
             Customer Note
           </span>
-          <p className="text-[10px] text-zinc-300 font-medium">"{order.customer_note}"</p>
+          <p className="text-[10px] text-zinc-300 font-medium">&quot;{order.customer_note}&quot;</p>
         </div>
       )}
 

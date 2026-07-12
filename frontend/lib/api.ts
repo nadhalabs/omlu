@@ -20,6 +20,10 @@ import {
   DashboardSummaryResponse,
   RestaurantSettingsResponse,
   RestaurantSettingsUpdate,
+  StaffSessionListItem,
+  StaffSessionDetail,
+  StaffAccountCreateRequest,
+  StaffAccountResponse,
 } from "./types";
 
 export class ApiError extends Error {
@@ -508,6 +512,37 @@ export async function staffLogout(): Promise<void> {
     if (error instanceof ApiError) {
       throw error;
     }
+    throw new ApiError(500, "Could not connect to the Next.js API server.");
+  }
+}
+
+export async function changeStaffPassword(body: {
+  current_password: string;
+  new_password: string;
+}): Promise<{ staff: StaffSummaryResponse }> {
+  try {
+    const response = await fetch("/api/auth/change-password", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      let message = "Password change failed.";
+      try {
+        const errorData = await response.json();
+        if (errorData && typeof errorData.detail === "string") {
+          message = errorData.detail;
+        }
+      } catch {}
+      throw new ApiError(response.status, message);
+    }
+
+    return await response.json();
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
     throw new ApiError(500, "Could not connect to the Next.js API server.");
   }
 }
@@ -1003,6 +1038,186 @@ export async function updateRestaurantSettings(
     });
     if (!res.ok) {
       let msg = "Failed to update settings.";
+      try {
+        const err = await res.json();
+        if (err && typeof err.detail === "string") msg = err.detail;
+      } catch {}
+      throw new ApiError(res.status, msg);
+    }
+    return await res.json();
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError(500, "Could not connect to proxy server.");
+  }
+}
+
+
+// ---- Staff Management ----
+
+export async function getStaffAccounts(): Promise<StaffAccountResponse[]> {
+  try {
+    const res = await fetch("/api/admin/staff");
+    if (!res.ok) {
+      let msg = "Failed to load staff accounts.";
+      try {
+        const err = await res.json();
+        if (err && typeof err.detail === "string") msg = err.detail;
+      } catch {}
+      throw new ApiError(res.status, msg);
+    }
+    return await res.json();
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError(500, "Could not connect to proxy server.");
+  }
+}
+
+export async function createStaffAccount(
+  data: StaffAccountCreateRequest
+): Promise<StaffAccountResponse> {
+  try {
+    const res = await fetch("/api/admin/staff", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      let msg = "Failed to create staff account.";
+      try {
+        const err = await res.json();
+        if (err && typeof err.detail === "string") msg = err.detail;
+      } catch {}
+      throw new ApiError(res.status, msg);
+    }
+    return await res.json();
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError(500, "Could not connect to proxy server.");
+  }
+}
+
+export async function updateStaffAccount(
+  staffId: number,
+  data: { role?: string; status?: string; reason?: string }
+): Promise<StaffAccountResponse> {
+  try {
+    const res = await fetch(`/api/admin/staff/${staffId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      let msg = "Failed to update staff account.";
+      try {
+        const err = await res.json();
+        if (err && typeof err.detail === "string") msg = err.detail;
+      } catch {}
+      throw new ApiError(res.status, msg);
+    }
+    return await res.json();
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError(500, "Could not connect to proxy server.");
+  }
+}
+
+export async function resetStaffPassword(
+  staffId: number,
+  temporaryPassword: string
+): Promise<StaffAccountResponse> {
+  try {
+    const res = await fetch(`/api/admin/staff/${staffId}/reset-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ temporary_password: temporaryPassword }),
+    });
+    if (!res.ok) {
+      let msg = "Failed to reset password.";
+      try {
+        const err = await res.json();
+        if (err && typeof err.detail === "string") msg = err.detail;
+      } catch {}
+      throw new ApiError(res.status, msg);
+    }
+    return await res.json();
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError(500, "Could not connect to proxy server.");
+  }
+}
+
+export async function revokeStaffSessions(
+  staffId: number
+): Promise<StaffAccountResponse> {
+  try {
+    const res = await fetch(`/api/admin/staff/${staffId}/sessions/revoke`, {
+      method: "POST",
+    });
+    if (!res.ok) {
+      let msg = "Failed to sign out staff sessions.";
+      try {
+        const err = await res.json();
+        if (err && typeof err.detail === "string") msg = err.detail;
+      } catch {}
+      throw new ApiError(res.status, msg);
+    }
+    return await res.json();
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError(500, "Could not connect to proxy server.");
+  }
+}
+
+export async function removeStaffAccess(staffId: number): Promise<void> {
+  try {
+    const res = await fetch(`/api/admin/staff/${staffId}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) {
+      let msg = "Failed to remove access.";
+      try {
+        const err = await res.json();
+        if (err && typeof err.detail === "string") msg = err.detail;
+      } catch {}
+      throw new ApiError(res.status, msg);
+    }
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError(500, "Could not connect to proxy server.");
+  }
+}
+
+
+// ---- Staff Active Sessions ----
+
+export async function getStaffSessions(): Promise<StaffSessionListItem[]> {
+  try {
+    const res = await fetch("/api/staff/sessions");
+    if (!res.ok) {
+      let msg = "Failed to load active sessions.";
+      try {
+        const err = await res.json();
+        if (err && typeof err.detail === "string") msg = err.detail;
+      } catch {}
+      throw new ApiError(res.status, msg);
+    }
+    return await res.json();
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError(500, "Could not connect to proxy server.");
+  }
+}
+
+export async function closeEmptySession(
+  sessionToken: string
+): Promise<StaffSessionDetail> {
+  try {
+    const res = await fetch(
+      `/api/staff/sessions/${encodeURIComponent(sessionToken)}/close-empty`,
+      { method: "POST" }
+    );
+    if (!res.ok) {
+      let msg = "Failed to close session.";
       try {
         const err = await res.json();
         if (err && typeof err.detail === "string") msg = err.detail;
