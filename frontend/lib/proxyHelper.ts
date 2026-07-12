@@ -55,10 +55,10 @@ export async function proxyAdminRequest(
     }
 
     if (!res.ok) {
-      let errDetail = `API Request failed with status ${res.status}`;
+      let errDetail: unknown = `API Request failed with status ${res.status}`;
       try {
         const errJson = await res.json();
-        if (errJson && typeof errJson.detail === "string") {
+        if (errJson && (typeof errJson.detail === "string" || typeof errJson.detail === "object")) {
           errDetail = errJson.detail;
         }
       } catch {}

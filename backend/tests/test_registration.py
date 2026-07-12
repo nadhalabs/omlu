@@ -63,7 +63,7 @@ def test_restaurant_registration_creates_active_owner_and_defaults():
 
         assert restaurant.is_active is True
         assert restaurant.contact_email == "contact@registration.test"
-        assert restaurant.phone_number == "+91 99999 99999"
+        assert restaurant.phone_number == "+919999999999"
         assert restaurant.city == "Kochi"
         assert restaurant.plan == "free_pilot"
         assert restaurant.subscription_status == "active"
@@ -94,7 +94,10 @@ def test_duplicate_restaurant_username_is_rejected_case_insensitively():
     response = client.post("/public/restaurants/register", json=duplicate)
 
     assert response.status_code == 409
-    assert "already taken" in response.json()["detail"].lower()
+    assert response.json()["detail"] == {
+        "field": "restaurant_username",
+        "message": "Restaurant username is already taken.",
+    }
 
     db = SessionLocal()
     try:

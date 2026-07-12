@@ -25,10 +25,10 @@ export async function POST(request: NextRequest) {
     });
 
     if (!res.ok) {
-      let detail = "Password change failed";
+      let detail: unknown = "Password change failed";
       try {
         const err = await res.json();
-        if (err && typeof err.detail === "string") detail = err.detail;
+        if (err && (typeof err.detail === "string" || typeof err.detail === "object")) detail = err.detail;
       } catch {}
       return NextResponse.json({ detail }, { status: res.status });
     }

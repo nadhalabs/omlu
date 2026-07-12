@@ -386,7 +386,7 @@ def test_owner_can_create_staff_account_and_staff_can_login(setup_auth_test_data
             "username": "created_staff",
             "email": "created-staff@test.local",
             "role": "staff",
-            "temporary_password": "temporary123",
+            "temporary_password": "Temporary123!",
         },
     )
     assert response.status_code == 201
@@ -399,7 +399,7 @@ def test_owner_can_create_staff_account_and_staff_can_login(setup_auth_test_data
         "/auth/staff/login",
         json={
             "login": "created_staff",
-            "password": "temporary123",
+            "password": "Temporary123!",
             "restaurant_slug": data["restaurant_slug"],
         },
     )
@@ -487,7 +487,7 @@ def test_admin_cannot_remove_or_reset_owner(setup_auth_test_data):
     reset_response = client.post(
         f"/admin/staff/{data['owner_id']}/reset-password",
         headers={"Authorization": f"Bearer {admin_token}"},
-        json={"temporary_password": "new-owner-temp"},
+        json={"temporary_password": "NewOwnerTemp123!"},
     )
     assert reset_response.status_code == 403
 
@@ -505,7 +505,7 @@ def test_first_login_password_change_enforced(setup_auth_test_data):
             "username": "first_login_staff",
             "email": "first-login-staff@test.local",
             "role": "staff",
-            "temporary_password": "temporary123",
+            "temporary_password": "Temporary123!",
         },
     )
     assert create_response.status_code == 201
@@ -513,7 +513,7 @@ def test_first_login_password_change_enforced(setup_auth_test_data):
         "/auth/staff/login",
         json={
             "login": "first_login_staff",
-            "password": "temporary123",
+            "password": "Temporary123!",
             "restaurant_slug": data["restaurant_slug"],
         },
     )
@@ -525,7 +525,7 @@ def test_first_login_password_change_enforced(setup_auth_test_data):
     change_response = client.post(
         "/auth/staff/change-password",
         headers={"Authorization": f"Bearer {token}"},
-        json={"current_password": "temporary123", "new_password": "permanent123"},
+        json={"current_password": "Temporary123!", "new_password": "Permanent123!"},
     )
     assert change_response.status_code == 200
     assert change_response.json()["staff"]["must_change_password"] is False
@@ -567,7 +567,7 @@ def test_password_reset_revokes_existing_token(setup_auth_test_data):
             "username": "reset_token_staff",
             "email": "reset-token-staff@test.local",
             "role": "staff",
-            "temporary_password": "temporary123",
+            "temporary_password": "Temporary123!",
         },
     )
     assert create_response.status_code == 201
@@ -576,7 +576,7 @@ def test_password_reset_revokes_existing_token(setup_auth_test_data):
         "/auth/staff/login",
         json={
             "login": "reset_token_staff",
-            "password": "temporary123",
+            "password": "Temporary123!",
             "restaurant_slug": data["restaurant_slug"],
         },
     )
@@ -584,14 +584,14 @@ def test_password_reset_revokes_existing_token(setup_auth_test_data):
     change_response = client.post(
         "/auth/staff/change-password",
         headers={"Authorization": f"Bearer {change_login.json()['access_token']}"},
-        json={"current_password": "temporary123", "new_password": "permanent123"},
+        json={"current_password": "Temporary123!", "new_password": "Permanent123!"},
     )
     assert change_response.status_code == 200
     staff_login = client.post(
         "/auth/staff/login",
         json={
             "login": "reset_token_staff",
-            "password": "permanent123",
+            "password": "Permanent123!",
             "restaurant_slug": data["restaurant_slug"],
         },
     )
@@ -600,7 +600,7 @@ def test_password_reset_revokes_existing_token(setup_auth_test_data):
     reset_response = client.post(
         f"/admin/staff/{staff_id}/reset-password",
         headers={"Authorization": f"Bearer {owner_token}"},
-        json={"temporary_password": "newtemporary123"},
+        json={"temporary_password": "NewTemporary123!"},
     )
     assert reset_response.status_code == 200
     assert reset_response.json()["must_change_password"] is True

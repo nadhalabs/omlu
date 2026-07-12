@@ -24,6 +24,7 @@ from app.utils.auth import (
     get_current_staff_user_for_password_change,
     security_scheme,
 )
+from app.utils.validation import field_error, validate_password
 import datetime
 import time
 import secrets
@@ -145,6 +146,12 @@ def staff_login(
 
     login_normalized = normalize_identifier(login_req.login)
     restaurant_slug = normalize_restaurant_slug(login_req.restaurant_slug)
+    if not restaurant_slug:
+        field_error("restaurant_slug", "Restaurant username is required.")
+    if not login_normalized:
+        field_error("login", "Personal username or email is required.")
+    if not login_req.password:
+        field_error("password", "Password is required.")
     
     # 1. Find restaurant by slug
     restaurant = db.query(Restaurant).filter(
@@ -206,9 +213,15 @@ def change_password(
     db: Session = Depends(get_db),
 ):
     if not verify_password(body.current_password, current_user.password_hash):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect")
+        field_error("current_password", "Current password is incorrect", status.HTTP_400_BAD_REQUEST)
     if verify_password(body.new_password, current_user.password_hash):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="New password must be different")
+        field_error("new_password", "New password must be different", status.HTTP_400_BAD_REQUEST)
+    validate_password(
+        body.new_password,
+        field="new_password",
+        restaurant_username=current_user.restaurant.slug if current_user.restaurant else None,
+        personal_username=current_user.username,
+    )
 
     current_user.password_hash = hash_password(body.new_password)
     previous_must_change = current_user.must_change_password

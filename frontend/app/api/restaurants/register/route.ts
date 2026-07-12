@@ -22,7 +22,9 @@ export async function POST(request: NextRequest) {
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       const detail =
-        typeof data.detail === "string" ? data.detail : "Registration failed.";
+        typeof data.detail === "string" || (data.detail && typeof data.detail === "object")
+          ? data.detail
+          : "Registration failed.";
       return NextResponse.json({ detail }, { status: res.status });
     }
 

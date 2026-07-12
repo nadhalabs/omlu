@@ -17,6 +17,7 @@ from app.schemas.registration import (
     RestaurantRegistrationResponse,
 )
 from app.utils.auth import hash_password, normalize_email, normalize_identifier
+from app.utils.validation import field_error
 
 
 router = APIRouter(prefix="/public/restaurants")
@@ -71,10 +72,7 @@ def register_restaurant(
         ).first()
         if existing_restaurant:
             logger.info("registration_duplicate_restaurant_slug slug=%s ip=%s", restaurant_slug, client_ip)
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Restaurant username is already taken.",
-            )
+            field_error("restaurant_username", "Restaurant username is already taken.", status.HTTP_409_CONFLICT)
 
         restaurant = Restaurant(
             name=body.restaurant_name,
@@ -103,10 +101,13 @@ def register_restaurant(
             ),
         ).first()
         if duplicate_owner:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Owner username or email is already in use for this restaurant.",
+            field = "owner_email" if duplicate_owner.email == owner_email else "owner_username"
+            message = (
+                "Owner email is already in use for this restaurant."
+                if field == "owner_email"
+                else "Personal username is already in use for this restaurant."
             )
+            field_error(field, message, status.HTTP_409_CONFLICT)
 
         owner = StaffUser(
             restaurant_id=restaurant.id,
@@ -151,9 +152,10 @@ def register_restaurant(
     except IntegrityError:
         db.rollback()
         logger.info("registration_integrity_failure slug=%s ip=%s", restaurant_slug, client_ip)
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Restaurant username or owner credentials are already in use.",
+        field_error(
+            "restaurant_username",
+            "Restaurant username or owner credentials are already in use.",
+            status.HTTP_409_CONFLICT,
         )
     except Exception:
         db.rollback()

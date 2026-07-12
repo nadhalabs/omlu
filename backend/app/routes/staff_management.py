@@ -1,6 +1,5 @@
 import datetime
 import json
-import re
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -16,7 +15,14 @@ from app.schemas.staff_management import (
     StaffPasswordReset,
     StaffSessionResponse,
 )
-from app.utils.auth import RoleChecker, hash_password, normalize_email, normalize_identifier
+from app.utils.auth import RoleChecker, hash_password
+from app.utils.validation import (
+    field_error,
+    validate_email,
+    validate_owner_name,
+    validate_password,
+    validate_personal_username,
+)
 
 
 router = APIRouter(prefix="/admin/staff")
@@ -25,9 +31,6 @@ _owner_admin = RoleChecker(["owner", "admin"])
 VALID_ROLES = {"owner", "admin", "staff", "kitchen"}
 MANAGEABLE_ROLES = {"admin", "staff", "kitchen"}
 VALID_STATUSES = {"invited", "pending", "active", "suspended", "removed"}
-USERNAME_RE = re.compile(r"^[a-z0-9_-]+$")
-
-
 def _client_ip(request: Request) -> str | None:
     return request.client.host if request.client else None
 
@@ -141,25 +144,31 @@ def create_staff_account(
 ):
     role = body.role.strip().lower()
     if role not in MANAGEABLE_ROLES:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid role for staff account creation")
+        field_error("role", "Invalid role for staff account creation", status.HTTP_400_BAD_REQUEST)
     if current_user.role == "admin" and role == "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admins cannot create admin accounts")
+        field_error("role", "Admins cannot create admin accounts", status.HTTP_403_FORBIDDEN)
 
-    username = normalize_identifier(body.username)
-    if not USERNAME_RE.match(username):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Username must use lowercase letters, numbers, hyphens, or underscores")
-    email = normalize_email(body.email)
+    name = validate_owner_name(body.name)
+    username = validate_personal_username(body.username, field="username")
+    email = validate_email(body.email, "email", "Enter a valid email address.")
+    validate_password(
+        body.temporary_password,
+        field="temporary_password",
+        restaurant_username=current_user.restaurant.slug if current_user.restaurant else None,
+        personal_username=username,
+    )
 
     existing = db.query(StaffUser).filter(
         StaffUser.restaurant_id == current_user.restaurant_id,
         or_(StaffUser.username == username, StaffUser.email == email),
     ).first()
     if existing:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="A staff account with that username or email already exists")
+        field = "email" if existing.email == email else "username"
+        field_error(field, "A staff account with that username or email already exists", status.HTTP_409_CONFLICT)
 
     staff = StaffUser(
         restaurant_id=current_user.restaurant_id,
-        name=body.name.strip(),
+        name=name,
         username=username,
         email=email,
         password_hash=hash_password(body.temporary_password),
@@ -261,6 +270,12 @@ def reset_staff_password(
     _assert_can_manage(current_user, target)
     if target.role == "owner":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Owner password cannot be reset from staff management")
+    validate_password(
+        body.temporary_password,
+        field="temporary_password",
+        restaurant_username=current_user.restaurant.slug if current_user.restaurant else None,
+        personal_username=target.username,
+    )
     target.password_hash = hash_password(body.temporary_password)
     target.must_change_password = True
     target.security_version = (target.security_version or 0) + 1

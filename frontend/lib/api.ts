@@ -30,11 +30,34 @@ import {
 
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  field?: string;
+  constructor(status: number, message: string, field?: string) {
     super(message);
     this.status = status;
+    this.field = field;
     this.name = "ApiError";
   }
+}
+
+function parseApiError(data: unknown, fallback: string) {
+  if (
+    data &&
+    typeof data === "object" &&
+    "detail" in data &&
+    data.detail &&
+    typeof data.detail === "object" &&
+    "message" in data.detail
+  ) {
+    const detail = data.detail as { field?: unknown; message?: unknown };
+    return {
+      message: typeof detail.message === "string" ? detail.message : fallback,
+      field: typeof detail.field === "string" ? detail.field : undefined,
+    };
+  }
+  if (data && typeof data === "object" && "detail" in data && typeof data.detail === "string") {
+    return { message: data.detail, field: undefined };
+  }
+  return { message: fallback, field: undefined };
 }
 
 export async function getPublicMenu(
@@ -479,14 +502,12 @@ export async function staffLogin(
     });
 
     if (!response.ok) {
-      let message = "Login failed.";
+      let parsed = { message: "Login failed.", field: undefined as string | undefined };
       try {
         const errorData = await response.json();
-        if (errorData && typeof errorData.detail === "string") {
-          message = errorData.detail;
-        }
+        parsed = parseApiError(errorData, "Login failed.");
       } catch {}
-      throw new ApiError(response.status, message);
+      throw new ApiError(response.status, parsed.message, parsed.field);
     }
 
     return await response.json();
@@ -511,14 +532,12 @@ export async function registerRestaurant(
     });
 
     if (!response.ok) {
-      let message = "Registration failed.";
+      let parsed = { message: "Registration failed.", field: undefined as string | undefined };
       try {
         const errorData = await response.json();
-        if (errorData && typeof errorData.detail === "string") {
-          message = errorData.detail;
-        }
+        parsed = parseApiError(errorData, "Registration failed.");
       } catch {}
-      throw new ApiError(response.status, message);
+      throw new ApiError(response.status, parsed.message, parsed.field);
     }
 
     return await response.json();
@@ -564,14 +583,12 @@ export async function changeStaffPassword(body: {
     });
 
     if (!response.ok) {
-      let message = "Password change failed.";
+      let parsed = { message: "Password change failed.", field: undefined as string | undefined };
       try {
         const errorData = await response.json();
-        if (errorData && typeof errorData.detail === "string") {
-          message = errorData.detail;
-        }
+        parsed = parseApiError(errorData, "Password change failed.");
       } catch {}
-      throw new ApiError(response.status, message);
+      throw new ApiError(response.status, parsed.message, parsed.field);
     }
 
     return await response.json();
@@ -1116,12 +1133,12 @@ export async function createStaffAccount(
       body: JSON.stringify(data),
     });
     if (!res.ok) {
-      let msg = "Failed to create staff account.";
+      let parsed = { message: "Failed to create staff account.", field: undefined as string | undefined };
       try {
         const err = await res.json();
-        if (err && typeof err.detail === "string") msg = err.detail;
+        parsed = parseApiError(err, "Failed to create staff account.");
       } catch {}
-      throw new ApiError(res.status, msg);
+      throw new ApiError(res.status, parsed.message, parsed.field);
     }
     return await res.json();
   } catch (error) {
@@ -1166,12 +1183,12 @@ export async function resetStaffPassword(
       body: JSON.stringify({ temporary_password: temporaryPassword }),
     });
     if (!res.ok) {
-      let msg = "Failed to reset password.";
+      let parsed = { message: "Failed to reset password.", field: undefined as string | undefined };
       try {
         const err = await res.json();
-        if (err && typeof err.detail === "string") msg = err.detail;
+        parsed = parseApiError(err, "Failed to reset password.");
       } catch {}
-      throw new ApiError(res.status, msg);
+      throw new ApiError(res.status, parsed.message, parsed.field);
     }
     return await res.json();
   } catch (error) {

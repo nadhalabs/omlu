@@ -22,10 +22,10 @@ export async function POST(request: NextRequest) {
     });
 
     if (!res.ok) {
-      let errDetail = "Authentication failed";
+      let errDetail: unknown = "Authentication failed";
       try {
         const errJson = await res.json();
-        if (errJson && typeof errJson.detail === "string") {
+        if (errJson && (typeof errJson.detail === "string" || typeof errJson.detail === "object")) {
           errDetail = errJson.detail;
         }
       } catch {}
