@@ -24,3 +24,15 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+@media print {
+  .print-hidden {
+    display: none !important;
+  }
+
+  .print-bill-sheet {
+    width: 210mm;
+    min-height: 297mm;
+    margin: 0 auto;
+  }
+}

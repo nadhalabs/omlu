@@ -1,8 +1,15 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { getPublicOrder, createPublicServiceRequest, ApiError } from "@/lib/api";
+import { useRouter } from "next/navigation";
+import {
+  getPublicOrder,
+  createOrRefreshPublicBill,
+  createPublicServiceRequest,
+  ApiError,
+} from "@/lib/api";
 import { PublicOrderResponse } from "@/lib/types";
+import { savePublicSessionToken } from "@/lib/publicSessionStorage";
 
 interface OrderTrackingClientProps {
   publicToken: string;
@@ -13,6 +20,7 @@ type SRStatus = "idle" | "loading" | "success" | "error";
 export default function OrderTrackingClient({
   publicToken,
 }: OrderTrackingClientProps) {
+  const router = useRouter();
   const [orderData, setOrderData] = useState<PublicOrderResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -44,6 +52,8 @@ export default function OrderTrackingClient({
       callWaiter: "Call Waiter",
       water: "Water",
       requestBill: "Request Bill",
+      viewFullBill: "View full table bill",
+      combinedSubtotal: "Combined subtotal",
       requestSent: "Request sent!",
       failedSend: "Failed to send request.",
       tooManyRequests: "Too many requests. Please wait.",
@@ -78,6 +88,8 @@ export default function OrderTrackingClient({
       callWaiter: "വെയ്റ്ററെ വിളിക്കുക",
       water: "വെള്ളം",
       requestBill: "ബിൽ ചോദിക്കുക",
+      viewFullBill: "മുഴുവൻ ടേബിൾ ബിൽ കാണുക",
+      combinedSubtotal: "ആകെ തുക",
       requestSent: "സന്ദേശം അയച്ചു!",
       failedSend: "സന്ദേശം അയക്കാൻ സാധിച്ചില്ല.",
       tooManyRequests: "വളരെ കൂടുതൽ സന്ദേശങ്ങൾ അയച്ചു. ദയവായി കാത്തിരിക്കുക.",
@@ -277,6 +289,46 @@ export default function OrderTrackingClient({
               {t.lastUpdated}: {lastUpdated.toLocaleTimeString()}
             </div>
           )}
+
+          {orderData.dining_session_token && (
+            <div className="mt-3 rounded-2xl border border-emerald-100 bg-emerald-50 p-4 dark:border-emerald-900/40 dark:bg-emerald-950/20">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
+                    {t.combinedSubtotal}
+                  </p>
+                  <p className="text-lg font-black text-emerald-700 dark:text-emerald-400">
+                    ₹{Number(orderData.session_subtotal || orderData.subtotal).toFixed(2)}
+                  </p>
+                  {orderData.session_order_count !== null &&
+                    orderData.session_order_count !== undefined && (
+                    <p className="text-xs font-semibold text-emerald-700/80 dark:text-emerald-300/80">
+                      {orderData.session_order_count} orders
+                    </p>
+                  )}
+                </div>
+                <button
+                  onClick={() => {
+                    if (
+                      orderData.restaurant_slug &&
+                      orderData.table_code &&
+                      orderData.dining_session_token
+                    ) {
+                      savePublicSessionToken(
+                        orderData.restaurant_slug,
+                        orderData.table_code,
+                        orderData.dining_session_token
+                      );
+                    }
+                    router.push(`/session/${orderData.dining_session_token}`);
+                  }}
+                  className="min-h-12 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-black text-white transition hover:bg-emerald-700"
+                >
+                  {t.viewFullBill}
+                </button>
+              </div>
+            </div>
+          )}
         </header>
 
         {/* Visual Timeline Panel */}
@@ -427,6 +479,9 @@ export default function OrderTrackingClient({
                         setSrStatus((prev) => ({ ...prev, [type]: "loading" }));
                         setSrMessage((prev) => ({ ...prev, [type]: "" }));
                         try {
+                          if (type === "bill" && orderData.dining_session_token) {
+                            await createOrRefreshPublicBill(orderData.dining_session_token);
+                          }
                           await createPublicServiceRequest(
                             orderData.restaurant_slug!,
                             orderData.table_code!,
@@ -493,4 +548,3 @@ export default function OrderTrackingClient({
     </div>
   );
 }
-

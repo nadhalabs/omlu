@@ -62,6 +62,7 @@ from app.routes import (
     dashboard_router,
     settings_router,
     health_router,
+    bills_router,
 )
 
 app.include_router(health_router)
@@ -73,6 +74,7 @@ app.include_router(auth_router)
 app.include_router(admin_router)
 app.include_router(dashboard_router)
 app.include_router(settings_router)
+app.include_router(bills_router)
 
 
 @app.get("/")

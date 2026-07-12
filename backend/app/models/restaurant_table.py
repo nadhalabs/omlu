@@ -29,3 +29,8 @@ class RestaurantTable(Base):
         back_populates="table",
         cascade="all, delete-orphan"
     )
+    dining_sessions: Mapped[list["DiningSession"]] = relationship(
+        "DiningSession",
+        back_populates="table",
+        cascade="all, delete-orphan"
+    )

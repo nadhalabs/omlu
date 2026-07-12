@@ -1,8 +1,10 @@
 import uuid
 import pytest
+from concurrent.futures import ThreadPoolExecutor
 from fastapi.testclient import TestClient
 from app.main import app
 from app.database import SessionLocal
+from app.models.dining_session import DiningSession
 from app.models.restaurant import Restaurant
 from app.models.restaurant_table import RestaurantTable
 from app.models.menu import MenuCategory, MenuItem
@@ -29,9 +31,10 @@ def setup_test_data():
 
     # Create tables
     table_active = RestaurantTable(restaurant_id=restaurant.id, table_number="T1", table_code="T1-TEST", is_active=True)
+    table_second = RestaurantTable(restaurant_id=restaurant.id, table_number="T3", table_code="T3-TEST", is_active=True)
     table_inactive = RestaurantTable(restaurant_id=restaurant.id, table_number="T2", table_code="T2-INACTIVE", is_active=False)
     table_other = RestaurantTable(restaurant_id=inactive_restaurant.id, table_number="T1", table_code="T1-OTHER", is_active=True)
-    db.add_all([table_active, table_inactive, table_other])
+    db.add_all([table_active, table_second, table_inactive, table_other])
     db.flush()
 
     # Create categories
@@ -53,6 +56,7 @@ def setup_test_data():
         "restaurant_slug": restaurant.slug,
         "inactive_restaurant_slug": inactive_restaurant.slug,
         "table_code": table_active.table_code,
+        "second_table_code": table_second.table_code,
         "inactive_table_code": table_inactive.table_code,
         "item_id": item_available.id,
         "unavailable_item_id": item_unavailable.id,
@@ -96,6 +100,241 @@ def test_valid_order_creation(setup_test_data):
     assert res_data["items"][0]["item_name"] == "Item Available"
     assert len(res_data["status_history"]) == 1
     assert res_data["status_history"][0]["new_status"] == "pending"
+    assert res_data["dining_session_token"]
+    assert res_data["session_subtotal"] == "200.00"
+    assert res_data["session_order_count"] >= 1
+    assert res_data["can_order_more"] is True
+
+
+def create_order_payload(item_id, quantity=1):
+    return {"items": [{"menu_item_id": item_id, "quantity": quantity}]}
+
+
+def post_table_order(data, table_code=None, item_id=None, idempotency_key=None, quantity=1):
+    return client.post(
+        f"/public/restaurants/{data['restaurant_slug']}/tables/{table_code or data['table_code']}/orders",
+        json=create_order_payload(item_id or data["item_id"], quantity),
+        headers={"Idempotency-Key": idempotency_key or f"idemp-{uuid.uuid4().hex}"}
+    )
+
+
+def create_test_table(data, table_number="S"):
+    db = SessionLocal()
+    restaurant = db.query(Restaurant).filter(Restaurant.slug == data["restaurant_slug"]).one()
+    table = RestaurantTable(
+        restaurant_id=restaurant.id,
+        table_number=table_number,
+        table_code=f"{table_number}-{uuid.uuid4().hex[:8]}",
+        is_active=True,
+    )
+    db.add(table)
+    db.commit()
+    table_code = table.table_code
+    db.close()
+    return table_code
+
+
+def test_first_order_creates_session(setup_test_data):
+    data = setup_test_data
+    table_code = create_test_table(data, "S1")
+
+    response = post_table_order(data, table_code=table_code)
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["dining_session_token"]
+    session_response = client.get(f"/public/sessions/{body['dining_session_token']}")
+    assert session_response.status_code == 200
+    session_body = session_response.json()
+    assert session_body["order_count"] == 1
+    assert session_body["combined_subtotal"] == "100.00"
+
+
+def test_second_order_joins_same_session_and_combines_subtotal(setup_test_data):
+    data = setup_test_data
+    table_code = create_test_table(data, "S2")
+    first = post_table_order(data, table_code=table_code, quantity=1).json()
+    second = client.post(
+        f"/public/sessions/{first['dining_session_token']}/orders",
+        json=create_order_payload(data["item_id"], 2),
+        headers={"Idempotency-Key": f"idemp-{uuid.uuid4().hex}"}
+    )
+
+    assert second.status_code == 201
+    session_body = second.json()
+    assert session_body["public_token"] == first["dining_session_token"]
+    assert session_body["order_count"] == 2
+    assert session_body["combined_subtotal"] == "300.00"
+    assert [order["subtotal"] for order in session_body["orders"]] == ["100.00", "200.00"]
+
+
+def test_another_table_gets_another_session(setup_test_data):
+    data = setup_test_data
+    first = post_table_order(data, table_code=create_test_table(data, "S3A")).json()
+    second = post_table_order(data, table_code=create_test_table(data, "S3B")).json()
+
+    assert first["dining_session_token"] != second["dining_session_token"]
+
+
+def test_idempotent_retry_does_not_create_another_order_or_session(setup_test_data):
+    data = setup_test_data
+    table_code = create_test_table(data, "S4")
+    key = f"idemp-{uuid.uuid4().hex}"
+    first = post_table_order(data, table_code=table_code, idempotency_key=key).json()
+    second = post_table_order(data, table_code=table_code, idempotency_key=key).json()
+
+    assert second["public_token"] == first["public_token"]
+    assert second["dining_session_token"] == first["dining_session_token"]
+
+    session_response = client.get(f"/public/sessions/{first['dining_session_token']}")
+    assert session_response.status_code == 200
+    session_body = session_response.json()
+    assert session_body["order_count"] == 1
+    assert session_body["combined_subtotal"] == "100.00"
+
+
+@pytest.mark.parametrize("locked_status", ["closed", "payment_requested"])
+def test_locked_session_rejects_new_orders(setup_test_data, locked_status):
+    data = setup_test_data
+    table_code = create_test_table(data, f"S5-{locked_status[:3]}")
+    first = post_table_order(data, table_code=table_code).json()
+    db = SessionLocal()
+    session = db.query(DiningSession).filter(
+        DiningSession.public_token == first["dining_session_token"]
+    ).one()
+    session.status = locked_status
+    db.commit()
+    db.close()
+
+    response = client.post(
+        f"/public/sessions/{first['dining_session_token']}/orders",
+        json=create_order_payload(data["item_id"]),
+        headers={"Idempotency-Key": f"idemp-{uuid.uuid4().hex}"}
+    )
+
+    assert response.status_code == 409
+    assert "ordering is locked" in response.json()["detail"].lower()
+
+
+def test_order_tracking_returns_session_information(setup_test_data):
+    data = setup_test_data
+    table_code = create_test_table(data, "S6")
+    first = post_table_order(data, table_code=table_code, quantity=1).json()
+    client.post(
+        f"/public/sessions/{first['dining_session_token']}/orders",
+        json=create_order_payload(data["item_id"], 2),
+        headers={"Idempotency-Key": f"idemp-{uuid.uuid4().hex}"}
+    )
+
+    response = client.get(f"/public/orders/{first['public_token']}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["dining_session_token"] == first["dining_session_token"]
+    assert body["session_subtotal"] == "300.00"
+    assert body["session_order_count"] == 2
+    assert body["can_order_more"] is True
+
+
+def test_historical_null_session_order_remains_readable(setup_test_data):
+    data = setup_test_data
+    db = SessionLocal()
+    restaurant = db.query(Restaurant).filter(Restaurant.slug == data["restaurant_slug"]).one()
+    table = db.query(RestaurantTable).filter(
+        RestaurantTable.restaurant_id == restaurant.id,
+        RestaurantTable.table_code == data["table_code"]
+    ).one()
+    order = Order(
+        restaurant_id=restaurant.id,
+        table_id=table.id,
+        order_number=f"NS-HIST-{uuid.uuid4().hex[:8]}",
+        public_token=uuid.uuid4().hex,
+        status="pending",
+        subtotal=100.00,
+        idempotency_key=f"hist-{uuid.uuid4().hex}",
+    )
+    db.add(order)
+    db.flush()
+    db.add(OrderStatusHistory(order_id=order.id, old_status=None, new_status="pending"))
+    token = order.public_token
+    db.commit()
+    db.close()
+
+    response = client.get(f"/public/orders/{token}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["dining_session_token"] is None
+    assert body["session_subtotal"] is None
+    assert body["session_order_count"] is None
+
+
+def test_session_order_item_from_another_restaurant_rejected(setup_test_data):
+    data = setup_test_data
+    first = post_table_order(data, table_code=create_test_table(data, "S8")).json()
+
+    response = client.post(
+        f"/public/sessions/{first['dining_session_token']}/orders",
+        json=create_order_payload(data["other_item_id"]),
+        headers={"Idempotency-Key": f"idemp-{uuid.uuid4().hex}"}
+    )
+
+    assert response.status_code == 400
+    assert "another restaurant" in response.json()["detail"].lower()
+
+
+def test_session_order_unavailable_item_rejected(setup_test_data):
+    data = setup_test_data
+    first = post_table_order(data, table_code=create_test_table(data, "S9")).json()
+
+    response = client.post(
+        f"/public/sessions/{first['dining_session_token']}/orders",
+        json=create_order_payload(data["unavailable_item_id"]),
+        headers={"Idempotency-Key": f"idemp-{uuid.uuid4().hex}"}
+    )
+
+    assert response.status_code == 400
+    assert "unavailable" in response.json()["detail"].lower()
+
+
+def test_concurrent_first_orders_create_one_session(setup_test_data):
+    data = setup_test_data
+    db = SessionLocal()
+    restaurant = db.query(Restaurant).filter(Restaurant.slug == data["restaurant_slug"]).one()
+    table = RestaurantTable(
+        restaurant_id=restaurant.id,
+        table_number="TC",
+        table_code=f"TC-{uuid.uuid4().hex[:8]}",
+        is_active=True,
+    )
+    db.add(table)
+    db.commit()
+    table_code = table.table_code
+    table_id = table.id
+    db.close()
+
+    def submit_order():
+        local_client = TestClient(app)
+        return local_client.post(
+            f"/public/restaurants/{data['restaurant_slug']}/tables/{table_code}/orders",
+            json=create_order_payload(data["item_id"]),
+            headers={"Idempotency-Key": f"idemp-{uuid.uuid4().hex}"}
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        responses = list(executor.map(lambda _: submit_order(), range(2)))
+
+    assert [response.status_code for response in responses] == [201, 201]
+    tokens = {response.json()["dining_session_token"] for response in responses}
+    assert len(tokens) == 1
+
+    db = SessionLocal()
+    session_count = db.query(DiningSession).filter(DiningSession.table_id == table_id).count()
+    order_count = db.query(Order).join(DiningSession).filter(DiningSession.table_id == table_id).count()
+    db.close()
+
+    assert session_count == 1
+    assert order_count == 2
 
 
 def test_duplicate_idempotency_request(setup_test_data):

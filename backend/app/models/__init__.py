@@ -4,6 +4,8 @@ from app.models.menu import MenuCategory, MenuItem
 from app.models.order import Order, OrderItem, OrderStatusHistory, RestaurantDailySequence
 from app.models.staff_user import StaffUser
 from app.models.service_request import ServiceRequest
+from app.models.dining_session import DiningSession
+from app.models.bill import Bill, RestaurantBillDailySequence
 
 __all__ = [
     "Restaurant",
@@ -16,4 +18,7 @@ __all__ = [
     "RestaurantDailySequence",
     "StaffUser",
     "ServiceRequest",
+    "DiningSession",
+    "Bill",
+    "RestaurantBillDailySequence",
 ]

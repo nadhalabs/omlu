@@ -77,7 +77,99 @@ export interface PublicOrderResponse {
   items: PublicOrderResponseItem[];
   status_history: OrderStatusHistoryResponse[];
   service_requests_enabled?: boolean;
+  dining_session_token?: string | null;
+  session_subtotal?: string | null;
+  session_order_count?: number | null;
+  can_order_more?: boolean | null;
 }
+
+export type DiningSessionStatus =
+  | "open"
+  | "payment_requested"
+  | "payment_pending"
+  | "paid"
+  | "closed"
+  | "cancelled";
+
+export interface DiningSessionOrderItem {
+  menu_item_id: number | null;
+  item_name: string;
+  quantity: number;
+  unit_price: string;
+  total_price: string;
+  item_note: string | null;
+}
+
+export interface DiningSessionOrder {
+  order_number: string;
+  public_token: string;
+  status: string;
+  subtotal: string;
+  created_at: string;
+  customer_note: string | null;
+  items: DiningSessionOrderItem[];
+}
+
+export interface PublicDiningSessionResponse {
+  public_token: string;
+  status: DiningSessionStatus;
+  restaurant_name: string;
+  restaurant_slug: string;
+  table_number: string;
+  table_code: string;
+  opened_at: string;
+  orders: DiningSessionOrder[];
+  combined_subtotal: string;
+  order_count: number;
+  service_requests_enabled: boolean;
+  can_order_more: boolean;
+}
+
+export type SessionSummaryResponse = PublicDiningSessionResponse;
+
+export type BillStatus =
+  | "draft"
+  | "issued"
+  | "payment_pending"
+  | "paid"
+  | "cancelled";
+
+export interface BillItem {
+  item_name: string;
+  quantity: number;
+  unit_price: string;
+  line_total: string;
+}
+
+export interface BillOrder {
+  order_number: string;
+  status: string;
+  subtotal: string;
+  items: BillItem[];
+}
+
+export interface BillResponse {
+  bill_number: string;
+  restaurant_name: string;
+  table_number: string;
+  session_token: string;
+  status: BillStatus;
+  orders: BillOrder[];
+  subtotal: string;
+  tax_amount: string;
+  discount_amount: string;
+  total_amount: string;
+  currency: string;
+  generated_at: string;
+  paid_at: string | null;
+  payment_method: "counter_cash" | "counter_upi" | "online" | null;
+  payment_reference: string | null;
+  paid_by_staff_id: number | null;
+}
+
+export type IssueBillResponse = BillResponse;
+export type CounterPaymentMethod = "counter_cash" | "counter_upi";
+export type CounterPaymentResponse = BillResponse;
 
 export interface KitchenOrderItemResponse {
   item_name: string;
@@ -166,6 +258,7 @@ export interface ServiceRequestResponse {
   restaurant_id: number;
   table_id: number;
   order_id: number | null;
+  dining_session_id: number | null;
   request_type: string;
   status: "pending" | "resolved" | "cancelled";
   created_at: string;
@@ -176,6 +269,8 @@ export interface ServiceRequestResponse {
 export interface StaffServiceRequestResponse extends ServiceRequestResponse {
   table_number: string | null;
   order_number: string | null;
+  dining_session_token: string | null;
+  bill_number: string | null;
   resolver_name: string | null;
 }
 

@@ -2,8 +2,24 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getPublicMenu, createPublicOrder, ApiError } from "@/lib/api";
-import { PublicMenuResponse, MenuItem, MenuCategory, OrderItemRequest } from "@/lib/types";
+import {
+  getPublicMenu,
+  createPublicOrder,
+  getPublicDiningSession,
+  addOrderToDiningSession,
+  ApiError,
+} from "@/lib/api";
+import {
+  PublicMenuResponse,
+  PublicDiningSessionResponse,
+  MenuItem,
+  OrderItemRequest,
+} from "@/lib/types";
+import {
+  clearPublicSessionToken,
+  readPublicSessionToken,
+  savePublicSessionToken,
+} from "@/lib/publicSessionStorage";
 
 interface MenuClientProps {
   restaurantSlug: string;
@@ -34,6 +50,10 @@ export default function MenuClient({
   // Order submission states
   const [isPlacingOrder, setIsPlacingOrder] = useState<boolean>(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [currentSession, setCurrentSession] =
+    useState<PublicDiningSessionResponse | null>(null);
+  const [sessionLoading, setSessionLoading] = useState<boolean>(false);
+  const [sessionNotice, setSessionNotice] = useState<string | null>(null);
 
   // Fetch menu data
   const fetchMenu = async () => {
@@ -62,6 +82,58 @@ export default function MenuClient({
     setIdempotencyKey(crypto.randomUUID());
   }, [restaurantSlug, tableCode]);
 
+  useEffect(() => {
+    const validateSavedSession = async () => {
+      const queryToken = new URLSearchParams(window.location.search).get("session");
+      const savedToken = readPublicSessionToken(restaurantSlug, tableCode);
+      const tokenToValidate = queryToken || savedToken;
+
+      if (!tokenToValidate) {
+        setCurrentSession(null);
+        setSessionNotice(null);
+        return;
+      }
+
+      setSessionLoading(true);
+      try {
+        const session = await getPublicDiningSession(tokenToValidate);
+        const belongsToThisTable =
+          session.restaurant_slug === restaurantSlug &&
+          session.table_code === tableCode;
+
+        if (!belongsToThisTable) {
+          clearPublicSessionToken(restaurantSlug, tableCode);
+          setCurrentSession(null);
+          setSessionNotice("Saved table session did not match this QR table and was removed.");
+          return;
+        }
+
+        if (["paid", "closed", "cancelled"].includes(session.status)) {
+          clearPublicSessionToken(restaurantSlug, tableCode);
+          setCurrentSession(null);
+          setSessionNotice("This saved table session is finished and was removed.");
+          return;
+        }
+
+        savePublicSessionToken(restaurantSlug, tableCode, session.public_token);
+        setCurrentSession(session);
+        setSessionNotice(
+          session.status === "open"
+            ? null
+            : "This table session is no longer open. New ordering is disabled."
+        );
+      } catch {
+        clearPublicSessionToken(restaurantSlug, tableCode);
+        setCurrentSession(null);
+        setSessionNotice("Saved table session could not be verified and was removed.");
+      } finally {
+        setSessionLoading(false);
+      }
+    };
+
+    validateSavedSession();
+  }, [restaurantSlug, tableCode]);
+
   // Local translations for UI labels
   const translations = {
     en: {
@@ -85,6 +157,11 @@ export default function MenuClient({
       yourCart: "Your Cart",
       emptyCartMsg: "Your cart is empty",
       checkoutFailed: "Checkout failed. Please try again.",
+      currentBill: "Current bill",
+      previousOrders: "previous orders",
+      billLocked: "Ordering is currently locked for this table session.",
+      checkingSession: "Checking current table bill...",
+      viewFullBill: "View full table bill",
     },
     ml: {
       searchPlaceholder: "വിഭവങ്ങൾ തിരയുക...",
@@ -107,6 +184,11 @@ export default function MenuClient({
       yourCart: "നിങ്ങളുടെ കാർട്ട്",
       emptyCartMsg: "കാർട്ടിൽ വിഭവങ്ങൾ ഒന്നുമില്ല",
       checkoutFailed: "ഓർഡർ സബ്മിറ്റ് ചെയ്യാൻ സാധിച്ചില്ല. വീണ്ടും ശ്രമിക്കുക.",
+      currentBill: "നിലവിലെ ബിൽ",
+      previousOrders: "മുൻ ഓർഡറുകൾ",
+      billLocked: "ഈ മേശയിലെ സെഷനിൽ പുതിയ ഓർഡർ ഇപ്പോൾ ലോക്ക് ചെയ്തിരിക്കുന്നു.",
+      checkingSession: "നിലവിലെ ടേബിൾ ബിൽ പരിശോധിക്കുന്നു...",
+      viewFullBill: "മുഴുവൻ ടേബിൾ ബിൽ കാണുക",
     },
   };
 
@@ -206,12 +288,35 @@ export default function MenuClient({
     };
 
     try {
-      const orderResponse = await createPublicOrder(
-        restaurantSlug,
-        tableCode,
-        payload,
-        idempotencyKey
-      );
+      if (currentSession && currentSession.status !== "open") {
+        throw new ApiError(409, t.billLocked);
+      }
+
+      const sessionResponse = currentSession?.status === "open"
+        ? await addOrderToDiningSession(
+            currentSession.public_token,
+            payload,
+            idempotencyKey
+          )
+        : null;
+
+      const orderResponse = sessionResponse
+        ? null
+        : await createPublicOrder(
+            restaurantSlug,
+            tableCode,
+            payload,
+            idempotencyKey
+          );
+
+      const sessionToken =
+        sessionResponse?.public_token || orderResponse?.dining_session_token;
+
+      if (!sessionToken) {
+        throw new ApiError(500, "Order was placed, but no table session was returned.");
+      }
+
+      savePublicSessionToken(restaurantSlug, tableCode, sessionToken);
       
       // Order placed successfully! Clear cart & redirect
       setCart({});
@@ -219,8 +324,7 @@ export default function MenuClient({
       setCustomerNote("");
       setIsCartOpen(false);
       
-      // Navigate to tracking page
-      router.push(`/order/${orderResponse.public_token}`);
+      router.push(`/session/${sessionToken}`);
     } catch (err) {
       if (err instanceof ApiError) {
         setCheckoutError(err.message);
@@ -307,6 +411,13 @@ export default function MenuClient({
     currency: "INR",
   }).format(subtotal);
 
+  const combinedSubtotal = currentSession
+    ? new Intl.NumberFormat("en-IN", {
+        style: "currency",
+        currency: "INR",
+      }).format(Number(currentSession.combined_subtotal))
+    : null;
+
   // Scroll to Category Header
   const scrollToCategory = (categoryId: number) => {
     setActiveCategory(categoryId);
@@ -349,6 +460,42 @@ export default function MenuClient({
       <div className="sticky top-[61px] z-30 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800 py-3 px-4 sm:px-6">
         <div className="max-w-3xl mx-auto flex flex-col gap-3">
           {/* Search box */}
+          {sessionLoading && (
+            <div className="text-xs font-semibold text-amber-700 dark:text-amber-500 bg-amber-50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/40 rounded-xl px-3 py-2">
+              {t.checkingSession}
+            </div>
+          )}
+
+          {currentSession && (
+            <div className="flex items-center justify-between gap-3 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/40 rounded-2xl px-4 py-3">
+              <div>
+                <p className="text-xs font-black uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
+                  {t.currentBill}
+                </p>
+                <p className="text-xs text-emerald-700/80 dark:text-emerald-300/80 font-semibold">
+                  {currentSession.order_count} {t.previousOrders}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-lg font-black text-emerald-700 dark:text-emerald-400">
+                  {combinedSubtotal}
+                </p>
+                <button
+                  onClick={() => router.push(`/session/${currentSession.public_token}`)}
+                  className="text-[11px] font-bold underline text-emerald-700 dark:text-emerald-300 min-h-8"
+                >
+                  {t.viewFullBill}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {sessionNotice && (
+            <div className="text-xs font-semibold text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-900/40 rounded-xl px-3 py-2">
+              {language === "en" ? sessionNotice : t.billLocked}
+            </div>
+          )}
+
           <div className="relative">
             <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-zinc-400">
               🔍
@@ -635,7 +782,7 @@ export default function MenuClient({
                   </span>
                 </div>
                 <button
-                  disabled={isPlacingOrder}
+                  disabled={isPlacingOrder || (!!currentSession && currentSession.status !== "open")}
                   onClick={handlePlaceOrder}
                   className={`w-full py-3.5 rounded-2xl font-bold text-white text-center shadow-md transition cursor-pointer flex items-center justify-center gap-2 ${
                     isPlacingOrder

@@ -4,14 +4,16 @@ from collections import defaultdict
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
-from sqlalchemy import text
 
 from app.database import get_db
 from app.models.restaurant import Restaurant
 from app.models.restaurant_table import RestaurantTable
 from app.models.order import Order
 from app.models.service_request import ServiceRequest
+from app.models.dining_session import DiningSession
+from app.models.bill import Bill
 from app.schemas.service_request import ServiceRequestCreate, ServiceRequestResponse, StaffServiceRequestResponse
+from app.services.dining_sessions import find_current_open_session_for_table
 from app.utils.auth import get_current_staff_user, RoleChecker
 from app.models.staff_user import StaffUser
 
@@ -94,6 +96,7 @@ def create_public_service_request(
 
     # 6. If order token provided, validate it belongs to this restaurant and table
     order_id = None
+    dining_session_id = None
     if req_body.public_order_token:
         order = db.query(Order).filter(
             Order.public_token == req_body.public_order_token,
@@ -111,6 +114,18 @@ def create_public_service_request(
                 detail="Cannot associate a service request with a rejected order."
             )
         order_id = order.id
+        dining_session_id = order.dining_session_id
+
+        current_session = find_current_open_session_for_table(db, table.id)
+        if current_session and dining_session_id and current_session.id != dining_session_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Order token is not valid for the current table session."
+            )
+    else:
+        current_session = find_current_open_session_for_table(db, table.id)
+        if current_session:
+            dining_session_id = current_session.id
 
     # 7. Cooldown check: use a SELECT FOR UPDATE within a transaction to prevent races
     # Rule: a table cannot have another PENDING request of the same type
@@ -147,6 +162,7 @@ def create_public_service_request(
             restaurant_id=restaurant.id,
             table_id=table.id,
             order_id=order_id,
+            dining_session_id=dining_session_id,
             request_type=req_body.request_type,
             status="pending"
         )
@@ -199,10 +215,19 @@ def list_staff_service_requests(
     for r in requests_list:
         table = db.query(RestaurantTable).filter(RestaurantTable.id == r.table_id).first()
         order_number = None
+        dining_session_token = None
+        bill_number = None
         if r.order_id:
             order = db.query(Order).filter(Order.id == r.order_id).first()
             if order:
                 order_number = order.order_number
+        if r.dining_session_id:
+            dining_session = db.query(DiningSession).filter(DiningSession.id == r.dining_session_id).first()
+            if dining_session:
+                dining_session_token = dining_session.public_token
+            bill = db.query(Bill).filter(Bill.dining_session_id == r.dining_session_id).first()
+            if bill:
+                bill_number = bill.bill_number
         resolver_name = None
         if r.resolved_by_staff_id:
             resolver = db.query(StaffUser).filter(StaffUser.id == r.resolved_by_staff_id).first()
@@ -214,6 +239,7 @@ def list_staff_service_requests(
             restaurant_id=r.restaurant_id,
             table_id=r.table_id,
             order_id=r.order_id,
+            dining_session_id=r.dining_session_id,
             request_type=r.request_type,
             status=r.status,
             created_at=r.created_at,
@@ -221,6 +247,8 @@ def list_staff_service_requests(
             resolved_by_staff_id=r.resolved_by_staff_id,
             table_number=table.table_number if table else None,
             order_number=order_number,
+            dining_session_token=dining_session_token,
+            bill_number=bill_number,
             resolver_name=resolver_name
         ))
 
@@ -271,10 +299,19 @@ def resolve_service_request(
     # Build enriched response
     table = db.query(RestaurantTable).filter(RestaurantTable.id == service_req.table_id).first()
     order_number = None
+    dining_session_token = None
+    bill_number = None
     if service_req.order_id:
         order = db.query(Order).filter(Order.id == service_req.order_id).first()
         if order:
             order_number = order.order_number
+    if service_req.dining_session_id:
+        dining_session = db.query(DiningSession).filter(DiningSession.id == service_req.dining_session_id).first()
+        if dining_session:
+            dining_session_token = dining_session.public_token
+        bill = db.query(Bill).filter(Bill.dining_session_id == service_req.dining_session_id).first()
+        if bill:
+            bill_number = bill.bill_number
     resolver_name = None
     if service_req.resolved_by_staff_id:
         resolver = db.query(StaffUser).filter(StaffUser.id == service_req.resolved_by_staff_id).first()
@@ -286,6 +323,7 @@ def resolve_service_request(
         restaurant_id=service_req.restaurant_id,
         table_id=service_req.table_id,
         order_id=service_req.order_id,
+        dining_session_id=service_req.dining_session_id,
         request_type=service_req.request_type,
         status=service_req.status,
         created_at=service_req.created_at,
@@ -293,5 +331,7 @@ def resolve_service_request(
         resolved_by_staff_id=service_req.resolved_by_staff_id,
         table_number=table.table_number if table else None,
         order_number=order_number,
+        dining_session_token=dining_session_token,
+        bill_number=bill_number,
         resolver_name=resolver_name
     )

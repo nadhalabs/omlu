@@ -51,9 +51,19 @@ class PublicOrderResponse(BaseModel):
     items: List[PublicOrderResponseItem]
     status_history: List[OrderStatusHistoryResponse]
     service_requests_enabled: Optional[bool] = True  # Pass through restaurant setting
+    dining_session_token: Optional[str] = None
+    session_subtotal: Optional[Decimal] = None
+    session_order_count: Optional[int] = None
+    can_order_more: Optional[bool] = None
 
     @field_serializer("subtotal")
     def serialize_subtotal(self, subtotal: Decimal) -> str:
+        return f"{subtotal:.2f}"
+
+    @field_serializer("session_subtotal")
+    def serialize_session_subtotal(self, subtotal: Optional[Decimal]) -> Optional[str]:
+        if subtotal is None:
+            return None
         return f"{subtotal:.2f}"
 
     model_config = ConfigDict(from_attributes=True)

@@ -1,8 +1,15 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { getStaffServiceRequests, resolveStaffServiceRequest, ApiError } from "@/lib/api";
-import { StaffServiceRequestResponse } from "@/lib/types";
+import {
+  getStaffServiceRequests,
+  resolveStaffServiceRequest,
+  confirmStaffCounterPayment,
+  createOrRefreshPublicBill,
+  issueStaffBill,
+  ApiError,
+} from "@/lib/api";
+import { CounterPaymentMethod, StaffServiceRequestResponse } from "@/lib/types";
 
 const REQUEST_TYPE_LABELS: Record<string, string> = {
   waiter: "🙋 Waiter",
@@ -29,6 +36,11 @@ export default function StaffRequestsClient() {
   const [error, setError] = useState<string | null>(null);
   const [showResolved, setShowResolved] = useState(false);
   const [resolvingId, setResolvingId] = useState<number | null>(null);
+  const [issuingId, setIssuingId] = useState<number | null>(null);
+  const [confirmingPayment, setConfirmingPayment] = useState<string | null>(null);
+  const [paidBills, setPaidBills] = useState<
+    Record<number, { method: CounterPaymentMethod | "online"; paidAt: string }>
+  >({});
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   // Track IDs we've already alerted for so we don't replay
@@ -87,6 +99,76 @@ export default function StaffRequestsClient() {
       else setError("Failed to resolve request.");
     } finally {
       setResolvingId(null);
+    }
+  };
+
+  const handleIssueBill = async (req: StaffServiceRequestResponse) => {
+    if (!req.dining_session_token || issuingId === req.id) return;
+    setIssuingId(req.id);
+    setError(null);
+    try {
+      const bill = req.bill_number
+        ? null
+        : await createOrRefreshPublicBill(req.dining_session_token);
+      const billNumber = req.bill_number || bill?.bill_number;
+      if (!billNumber) {
+        throw new Error("Bill could not be prepared.");
+      }
+      const issued = await issueStaffBill(billNumber);
+      setRequests((prev) =>
+        prev.map((item) =>
+          item.id === req.id
+            ? { ...item, bill_number: issued.bill_number }
+            : item
+        )
+      );
+    } catch (err) {
+      if (err instanceof ApiError) setError(err.message);
+      else if (err instanceof Error) setError(err.message);
+      else setError("Failed to issue bill.");
+    } finally {
+      setIssuingId(null);
+    }
+  };
+
+  const handleConfirmPayment = async (
+    req: StaffServiceRequestResponse,
+    method: CounterPaymentMethod
+  ) => {
+    if (!req.dining_session_token) return;
+    const actionKey = `${req.id}-${method}`;
+    if (confirmingPayment) return;
+    setConfirmingPayment(actionKey);
+    setError(null);
+    try {
+      const bill = req.bill_number
+        ? null
+        : await createOrRefreshPublicBill(req.dining_session_token);
+      const billNumber = req.bill_number || bill?.bill_number;
+      if (!billNumber) {
+        throw new Error("Bill could not be prepared.");
+      }
+      const paid = await confirmStaffCounterPayment(billNumber, method);
+      setRequests((prev) =>
+        prev.map((item) =>
+          item.id === req.id
+            ? { ...item, bill_number: paid.bill_number }
+            : item
+        )
+      );
+      setPaidBills((prev) => ({
+        ...prev,
+        [req.id]: {
+          method: paid.payment_method || method,
+          paidAt: paid.paid_at || new Date().toISOString(),
+        },
+      }));
+    } catch (err) {
+      if (err instanceof ApiError) setError(err.message);
+      else if (err instanceof Error) setError(err.message);
+      else setError("Failed to confirm payment.");
+    } finally {
+      setConfirmingPayment(null);
     }
   };
 
@@ -170,6 +252,7 @@ export default function StaffRequestsClient() {
             {requests.map((req) => {
               const isPending = req.status === "pending";
               const typeColor = REQUEST_TYPE_COLORS[req.request_type] || "bg-zinc-900 border-zinc-700 text-zinc-300";
+              const paidBill = paidBills[req.id];
 
               return (
                 <div
@@ -208,14 +291,66 @@ export default function StaffRequestsClient() {
                     {/* Action */}
                     <div className="shrink-0 flex flex-col items-end gap-1">
                       {isPending ? (
-                        <button
-                          id={`resolve-btn-${req.id}`}
-                          onClick={() => handleResolve(req.id)}
-                          disabled={resolvingId === req.id}
-                          className="px-4 py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition cursor-pointer"
-                        >
-                          {resolvingId === req.id ? "Resolving…" : "Mark Resolved"}
-                        </button>
+                        <div className="flex flex-col gap-2">
+                          {paidBill && (
+                            <div className="rounded-xl border border-emerald-700/40 bg-emerald-950/30 px-3 py-2 text-xs font-bold text-emerald-300">
+                              <p>Paid</p>
+                              <p>
+                                {paidBill.method === "counter_cash"
+                                  ? "Cash"
+                                  : paidBill.method === "counter_upi"
+                                    ? "UPI"
+                                    : "Online"}
+                              </p>
+                              <p>{new Date(paidBill.paidAt).toLocaleTimeString()}</p>
+                            </div>
+                          )}
+                          {req.request_type === "bill" && req.dining_session_token && !paidBill && (
+                            <div className="flex flex-col gap-2">
+                              <a
+                                href={`/bill/${encodeURIComponent(req.dining_session_token)}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-4 py-2 bg-zinc-100 hover:bg-white text-zinc-950 font-bold text-xs rounded-xl transition text-center"
+                              >
+                                Open Bill
+                              </a>
+                              <button
+                                onClick={() => handleIssueBill(req)}
+                                disabled={issuingId === req.id}
+                                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition cursor-pointer"
+                              >
+                                {issuingId === req.id ? "Issuing…" : "Issue Bill"}
+                              </button>
+                              <button
+                                onClick={() => handleConfirmPayment(req, "counter_cash")}
+                                disabled={confirmingPayment !== null}
+                                className="px-4 py-2 bg-zinc-100 hover:bg-white disabled:opacity-50 text-zinc-950 font-bold text-xs rounded-xl transition cursor-pointer"
+                              >
+                                {confirmingPayment === `${req.id}-counter_cash`
+                                  ? "Confirming…"
+                                  : "Confirm Cash Payment"}
+                              </button>
+                              <button
+                                onClick={() => handleConfirmPayment(req, "counter_upi")}
+                                disabled={confirmingPayment !== null}
+                                className="px-4 py-2 bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition cursor-pointer"
+                              >
+                                {confirmingPayment === `${req.id}-counter_upi`
+                                  ? "Confirming…"
+                                  : "Confirm UPI Payment"}
+                              </button>
+                            </div>
+                          )}
+                          <button
+                            id={`resolve-btn-${req.id}`}
+                            onClick={() => handleResolve(req.id)}
+                            disabled={resolvingId === req.id}
+                            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition cursor-pointer"
+                          >
+                            {resolvingId === req.id ? "Resolving…" : "Mark Resolved"}
+                          </button>
+                        </div>
                       ) : (
                         <span className="text-xs text-emerald-500 font-bold flex items-center gap-1">
                           ✓ Resolved

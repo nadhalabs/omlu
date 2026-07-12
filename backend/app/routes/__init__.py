@@ -7,6 +7,7 @@ from app.routes.service_request import router as service_request_router
 from app.routes.dashboard import router as dashboard_router
 from app.routes.settings import router as settings_router
 from app.routes.health import router as health_router
+from app.routes.bills import router as bills_router
 
 __all__ = [
     "public_menu_router",
@@ -18,4 +19,5 @@ __all__ = [
     "dashboard_router",
     "settings_router",
     "health_router",
+    "bills_router",
 ]

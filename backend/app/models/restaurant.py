@@ -44,9 +44,18 @@ class Restaurant(Base):
         back_populates="restaurant",
         cascade="all, delete-orphan"
     )
+    dining_sessions: Mapped[List["DiningSession"]] = relationship(
+        "DiningSession",
+        back_populates="restaurant",
+        cascade="all, delete-orphan"
+    )
+    bills: Mapped[List["Bill"]] = relationship(
+        "Bill",
+        back_populates="restaurant",
+        cascade="all, delete-orphan"
+    )
     service_requests: Mapped[List["ServiceRequest"]] = relationship(
         "ServiceRequest",
         back_populates="restaurant",
         cascade="all, delete-orphan"
     )
-

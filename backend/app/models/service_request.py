@@ -21,6 +21,11 @@ class ServiceRequest(Base):
         ForeignKey("orders.id", ondelete="SET NULL"),
         nullable=True
     )
+    dining_session_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("dining_sessions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True
+    )
     request_type: Mapped[str] = mapped_column(
         String(50),
         CheckConstraint(
@@ -63,6 +68,7 @@ class ServiceRequest(Base):
     )
     table: Mapped["RestaurantTable"] = relationship("RestaurantTable")
     order: Mapped[Optional["Order"]] = relationship("Order")
+    dining_session: Mapped[Optional["DiningSession"]] = relationship("DiningSession")
     resolver: Mapped[Optional["StaffUser"]] = relationship(
         "StaffUser",
         foreign_keys=[resolved_by_staff_id]

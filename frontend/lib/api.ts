@@ -1,5 +1,10 @@
 import {
   PublicMenuResponse,
+  PublicDiningSessionResponse,
+  BillResponse,
+  CounterPaymentMethod,
+  CounterPaymentResponse,
+  IssueBillResponse,
   PublicOrderCreateRequest,
   PublicOrderResponse,
   KitchenOrderResponse,
@@ -107,6 +112,234 @@ export async function createPublicOrder(
       throw error;
     }
     throw new ApiError(500, "Could not connect to the backend server.");
+  }
+}
+
+export async function getPublicDiningSession(
+  sessionToken: string
+): Promise<PublicDiningSessionResponse> {
+  const baseUrl =
+    process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+  const url = `${baseUrl}/public/sessions/${encodeURIComponent(sessionToken)}`;
+
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      let message = "An error occurred while fetching the table session.";
+      try {
+        const errorData = await response.json();
+        if (errorData && typeof errorData.detail === "string") {
+          message = errorData.detail;
+        }
+      } catch {}
+      throw new ApiError(response.status, message);
+    }
+
+    return await response.json();
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
+    }
+    throw new ApiError(500, "Could not connect to the backend server.");
+  }
+}
+
+export async function addOrderToDiningSession(
+  sessionToken: string,
+  body: PublicOrderCreateRequest,
+  idempotencyKey: string
+): Promise<PublicDiningSessionResponse> {
+  const baseUrl =
+    process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+  const url = `${baseUrl}/public/sessions/${encodeURIComponent(sessionToken)}/orders`;
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Idempotency-Key": idempotencyKey,
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      let message = "An error occurred while adding items to the table bill.";
+      try {
+        const errorData = await response.json();
+        if (errorData && typeof errorData.detail === "string") {
+          message = errorData.detail;
+        }
+      } catch {}
+      throw new ApiError(response.status, message);
+    }
+
+    return await response.json();
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
+    }
+    throw new ApiError(500, "Could not connect to the backend server.");
+  }
+}
+
+export async function createOrRefreshPublicBill(
+  sessionToken: string
+): Promise<BillResponse> {
+  const baseUrl =
+    process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+  const url = `${baseUrl}/public/sessions/${encodeURIComponent(sessionToken)}/bill`;
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    if (!response.ok) {
+      let message = "An error occurred while preparing the bill.";
+      try {
+        const errorData = await response.json();
+        if (errorData && typeof errorData.detail === "string") {
+          message = errorData.detail;
+        }
+      } catch {}
+      throw new ApiError(response.status, message);
+    }
+
+    return await response.json();
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError(500, "Could not connect to the backend server.");
+  }
+}
+
+export async function getPublicBill(
+  sessionToken: string
+): Promise<BillResponse> {
+  const baseUrl =
+    process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+  const url = `${baseUrl}/public/sessions/${encodeURIComponent(sessionToken)}/bill`;
+
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    if (!response.ok) {
+      let message = "Bill not found.";
+      try {
+        const errorData = await response.json();
+        if (errorData && typeof errorData.detail === "string") {
+          message = errorData.detail;
+        }
+      } catch {}
+      throw new ApiError(response.status, message);
+    }
+
+    return await response.json();
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError(500, "Could not connect to the backend server.");
+  }
+}
+
+export async function issueStaffBill(
+  billNumber: string
+): Promise<IssueBillResponse> {
+  try {
+    const response = await fetch(
+      `/api/staff/bills/${encodeURIComponent(billNumber)}/issue`,
+      { method: "POST" }
+    );
+
+    if (!response.ok) {
+      let message = "Failed to issue bill.";
+      try {
+        const errorData = await response.json();
+        if (errorData && typeof errorData.detail === "string") {
+          message = errorData.detail;
+        }
+      } catch {}
+      throw new ApiError(response.status, message);
+    }
+
+    return await response.json();
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError(500, "Could not connect to proxy server.");
+  }
+}
+
+export async function requestPayAtCounter(
+  sessionToken: string,
+  method: CounterPaymentMethod
+): Promise<CounterPaymentResponse> {
+  const baseUrl =
+    process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+  const url = `${baseUrl}/public/sessions/${encodeURIComponent(sessionToken)}/pay-at-counter`;
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ method }),
+    });
+
+    if (!response.ok) {
+      let message = "Failed to request counter payment.";
+      try {
+        const errorData = await response.json();
+        if (errorData && typeof errorData.detail === "string") {
+          message = errorData.detail;
+        }
+      } catch {}
+      throw new ApiError(response.status, message);
+    }
+
+    return await response.json();
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError(500, "Could not connect to the backend server.");
+  }
+}
+
+export async function confirmStaffCounterPayment(
+  billNumber: string,
+  method: CounterPaymentMethod
+): Promise<CounterPaymentResponse> {
+  try {
+    const response = await fetch(
+      `/api/staff/bills/${encodeURIComponent(billNumber)}/confirm-counter-payment`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ method }),
+      }
+    );
+
+    if (!response.ok) {
+      let message = "Failed to confirm counter payment.";
+      try {
+        const errorData = await response.json();
+        if (errorData && typeof errorData.detail === "string") {
+          message = errorData.detail;
+        }
+      } catch {}
+      throw new ApiError(response.status, message);
+    }
+
+    return await response.json();
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError(500, "Could not connect to proxy server.");
   }
 }
 
@@ -782,4 +1015,3 @@ export async function updateRestaurantSettings(
     throw new ApiError(500, "Could not connect to proxy server.");
   }
 }
-

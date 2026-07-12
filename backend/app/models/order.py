@@ -33,6 +33,11 @@ class Order(Base):
         ForeignKey("restaurant_tables.id", ondelete="CASCADE"),
         index=True
     )
+    dining_session_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("dining_sessions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True
+    )
     order_number: Mapped[str] = mapped_column(String(50))
     public_token: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     status: Mapped[str] = mapped_column(
@@ -68,6 +73,10 @@ class Order(Base):
     )
     table: Mapped["RestaurantTable"] = relationship(
         "RestaurantTable",
+        back_populates="orders"
+    )
+    dining_session: Mapped[Optional["DiningSession"]] = relationship(
+        "DiningSession",
         back_populates="orders"
     )
     items: Mapped[List["OrderItem"]] = relationship(
