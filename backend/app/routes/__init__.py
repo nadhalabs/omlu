@@ -11,6 +11,7 @@ from app.routes.bills import router as bills_router
 from app.routes.sessions import router as sessions_router
 from app.routes.staff_management import router as staff_management_router
 from app.routes.registration import router as registration_router
+from app.routes.history import router as history_router
 
 __all__ = [
     "public_menu_router",
@@ -26,4 +27,5 @@ __all__ = [
     "sessions_router",
     "staff_management_router",
     "registration_router",
+    "history_router",
 ]

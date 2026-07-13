@@ -90,6 +90,10 @@ export default async function AdminLayout({
             <AdminSidebarLink href="/admin/menu" label="🍔 Menu Items" />
             <AdminSidebarLink href="/admin/tables" label="📋 Tables Map" />
             <AdminSidebarLink href="/admin/staff" label="👥 Staff Management" />
+            <AdminSidebarLink href="/admin/orders/history" label="Order History" />
+            <AdminSidebarLink href="/admin/bills/history" label="Bill History" />
+            <AdminSidebarLink href="/admin/sessions/history" label="Session History" />
+            <AdminSidebarLink href="/admin/performance" label="Performance" />
             <AdminSidebarLink href="/admin/settings" label="⚙️ Settings" />
             <AdminSidebarLink href={`/kitchen/${staffInfo.restaurant_slug}`} label="🧑‍🍳 Kitchen Dashboard" />
             <AdminSidebarLink href="/staff/requests" label="🔔 Service Requests" />

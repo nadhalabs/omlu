@@ -66,6 +66,7 @@ from app.routes import (
     sessions_router,
     staff_management_router,
     registration_router,
+    history_router,
 )
 
 app.include_router(health_router)
@@ -81,6 +82,7 @@ app.include_router(bills_router)
 app.include_router(sessions_router)
 app.include_router(staff_management_router)
 app.include_router(registration_router)
+app.include_router(history_router)
 
 
 @app.get("/")
