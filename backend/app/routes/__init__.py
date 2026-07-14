@@ -15,6 +15,7 @@ from app.routes.history import router as history_router
 from app.routes.menu_options import router as menu_options_router
 from app.routes.realtime import router as realtime_router
 from app.routes.staff_tables import router as staff_tables_router
+from app.routes.push import router as push_router
 
 __all__ = [
     "public_menu_router",
@@ -34,4 +35,5 @@ __all__ = [
     "menu_options_router",
     "realtime_router",
     "staff_tables_router",
+    "push_router",
 ]

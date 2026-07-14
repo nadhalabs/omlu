@@ -114,6 +114,85 @@ Production command:
 alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
 ```
 
+For multi-process or multi-instance realtime on Render, create a Render Key Value
+instance and set the backend service environment variable:
+
+```bash
+REDIS_URL=<internal Redis URL from Render Key Value>
+```
+
+When `REDIS_URL` is present, FastAPI realtime events use Redis Pub/Sub. When it
+is absent, the backend falls back to the in-memory broker for local development
+and tests.
+
+### Realtime, Push, and Operations Runbook
+
+Customer realtime uses direct browser WebSockets to the FastAPI backend. In
+production, set `REDIS_URL` so multiple Render workers or instances exchange
+events through Redis Pub/Sub. Without Redis, websocket delivery is limited to the
+single backend process that accepted the connection; customers still recover
+missed state through PostgreSQL refetch and polling.
+
+Optional customer push notifications require browser support, HTTPS, a service
+worker, and VAPID keys:
+
+```bash
+VAPID_PUBLIC_KEY=<web-push public key>
+VAPID_PRIVATE_KEY=<web-push private key>
+VAPID_SUBJECT=mailto:ops@omlu.app
+CUSTOMER_PUSH_TTL_SECONDS=43200
+```
+
+Frontend Vercel must expose the public key only through the backend config
+endpoint; it should continue to set:
+
+```bash
+NEXT_PUBLIC_BACKEND_URL=https://omlu-api.onrender.com
+```
+
+Customers are prompted only after tapping **Notify me** on their active table
+session. Push subscriptions are stored against the active public dining session
+and are expired when the session closes. Lock-screen notifications intentionally
+avoid sensitive details: they announce only order accepted, order ready, bill
+issued, or payment received.
+
+Realtime guardrails can be tuned with:
+
+```bash
+REALTIME_MAX_CONNECTIONS=5000
+REALTIME_MAX_CONNECTIONS_PER_SESSION=20
+REALTIME_MAX_CONNECTIONS_PER_IP=100
+```
+
+Operational checks:
+
+```bash
+GET /health
+GET /health/database
+GET /health/realtime
+GET /health/ready
+GET /metrics/realtime
+```
+
+Failure behavior:
+
+- WebSocket disconnects: the frontend reconnects with backoff and continues
+  polling every few seconds.
+- Redis unavailable: HTTP writes continue, publish failures are logged and
+  reflected in realtime metrics; customers recover on refetch/polling.
+- Push unavailable or denied: realtime and polling remain authoritative.
+- Push delivery failure: invalid endpoints are expired; transient failures are
+  logged without failing the order, bill, payment, or session transaction.
+
+Horizontal scaling verification:
+
+1. Set `REDIS_URL` to Render Key Value internal Redis.
+2. Run at least two FastAPI instances.
+3. Open a customer session websocket through one instance.
+4. Confirm an order/bill/payment update through another instance.
+5. Verify `/metrics/realtime` shows publish/delivery activity and the customer
+   page refetches the updated PostgreSQL state.
+
 ### Frontend Production Setup (Vercel / Next.js)
 
 Compile and build the production bundle:

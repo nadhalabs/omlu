@@ -70,6 +70,7 @@ from app.routes import (
     menu_options_router,
     realtime_router,
     staff_tables_router,
+    push_router,
 )
 
 app.include_router(health_router)
@@ -89,6 +90,14 @@ app.include_router(history_router)
 app.include_router(menu_options_router)
 app.include_router(realtime_router)
 app.include_router(staff_tables_router)
+app.include_router(push_router)
+
+
+@app.on_event("shutdown")
+async def shutdown_realtime_broker():
+    from app.services.realtime import broker
+
+    await broker.shutdown()
 
 
 @app.get("/")

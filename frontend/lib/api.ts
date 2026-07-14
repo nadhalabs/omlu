@@ -80,6 +80,7 @@ export async function getPublicMenu(
   try {
     const response = await fetch(url, {
       method: "GET",
+      cache: "no-store",
       headers: {
         "Content-Type": "application/json",
       },
@@ -159,6 +160,7 @@ export async function getPublicDiningSession(
   try {
     const response = await fetch(url, {
       method: "GET",
+      cache: "no-store",
       headers: {
         "Content-Type": "application/json",
       },
@@ -196,6 +198,7 @@ export async function getActivePublicDiningSession(
   try {
     const response = await fetch(url, {
       method: "GET",
+      cache: "no-store",
       headers: {
         "Content-Type": "application/json",
       },
@@ -298,6 +301,7 @@ export async function getPublicBill(
   try {
     const response = await fetch(url, {
       method: "GET",
+      cache: "no-store",
       headers: { "Content-Type": "application/json" },
     });
 

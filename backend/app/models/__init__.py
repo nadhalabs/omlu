@@ -6,6 +6,7 @@ from app.models.staff_user import AuditLog, StaffSession, StaffUser
 from app.models.service_request import ServiceRequest
 from app.models.dining_session import DiningSession
 from app.models.bill import Bill, RestaurantBillDailySequence
+from app.models.push_subscription import CustomerPushSubscription
 
 __all__ = [
     "Restaurant",
@@ -27,4 +28,5 @@ __all__ = [
     "DiningSession",
     "Bill",
     "RestaurantBillDailySequence",
+    "CustomerPushSubscription",
 ]

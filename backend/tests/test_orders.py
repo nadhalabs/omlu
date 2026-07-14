@@ -1,3 +1,4 @@
+import datetime
 import uuid
 import pytest
 from concurrent.futures import ThreadPoolExecutor
@@ -260,6 +261,87 @@ def test_public_session_includes_public_bill_and_request_state(setup_test_data):
             "resolved_at": None,
         }
     ]
+
+
+def test_active_session_recovery_reflects_missed_database_changes(setup_test_data):
+    data = setup_test_data
+    table_code = create_test_table(data, "RS5")
+    first = post_table_order(data, table_code=table_code, quantity=1).json()
+
+    db = SessionLocal()
+    session = db.query(DiningSession).filter(
+        DiningSession.public_token == first["dining_session_token"]
+    ).one()
+    order = db.query(Order).filter(Order.dining_session_id == session.id).one()
+    order.status = "ready"
+    db.add(OrderStatusHistory(order_id=order.id, old_status="pending", new_status="ready"))
+    bill = Bill(
+        restaurant_id=session.restaurant_id,
+        dining_session_id=session.id,
+        bill_number=f"BILL-RS5-{uuid.uuid4().hex[:8]}",
+        status="payment_pending",
+        subtotal=100.00,
+        tax_amount=0.00,
+        discount_amount=0.00,
+        total_amount=100.00,
+        currency="INR",
+        payment_method="counter_cash",
+    )
+    request = ServiceRequest(
+        restaurant_id=session.restaurant_id,
+        table_id=session.table_id,
+        dining_session_id=session.id,
+        request_type="waiter",
+        status="resolved",
+        resolved_at=datetime.datetime.now(datetime.timezone.utc),
+    )
+    db.add_all([bill, request])
+    db.commit()
+    db.close()
+
+    response = client.get(
+        f"/public/restaurants/{data['restaurant_slug']}/tables/{table_code}/session"
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["public_token"] == first["dining_session_token"]
+    assert body["orders"][0]["status"] == "ready"
+    assert body["bill"]["status"] == "payment_pending"
+    assert body["bill"]["payment_method"] == "counter_cash"
+    assert body["service_requests"][0]["status"] == "resolved"
+
+
+def test_old_session_token_does_not_follow_new_table_session(setup_test_data):
+    data = setup_test_data
+    table_code = create_test_table(data, "RS6")
+    first = post_table_order(data, table_code=table_code).json()
+
+    db = SessionLocal()
+    old_session = db.query(DiningSession).filter(
+        DiningSession.public_token == first["dining_session_token"]
+    ).one()
+    old_session.status = "closed"
+    old_session.closed_at = datetime.datetime.now(datetime.timezone.utc)
+    db.commit()
+    db.close()
+
+    second = post_table_order(data, table_code=table_code).json()
+
+    old_response = client.get(f"/public/sessions/{first['dining_session_token']}")
+    active_response = client.get(
+        f"/public/restaurants/{data['restaurant_slug']}/tables/{table_code}/session"
+    )
+
+    assert old_response.status_code == 200
+    assert active_response.status_code == 200
+    old_body = old_response.json()
+    active_body = active_response.json()
+    assert old_body["public_token"] == first["dining_session_token"]
+    assert old_body["status"] == "closed"
+    assert old_body["order_count"] == 1
+    assert active_body["public_token"] == second["dining_session_token"]
+    assert active_body["public_token"] != first["dining_session_token"]
 
 
 def test_second_order_joins_same_session_and_combines_subtotal(setup_test_data):

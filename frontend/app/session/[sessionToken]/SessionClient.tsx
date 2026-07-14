@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ApiError,
@@ -10,10 +10,13 @@ import {
 } from "@/lib/api";
 import { PublicDiningSessionResponse } from "@/lib/types";
 import {
+  clearPublicReceiptToken,
   clearPublicSessionToken,
+  savePublicReceiptToken,
   savePublicSessionToken,
 } from "@/lib/publicSessionStorage";
 import { useRealtime } from "@/lib/realtime";
+import { customerPushSupported, enableCustomerPush } from "@/lib/customerPush";
 
 interface SessionClientProps {
   sessionToken: string;
@@ -32,6 +35,10 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
   const [serviceMessage, setServiceMessage] = useState<Record<string, string>>({});
   const [billActionLoading, setBillActionLoading] = useState<"view" | "request" | null>(null);
   const [billActionError, setBillActionError] = useState<string | null>(null);
+  const [pushStatus, setPushStatus] = useState<"idle" | "loading" | "enabled" | "unsupported" | "error">("idle");
+  const [pushMessage, setPushMessage] = useState<string | null>(null);
+  const fetchInFlightRef = useRef(false);
+  const pendingFetchRef = useRef(false);
 
   const translations = {
     en: {
@@ -68,6 +75,10 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
       tooManyRequests: "Too many requests. Please wait.",
       lastUpdated: "Last updated",
       realtimeOffline: "Live updates reconnecting. Checking periodically.",
+      enablePush: "Notify me",
+      pushEnabled: "Notifications enabled",
+      pushUnsupported: "Notifications are not supported on this browser.",
+      pushError: "Could not enable notifications.",
       billState: "Bill status",
       billNotRequested: "Bill not requested",
       billRequested: "Bill requested",
@@ -129,6 +140,10 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
       tooManyRequests: "വളരെ കൂടുതൽ അഭ്യർത്ഥനകൾ. ദയവായി കാത്തിരിക്കുക.",
       lastUpdated: "അവസാനം പുതുക്കിയത്",
       realtimeOffline: "ലൈവ് അപ്ഡേറ്റുകൾ വീണ്ടും കണക്റ്റ് ചെയ്യുന്നു. ഇടയ്ക്കിടെ പരിശോധിക്കുന്നു.",
+      enablePush: "അറിയിപ്പുകൾ വേണം",
+      pushEnabled: "അറിയിപ്പുകൾ ഓണാക്കി",
+      pushUnsupported: "ഈ ബ്രൗസറിൽ അറിയിപ്പുകൾ പിന്തുണയ്‌ക്കുന്നില്ല.",
+      pushError: "അറിയിപ്പുകൾ ഓണാക്കാൻ സാധിച്ചില്ല.",
       billState: "ബിൽ നില",
       billNotRequested: "ബിൽ ചോദിച്ചിട്ടില്ല",
       billRequested: "ബിൽ ചോദിച്ചു",
@@ -162,26 +177,42 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
 
   const fetchSession = useCallback(
     async (showLoading = true) => {
-      if (showLoading) setLoading(true);
+      if (fetchInFlightRef.current) {
+        pendingFetchRef.current = true;
+        return;
+      }
+      fetchInFlightRef.current = true;
+      let shouldShowLoading = showLoading;
       try {
-        const data = await getPublicDiningSession(sessionToken);
-        setSession(data);
-        setError(null);
-        setLastUpdated(new Date());
+        do {
+          pendingFetchRef.current = false;
+          if (shouldShowLoading) setLoading(true);
+          try {
+            const data = await getPublicDiningSession(sessionToken);
+            setSession(data);
+            setError(null);
+            setLastUpdated(new Date());
 
-        if (["closed", "cancelled"].includes(data.status)) {
-          clearPublicSessionToken(data.restaurant_slug, data.table_code);
-        } else {
-          savePublicSessionToken(data.restaurant_slug, data.table_code, data.public_token);
-        }
-      } catch (err) {
-        if (err instanceof ApiError) {
-          setError(err.status === 404 ? t.notFound : err.message);
-        } else {
-          setError(t.connectionError);
-        }
+            if (["closed", "cancelled"].includes(data.status)) {
+              clearPublicSessionToken(data.restaurant_slug, data.table_code);
+              savePublicReceiptToken(data.restaurant_slug, data.table_code, data.public_token);
+            } else {
+              savePublicSessionToken(data.restaurant_slug, data.table_code, data.public_token);
+              clearPublicReceiptToken(data.restaurant_slug, data.table_code);
+            }
+          } catch (err) {
+            if (err instanceof ApiError) {
+              setError(err.status === 404 ? t.notFound : err.message);
+            } else {
+              setError(t.connectionError);
+            }
+          } finally {
+            if (shouldShowLoading) setLoading(false);
+            shouldShowLoading = false;
+          }
+        } while (pendingFetchRef.current);
       } finally {
-        if (showLoading) setLoading(false);
+        fetchInFlightRef.current = false;
       }
     },
     [sessionToken, t.connectionError, t.notFound]
@@ -195,11 +226,14 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
         fetchSession(false);
       }
     };
+    const handleOnline = () => fetchSession(false);
 
     document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("online", handleOnline);
     return () => {
       window.clearTimeout(timeout);
       document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("online", handleOnline);
     };
   }, [fetchSession]);
 
@@ -210,10 +244,9 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
   });
 
   useEffect(() => {
-    if (realtimeStatus === "live") return;
-    const interval = window.setInterval(() => fetchSession(false), 8_000);
+    const interval = window.setInterval(() => fetchSession(false), 6_000);
     return () => window.clearInterval(interval);
-  }, [fetchSession, realtimeStatus]);
+  }, [fetchSession]);
 
   const serviceTypes = [
     { type: "waiter", label: t.callWaiter },
@@ -298,6 +331,25 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
     }
   };
 
+  const handleEnablePush = async () => {
+    if (!session || pushStatus === "loading") return;
+    if (!customerPushSupported()) {
+      setPushStatus("unsupported");
+      setPushMessage(t.pushUnsupported);
+      return;
+    }
+    setPushStatus("loading");
+    setPushMessage(null);
+    try {
+      await enableCustomerPush(session.public_token);
+      setPushStatus("enabled");
+      setPushMessage(t.pushEnabled);
+    } catch (err) {
+      setPushStatus("error");
+      setPushMessage(err instanceof Error ? err.message : t.pushError);
+    }
+  };
+
   if (loading && !session) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-50 px-4 py-8 dark:bg-zinc-950">
@@ -356,7 +408,14 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
   return (
     <div className="min-h-screen bg-zinc-50 px-4 py-6 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100 sm:px-6">
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
-        <div className="flex justify-end">
+        <div className="flex flex-wrap justify-end gap-2">
+          <button
+            onClick={handleEnablePush}
+            disabled={pushStatus === "loading" || pushStatus === "enabled"}
+            className="min-h-10 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800 shadow-2xs disabled:opacity-60 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300"
+          >
+            {pushStatus === "enabled" ? t.pushEnabled : pushStatus === "loading" ? "..." : t.enablePush}
+          </button>
           <button
             onClick={() => setLanguage(language === "en" ? "ml" : "en")}
             className="min-h-10 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-bold text-amber-700 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900 dark:text-amber-500"
@@ -364,6 +423,16 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
             {language === "en" ? "മലയാളം" : "English"}
           </button>
         </div>
+
+        {pushMessage && (
+          <p className={`rounded-2xl px-4 py-3 text-sm font-bold ${
+            pushStatus === "enabled"
+              ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300"
+              : "bg-zinc-100 text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300"
+          }`}>
+            {pushMessage}
+          </p>
+        )}
 
         <header className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
           <div className="flex items-start justify-between gap-4">

@@ -18,8 +18,11 @@ import {
   SelectedOptionRequest,
 } from "@/lib/types";
 import {
+  clearPublicReceiptToken,
   clearPublicSessionToken,
+  readPublicReceiptToken,
   readPublicSessionToken,
+  savePublicReceiptToken,
   savePublicSessionToken,
 } from "@/lib/publicSessionStorage";
 import { useRealtime } from "@/lib/realtime";
@@ -66,6 +69,7 @@ export default function MenuClient({
     useState<PublicDiningSessionResponse | null>(null);
   const [sessionLoading, setSessionLoading] = useState<boolean>(false);
   const [sessionNotice, setSessionNotice] = useState<string | null>(null);
+  const [receiptToken, setReceiptToken] = useState<string | null>(null);
 
   // Fetch menu data
   const fetchMenu = async () => {
@@ -106,32 +110,39 @@ export default function MenuClient({
     const validateSavedSession = async () => {
       const queryToken = new URLSearchParams(window.location.search).get("session");
       const savedToken = readPublicSessionToken(restaurantSlug, tableCode);
-      const tokenToValidate = queryToken || savedToken;
+      const savedReceiptToken = readPublicReceiptToken(restaurantSlug, tableCode);
 
-      if (!tokenToValidate) {
-        setSessionLoading(true);
-        try {
-          const activeSession = await getActivePublicDiningSession(restaurantSlug, tableCode);
-          savePublicSessionToken(restaurantSlug, tableCode, activeSession.public_token);
-          setCurrentSession(activeSession);
-          setSessionNotice(
-            activeSession.status === "open"
-              ? null
-              : "This table session is no longer open. New ordering is disabled."
-          );
-        } catch (err) {
-          setCurrentSession(null);
-          setSessionNotice(null);
-          if (err instanceof ApiError && err.status !== 404) {
-            setSessionNotice(err.message);
-          }
-        } finally {
+      setSessionLoading(true);
+      try {
+        const activeSession = await getActivePublicDiningSession(restaurantSlug, tableCode);
+        savePublicSessionToken(restaurantSlug, tableCode, activeSession.public_token);
+        clearPublicReceiptToken(restaurantSlug, tableCode);
+        setCurrentSession(activeSession);
+        setReceiptToken(null);
+        setSessionNotice(
+          activeSession.status === "open"
+            ? null
+            : "This table session is no longer open. New ordering is disabled."
+        );
+        setSessionLoading(false);
+        return;
+      } catch (err) {
+        setCurrentSession(null);
+        if (err instanceof ApiError && err.status !== 404) {
+          setSessionNotice(err.message);
           setSessionLoading(false);
+          return;
         }
+      }
+
+      const tokenToValidate = queryToken || savedToken;
+      if (!tokenToValidate) {
+        setReceiptToken(savedReceiptToken);
+        setSessionNotice(null);
+        setSessionLoading(false);
         return;
       }
 
-      setSessionLoading(true);
       try {
         const session = await getPublicDiningSession(tokenToValidate);
         const belongsToThisTable =
@@ -147,12 +158,16 @@ export default function MenuClient({
 
         if (["closed", "cancelled"].includes(session.status)) {
           clearPublicSessionToken(restaurantSlug, tableCode);
+          savePublicReceiptToken(restaurantSlug, tableCode, session.public_token);
+          setReceiptToken(session.public_token);
           setCurrentSession(null);
-          setSessionNotice("This saved table session is finished and was removed.");
+          setSessionNotice("This table session is finished. You can still view the final bill.");
           return;
         }
 
         savePublicSessionToken(restaurantSlug, tableCode, session.public_token);
+        clearPublicReceiptToken(restaurantSlug, tableCode);
+        setReceiptToken(null);
         setCurrentSession(session);
         setSessionNotice(
           session.status === "open"
@@ -162,7 +177,8 @@ export default function MenuClient({
       } catch {
         clearPublicSessionToken(restaurantSlug, tableCode);
         setCurrentSession(null);
-        setSessionNotice("Saved table session could not be verified and was removed.");
+        setReceiptToken(savedReceiptToken);
+        setSessionNotice(savedReceiptToken ? null : "Saved table session could not be verified and was removed.");
       } finally {
         setSessionLoading(false);
       }
@@ -199,6 +215,7 @@ export default function MenuClient({
       billLocked: "Ordering is currently locked for this table session.",
       checkingSession: "Checking current table bill...",
       viewFullBill: "View full table bill",
+      viewFinalReceipt: "View final bill",
     },
     ml: {
       searchPlaceholder: "വിഭവങ്ങൾ തിരയുക...",
@@ -226,6 +243,7 @@ export default function MenuClient({
       billLocked: "ഈ മേശയിലെ സെഷനിൽ പുതിയ ഓർഡർ ഇപ്പോൾ ലോക്ക് ചെയ്തിരിക്കുന്നു.",
       checkingSession: "നിലവിലെ ടേബിൾ ബിൽ പരിശോധിക്കുന്നു...",
       viewFullBill: "മുഴുവൻ ടേബിൾ ബിൽ കാണുക",
+      viewFinalReceipt: "അവസാന ബിൽ കാണുക",
     },
   };
 
@@ -597,6 +615,20 @@ export default function MenuClient({
                   {t.viewFullBill}
                 </button>
               </div>
+            </div>
+          )}
+
+          {!currentSession && receiptToken && (
+            <div className="flex items-center justify-between gap-3 rounded-2xl border border-zinc-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900">
+              <p className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">
+                {language === "en" ? "Final bill from your last visit is still available." : "കഴിഞ്ഞ സന്ദർശനത്തിലെ അവസാന ബിൽ ലഭ്യമാണ്."}
+              </p>
+              <button
+                onClick={() => router.push(`/bill/${receiptToken}`)}
+                className="min-h-9 shrink-0 rounded-xl bg-zinc-900 px-3 py-2 text-xs font-black text-white dark:bg-zinc-100 dark:text-zinc-950"
+              >
+                {t.viewFinalReceipt}
+              </button>
             </div>
           )}
 

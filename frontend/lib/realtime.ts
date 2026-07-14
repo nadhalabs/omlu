@@ -42,6 +42,15 @@ function websocketBaseUrl() {
   return apiBaseUrl().replace(/^http/i, "ws").replace(/\/$/, "");
 }
 
+function realtimeLog(message: string, details?: unknown) {
+  if (process.env.NODE_ENV !== "development") return;
+  if (details === undefined) {
+    console.debug(`[realtime] ${message}`);
+  } else {
+    console.debug(`[realtime] ${message}`, details);
+  }
+}
+
 async function getStaffWsToken() {
   const res = await fetch("/api/auth/ws-token", { cache: "no-store" });
   if (!res.ok) throw new Error("Real-time authentication failed.");
@@ -111,19 +120,25 @@ export function useRealtime({
         const url = await buildRealtimeUrl(targetRef.current);
         if (!active) return;
 
+        socketRef.current?.close();
+        realtimeLog("connecting", { url, target: targetRef.current });
         const socket = new WebSocket(url);
         socketRef.current = socket;
 
         socket.onopen = () => {
+          if (socketRef.current !== socket) return;
+          realtimeLog("opened", { url });
           retryRef.current = 0;
           setStatus("live");
           onReconnectRef.current?.();
         };
 
         socket.onmessage = (message) => {
+          if (socketRef.current !== socket) return;
           try {
             const event = JSON.parse(message.data) as RealtimeEvent;
             if (event.type === "heartbeat" || event.type === "connection.ready") return;
+            realtimeLog("event received", event);
             if (event.id) {
               if (seenIdsRef.current.has(event.id)) return;
               seenIdsRef.current.add(event.id);
@@ -139,14 +154,18 @@ export function useRealtime({
         };
 
         socket.onclose = () => {
+          if (socketRef.current !== socket) return;
           if (!active) return;
+          realtimeLog("closed", { url });
           setStatus("reconnecting");
           retryRef.current += 1;
           const delay = Math.min(30_000, 1_000 * 2 ** Math.min(retryRef.current, 5));
+          realtimeLog("reconnecting", { delayMs: delay, attempt: retryRef.current });
           reconnectTimerRef.current = window.setTimeout(connect, delay);
         };
 
         socket.onerror = () => {
+          realtimeLog("closed", { url, reason: "error" });
           socket.close();
         };
       } catch {
@@ -154,6 +173,7 @@ export function useRealtime({
         setStatus("reconnecting");
         retryRef.current += 1;
         const delay = Math.min(30_000, 1_000 * 2 ** Math.min(retryRef.current, 5));
+        realtimeLog("reconnecting", { delayMs: delay, attempt: retryRef.current });
         reconnectTimerRef.current = window.setTimeout(connect, delay);
       }
     };

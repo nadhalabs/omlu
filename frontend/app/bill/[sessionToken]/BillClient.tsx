@@ -1,11 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ApiError, getPublicBill, requestPayAtCounter } from "@/lib/api";
 import { BillResponse, CounterPaymentMethod } from "@/lib/types";
 import { buildWhatsAppBillShareUrl } from "@/lib/billShare";
 import { useRealtime } from "@/lib/realtime";
+import {
+  hasSeenPaymentSuccess,
+  markPaymentSuccessSeen,
+} from "@/lib/publicSessionStorage";
 
 interface BillClientProps {
   sessionToken: string;
@@ -19,6 +23,9 @@ export default function BillClient({ sessionToken }: BillClientProps) {
   const [paymentAction, setPaymentAction] = useState<CounterPaymentMethod | null>(null);
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [language, setLanguage] = useState<"en" | "ml">("en");
+  const [showPaymentSuccess, setShowPaymentSuccess] = useState<boolean>(false);
+  const hasLoadedBillRef = useRef(false);
+  const paidStatusRef = useRef<string | null>(null);
 
   const labels = {
     en: {
@@ -45,9 +52,13 @@ export default function BillClient({ sessionToken }: BillClientProps) {
       paymentMethod: "Payment method",
       paidAt: "Paid at",
       back: "Back to table bill",
+      paymentReceived: "Payment received",
+      receiptAction: "View receipt",
+      paidAmount: "Paid amount",
       paymentLabels: {
         counter_cash: "Cash at counter",
         counter_upi: "UPI at counter",
+        counter_card: "Card at counter",
         online: "Online",
       } as Record<string, string>,
       statusLabels: {
@@ -82,9 +93,13 @@ export default function BillClient({ sessionToken }: BillClientProps) {
       paymentMethod: "പേയ്മെന്റ് രീതി",
       paidAt: "പണം നൽകിയ സമയം",
       back: "ടേബിൾ ബില്ലിലേക്ക് മടങ്ങുക",
+      paymentReceived: "പണം ലഭിച്ചു",
+      receiptAction: "രസീത് കാണുക",
+      paidAmount: "അടച്ച തുക",
       paymentLabels: {
         counter_cash: "കൗണ്ടറിൽ കാഷ്",
         counter_upi: "കൗണ്ടറിൽ UPI",
+        counter_card: "കൗണ്ടറിൽ കാർഡ്",
         online: "ഓൺലൈൻ",
       } as Record<string, string>,
       statusLabels: {
@@ -99,13 +114,94 @@ export default function BillClient({ sessionToken }: BillClientProps) {
 
   const t = labels[language];
 
+  const formatBillTotal = useCallback(
+    (nextBill: BillResponse) =>
+      new Intl.NumberFormat("en-IN", {
+        style: "currency",
+        currency: nextBill.currency || "INR",
+      }).format(Number(nextBill.total_amount)),
+    []
+  );
+
+  const celebratePayment = useCallback(() => {
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!reducedMotion && "vibrate" in navigator) {
+      navigator.vibrate?.([80, 40, 80]);
+    }
+
+    const userActivation = navigator.userActivation;
+    if (!reducedMotion && userActivation?.hasBeenActive) {
+      try {
+        const AudioContextCtor =
+          window.AudioContext ||
+          (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        if (!AudioContextCtor) return;
+        const audioContext = new AudioContextCtor();
+        const oscillator = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        oscillator.type = "sine";
+        oscillator.frequency.setValueAtTime(660, audioContext.currentTime);
+        oscillator.frequency.exponentialRampToValueAtTime(880, audioContext.currentTime + 0.12);
+        gain.gain.setValueAtTime(0.0001, audioContext.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.06, audioContext.currentTime + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.18);
+        oscillator.connect(gain);
+        gain.connect(audioContext.destination);
+        oscillator.start();
+        oscillator.stop(audioContext.currentTime + 0.2);
+        window.setTimeout(() => void audioContext.close(), 300);
+      } catch {
+        // Browsers may reject audio without permission or activation; the visual receipt remains authoritative.
+      }
+    }
+  }, []);
+
+  const applyFetchedBill = useCallback(
+    (data: BillResponse, source: "initial" | "event" | "poll" | "action") => {
+      const previousStatus = paidStatusRef.current;
+      const isPaid = data.status === "paid";
+      const billKey = data.bill_number;
+      const seen = hasSeenPaymentSuccess(sessionToken, billKey);
+
+      setBill(data);
+      setError(null);
+      paidStatusRef.current = data.status;
+
+      if (!isPaid) {
+        setShowPaymentSuccess(false);
+        hasLoadedBillRef.current = true;
+        return;
+      }
+
+      if (!hasLoadedBillRef.current && source === "initial") {
+        markPaymentSuccessSeen(sessionToken, billKey);
+        hasLoadedBillRef.current = true;
+        return;
+      }
+
+      const becamePaid = previousStatus !== "paid";
+      if (source === "event" && becamePaid && !seen) {
+        markPaymentSuccessSeen(sessionToken, billKey);
+        setShowPaymentSuccess(true);
+        celebratePayment();
+      } else if (seen) {
+        setShowPaymentSuccess(false);
+      }
+
+      hasLoadedBillRef.current = true;
+    },
+    [celebratePayment, sessionToken]
+  );
+
   const fetchBill = useCallback(
-    async (showLoading = true) => {
+    async (
+      showLoading = true,
+      source: "initial" | "event" | "poll" | "action" = "poll"
+    ) => {
       if (showLoading) setLoading(true);
       try {
         const data = await getPublicBill(sessionToken);
-        setBill(data);
-        setError(null);
+        applyFetchedBill(data, source);
       } catch (err) {
         if (err instanceof ApiError) {
           setError(err.status === 404 ? t.notFound : err.message);
@@ -116,25 +212,36 @@ export default function BillClient({ sessionToken }: BillClientProps) {
         if (showLoading) setLoading(false);
       }
     },
-    [sessionToken, t.notFound]
+    [applyFetchedBill, sessionToken, t.notFound]
   );
 
   useEffect(() => {
-    const timeout = window.setTimeout(() => fetchBill(true), 0);
-    return () => window.clearTimeout(timeout);
+    const timeout = window.setTimeout(() => fetchBill(true, "initial"), 0);
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        fetchBill(false, "poll");
+      }
+    };
+    const handleOnline = () => fetchBill(false, "poll");
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("online", handleOnline);
+    return () => {
+      window.clearTimeout(timeout);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("online", handleOnline);
+    };
   }, [fetchBill]);
 
-  const realtimeStatus = useRealtime({
+  useRealtime({
     target: { kind: "session", token: sessionToken },
-    onEvent: () => void fetchBill(false),
-    onReconnect: () => void fetchBill(false),
+    onEvent: () => void fetchBill(false, "event"),
+    onReconnect: () => void fetchBill(false, "poll"),
   });
 
   useEffect(() => {
-    if (realtimeStatus === "live") return;
-    const interval = window.setInterval(() => fetchBill(false), 8_000);
+    const interval = window.setInterval(() => fetchBill(false, "poll"), 6_000);
     return () => window.clearInterval(interval);
-  }, [fetchBill, realtimeStatus]);
+  }, [fetchBill]);
 
   const billUrl =
     typeof window === "undefined"
@@ -147,7 +254,7 @@ export default function BillClient({ sessionToken }: BillClientProps) {
     setPaymentError(null);
     try {
       const updated = await requestPayAtCounter(sessionToken, method);
-      setBill(updated);
+      applyFetchedBill(updated, "action");
     } catch (err) {
       if (err instanceof ApiError) setPaymentError(err.message);
       else setPaymentError("Failed to request counter payment.");
@@ -191,6 +298,9 @@ export default function BillClient({ sessionToken }: BillClientProps) {
   if (!bill) return null;
 
   const shareUrl = buildWhatsAppBillShareUrl(bill, billUrl);
+  const paidMethodLabel = bill.payment_method
+    ? t.paymentLabels[bill.payment_method] || bill.payment_method
+    : t.statusLabels.paid;
 
   return (
     <div className="min-h-screen bg-zinc-100 px-4 py-6 text-zinc-950 dark:bg-zinc-950 dark:text-zinc-100 sm:px-6 print:bg-white print:px-0 print:py-0 print:text-black">
@@ -335,6 +445,52 @@ export default function BillClient({ sessionToken }: BillClientProps) {
             </div>
           </footer>
         </article>
+
+        {bill.status === "paid" && (
+          <section
+            className={`print-hidden rounded-3xl border border-emerald-200 bg-emerald-50 p-5 text-emerald-950 shadow-sm dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-50 ${
+              showPaymentSuccess ? "motion-safe:animate-pulse" : ""
+            }`}
+            aria-live="polite"
+          >
+            <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:text-left">
+              <div
+                className={`grid h-16 w-16 shrink-0 place-items-center rounded-full bg-emerald-600 text-white shadow-lg ${
+                  showPaymentSuccess ? "motion-safe:animate-bounce" : ""
+                }`}
+                aria-hidden="true"
+              >
+                <svg viewBox="0 0 32 32" className="h-9 w-9" fill="none">
+                  <circle cx="16" cy="16" r="14" stroke="currentColor" strokeWidth="3" opacity="0.35" />
+                  <path
+                    d="M9 16.5 13.5 21 23 11"
+                    stroke="currentColor"
+                    strokeWidth="3.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </div>
+              <div className="min-w-0 flex-1">
+                <h2 className="text-2xl font-black">{t.paymentReceived}</h2>
+                <div className="mt-2 grid grid-cols-1 gap-1 text-sm font-bold text-emerald-800 dark:text-emerald-200 sm:grid-cols-2">
+                  <p>
+                    {t.paidAmount}: {formatBillTotal(bill)}
+                  </p>
+                  <p>
+                    {t.paymentMethod}: {paidMethodLabel}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => document.querySelector("article")?.scrollIntoView({ behavior: "smooth" })}
+                className="min-h-12 rounded-2xl bg-emerald-700 px-5 py-3 text-sm font-black text-white shadow-md transition hover:bg-emerald-800"
+              >
+                {t.receiptAction}
+              </button>
+            </div>
+          </section>
+        )}
 
         <div className="print-hidden rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
           {bill.status === "issued" && (
