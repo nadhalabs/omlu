@@ -124,11 +124,17 @@ export default function BillClient({ sessionToken }: BillClientProps) {
     return () => window.clearTimeout(timeout);
   }, [fetchBill]);
 
-  useRealtime({
+  const realtimeStatus = useRealtime({
     target: { kind: "session", token: sessionToken },
     onEvent: () => void fetchBill(false),
     onReconnect: () => void fetchBill(false),
   });
+
+  useEffect(() => {
+    if (realtimeStatus === "live") return;
+    const interval = window.setInterval(() => fetchBill(false), 8_000);
+    return () => window.clearInterval(interval);
+  }, [fetchBill, realtimeStatus]);
 
   const billUrl =
     typeof window === "undefined"

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getKitchenOrders, updateKitchenOrderStatus, getStaffMe, staffLogout, ApiError } from "@/lib/api";
 import { KitchenOrderResponse, CurrentStaffResponse } from "@/lib/types";
@@ -345,6 +346,10 @@ export default function KitchenDashboardClient({
   }
 
   if (!staffInfo) return null;
+  const dashboardHref =
+    staffInfo.role === "owner" || staffInfo.role === "admin"
+      ? "/admin/dashboard"
+      : "/staff";
 
   // Sort orders into columns
   const cols = {
@@ -375,6 +380,12 @@ export default function KitchenDashboardClient({
 
         {/* Action / Sync controls */}
         <div className="flex flex-wrap items-center gap-3 self-stretch md:self-auto justify-between">
+          <Link
+            href={dashboardHref}
+            className="px-4 py-2.5 rounded-xl text-sm font-bold bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition"
+          >
+            Back to dashboard
+          </Link>
           {/* Sound Alert Toggle */}
           <button
             onClick={handleToggleSound}

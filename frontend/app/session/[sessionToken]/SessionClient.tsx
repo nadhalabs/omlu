@@ -67,6 +67,19 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
       failedSend: "Failed to send request.",
       tooManyRequests: "Too many requests. Please wait.",
       lastUpdated: "Last updated",
+      realtimeOffline: "Live updates reconnecting. Checking periodically.",
+      billState: "Bill status",
+      billNotRequested: "Bill not requested",
+      billRequested: "Bill requested",
+      billIssued: "Bill issued",
+      paymentPending: "Payment pending",
+      paidConfirmation: "Payment received",
+      paidAt: "Paid at",
+      sessionClosed: "Session closed",
+      serviceHistory: "Request history",
+      noServiceHistory: "No requests yet",
+      requestedAt: "Requested",
+      completedAt: "Completed",
       statusLabels: {
         open: "Open",
         payment_requested: "Bill requested",
@@ -115,6 +128,19 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
       failedSend: "അഭ്യർത്ഥന അയക്കാൻ സാധിച്ചില്ല.",
       tooManyRequests: "വളരെ കൂടുതൽ അഭ്യർത്ഥനകൾ. ദയവായി കാത്തിരിക്കുക.",
       lastUpdated: "അവസാനം പുതുക്കിയത്",
+      realtimeOffline: "ലൈവ് അപ്ഡേറ്റുകൾ വീണ്ടും കണക്റ്റ് ചെയ്യുന്നു. ഇടയ്ക്കിടെ പരിശോധിക്കുന്നു.",
+      billState: "ബിൽ നില",
+      billNotRequested: "ബിൽ ചോദിച്ചിട്ടില്ല",
+      billRequested: "ബിൽ ചോദിച്ചു",
+      billIssued: "ബിൽ നൽകി",
+      paymentPending: "പേയ്മെന്റ് കാത്തിരിക്കുന്നു",
+      paidConfirmation: "പണം ലഭിച്ചു",
+      paidAt: "പണം നൽകിയ സമയം",
+      sessionClosed: "സെഷൻ അടച്ചു",
+      serviceHistory: "അഭ്യർത്ഥന ചരിത്രം",
+      noServiceHistory: "ഇനിയും അഭ്യർത്ഥനകളില്ല",
+      requestedAt: "അഭ്യർത്ഥിച്ചത്",
+      completedAt: "പൂർത്തിയായത്",
       statusLabels: {
         open: "തുറന്നിരിക്കുന്നു",
         payment_requested: "ബിൽ ചോദിച്ചു",
@@ -143,7 +169,7 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
         setError(null);
         setLastUpdated(new Date());
 
-        if (["paid", "closed", "cancelled"].includes(data.status)) {
+        if (["closed", "cancelled"].includes(data.status)) {
           clearPublicSessionToken(data.restaurant_slug, data.table_code);
         } else {
           savePublicSessionToken(data.restaurant_slug, data.table_code, data.public_token);
@@ -177,11 +203,17 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
     };
   }, [fetchSession]);
 
-  useRealtime({
+  const realtimeStatus = useRealtime({
     target: { kind: "session", token: sessionToken },
     onEvent: () => void fetchSession(false),
     onReconnect: () => void fetchSession(false),
   });
+
+  useEffect(() => {
+    if (realtimeStatus === "live") return;
+    const interval = window.setInterval(() => fetchSession(false), 8_000);
+    return () => window.clearInterval(interval);
+  }, [fetchSession, realtimeStatus]);
 
   const serviceTypes = [
     { type: "waiter", label: t.callWaiter },
@@ -299,6 +331,27 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
   if (!session) return null;
 
   const canOrderMore = session.can_order_more && session.status === "open";
+  const billStatus = session.bill?.status;
+  const billStatusLabel =
+    session.status === "closed"
+      ? t.sessionClosed
+      : billStatus === "paid"
+      ? t.paidConfirmation
+      : billStatus === "payment_pending"
+      ? t.paymentPending
+      : billStatus === "issued"
+      ? t.billIssued
+      : billStatus === "draft" || session.status === "payment_requested"
+      ? t.billRequested
+      : t.billNotRequested;
+  const billTotal = session.bill
+    ? new Intl.NumberFormat("en-IN", {
+        style: "currency",
+        currency: session.bill.currency || "INR",
+      }).format(Number(session.bill.total_amount))
+    : null;
+  const requestStatusLabel = (status: string) =>
+    status === "resolved" ? "completed" : status;
 
   return (
     <div className="min-h-screen bg-zinc-50 px-4 py-6 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100 sm:px-6">
@@ -349,6 +402,29 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
               <p className="mt-1 text-2xl font-black text-emerald-700 dark:text-emerald-400">
                 ₹{Number(session.combined_subtotal).toFixed(2)}
               </p>
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-2xl border border-amber-100 bg-amber-50 p-4 dark:border-amber-900/40 dark:bg-amber-950/20">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-black uppercase tracking-wide text-amber-700 dark:text-amber-500">
+                  {t.billState}
+                </p>
+                <p className="mt-1 text-lg font-black text-zinc-950 dark:text-zinc-50">
+                  {billStatusLabel}
+                </p>
+                {session.bill?.paid_at && (
+                  <p className="mt-1 text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+                    {t.paidAt}: {new Date(session.bill.paid_at).toLocaleString()}
+                  </p>
+                )}
+              </div>
+              {billTotal && (
+                <p className="text-right text-2xl font-black text-amber-700 dark:text-amber-500">
+                  {billTotal}
+                </p>
+              )}
             </div>
           </div>
 
@@ -405,6 +481,11 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
               {t.lastUpdated}: {lastUpdated.toLocaleTimeString()}
             </p>
           )}
+          {realtimeStatus !== "live" && (
+            <p className="mt-2 rounded-xl bg-zinc-100 px-3 py-2 text-xs font-semibold text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+              {t.realtimeOffline}
+            </p>
+          )}
         </header>
 
         <section className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
@@ -448,6 +529,43 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
               Service requests are disabled.
             </p>
           )}
+
+          <div className="mt-5 border-t border-zinc-100 pt-4 dark:border-zinc-800">
+            <h3 className="text-xs font-black uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+              {t.serviceHistory}
+            </h3>
+            {session.service_requests.length === 0 ? (
+              <p className="mt-3 rounded-2xl bg-zinc-50 p-4 text-sm font-semibold text-zinc-500 dark:bg-zinc-800/50">
+                {t.noServiceHistory}
+              </p>
+            ) : (
+              <div className="mt-3 flex flex-col gap-2">
+                {session.service_requests.map((request, index) => (
+                  <div
+                    key={`${request.request_type}-${request.created_at}-${index}`}
+                    className="flex items-start justify-between gap-3 rounded-2xl bg-zinc-50 p-3 dark:bg-zinc-800/50"
+                  >
+                    <div>
+                      <p className="text-sm font-black capitalize text-zinc-900 dark:text-zinc-100">
+                        {request.request_type}
+                      </p>
+                      <p className="mt-1 text-[11px] font-semibold text-zinc-500">
+                        {t.requestedAt}: {new Date(request.created_at).toLocaleTimeString()}
+                      </p>
+                      {request.resolved_at && (
+                        <p className="text-[11px] font-semibold text-zinc-500">
+                          {t.completedAt}: {new Date(request.resolved_at).toLocaleTimeString()}
+                        </p>
+                      )}
+                    </div>
+                    <p className="rounded-xl bg-white px-3 py-1 text-xs font-black capitalize text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
+                      {requestStatusLabel(request.status)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </section>
 
         <main className="flex flex-col gap-4">

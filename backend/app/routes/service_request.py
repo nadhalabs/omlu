@@ -12,7 +12,7 @@ from app.models.order import Order
 from app.models.service_request import ServiceRequest
 from app.models.dining_session import DiningSession
 from app.models.bill import Bill
-from app.schemas.service_request import ServiceRequestCreate, ServiceRequestResponse, StaffServiceRequestResponse
+from app.schemas.service_request import ServiceRequestCreate, PublicServiceRequestResponse, StaffServiceRequestResponse
 from app.services.dining_sessions import find_current_open_session_for_table
 from app.utils.auth import get_current_staff_user, RoleChecker
 from app.models.staff_user import StaffUser
@@ -52,7 +52,7 @@ VALID_REQUEST_TYPES = {"waiter", "water", "bill"}
 
 @router.post(
     "/public/restaurants/{restaurant_slug}/tables/{table_code}/service-requests",
-    response_model=ServiceRequestResponse,
+    response_model=PublicServiceRequestResponse,
     status_code=status.HTTP_201_CREATED
 )
 def create_public_service_request(

@@ -163,6 +163,8 @@ export interface PublicDiningSessionResponse {
   order_count: number;
   service_requests_enabled: boolean;
   can_order_more: boolean;
+  bill: PublicDiningSessionBillSummary | null;
+  service_requests: PublicDiningSessionServiceRequest[];
 }
 
 export type SessionSummaryResponse = PublicDiningSessionResponse;
@@ -206,6 +208,23 @@ export interface BillResponse {
   payment_method: "counter_cash" | "counter_upi" | "counter_card" | "online" | null;
   payment_reference: string | null;
   paid_by_staff_id: number | null;
+}
+
+export interface PublicDiningSessionBillSummary {
+  bill_number: string;
+  status: BillStatus;
+  total_amount: string;
+  currency: string;
+  generated_at: string;
+  paid_at: string | null;
+  payment_method: "counter_cash" | "counter_upi" | "counter_card" | "online" | null;
+}
+
+export interface PublicDiningSessionServiceRequest {
+  request_type: "waiter" | "water" | "bill" | string;
+  status: "pending" | "acknowledged" | "resolved" | "completed" | "cancelled" | string;
+  created_at: string;
+  resolved_at: string | null;
 }
 
 export type IssueBillResponse = BillResponse;
@@ -319,6 +338,13 @@ export interface AdminTableResponse {
 export interface ServiceRequestCreate {
   request_type: "waiter" | "water" | "bill";
   public_order_token?: string | null;
+}
+
+export interface PublicServiceRequestResponse {
+  request_type: string;
+  status: "pending" | "resolved" | "cancelled" | string;
+  created_at: string;
+  resolved_at: string | null;
 }
 
 export interface ServiceRequestResponse {

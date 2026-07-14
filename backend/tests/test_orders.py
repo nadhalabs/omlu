@@ -5,10 +5,12 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.database import SessionLocal
 from app.models.dining_session import DiningSession
+from app.models.bill import Bill
 from app.models.restaurant import Restaurant
 from app.models.restaurant_table import RestaurantTable
 from app.models.menu import MenuCategory, MenuItem
 from app.models.order import Order, OrderStatusHistory, RestaurantDailySequence
+from app.models.service_request import ServiceRequest
 
 client = TestClient(app)
 
@@ -148,6 +150,116 @@ def test_first_order_creates_session(setup_test_data):
     session_body = session_response.json()
     assert session_body["order_count"] == 1
     assert session_body["combined_subtotal"] == "100.00"
+    assert session_body["bill"] is None
+    assert session_body["service_requests"] == []
+
+
+def test_rescanning_qr_restores_active_session_orders(setup_test_data):
+    data = setup_test_data
+    table_code = create_test_table(data, "RS1")
+    first = post_table_order(data, table_code=table_code, quantity=1).json()
+    client.post(
+        f"/public/sessions/{first['dining_session_token']}/orders",
+        json=create_order_payload(data["item_id"], 2),
+        headers={"Idempotency-Key": f"idemp-{uuid.uuid4().hex}"}
+    )
+
+    response = client.get(
+        f"/public/restaurants/{data['restaurant_slug']}/tables/{table_code}/session"
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["public_token"] == first["dining_session_token"]
+    assert body["order_count"] == 2
+    assert [order["status"] for order in body["orders"]] == ["pending", "pending"]
+    assert body["combined_subtotal"] == "300.00"
+
+
+def test_active_session_lookup_is_table_scoped(setup_test_data):
+    data = setup_test_data
+    first_table = create_test_table(data, "RS2A")
+    second_table = create_test_table(data, "RS2B")
+    first = post_table_order(data, table_code=first_table).json()
+    second = post_table_order(data, table_code=second_table).json()
+
+    response = client.get(
+        f"/public/restaurants/{data['restaurant_slug']}/tables/{second_table}/session"
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["public_token"] == second["dining_session_token"]
+    assert body["public_token"] != first["dining_session_token"]
+    assert body["table_code"] == second_table
+
+
+def test_closed_session_no_longer_restores_as_active(setup_test_data):
+    data = setup_test_data
+    table_code = create_test_table(data, "RS3")
+    first = post_table_order(data, table_code=table_code).json()
+    db = SessionLocal()
+    session = db.query(DiningSession).filter(
+        DiningSession.public_token == first["dining_session_token"]
+    ).one()
+    session.status = "closed"
+    db.commit()
+    db.close()
+
+    response = client.get(
+        f"/public/restaurants/{data['restaurant_slug']}/tables/{table_code}/session"
+    )
+
+    assert response.status_code == 404
+    assert "no active" in response.json()["detail"].lower()
+
+
+def test_public_session_includes_public_bill_and_request_state(setup_test_data):
+    data = setup_test_data
+    table_code = create_test_table(data, "RS4")
+    first = post_table_order(data, table_code=table_code, quantity=2).json()
+
+    db = SessionLocal()
+    session = db.query(DiningSession).filter(
+        DiningSession.public_token == first["dining_session_token"]
+    ).one()
+    bill = Bill(
+        restaurant_id=session.restaurant_id,
+        dining_session_id=session.id,
+        bill_number=f"BILL-RS4-{uuid.uuid4().hex[:8]}",
+        status="issued",
+        subtotal=200.00,
+        tax_amount=0.00,
+        discount_amount=0.00,
+        total_amount=200.00,
+        currency="INR",
+    )
+    request = ServiceRequest(
+        restaurant_id=session.restaurant_id,
+        table_id=session.table_id,
+        dining_session_id=session.id,
+        request_type="water",
+        status="pending",
+    )
+    db.add_all([bill, request])
+    db.commit()
+    db.close()
+
+    response = client.get(f"/public/sessions/{first['dining_session_token']}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["bill"]["bill_number"].startswith("BILL-RS4-")
+    assert body["bill"]["status"] == "issued"
+    assert body["bill"]["total_amount"] == "200.00"
+    assert body["service_requests"] == [
+        {
+            "request_type": "water",
+            "status": "pending",
+            "created_at": body["service_requests"][0]["created_at"],
+            "resolved_at": None,
+        }
+    ]
 
 
 def test_second_order_joins_same_session_and_combines_subtotal(setup_test_data):

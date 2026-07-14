@@ -14,10 +14,12 @@ from app.models.restaurant import Restaurant
 from app.models.restaurant_table import RestaurantTable
 from app.models.dining_session import DiningSession
 from app.models.order import Order, OrderItem, OrderItemSelectedOption, OrderStatusHistory, RestaurantDailySequence
+from app.models.service_request import ServiceRequest
 from app.schemas.order import PublicOrderCreateRequest, PublicOrderResponse
 from app.schemas.dining_session import PublicDiningSessionResponse
 from app.services.dining_sessions import (
     calculate_session_subtotal,
+    find_current_open_session_for_table,
     get_or_create_open_session,
 )
 from app.services.order_pricing import validate_and_price_order_items
@@ -90,6 +92,7 @@ def load_session_for_response(db: Session, session_id: int) -> DiningSession:
     return db.query(DiningSession).options(
         joinedload(DiningSession.restaurant),
         joinedload(DiningSession.table),
+        joinedload(DiningSession.bill),
         selectinload(DiningSession.orders).selectinload(Order.items).selectinload(OrderItem.selected_options),
     ).filter(DiningSession.id == session_id).one()
 
@@ -132,6 +135,11 @@ def build_order_response(db: Session, order: Order):
 def build_session_response(db: Session, dining_session: DiningSession):
     dining_session = load_session_for_response(db, dining_session.id)
     orders = sorted(dining_session.orders, key=lambda order: (order.created_at, order.id))
+    service_requests = db.query(ServiceRequest).filter(
+        ServiceRequest.restaurant_id == dining_session.restaurant_id,
+        ServiceRequest.table_id == dining_session.table_id,
+        ServiceRequest.dining_session_id == dining_session.id,
+    ).order_by(ServiceRequest.created_at.asc(), ServiceRequest.id.asc()).all()
     return {
         "public_token": dining_session.public_token,
         "status": dining_session.status,
@@ -145,6 +153,8 @@ def build_session_response(db: Session, dining_session: DiningSession):
         "order_count": len(orders),
         "service_requests_enabled": getattr(dining_session.restaurant, "service_requests_enabled", True),
         "can_order_more": dining_session.status == "open",
+        "bill": dining_session.bill,
+        "service_requests": service_requests,
     }
 
 
@@ -370,6 +380,48 @@ def create_public_order(
         state={"order_number": new_order.order_number, "status": new_order.status, "table_id": table.id, "session_token": dining_session.public_token},
     )
     return build_order_response(db, load_order_for_response(db, new_order.id))
+
+
+@router.get(
+    "/public/restaurants/{restaurant_slug}/tables/{table_code}/session",
+    response_model=PublicDiningSessionResponse
+)
+def get_active_public_table_session(
+    restaurant_slug: str,
+    table_code: str,
+    db: Session = Depends(get_db)
+):
+    restaurant = db.query(Restaurant).filter(
+        Restaurant.slug == restaurant_slug,
+        Restaurant.is_active == True,
+    ).first()
+
+    if not restaurant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Restaurant not found"
+        )
+
+    table = db.query(RestaurantTable).filter(
+        RestaurantTable.restaurant_id == restaurant.id,
+        RestaurantTable.table_code == table_code,
+        RestaurantTable.is_active == True,
+    ).first()
+
+    if not table:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Table not found"
+        )
+
+    dining_session = find_current_open_session_for_table(db, table.id)
+    if not dining_session or dining_session.restaurant_id != restaurant.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No active table session found"
+        )
+
+    return build_session_response(db, dining_session)
 
 
 @router.get(

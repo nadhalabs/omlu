@@ -282,7 +282,9 @@ class TestPublicServiceRequests:
         data = r.json()
         assert data["request_type"] == "waiter"
         assert data["status"] == "pending"
-        assert data["restaurant_id"] == restaurant.id
+        assert "restaurant_id" not in data
+        assert "table_id" not in data
+        assert "resolved_by_staff_id" not in data
 
     def test_create_water_request(self, restaurant, table):
         r = client.post(

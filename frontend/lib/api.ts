@@ -17,7 +17,7 @@ import {
   AdminMenuItemResponse,
   AdminTableResponse,
   ServiceRequestCreate,
-  ServiceRequestResponse,
+  PublicServiceRequestResponse,
   StaffServiceRequestResponse,
   DashboardSummaryResponse,
   RestaurantSettingsResponse,
@@ -166,6 +166,43 @@ export async function getPublicDiningSession(
 
     if (!response.ok) {
       let message = "An error occurred while fetching the table session.";
+      try {
+        const errorData = await response.json();
+        if (errorData && typeof errorData.detail === "string") {
+          message = errorData.detail;
+        }
+      } catch {}
+      throw new ApiError(response.status, message);
+    }
+
+    return await response.json();
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
+    }
+    throw new ApiError(500, "Could not connect to the backend server.");
+  }
+}
+
+export async function getActivePublicDiningSession(
+  restaurantSlug: string,
+  tableCode: string
+): Promise<PublicDiningSessionResponse> {
+  const baseUrl = publicBackendBaseUrl();
+  const url = `${baseUrl}/public/restaurants/${encodeURIComponent(
+    restaurantSlug
+  )}/tables/${encodeURIComponent(tableCode)}/session`;
+
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      let message = "No active table session found.";
       try {
         const errorData = await response.json();
         if (errorData && typeof errorData.detail === "string") {
@@ -992,7 +1029,7 @@ export async function createPublicServiceRequest(
   restaurantSlug: string,
   tableCode: string,
   body: ServiceRequestCreate
-): Promise<ServiceRequestResponse> {
+): Promise<PublicServiceRequestResponse> {
   const baseUrl = publicBackendBaseUrl();
   const url = `${baseUrl}/public/restaurants/${encodeURIComponent(restaurantSlug)}/tables/${encodeURIComponent(tableCode)}/service-requests`;
   try {

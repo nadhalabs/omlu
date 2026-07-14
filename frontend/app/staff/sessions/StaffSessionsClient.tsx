@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
-import { getStaffSessions, closeEmptySession, ApiError } from "@/lib/api";
-import { StaffSessionListItem } from "@/lib/types";
+import { getStaffMe, getStaffSessions, closeEmptySession, ApiError } from "@/lib/api";
+import { CurrentStaffResponse, StaffSessionListItem } from "@/lib/types";
 import { useRealtime } from "@/lib/realtime";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -65,6 +65,7 @@ export default function StaffSessionsClient() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [staffInfo, setStaffInfo] = useState<CurrentStaffResponse | null>(null);
 
   // Close state
   const [confirmToken, setConfirmToken] = useState<string | null>(null);
@@ -97,11 +98,19 @@ export default function StaffSessionsClient() {
     };
   }, [fetchSessions]);
 
+  useEffect(() => {
+    void getStaffMe().then(setStaffInfo).catch(() => setStaffInfo(null));
+  }, []);
+
   const realtimeStatus = useRealtime({
     target: { kind: "staff", channel: "staff" },
     onEvent: () => void fetchSessions(false),
     onReconnect: () => void fetchSessions(false),
   });
+  const dashboardHref =
+    staffInfo?.role === "owner" || staffInfo?.role === "admin"
+      ? "/admin/dashboard"
+      : "/staff";
 
   // Open confirm dialog
   const handleAskClose = (token: string) => {
@@ -156,6 +165,12 @@ export default function StaffSessionsClient() {
           </div>
           <div className="flex items-center gap-3 flex-wrap">
             {/* Nav links */}
+            <Link
+              href={dashboardHref}
+              className="text-xs text-zinc-400 hover:text-amber-400 font-semibold transition px-3 py-1.5 rounded-lg border border-zinc-800 hover:border-amber-700/50"
+            >
+              Back to dashboard
+            </Link>
             <Link
               href="/staff/tables"
               className="text-xs text-zinc-400 hover:text-amber-400 font-semibold transition px-3 py-1.5 rounded-lg border border-zinc-800 hover:border-amber-700/50"

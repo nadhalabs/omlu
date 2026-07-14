@@ -6,6 +6,7 @@ import {
   getPublicMenu,
   createPublicOrder,
   getPublicDiningSession,
+  getActivePublicDiningSession,
   addOrderToDiningSession,
   ApiError,
 } from "@/lib/api";
@@ -108,8 +109,25 @@ export default function MenuClient({
       const tokenToValidate = queryToken || savedToken;
 
       if (!tokenToValidate) {
-        setCurrentSession(null);
-        setSessionNotice(null);
+        setSessionLoading(true);
+        try {
+          const activeSession = await getActivePublicDiningSession(restaurantSlug, tableCode);
+          savePublicSessionToken(restaurantSlug, tableCode, activeSession.public_token);
+          setCurrentSession(activeSession);
+          setSessionNotice(
+            activeSession.status === "open"
+              ? null
+              : "This table session is no longer open. New ordering is disabled."
+          );
+        } catch (err) {
+          setCurrentSession(null);
+          setSessionNotice(null);
+          if (err instanceof ApiError && err.status !== 404) {
+            setSessionNotice(err.message);
+          }
+        } finally {
+          setSessionLoading(false);
+        }
         return;
       }
 
@@ -127,7 +145,7 @@ export default function MenuClient({
           return;
         }
 
-        if (["paid", "closed", "cancelled"].includes(session.status)) {
+        if (["closed", "cancelled"].includes(session.status)) {
           clearPublicSessionToken(restaurantSlug, tableCode);
           setCurrentSession(null);
           setSessionNotice("This saved table session is finished and was removed.");

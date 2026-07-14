@@ -233,6 +233,7 @@ export default function StaffRequestsClient() {
 
   const pendingCount = requests.filter((r) => r.status === "pending").length;
   const canRecordPayments = staffInfo?.role === "owner" || staffInfo?.role === "admin";
+  const dashboardHref = canRecordPayments ? "/admin/dashboard" : "/staff";
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 py-8 px-4 sm:px-6">
@@ -258,6 +259,12 @@ export default function StaffRequestsClient() {
             </p>
           </div>
           <div className="flex gap-3 items-center flex-wrap">
+            <Link
+              href={dashboardHref}
+              className="text-xs text-zinc-400 hover:text-amber-400 font-semibold transition px-3 py-1.5 rounded-lg border border-zinc-800 hover:border-amber-700/50"
+            >
+              Back to dashboard
+            </Link>
             {/* Show resolved toggle */}
             <label className="flex items-center gap-2 text-xs font-semibold text-zinc-400 cursor-pointer select-none">
               <input
