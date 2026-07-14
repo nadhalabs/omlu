@@ -6,7 +6,7 @@ from typing import Iterable
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import and_, case, distinct, func, or_
 from sqlalchemy.orm import Session, joinedload
 
@@ -16,7 +16,9 @@ from app.models.dining_session import DiningSession
 from app.models.menu import MenuCategory, MenuItem
 from app.models.order import Order, OrderItem, OrderStatusHistory
 from app.models.restaurant_table import RestaurantTable
+from app.models.service_request import ServiceRequest
 from app.models.staff_user import StaffUser
+from app.services.pdf_reports import build_performance_pdf
 from app.utils.auth import RoleChecker
 
 
@@ -27,7 +29,7 @@ COMPLETED_ORDER_STATUSES = {"served", "rejected"}
 VALID_ORDER_STATUSES = {"pending", "accepted", "preparing", "ready", "served", "rejected"}
 VALID_BILL_STATUSES = {"draft", "issued", "payment_pending", "paid", "cancelled", "void", "unpaid"}
 VALID_SESSION_STATUSES = {"open", "payment_requested", "payment_pending", "paid", "closed", "cancelled"}
-VALID_PAYMENT_METHODS = {"counter_cash", "counter_upi", "online"}
+VALID_PAYMENT_METHODS = {"counter_cash", "counter_upi", "counter_card", "online"}
 
 
 def _restaurant_timezone(staff: StaffUser) -> ZoneInfo:
@@ -38,13 +40,13 @@ def _restaurant_timezone(staff: StaffUser) -> ZoneInfo:
         return ZoneInfo("Asia/Kolkata")
 
 
-def _utc_bounds(
+def _local_date_range(
     *,
     staff: StaffUser,
     preset: str | None,
     start_date: date | None,
     end_date: date | None,
-) -> tuple[datetime, datetime]:
+) -> tuple[date, date]:
     tz = _restaurant_timezone(staff)
     local_today = datetime.now(tz).date()
     normalized_preset = (preset or "today").strip().lower()
@@ -61,6 +63,10 @@ def _utc_bounds(
     elif normalized_preset in {"last_30_days", "last30"}:
         start_local = local_today - timedelta(days=29)
         end_local = local_today
+    elif normalized_preset in {"month", "monthly", "this_month"}:
+        start_local = local_today.replace(day=1)
+        next_month = (start_local.replace(day=28) + timedelta(days=4)).replace(day=1)
+        end_local = next_month - timedelta(days=1)
     elif normalized_preset == "custom":
         if not start_date or not end_date:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Custom date range requires start_date and end_date")
@@ -73,6 +79,18 @@ def _utc_bounds(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="start_date must be before or equal to end_date")
     if (end_local - start_local).days > 370:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Date range cannot exceed 370 days")
+    return start_local, end_local
+
+
+def _utc_bounds(
+    *,
+    staff: StaffUser,
+    preset: str | None,
+    start_date: date | None,
+    end_date: date | None,
+) -> tuple[datetime, datetime]:
+    tz = _restaurant_timezone(staff)
+    start_local, end_local = _local_date_range(staff=staff, preset=preset, start_date=start_date, end_date=end_date)
 
     start_dt = datetime.combine(start_local, time.min, tzinfo=tz).astimezone(timezone.utc)
     end_dt = datetime.combine(end_local + timedelta(days=1), time.min, tzinfo=tz).astimezone(timezone.utc)
@@ -198,7 +216,7 @@ def order_history(
         query.options(
             joinedload(Order.table),
             joinedload(Order.dining_session),
-            joinedload(Order.items),
+            joinedload(Order.items).joinedload(OrderItem.selected_options),
             joinedload(Order.status_history),
         )
         .order_by(Order.created_at.desc(), Order.id.desc())
@@ -321,6 +339,9 @@ def _duration_minutes(session: DiningSession) -> int | None:
 def _session_row(session: DiningSession) -> dict:
     order_count = len(session.orders)
     combined_subtotal = sum((order.subtotal for order in session.orders), Decimal("0.00"))
+    closed_by = None
+    if session.closed_by_staff_id:
+        closed_by = session.closed_by_staff_id
     return {
         "id": session.id,
         "session_token": session.public_token,
@@ -332,7 +353,7 @@ def _session_row(session: DiningSession) -> dict:
         "combined_subtotal": _money(combined_subtotal),
         "final_bill_total": _money(session.bill.total_amount) if session.bill else "0.00",
         "payment_status": session.bill.status if session.bill else session.status,
-        "closed_by": None,
+        "closed_by": closed_by,
         "status": session.status,
     }
 
@@ -603,6 +624,157 @@ def _csv_response(filename: str, rows: list[dict]) -> StreamingResponse:
     )
 
 
+def _report_type(preset: str | None, start_local: date, end_local: date) -> str:
+    normalized = (preset or "today").strip().lower()
+    if normalized == "today" and start_local == end_local:
+        return "Daily report"
+    if normalized in {"month", "monthly", "this_month"}:
+        return "Monthly report"
+    return "Custom date range report"
+
+
+def _safe_report_filename(preset: str | None, start_local: date, end_local: date) -> str:
+    normalized = (preset or "today").strip().lower()
+    if normalized == "today" and start_local == end_local:
+        return f"omlu-daily-report-{start_local.isoformat()}.pdf"
+    if normalized in {"month", "monthly", "this_month"}:
+        return f"omlu-monthly-report-{start_local.strftime('%Y-%m')}.pdf"
+    return f"omlu-report-{start_local.isoformat()}-to-{end_local.isoformat()}.pdf"
+
+
+def _payment_method_label(method: str | None) -> str:
+    return {
+        "counter_cash": "Cash",
+        "counter_upi": "UPI",
+        "counter_card": "Card",
+        "online": "Online",
+        None: "Other or unknown",
+    }.get(method, "Other or unknown")
+
+
+def _payment_breakdown(db: Session, staff: StaffUser, start_utc: datetime, end_utc: datetime, total_revenue: Decimal) -> list[dict]:
+    rows = db.query(
+        Bill.payment_method,
+        func.count(Bill.id),
+        func.coalesce(func.sum(Bill.total_amount), 0),
+    ).filter(
+        Bill.restaurant_id == staff.restaurant_id,
+        Bill.status == "paid",
+        Bill.generated_at >= start_utc,
+        Bill.generated_at < end_utc,
+    ).group_by(Bill.payment_method).all()
+    breakdown = []
+    for method, count, amount in rows:
+        value = Decimal(str(amount or 0))
+        percentage = (value / total_revenue * Decimal("100")) if total_revenue else Decimal("0")
+        breakdown.append({
+            "method": _payment_method_label(method),
+            "bill_count": int(count or 0),
+            "amount": _money(value),
+            "percentage": f"{percentage.quantize(Decimal('0.01'))}",
+        })
+    if not breakdown:
+        breakdown.append({"method": "Other or unknown", "bill_count": 0, "amount": "0.00", "percentage": "0.00"})
+    return breakdown
+
+
+def _detailed_staff_activity(db: Session, staff: StaffUser, start_utc: datetime, end_utc: datetime) -> list[dict]:
+    activity: dict[int, dict] = {}
+
+    def row_for(staff_id: int | None, name: str | None = None) -> dict | None:
+        if not staff_id:
+            return None
+        if staff_id not in activity:
+            staff_user = db.query(StaffUser).filter(StaffUser.id == staff_id, StaffUser.restaurant_id == staff.restaurant_id).first()
+            activity[staff_id] = {
+                "staff_name": name or (staff_user.name if staff_user else "Unknown staff"),
+                "orders_created": 0,
+                "requests_resolved": 0,
+                "bills_generated": 0,
+                "payments_recorded": 0,
+                "sessions_opened": 0,
+                "sessions_closed": 0,
+            }
+        return activity[staff_id]
+
+    for staff_id, name, count in db.query(StaffUser.id, StaffUser.name, func.count(Order.id)).join(Order, Order.created_by_staff_id == StaffUser.id).filter(
+        StaffUser.restaurant_id == staff.restaurant_id,
+        Order.created_at >= start_utc,
+        Order.created_at < end_utc,
+    ).group_by(StaffUser.id, StaffUser.name).all():
+        row_for(staff_id, name)["orders_created"] = int(count or 0)
+
+    for staff_id, name, count in db.query(StaffUser.id, StaffUser.name, func.count(ServiceRequest.id)).join(ServiceRequest, ServiceRequest.resolved_by_staff_id == StaffUser.id).filter(
+        StaffUser.restaurant_id == staff.restaurant_id,
+        ServiceRequest.resolved_at >= start_utc,
+        ServiceRequest.resolved_at < end_utc,
+    ).group_by(StaffUser.id, StaffUser.name).all():
+        row_for(staff_id, name)["requests_resolved"] = int(count or 0)
+
+    for staff_id, name, count in db.query(StaffUser.id, StaffUser.name, func.count(Bill.id)).join(Bill, Bill.generated_by_staff_id == StaffUser.id).filter(
+        StaffUser.restaurant_id == staff.restaurant_id,
+        Bill.generated_at >= start_utc,
+        Bill.generated_at < end_utc,
+    ).group_by(StaffUser.id, StaffUser.name).all():
+        row_for(staff_id, name)["bills_generated"] = int(count or 0)
+
+    for staff_id, name, count in db.query(StaffUser.id, StaffUser.name, func.count(Bill.id)).join(Bill, Bill.paid_by_staff_id == StaffUser.id).filter(
+        StaffUser.restaurant_id == staff.restaurant_id,
+        Bill.paid_at >= start_utc,
+        Bill.paid_at < end_utc,
+    ).group_by(StaffUser.id, StaffUser.name).all():
+        row_for(staff_id, name)["payments_recorded"] = int(count or 0)
+
+    for staff_id, name, count in db.query(StaffUser.id, StaffUser.name, func.count(DiningSession.id)).join(DiningSession, DiningSession.opened_by_staff_id == StaffUser.id).filter(
+        StaffUser.restaurant_id == staff.restaurant_id,
+        DiningSession.opened_at >= start_utc,
+        DiningSession.opened_at < end_utc,
+    ).group_by(StaffUser.id, StaffUser.name).all():
+        row_for(staff_id, name)["sessions_opened"] = int(count or 0)
+
+    for staff_id, name, count in db.query(StaffUser.id, StaffUser.name, func.count(DiningSession.id)).join(DiningSession, DiningSession.closed_by_staff_id == StaffUser.id).filter(
+        StaffUser.restaurant_id == staff.restaurant_id,
+        DiningSession.closed_at >= start_utc,
+        DiningSession.closed_at < end_utc,
+    ).group_by(StaffUser.id, StaffUser.name).all():
+        row_for(staff_id, name)["sessions_closed"] = int(count or 0)
+
+    return sorted(activity.values(), key=lambda item: sum(value for key, value in item.items() if key != "staff_name"), reverse=True)[:20]
+
+
+def _performance_pdf_context(
+    *,
+    preset: str | None,
+    start_date: date | None,
+    end_date: date | None,
+    current_user: StaffUser,
+    db: Session,
+) -> tuple[dict, str]:
+    start_local, end_local = _local_date_range(staff=current_user, preset=preset, start_date=start_date, end_date=end_date)
+    start_utc, end_utc = _utc_bounds(staff=current_user, preset=preset, start_date=start_date, end_date=end_date)
+    summary = performance_summary(preset, start_date, end_date, current_user, db)
+    total_revenue = Decimal(str(summary["metrics"]["total_revenue"] or 0))
+    tz = _restaurant_timezone(current_user)
+    generated_at = datetime.now(tz)
+    context = {
+        "restaurant": {
+            "name": current_user.restaurant.name if current_user.restaurant else "Restaurant",
+            "logo_url": current_user.restaurant.logo_url if current_user.restaurant else None,
+            "timezone": current_user.restaurant.timezone if current_user.restaurant and current_user.restaurant.timezone else "Asia/Kolkata",
+        },
+        "report": {
+            "type": _report_type(preset, start_local, end_local),
+            "start_date": start_local.isoformat(),
+            "end_date": end_local.isoformat(),
+            "generated_at": generated_at.strftime("%Y-%m-%d %H:%M:%S %Z"),
+        },
+        "summary": summary,
+        "payment_breakdown": _payment_breakdown(db, current_user, start_utc, end_utc, total_revenue),
+        "staff_activity_detail": _detailed_staff_activity(db, current_user, start_utc, end_utc),
+    }
+    return context, _safe_report_filename(preset, start_local, end_local)
+
+
 @router.get("/orders/export")
 def export_orders(
     preset: str | None = Query("today"),
@@ -616,7 +788,7 @@ def export_orders(
     db: Session = Depends(get_db),
 ):
     start_utc, end_utc = _utc_bounds(staff=current_user, preset=preset, start_date=start_date, end_date=end_date)
-    orders = _orders_query(db, current_user, start_utc, end_utc, status_filter, table_id, staff_id, order_number).options(joinedload(Order.table), joinedload(Order.dining_session), joinedload(Order.items), joinedload(Order.status_history)).order_by(Order.created_at.desc()).limit(5000).all()
+    orders = _orders_query(db, current_user, start_utc, end_utc, status_filter, table_id, staff_id, order_number).options(joinedload(Order.table), joinedload(Order.dining_session), joinedload(Order.items).joinedload(OrderItem.selected_options), joinedload(Order.status_history)).order_by(Order.created_at.desc()).limit(5000).all()
     actor_ids = []
     for order in orders:
         actor_ids.extend(_order_actor_ids(order))
@@ -632,7 +804,7 @@ def order_history_detail(
 ):
     order = (
         db.query(Order)
-        .options(joinedload(Order.table), joinedload(Order.dining_session), joinedload(Order.items), joinedload(Order.status_history))
+        .options(joinedload(Order.table), joinedload(Order.dining_session), joinedload(Order.items).joinedload(OrderItem.selected_options), joinedload(Order.status_history))
         .filter(Order.id == order_id, Order.restaurant_id == current_user.restaurant_id)
         .first()
     )
@@ -651,6 +823,16 @@ def order_history_detail(
                     "unit_price": _money(item.unit_price),
                     "total_price": _money(item.total_price),
                     "item_note": item.item_note,
+                    "selected_options": [
+                        {
+                            "option_name": option.option_name,
+                            "group_name": option.group_name,
+                            "option_type": option.option_type,
+                            "price_delta": _money(option.price_delta),
+                            "quantity": option.quantity,
+                        }
+                        for option in sorted(item.selected_options, key=lambda option: (option.display_order, option.id))
+                    ],
                 }
                 for item in order.items
             ],
@@ -713,3 +895,26 @@ def export_performance(
     response = performance_summary(preset, start_date, end_date, current_user, db)
     rows = [{"metric": key, "value": value} for key, value in response["metrics"].items()]
     return _csv_response("performance-summary.csv", rows)
+
+
+@router.get("/performance/export.pdf")
+def export_performance_pdf(
+    preset: str | None = Query("today"),
+    start_date: date | None = None,
+    end_date: date | None = None,
+    current_user: StaffUser = Depends(_owner_admin),
+    db: Session = Depends(get_db),
+):
+    context, filename = _performance_pdf_context(
+        preset=preset,
+        start_date=start_date,
+        end_date=end_date,
+        current_user=current_user,
+        db=db,
+    )
+    pdf_bytes = build_performance_pdf(context)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

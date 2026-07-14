@@ -14,17 +14,27 @@ import {
   PublicDiningSessionResponse,
   MenuItem,
   OrderItemRequest,
+  SelectedOptionRequest,
 } from "@/lib/types";
 import {
   clearPublicSessionToken,
   readPublicSessionToken,
   savePublicSessionToken,
 } from "@/lib/publicSessionStorage";
+import { useRealtime } from "@/lib/realtime";
 
 interface MenuClientProps {
   restaurantSlug: string;
   tableCode: string;
 }
+
+type CartLine = {
+  key: string;
+  menu_item_id: number;
+  quantity: number;
+  item_note: string;
+  selected_options: SelectedOptionRequest[];
+};
 
 export default function MenuClient({
   restaurantSlug,
@@ -41,11 +51,12 @@ export default function MenuClient({
   const [activeCategory, setActiveCategory] = useState<number | null>(null);
   
   // Cart & notes states
-  const [cart, setCart] = useState<Record<number, number>>({});
-  const [itemNotes, setItemNotes] = useState<Record<number, string>>({});
+  const [cart, setCart] = useState<Record<string, CartLine>>({});
   const [customerNote, setCustomerNote] = useState<string>("");
   const [isCartOpen, setIsCartOpen] = useState<boolean>(false);
   const [idempotencyKey, setIdempotencyKey] = useState<string>("");
+  const [customisingItem, setCustomisingItem] = useState<MenuItem | null>(null);
+  const [draftOptions, setDraftOptions] = useState<Record<number, Record<number, number>>>({});
   
   // Order submission states
   const [isPlacingOrder, setIsPlacingOrder] = useState<boolean>(false);
@@ -83,6 +94,12 @@ export default function MenuClient({
     }, 0);
     return () => window.clearTimeout(timeout);
   }, [restaurantSlug, tableCode]);
+
+  useRealtime({
+    target: { kind: "menu", restaurantSlug, tableCode },
+    onEvent: () => void fetchMenu(),
+    onReconnect: () => void fetchMenu(),
+  });
 
   useEffect(() => {
     const validateSavedSession = async () => {
@@ -205,48 +222,91 @@ export default function MenuClient({
   };
 
   // Cart operations
+  const optionKey = (itemId: number, options: SelectedOptionRequest[]) =>
+    `${itemId}:${options
+      .map((option) => `${option.group_id}-${option.option_id}-${option.quantity}`)
+      .sort()
+      .join("|")}`;
+
+  const selectedOptionsFromDraft = (): SelectedOptionRequest[] =>
+    Object.entries(draftOptions).flatMap(([groupId, options]) =>
+      Object.entries(options)
+        .filter(([, quantity]) => quantity > 0)
+        .map(([optionId, quantity]) => ({
+          group_id: Number(groupId),
+          option_id: Number(optionId),
+          quantity,
+        }))
+    );
+
+  const addLineToCart = (item: MenuItem, selectedOptions: SelectedOptionRequest[] = []) => {
+    const key = optionKey(item.id, selectedOptions);
+    setCart((prev) => ({
+      ...prev,
+      [key]: prev[key]
+        ? { ...prev[key], quantity: prev[key].quantity + 1 }
+        : { key, menu_item_id: item.id, quantity: 1, item_note: "", selected_options: selectedOptions },
+    }));
+  };
+
   const addToCart = (item: MenuItem) => {
+    if ((item.option_groups || []).length > 0) {
+      setDraftOptions({});
+      setCustomisingItem(item);
+      return;
+    }
+    addLineToCart(item);
+  };
+
+  const incrementQty = (lineKey: string) => {
     setCart((prev) => ({
       ...prev,
-      [item.id]: 1,
+      [lineKey]: { ...prev[lineKey], quantity: (prev[lineKey]?.quantity || 0) + 1 },
     }));
   };
 
-  const incrementQty = (itemId: number) => {
-    setCart((prev) => ({
-      ...prev,
-      [itemId]: (prev[itemId] || 0) + 1,
-    }));
-  };
-
-  const decrementQty = (itemId: number) => {
+  const decrementQty = (lineKey: string) => {
     setCart((prev) => {
-      const currentQty = prev[itemId] || 0;
+      const currentQty = prev[lineKey]?.quantity || 0;
       if (currentQty <= 1) {
         const newCart = { ...prev };
-        delete newCart[itemId];
+        delete newCart[lineKey];
         return newCart;
       }
       return {
         ...prev,
-        [itemId]: currentQty - 1,
+        [lineKey]: { ...prev[lineKey], quantity: currentQty - 1 },
       };
     });
   };
 
-  const removeItem = (itemId: number) => {
+  const removeItem = (lineKey: string) => {
     setCart((prev) => {
       const newCart = { ...prev };
-      delete newCart[itemId];
+      delete newCart[lineKey];
       return newCart;
     });
   };
 
-  const handleItemNoteChange = (itemId: number, note: string) => {
-    setItemNotes((prev) => ({
+  const handleItemNoteChange = (lineKey: string, note: string) => {
+    setCart((prev) => ({
       ...prev,
-      [itemId]: note,
+      [lineKey]: { ...prev[lineKey], item_note: note },
     }));
+  };
+
+  const toggleDraftOption = (groupId: number, optionId: number, multi: boolean) => {
+    setDraftOptions((prev) => {
+      const current = prev[groupId] || {};
+      const selected = Boolean(current[optionId]);
+      if (!multi) {
+        return { ...prev, [groupId]: selected ? {} : { [optionId]: 1 } };
+      }
+      const nextGroup = { ...current };
+      if (selected) delete nextGroup[optionId];
+      else nextGroup[optionId] = 1;
+      return { ...prev, [groupId]: nextGroup };
+    });
   };
 
   // Search filtering
@@ -273,16 +333,12 @@ export default function MenuClient({
     setIsPlacingOrder(true);
     setCheckoutError(null);
 
-    const orderItemsPayload: OrderItemRequest[] = Object.entries(cart).map(
-      ([itemIdStr, qty]) => {
-        const itemId = Number(itemIdStr);
-        return {
-          menu_item_id: itemId,
-          quantity: qty,
-          item_note: itemNotes[itemId] || null,
-        };
-      }
-    );
+    const orderItemsPayload: OrderItemRequest[] = Object.values(cart).map((line) => ({
+      menu_item_id: line.menu_item_id,
+      quantity: line.quantity,
+      item_note: line.item_note.trim() || null,
+      selected_options: line.selected_options,
+    }));
 
     const payload = {
       items: orderItemsPayload,
@@ -322,7 +378,6 @@ export default function MenuClient({
       
       // Order placed successfully! Clear cart & redirect
       setCart({});
-      setItemNotes({});
       setCustomerNote("");
       setIsCartOpen(false);
       
@@ -400,11 +455,46 @@ export default function MenuClient({
 
   let totalQty = 0;
   let subtotal = 0;
-  Object.entries(cart).forEach(([itemIdStr, qty]) => {
-    const item = allItemsMap[Number(itemIdStr)];
+  const optionPrice = (item: MenuItem, selectedOptions: SelectedOptionRequest[]) => {
+    const groups = item.option_groups || [];
+    const variant = selectedOptions
+      .map((selection) => groups.find((group) => group.id === selection.group_id)?.options.find((option) => option.id === selection.option_id))
+      .find((option) => option && groups.find((group) => group.id === option.group_id)?.type === "variant");
+    const addons = selectedOptions.reduce((sum, selection) => {
+      const group = groups.find((candidate) => candidate.id === selection.group_id);
+      const option = group?.options.find((candidate) => candidate.id === selection.option_id);
+      if (!group || !option || group.type !== "addon") return sum;
+      return sum + Number(option.price_delta) * selection.quantity;
+    }, 0);
+    return (variant ? Number(variant.price_delta) : Number(item.price)) + addons;
+  };
+
+  const selectedOptionLabels = (item: MenuItem, selectedOptions: SelectedOptionRequest[]) => {
+    const groups = item.option_groups || [];
+    return selectedOptions.flatMap((selection) => {
+      const group = groups.find((candidate) => candidate.id === selection.group_id);
+      const option = group?.options.find((candidate) => candidate.id === selection.option_id);
+      return option ? [`${group?.name}: ${option.name}${selection.quantity > 1 ? ` x${selection.quantity}` : ""}`] : [];
+    });
+  };
+
+  const hasRequiredSelections = (item: MenuItem, selectedOptions: SelectedOptionRequest[]) => {
+    return (item.option_groups || []).every((group) => {
+      const count = selectedOptions
+        .filter((selection) => selection.group_id === group.id)
+        .reduce((sum, selection) => sum + selection.quantity, 0);
+      const min = Math.max(group.minimum_selections, group.required ? 1 : 0);
+      return count >= min && (!group.maximum_selections || count <= group.maximum_selections);
+    });
+  };
+
+  const draftSelectedOptions = selectedOptionsFromDraft();
+
+  Object.values(cart).forEach((line) => {
+    const item = allItemsMap[line.menu_item_id];
     if (item) {
-      totalQty += qty;
-      subtotal += Number(item.price) * qty;
+      totalQty += line.quantity;
+      subtotal += optionPrice(item, line.selected_options) * line.quantity;
     }
   });
 
@@ -557,7 +647,11 @@ export default function MenuClient({
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {category.items.map((item) => {
-                    const cartQty = cart[item.id] || 0;
+                    const simpleKey = optionKey(item.id, []);
+                    const cartQty = Object.values(cart)
+                      .filter((line) => line.menu_item_id === item.id)
+                      .reduce((sum, line) => sum + line.quantity, 0);
+                    const isConfigurable = (item.option_groups || []).length > 0;
                     return (
                       <div
                         key={item.id}
@@ -583,17 +677,17 @@ export default function MenuClient({
                               <span className="text-xs font-semibold text-red-500 bg-red-50 dark:bg-red-950/20 px-2.5 py-1 rounded-md">
                                 Unavailable
                               </span>
-                            ) : cartQty === 0 ? (
+                            ) : cartQty === 0 || isConfigurable ? (
                               <button
                                 onClick={() => addToCart(item)}
                                 className="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg cursor-pointer transition shadow-2xs"
                               >
-                                + {t.add}
+                                + {isConfigurable ? "Choose" : t.add}
                               </button>
                             ) : (
                               <div className="flex items-center border border-amber-600 rounded-lg overflow-hidden bg-amber-50/50 dark:bg-amber-950/10">
                                 <button
-                                  onClick={() => decrementQty(item.id)}
+                                  onClick={() => decrementQty(simpleKey)}
                                   className="px-2.5 py-1 text-amber-600 font-bold hover:bg-amber-600 hover:text-white transition cursor-pointer text-xs"
                                 >
                                   −
@@ -602,7 +696,7 @@ export default function MenuClient({
                                   {cartQty}
                                 </span>
                                 <button
-                                  onClick={() => incrementQty(item.id)}
+                                  onClick={() => incrementQty(simpleKey)}
                                   className="px-2.5 py-1 text-amber-600 font-bold hover:bg-amber-600 hover:text-white transition cursor-pointer text-xs"
                                 >
                                   +
@@ -657,6 +751,91 @@ export default function MenuClient({
         </div>
       )}
 
+      {customisingItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <div className="max-h-[85vh] w-full max-w-lg overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="flex items-start justify-between gap-4 border-b border-zinc-200 px-6 py-4 dark:border-zinc-800">
+              <div>
+                <h2 className="text-lg font-black text-zinc-950 dark:text-zinc-50">
+                  {getLocalizedText(customisingItem.name_en, customisingItem.name_ml)}
+                </h2>
+                <p className="mt-1 text-xs font-semibold text-zinc-500">
+                  Choose required options before adding this item.
+                </p>
+              </div>
+              <button
+                onClick={() => setCustomisingItem(null)}
+                className="text-sm font-bold text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+              >
+                Close
+              </button>
+            </div>
+            <div className="flex max-h-[56vh] flex-col gap-5 overflow-y-auto px-6 py-4">
+              {(customisingItem.option_groups || []).map((group) => {
+                const selectedCount = Object.values(draftOptions[group.id] || {}).reduce((sum, quantity) => sum + quantity, 0);
+                const min = Math.max(group.minimum_selections, group.required ? 1 : 0);
+                const max = group.maximum_selections;
+                const multi = group.type === "addon" && max !== 1;
+                return (
+                  <section key={group.id} className="rounded-2xl border border-zinc-100 p-4 dark:border-zinc-800">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <h3 className="text-sm font-black text-zinc-900 dark:text-zinc-100">{group.name}</h3>
+                        <p className="text-xs text-zinc-500">
+                          {min > 0 ? `Choose at least ${min}` : "Optional"}
+                          {max ? ` · up to ${max}` : ""}
+                        </p>
+                      </div>
+                      {selectedCount < min && <span className="text-xs font-bold text-red-500">Required</span>}
+                    </div>
+                    <div className="mt-3 grid gap-2">
+                      {group.options.map((option) => {
+                        const checked = Boolean(draftOptions[group.id]?.[option.id]);
+                        const disabled = !option.available || (!checked && Boolean(max) && selectedCount >= max);
+                        return (
+                          <button
+                            key={option.id}
+                            disabled={disabled}
+                            onClick={() => toggleDraftOption(group.id, option.id, multi)}
+                            className={`flex items-center justify-between rounded-xl border px-3 py-3 text-left text-sm transition disabled:opacity-40 ${
+                              checked
+                                ? "border-amber-600 bg-amber-50 text-zinc-950 dark:bg-amber-950/20 dark:text-zinc-50"
+                                : "border-zinc-200 bg-zinc-50 text-zinc-800 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-200"
+                            }`}
+                          >
+                            <span className="font-bold">{option.name}</span>
+                            <span className="text-xs font-black text-amber-600">₹{Number(option.price_delta).toFixed(2)}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </section>
+                );
+              })}
+            </div>
+            <div className="border-t border-zinc-200 px-6 py-4 dark:border-zinc-800">
+              <div className="mb-3 flex items-center justify-between">
+                <span className="text-sm font-bold text-zinc-500">Item price</span>
+                <span className="text-lg font-black text-amber-600">
+                  ₹{optionPrice(customisingItem, draftSelectedOptions).toFixed(2)}
+                </span>
+              </div>
+              <button
+                disabled={!hasRequiredSelections(customisingItem, draftSelectedOptions)}
+                onClick={() => {
+                  addLineToCart(customisingItem, draftSelectedOptions);
+                  setCustomisingItem(null);
+                  setDraftOptions({});
+                }}
+                className="w-full rounded-2xl bg-amber-600 px-5 py-3.5 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Add to cart
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Slide-over Cart Modal View */}
       {isCartOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
@@ -688,15 +867,16 @@ export default function MenuClient({
                 </p>
               ) : (
                 <div className="flex flex-col gap-5">
-                  {Object.entries(cart).map(([itemIdStr, qty]) => {
-                    const itemId = Number(itemIdStr);
-                    const item = allItemsMap[itemId];
+                  {Object.values(cart).map((line) => {
+                    const item = allItemsMap[line.menu_item_id];
                     if (!item) return null;
-                    const itemTotal = Number(item.price) * qty;
+                    const unit = optionPrice(item, line.selected_options);
+                    const itemTotal = unit * line.quantity;
+                    const labels = selectedOptionLabels(item, line.selected_options);
 
                     return (
                       <div
-                        key={itemId}
+                        key={line.key}
                         className="flex flex-col gap-2 pb-4 border-b border-zinc-100 dark:border-zinc-800/50"
                       >
                         <div className="flex items-start justify-between gap-4">
@@ -705,8 +885,17 @@ export default function MenuClient({
                               {getLocalizedText(item.name_en, item.name_ml)}
                             </h4>
                             <span className="text-xs text-amber-600 dark:text-amber-500 font-bold">
-                              ₹{Number(item.price).toFixed(2)} × {qty}
+                              ₹{unit.toFixed(2)} × {line.quantity}
                             </span>
+                            {labels.length > 0 && (
+                              <div className="mt-1 flex flex-col gap-0.5">
+                                {labels.map((label) => (
+                                  <span key={label} className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                                    {label}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                           </div>
                           <div className="flex items-center gap-4">
                             <span className="font-bold text-sm text-zinc-950 dark:text-zinc-50">
@@ -715,16 +904,16 @@ export default function MenuClient({
                             {/* Qty controls */}
                             <div className="flex items-center border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-hidden bg-zinc-50 dark:bg-zinc-800">
                               <button
-                                onClick={() => decrementQty(itemId)}
+                                onClick={() => decrementQty(line.key)}
                                 className="px-2 py-0.5 text-zinc-600 dark:text-zinc-400 font-bold hover:bg-zinc-200 dark:hover:bg-zinc-700 cursor-pointer text-sm"
                               >
                                 −
                               </button>
                               <span className="px-2 text-xs font-bold text-zinc-900 dark:text-zinc-100">
-                                {qty}
+                                {line.quantity}
                               </span>
                               <button
-                                onClick={() => incrementQty(itemId)}
+                                onClick={() => incrementQty(line.key)}
                                 className="px-2 py-0.5 text-zinc-600 dark:text-zinc-400 font-bold hover:bg-zinc-200 dark:hover:bg-zinc-700 cursor-pointer text-sm"
                               >
                                 +
@@ -732,7 +921,7 @@ export default function MenuClient({
                             </div>
                             {/* Remove button */}
                             <button
-                              onClick={() => removeItem(itemId)}
+                              onClick={() => removeItem(line.key)}
                               className="text-red-500 hover:text-red-700 text-xs font-bold cursor-pointer"
                             >
                               ✕
@@ -742,9 +931,9 @@ export default function MenuClient({
                         {/* Item note field */}
                         <input
                           type="text"
-                          value={itemNotes[itemId] || ""}
+                          value={line.item_note}
                           onChange={(e) =>
-                            handleItemNoteChange(itemId, e.target.value)
+                            handleItemNoteChange(line.key, e.target.value)
                           }
                           placeholder={t.itemNotePlaceholder}
                           className="w-full px-3 py-1.5 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-100 dark:border-zinc-800/30 rounded-lg text-xs outline-none focus:ring-1 focus:ring-amber-600"

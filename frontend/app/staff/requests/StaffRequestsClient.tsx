@@ -7,10 +7,13 @@ import {
   resolveStaffServiceRequest,
   confirmStaffCounterPayment,
   createOrRefreshPublicBill,
+  getStaffMe,
   issueStaffBill,
+  requestStaffPaymentAssistance,
   ApiError,
 } from "@/lib/api";
-import { CounterPaymentMethod, StaffServiceRequestResponse } from "@/lib/types";
+import { CounterPaymentMethod, CurrentStaffResponse, StaffServiceRequestResponse } from "@/lib/types";
+import { useRealtime } from "@/lib/realtime";
 
 const REQUEST_TYPE_LABELS: Record<string, string> = {
   waiter: "🙋 Waiter",
@@ -39,6 +42,8 @@ export default function StaffRequestsClient() {
   const [resolvingId, setResolvingId] = useState<number | null>(null);
   const [issuingId, setIssuingId] = useState<number | null>(null);
   const [confirmingPayment, setConfirmingPayment] = useState<string | null>(null);
+  const [requestingAssistanceId, setRequestingAssistanceId] = useState<number | null>(null);
+  const [staffInfo, setStaffInfo] = useState<CurrentStaffResponse | null>(null);
   const [paidBills, setPaidBills] = useState<
     Record<number, { method: CounterPaymentMethod | "online"; paidAt: string }>
   >({});
@@ -87,6 +92,26 @@ export default function StaffRequestsClient() {
       clearInterval(interval);
     };
   }, [fetchRequests]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getStaffMe()
+      .then((staff) => {
+        if (!cancelled) setStaffInfo(staff);
+      })
+      .catch(() => {
+        if (!cancelled) setStaffInfo(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const realtimeStatus = useRealtime({
+    target: { kind: "staff", channel: "staff" },
+    onEvent: () => void fetchRequests(false),
+    onReconnect: () => void fetchRequests(false),
+  });
 
   const handleResolve = async (requestId: number) => {
     setResolvingId(requestId);
@@ -176,7 +201,38 @@ export default function StaffRequestsClient() {
     }
   };
 
+  const handleRequestPaymentAssistance = async (req: StaffServiceRequestResponse) => {
+    if (!req.dining_session_token || requestingAssistanceId === req.id) return;
+    setRequestingAssistanceId(req.id);
+    setError(null);
+    try {
+      const bill = req.bill_number
+        ? null
+        : await createOrRefreshPublicBill(req.dining_session_token);
+      const billNumber = req.bill_number || bill?.bill_number;
+      if (!billNumber) {
+        throw new Error("Bill could not be prepared.");
+      }
+      const issued = await issueStaffBill(billNumber);
+      await requestStaffPaymentAssistance(issued.bill_number);
+      setRequests((prev) =>
+        prev.map((item) =>
+          item.id === req.id
+            ? { ...item, bill_number: issued.bill_number }
+            : item
+        )
+      );
+    } catch (err) {
+      if (err instanceof ApiError) setError(err.message);
+      else if (err instanceof Error) setError(err.message);
+      else setError("Failed to notify admin for payment.");
+    } finally {
+      setRequestingAssistanceId(null);
+    }
+  };
+
   const pendingCount = requests.filter((r) => r.status === "pending").length;
+  const canRecordPayments = staffInfo?.role === "owner" || staffInfo?.role === "admin";
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 py-8 px-4 sm:px-6">
@@ -197,7 +253,7 @@ export default function StaffRequestsClient() {
             </h1>
             <p className="text-zinc-500 text-sm mt-1">
               {lastUpdated
-                ? `Updated: ${lastUpdated.toLocaleTimeString()}`
+                ? `Updated: ${lastUpdated.toLocaleTimeString()} · Real-time: ${realtimeStatus}`
                 : "Loading…"}
             </p>
           </div>
@@ -333,24 +389,38 @@ export default function StaffRequestsClient() {
                               >
                                 {issuingId === req.id ? "Issuing…" : "Issue Bill"}
                               </button>
-                              <button
-                                onClick={() => handleConfirmPayment(req, "counter_cash")}
-                                disabled={confirmingPayment !== null}
-                                className="px-4 py-2 bg-zinc-100 hover:bg-white disabled:opacity-50 text-zinc-950 font-bold text-xs rounded-xl transition cursor-pointer"
-                              >
-                                {confirmingPayment === `${req.id}-counter_cash`
-                                  ? "Confirming…"
-                                  : "Confirm Cash Payment"}
-                              </button>
-                              <button
-                                onClick={() => handleConfirmPayment(req, "counter_upi")}
-                                disabled={confirmingPayment !== null}
-                                className="px-4 py-2 bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition cursor-pointer"
-                              >
-                                {confirmingPayment === `${req.id}-counter_upi`
-                                  ? "Confirming…"
-                                  : "Confirm UPI Payment"}
-                              </button>
+                              {canRecordPayments ? (
+                                <>
+                                  <button
+                                    onClick={() => handleConfirmPayment(req, "counter_cash")}
+                                    disabled={confirmingPayment !== null}
+                                    className="px-4 py-2 bg-zinc-100 hover:bg-white disabled:opacity-50 text-zinc-950 font-bold text-xs rounded-xl transition cursor-pointer"
+                                  >
+                                    {confirmingPayment === `${req.id}-counter_cash`
+                                      ? "Confirming…"
+                                      : "Confirm Cash Payment"}
+                                  </button>
+                                  <button
+                                    onClick={() => handleConfirmPayment(req, "counter_upi")}
+                                    disabled={confirmingPayment !== null}
+                                    className="px-4 py-2 bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition cursor-pointer"
+                                  >
+                                    {confirmingPayment === `${req.id}-counter_upi`
+                                      ? "Confirming…"
+                                      : "Confirm UPI Payment"}
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  onClick={() => handleRequestPaymentAssistance(req)}
+                                  disabled={requestingAssistanceId !== null}
+                                  className="px-4 py-2 bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition cursor-pointer"
+                                >
+                                  {requestingAssistanceId === req.id
+                                    ? "Notifying…"
+                                    : "Customer ready to pay"}
+                                </button>
+                              )}
                             </div>
                           )}
                           <button

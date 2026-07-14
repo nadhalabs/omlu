@@ -1,6 +1,7 @@
 from pydantic import BaseModel, ConfigDict, field_serializer
 from typing import List, Optional
 from decimal import Decimal
+from app.schemas.menu_options import MenuOptionGroupResponse
 
 class PublicRestaurant(BaseModel):
     id: int
@@ -27,6 +28,7 @@ class PublicMenuItem(BaseModel):
     image_url: Optional[str] = None
     is_available: bool
     display_order: int
+    option_groups: List[MenuOptionGroupResponse] = []
 
     @field_serializer("price")
     def serialize_price(self, price: Decimal) -> str:

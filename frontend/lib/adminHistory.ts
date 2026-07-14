@@ -1,4 +1,4 @@
-export type DatePreset = "today" | "yesterday" | "last_7_days" | "last_30_days" | "custom";
+export type DatePreset = "today" | "yesterday" | "last_7_days" | "last_30_days" | "custom" | "month";
 
 export type HistoryFilters = {
   preset?: DatePreset;
@@ -110,4 +110,29 @@ export async function fetchHistory<T>(path: string, filters: HistoryFilters = {}
 export function exportHistory(path: string, filters: HistoryFilters = {}) {
   const query = paramsFrom(filters);
   window.location.href = `/api/admin/history/${path}/export${query ? `?${query}` : ""}`;
+}
+
+function filenameFromDisposition(disposition: string | null, fallback: string) {
+  if (!disposition) return fallback;
+  const match = disposition.match(/filename="?([^";]+)"?/i);
+  return match?.[1] || fallback;
+}
+
+export async function downloadHistoryPdf(path: string, filters: HistoryFilters = {}) {
+  const query = paramsFrom(filters);
+  const res = await fetch(`/api/admin/history/${path}/export.pdf${query ? `?${query}` : ""}`, { cache: "no-store" });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    const detail = typeof data.detail === "string" ? data.detail : "PDF download failed.";
+    throw new Error(detail);
+  }
+  const blob = await res.blob();
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filenameFromDisposition(res.headers.get("content-disposition"), "omlu-report.pdf");
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
 }

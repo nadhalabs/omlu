@@ -12,6 +12,7 @@ from app.models.menu import MenuCategory, MenuItem
 from app.models.restaurant_table import RestaurantTable
 from app.models.order import OrderItem
 from app.utils.auth import get_current_staff_user, RoleChecker
+from app.services.realtime import EVENT_AVAILABILITY_UPDATED, publish_event, public_menu_channel, restaurant_channel
 from app.schemas.admin import (
     CategoryCreate,
     CategoryUpdate,
@@ -427,6 +428,18 @@ def update_item_availability(
     item.is_available = avail_req.is_available
     db.commit()
     db.refresh(item)
+    publish_event(
+        EVENT_AVAILABILITY_UPDATED,
+        restaurant_id=current_user.restaurant_id,
+        channels=[
+            restaurant_channel(current_user.restaurant_id, "operations"),
+            restaurant_channel(current_user.restaurant_id, "staff"),
+            restaurant_channel(current_user.restaurant_id, "availability"),
+            public_menu_channel(current_user.restaurant_id),
+        ],
+        resource_id=item.id,
+        state={"kind": "item", "item_id": item.id, "is_available": item.is_available},
+    )
 
     return {
         "id": item.id,

@@ -3,6 +3,7 @@ from typing import List, Optional
 from decimal import Decimal
 from datetime import datetime
 from app.schemas.order import OrderStatusHistoryResponse
+from app.schemas.order import OrderItemSelectedOptionResponse
 
 class KitchenOrderItemResponse(BaseModel):
     item_name: str
@@ -10,6 +11,7 @@ class KitchenOrderItemResponse(BaseModel):
     unit_price: Decimal
     total_price: Decimal
     item_note: Optional[str] = None
+    selected_options: List[OrderItemSelectedOptionResponse] = Field(default_factory=list)
 
     @field_serializer("unit_price")
     def serialize_unit_price(self, price: Decimal) -> str:

@@ -3,8 +3,9 @@ from sqlalchemy.orm import Session, selectinload
 from app.database import get_db
 from app.models.restaurant import Restaurant
 from app.models.restaurant_table import RestaurantTable
-from app.models.menu import MenuCategory
+from app.models.menu import MenuCategory, MenuItem, MenuItemOptionGroup, MenuOptionGroup
 from app.schemas.public_menu import PublicMenuResponse
+from app.services.menu_options import serialize_item_option_groups
 
 router = APIRouter()
 
@@ -56,6 +57,9 @@ def get_public_menu(
     # Use selectinload(MenuCategory.items) as requested
     categories = db.query(MenuCategory).options(
         selectinload(MenuCategory.items)
+        .selectinload(MenuItem.option_group_links)
+        .selectinload(MenuItemOptionGroup.group)
+        .selectinload(MenuOptionGroup.options)
     ).filter(
         MenuCategory.restaurant_id == restaurant.id,
         MenuCategory.is_active == True
@@ -80,7 +84,21 @@ def get_public_menu(
             "name_en": category.name_en,
             "name_ml": category.name_ml,
             "display_order": category.display_order,
-            "items": sorted_items
+            "items": [
+                {
+                    "id": item.id,
+                    "name_en": item.name_en,
+                    "name_ml": item.name_ml,
+                    "description_en": item.description_en,
+                    "description_ml": item.description_ml,
+                    "price": item.price,
+                    "image_url": item.image_url,
+                    "is_available": item.is_available,
+                    "display_order": item.display_order,
+                    "option_groups": serialize_item_option_groups(item),
+                }
+                for item in sorted_items
+            ]
         })
 
     return {

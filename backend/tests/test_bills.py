@@ -459,31 +459,45 @@ def test_repeated_customer_counter_payment_request_is_idempotent(bill_context):
 
 
 @pytest.mark.parametrize(
-    ("token_key", "staff_id_key"),
+    ("token_key", "staff_id_key", "method"),
     [
-        ("owner_token", "owner_id"),
-        ("admin_token", "admin_id"),
-        ("staff_token", "staff_id"),
+        ("owner_token", "owner_id", "counter_cash"),
+        ("owner_token", "owner_id", "counter_upi"),
+        ("owner_token", "owner_id", "counter_card"),
+        ("admin_token", "admin_id", "counter_cash"),
     ],
 )
-def test_staff_can_confirm_counter_payment(bill_context, token_key, staff_id_key):
+def test_owner_and_admin_can_confirm_counter_payment(bill_context, token_key, staff_id_key, method):
     add_order(bill_context)
     issued = issue_bill_for(bill_context)
-    request_counter_payment(bill_context, "counter_upi")
+    request_counter_payment(bill_context, method)
 
     response = confirm_counter_payment(
         bill_context,
         issued["bill_number"],
         token_key=token_key,
-        method="counter_upi",
+        method=method,
     )
 
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "paid"
-    assert body["payment_method"] == "counter_upi"
+    assert body["payment_method"] == method
     assert body["paid_at"] is not None
     assert body["paid_by_staff_id"] == bill_context[staff_id_key]
+
+
+def test_staff_denied_confirm_counter_payment(bill_context):
+    add_order(bill_context)
+    issued = issue_bill_for(bill_context)
+
+    response = confirm_counter_payment(
+        bill_context,
+        issued["bill_number"],
+        token_key="staff_token",
+    )
+
+    assert response.status_code == 403
 
 
 def test_kitchen_denied_confirm_counter_payment(bill_context):
@@ -497,6 +511,18 @@ def test_kitchen_denied_confirm_counter_payment(bill_context):
     )
 
     assert response.status_code == 403
+
+
+def test_public_user_denied_confirm_counter_payment(bill_context):
+    add_order(bill_context)
+    issued = issue_bill_for(bill_context)
+
+    response = client.post(
+        f"/staff/bills/{issued['bill_number']}/confirm-counter-payment",
+        json={"method": "counter_cash"},
+    )
+
+    assert response.status_code == 401
 
 
 def test_cross_restaurant_denied_confirm_counter_payment(bill_context):
@@ -531,11 +557,205 @@ def test_repeated_confirmation_preserves_first_payment_time_and_staff(bill_conte
     )
 
     assert first.status_code == 200
-    assert second.status_code == 200
-    assert second.json()["status"] == "paid"
-    assert second.json()["payment_method"] == "counter_cash"
-    assert second.json()["paid_at"] == first.json()["paid_at"]
-    assert second.json()["paid_by_staff_id"] == bill_context["owner_id"]
+    assert second.status_code == 409
+    assert "already" in second.json()["detail"].lower()
+
+
+def test_staff_payment_authorization_failure_publishes_no_success_event(monkeypatch, bill_context):
+    from app.services import realtime
+
+    add_order(bill_context)
+    issued = issue_bill_for(bill_context)
+    request_counter_payment(bill_context, "counter_cash")
+
+    published = []
+    monkeypatch.setattr(realtime.broker, "publish", lambda event: published.append(event))
+    response = confirm_counter_payment(
+        bill_context,
+        issued["bill_number"],
+        token_key="staff_token",
+        method="counter_cash",
+    )
+
+    assert response.status_code == 403
+    assert all(event.type != realtime.EVENT_BILL_PAID for event in published)
+
+
+def test_staff_can_request_payment_assistance(monkeypatch, bill_context):
+    from app.services import realtime
+
+    add_order(bill_context)
+    issued = issue_bill_for(bill_context, token_key="staff_token")
+
+    published = []
+    monkeypatch.setattr(realtime.broker, "publish", lambda event: published.append(event))
+    response = client.post(
+        f"/staff/bills/{issued['bill_number']}/payment-assistance",
+        headers={"Authorization": f"Bearer {bill_context['staff_token']}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "issued"
+    assert any(event.type == realtime.EVENT_PAYMENT_ASSISTANCE_REQUESTED for event in published)
+    assistance_event = next(event for event in published if event.type == realtime.EVENT_PAYMENT_ASSISTANCE_REQUESTED)
+    assert assistance_event.restaurant_id == bill_context["restaurant_id"]
+    assert "restaurant:%s:operations" % bill_context["restaurant_id"] in assistance_event.channels
+
+
+def test_payment_assistance_respects_restaurant_isolation(bill_context):
+    add_order(bill_context)
+    issued = issue_bill_for(bill_context)
+
+    response = client.post(
+        f"/staff/bills/{issued['bill_number']}/payment-assistance",
+        headers={"Authorization": f"Bearer {bill_context['other_token']}"},
+    )
+
+    assert response.status_code == 404
+
+
+def test_two_simultaneous_payment_confirmations_only_one_succeeds(bill_context):
+    add_order(bill_context)
+    issued = issue_bill_for(bill_context)
+    request_counter_payment(bill_context, "counter_cash")
+
+    def confirm(method: str):
+        local_client = TestClient(app)
+        return local_client.post(
+            f"/staff/bills/{issued['bill_number']}/confirm-counter-payment",
+            json={"method": method},
+            headers={"Authorization": f"Bearer {bill_context['owner_token']}"},
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        responses = list(executor.map(confirm, ["counter_cash", "counter_upi"]))
+
+    statuses = sorted(response.status_code for response in responses)
+    assert statuses == [200, 409]
+
+    db = SessionLocal()
+    bill = db.query(Bill).filter(Bill.restaurant_id == bill_context["restaurant_id"], Bill.bill_number == issued["bill_number"]).one()
+    session = db.query(DiningSession).filter(DiningSession.id == bill_context["session_id"]).one()
+    db.close()
+    assert bill.status == "paid"
+    assert session.status == "closed"
+    assert bill.payment_method in {"counter_cash", "counter_upi"}
+
+
+def test_payment_confirmation_racing_with_session_closure_is_consistent(bill_context):
+    add_order(bill_context)
+    issued = issue_bill_for(bill_context)
+    request_counter_payment(bill_context, "counter_cash")
+
+    def confirm_payment():
+        local_client = TestClient(app)
+        return local_client.post(
+            f"/staff/bills/{issued['bill_number']}/confirm-counter-payment",
+            json={"method": "counter_cash"},
+            headers={"Authorization": f"Bearer {bill_context['owner_token']}"},
+        )
+
+    def close_session():
+        local_client = TestClient(app)
+        return local_client.post(
+            f"/staff/sessions/{bill_context['session_token']}/close-empty",
+            headers={"Authorization": f"Bearer {bill_context['owner_token']}"},
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        responses = [future.result() for future in [executor.submit(confirm_payment), executor.submit(close_session)]]
+
+    statuses = sorted(response.status_code for response in responses)
+    assert statuses == [200, 409]
+
+    db = SessionLocal()
+    bill = db.query(Bill).filter(Bill.restaurant_id == bill_context["restaurant_id"], Bill.bill_number == issued["bill_number"]).one()
+    session = db.query(DiningSession).filter(DiningSession.id == bill_context["session_id"]).one()
+    db.close()
+    assert bill.status == "paid"
+    assert session.status == "closed"
+
+
+def test_empty_session_closure_racing_with_bill_creation_is_consistent(bill_context):
+    add_order(bill_context, status="pending")
+
+    def create_bill_request():
+        local_client = TestClient(app)
+        return local_client.post(f"/public/sessions/{bill_context['session_token']}/bill")
+
+    def close_session():
+        local_client = TestClient(app)
+        return local_client.post(
+            f"/staff/sessions/{bill_context['session_token']}/close-empty",
+            headers={"Authorization": f"Bearer {bill_context['owner_token']}"},
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        responses = [future.result() for future in [executor.submit(create_bill_request), executor.submit(close_session)]]
+
+    success_count = sum(response.status_code in {200, 201} for response in responses)
+    assert success_count == 1
+    assert any(response.status_code == 409 for response in responses)
+
+    db = SessionLocal()
+    session = db.query(DiningSession).filter(DiningSession.id == bill_context["session_id"]).one()
+    bill = db.query(Bill).filter(Bill.dining_session_id == bill_context["session_id"]).first()
+    orders = db.query(Order).filter(Order.dining_session_id == bill_context["session_id"]).all()
+    db.close()
+    if bill:
+        assert bill.status == "draft"
+        assert session.status == "open"
+    else:
+        assert session.status == "cancelled"
+        assert all(order.status == "rejected" for order in orders)
+
+
+def test_closing_session_with_unpaid_bill_is_rejected(bill_context):
+    add_order(bill_context)
+    bill = create_bill(bill_context).json()
+
+    response = client.post(
+        f"/staff/sessions/{bill_context['session_token']}/close-empty",
+        headers={"Authorization": f"Bearer {bill_context['owner_token']}"},
+    )
+
+    assert response.status_code == 409
+    assert bill["bill_number"]
+    assert "bill" in response.json()["detail"].lower()
+
+
+def test_failed_payment_transition_does_not_publish_realtime_event(monkeypatch, bill_context):
+    from app.services import realtime
+
+    add_order(bill_context)
+    issued = issue_bill_for(bill_context)
+    request_counter_payment(bill_context, "counter_cash")
+    first = confirm_counter_payment(bill_context, issued["bill_number"], method="counter_cash")
+    assert first.status_code == 200
+
+    published = []
+    monkeypatch.setattr(realtime.broker, "publish", lambda event: published.append(event))
+    second = confirm_counter_payment(bill_context, issued["bill_number"], token_key="admin_token", method="counter_upi")
+
+    assert second.status_code == 409
+    assert published == []
+
+
+def test_invalid_payment_transition_rolls_back_bill_and_session(bill_context):
+    add_order(bill_context)
+    issued = issue_bill_for(bill_context)
+    request_counter_payment(bill_context, "counter_cash")
+
+    response = confirm_counter_payment(bill_context, issued["bill_number"], method="online")
+
+    assert response.status_code == 422
+    db = SessionLocal()
+    bill = db.query(Bill).filter(Bill.restaurant_id == bill_context["restaurant_id"], Bill.bill_number == issued["bill_number"]).one()
+    session = db.query(DiningSession).filter(DiningSession.id == bill_context["session_id"]).one()
+    db.close()
+    assert bill.status == "payment_pending"
+    assert bill.payment_method == "counter_cash"
+    assert session.status == "payment_pending"
 
 
 def test_counter_payment_closes_session_and_blocks_old_session_orders(bill_context):

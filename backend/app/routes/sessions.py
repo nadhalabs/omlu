@@ -7,10 +7,11 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 from app.database import get_db
 from app.models.bill import Bill
 from app.models.dining_session import ACTIVE_DINING_SESSION_STATUSES, DiningSession
-from app.models.order import Order
+from app.models.order import Order, OrderItem
 from app.models.restaurant_table import RestaurantTable
 from app.models.staff_user import StaffUser
 from app.schemas.sessions import StaffSessionListItem, StaffSessionDetail
+from app.services.realtime import EVENT_SESSION_CLOSED, EVENT_TABLE_UPDATED, publish_event, restaurant_channel, session_channel, table_channel
 from app.utils.auth import RoleChecker, get_current_staff_user
 
 router = APIRouter()
@@ -29,7 +30,7 @@ def _load_sessions(db: Session, restaurant_id: int) -> List[DiningSession]:
         db.query(DiningSession)
         .options(
             joinedload(DiningSession.table),
-            selectinload(DiningSession.orders).selectinload(Order.items),
+            selectinload(DiningSession.orders).selectinload(Order.items).selectinload(OrderItem.selected_options),
             joinedload(DiningSession.bill),
         )
         .filter(
@@ -122,12 +123,12 @@ def close_empty_session(
             detail=f"Session is not active (status: {session.status})",
         )
 
-    # Check for a paid bill
-    bill = db.query(Bill).filter(Bill.dining_session_id == session.id).first()
-    if bill and bill.status == "paid":
+    # Lock any bill after the session lock. A bill means the session is no longer empty.
+    bill = db.query(Bill).filter(Bill.dining_session_id == session.id).with_for_update().first()
+    if bill:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Cannot close a session with a paid bill.",
+            detail=f"Cannot close a session with a {bill.status} bill.",
         )
 
     # Load orders with lock
@@ -158,7 +159,25 @@ def close_empty_session(
     # Cancel the session
     session.status = "cancelled"
     session.closed_at = now
+    session.closed_by_staff_id = current_user.id
+    session_id = session.id
+    table_id = session.table_id
+    token = session.public_token
     db.commit()
+    publish_event(
+        EVENT_SESSION_CLOSED,
+        restaurant_id=current_user.restaurant_id,
+        channels=[restaurant_channel(current_user.restaurant_id, "operations"), restaurant_channel(current_user.restaurant_id, "staff"), session_channel(token), table_channel(current_user.restaurant_id, table_id)],
+        resource_id=session_id,
+        state={"session_token": token, "status": "cancelled", "table_id": table_id},
+    )
+    publish_event(
+        EVENT_TABLE_UPDATED,
+        restaurant_id=current_user.restaurant_id,
+        channels=[restaurant_channel(current_user.restaurant_id, "staff"), table_channel(current_user.restaurant_id, table_id)],
+        resource_id=table_id,
+        state={"table_id": table_id},
+    )
 
     # Reload for response
     session = (

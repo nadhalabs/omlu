@@ -60,12 +60,19 @@ function parseApiError(data: unknown, fallback: string) {
   return { message: fallback, field: undefined };
 }
 
+function publicBackendBaseUrl() {
+  return (
+    process.env.NEXT_PUBLIC_BACKEND_URL ||
+    process.env.NEXT_PUBLIC_API_BASE_URL ||
+    "http://localhost:8000"
+  ).replace(/\/+$/, "");
+}
+
 export async function getPublicMenu(
   restaurantSlug: string,
   tableCode: string
 ): Promise<PublicMenuResponse> {
-  const baseUrl =
-    process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+  const baseUrl = publicBackendBaseUrl();
   const url = `${baseUrl}/public/restaurants/${encodeURIComponent(
     restaurantSlug
   )}/tables/${encodeURIComponent(tableCode)}/menu`;
@@ -106,8 +113,7 @@ export async function createPublicOrder(
   body: PublicOrderCreateRequest,
   idempotencyKey: string
 ): Promise<PublicOrderResponse> {
-  const baseUrl =
-    process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+  const baseUrl = publicBackendBaseUrl();
   const url = `${baseUrl}/public/restaurants/${encodeURIComponent(
     restaurantSlug
   )}/tables/${encodeURIComponent(tableCode)}/orders`;
@@ -147,8 +153,7 @@ export async function createPublicOrder(
 export async function getPublicDiningSession(
   sessionToken: string
 ): Promise<PublicDiningSessionResponse> {
-  const baseUrl =
-    process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+  const baseUrl = publicBackendBaseUrl();
   const url = `${baseUrl}/public/sessions/${encodeURIComponent(sessionToken)}`;
 
   try {
@@ -184,8 +189,7 @@ export async function addOrderToDiningSession(
   body: PublicOrderCreateRequest,
   idempotencyKey: string
 ): Promise<PublicDiningSessionResponse> {
-  const baseUrl =
-    process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+  const baseUrl = publicBackendBaseUrl();
   const url = `${baseUrl}/public/sessions/${encodeURIComponent(sessionToken)}/orders`;
 
   try {
@@ -221,8 +225,7 @@ export async function addOrderToDiningSession(
 export async function createOrRefreshPublicBill(
   sessionToken: string
 ): Promise<BillResponse> {
-  const baseUrl =
-    process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+  const baseUrl = publicBackendBaseUrl();
   const url = `${baseUrl}/public/sessions/${encodeURIComponent(sessionToken)}/bill`;
 
   try {
@@ -252,8 +255,7 @@ export async function createOrRefreshPublicBill(
 export async function getPublicBill(
   sessionToken: string
 ): Promise<BillResponse> {
-  const baseUrl =
-    process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+  const baseUrl = publicBackendBaseUrl();
   const url = `${baseUrl}/public/sessions/${encodeURIComponent(sessionToken)}/bill`;
 
   try {
@@ -311,8 +313,7 @@ export async function requestPayAtCounter(
   sessionToken: string,
   method: CounterPaymentMethod
 ): Promise<CounterPaymentResponse> {
-  const baseUrl =
-    process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+  const baseUrl = publicBackendBaseUrl();
   const url = `${baseUrl}/public/sessions/${encodeURIComponent(sessionToken)}/pay-at-counter`;
 
   try {
@@ -372,11 +373,37 @@ export async function confirmStaffCounterPayment(
   }
 }
 
+export async function requestStaffPaymentAssistance(
+  billNumber: string
+): Promise<BillResponse> {
+  try {
+    const response = await fetch(
+      `/api/staff/bills/${encodeURIComponent(billNumber)}/payment-assistance`,
+      { method: "POST" }
+    );
+
+    if (!response.ok) {
+      let message = "Failed to notify admin for payment.";
+      try {
+        const errorData = await response.json();
+        if (errorData && typeof errorData.detail === "string") {
+          message = errorData.detail;
+        }
+      } catch {}
+      throw new ApiError(response.status, message);
+    }
+
+    return await response.json();
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError(500, "Could not connect to proxy server.");
+  }
+}
+
 export async function getPublicOrder(
   publicToken: string
 ): Promise<PublicOrderResponse> {
-  const baseUrl =
-    process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+  const baseUrl = publicBackendBaseUrl();
   const url = `${baseUrl}/public/orders/${encodeURIComponent(publicToken)}`;
 
   try {
@@ -966,8 +993,7 @@ export async function createPublicServiceRequest(
   tableCode: string,
   body: ServiceRequestCreate
 ): Promise<ServiceRequestResponse> {
-  const baseUrl =
-    process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+  const baseUrl = publicBackendBaseUrl();
   const url = `${baseUrl}/public/restaurants/${encodeURIComponent(restaurantSlug)}/tables/${encodeURIComponent(tableCode)}/service-requests`;
   try {
     const res = await fetch(url, {

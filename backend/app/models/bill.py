@@ -19,6 +19,7 @@ BILL_STATUSES = (
 BILL_PAYMENT_METHODS = (
     "counter_cash",
     "counter_upi",
+    "counter_card",
     "online",
 )
 
@@ -70,6 +71,11 @@ class Bill(Base):
         nullable=True,
         index=True,
     )
+    generated_by_staff_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("staff_users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -86,7 +92,7 @@ class Bill(Base):
             name="chk_bill_status_valid",
         ),
         CheckConstraint(
-            "payment_method IS NULL OR payment_method IN ('counter_cash', 'counter_upi', 'online')",
+            "payment_method IS NULL OR payment_method IN ('counter_cash', 'counter_upi', 'counter_card', 'online')",
             name="chk_bill_payment_method_valid",
         ),
         CheckConstraint("subtotal >= 0", name="chk_bill_subtotal_non_negative"),
@@ -99,4 +105,11 @@ class Bill(Base):
 
     restaurant: Mapped["Restaurant"] = relationship("Restaurant", back_populates="bills")
     dining_session: Mapped["DiningSession"] = relationship("DiningSession", back_populates="bill")
-    paid_by_staff: Mapped[Optional["StaffUser"]] = relationship("StaffUser")
+    paid_by_staff: Mapped[Optional["StaffUser"]] = relationship(
+        "StaffUser",
+        foreign_keys=[paid_by_staff_id],
+    )
+    generated_by_staff: Mapped[Optional["StaffUser"]] = relationship(
+        "StaffUser",
+        foreign_keys=[generated_by_staff_id],
+    )

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { backendUrl, getBackendBaseUrl } from "@/lib/backendUrl";
 
 export async function GET(
   request: NextRequest,
@@ -10,8 +11,7 @@ export async function GET(
   }
 
   const { path } = await params;
-  const backendBaseUrl = process.env.BACKEND_API_BASE_URL || "http://localhost:8000";
-  const targetUrl = new URL(`${backendBaseUrl}/admin/history/${path.map(encodeURIComponent).join("/")}`);
+  const targetUrl = new URL(backendUrl(`/admin/history/${path.map(encodeURIComponent).join("/")}`));
   request.nextUrl.searchParams.forEach((value, key) => targetUrl.searchParams.set(key, value));
 
   try {
@@ -31,9 +31,20 @@ export async function GET(
         },
       });
     }
+    if (contentType.includes("application/pdf")) {
+      const bytes = await res.arrayBuffer();
+      return new NextResponse(bytes, {
+        status: res.status,
+        headers: {
+          "Content-Type": "application/pdf",
+          "Content-Disposition": res.headers.get("content-disposition") || "attachment",
+        },
+      });
+    }
     const data = await res.json().catch(() => ({}));
     return NextResponse.json(data, { status: res.status });
-  } catch {
-    return NextResponse.json({ detail: "Could not connect to the backend server." }, { status: 500 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown connection error";
+    return NextResponse.json({ detail: `Could not connect to the backend server at ${getBackendBaseUrl()}. ${message}` }, { status: 500 });
   }
 }

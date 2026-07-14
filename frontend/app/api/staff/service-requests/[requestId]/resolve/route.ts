@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { backendUrl, getBackendBaseUrl } from "@/lib/backendUrl";
 
 // PATCH /api/staff/service-requests/[requestId]/resolve
 export async function PATCH(
@@ -11,8 +12,7 @@ export async function PATCH(
   }
 
   const { requestId } = await params;
-  const backendBaseUrl = process.env.BACKEND_API_BASE_URL || "http://localhost:8000";
-  const targetUrl = `${backendBaseUrl}/staff/service-requests/${requestId}/resolve`;
+  const targetUrl = backendUrl(`/staff/service-requests/${requestId}/resolve`);
 
   try {
     const res = await fetch(targetUrl, {
@@ -33,9 +33,10 @@ export async function PATCH(
 
     const data = await res.json();
     return NextResponse.json(data);
-  } catch {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown connection error";
     return NextResponse.json(
-      { detail: "Could not connect to the backend server." },
+      { detail: `Could not connect to the backend server at ${getBackendBaseUrl()}. ${message}` },
       { status: 500 }
     );
   }

@@ -1,4 +1,5 @@
 import { NextResponse, NextRequest } from "next/server";
+import { backendUrl, getBackendBaseUrl } from "@/lib/backendUrl";
 
 type Params = Promise<{ restaurantSlug: string; publicToken: string }>;
 
@@ -14,8 +15,6 @@ export async function PATCH(
     return NextResponse.json({ detail: "Not authenticated" }, { status: 401 });
   }
 
-  const backendBaseUrl = process.env.BACKEND_API_BASE_URL || "http://localhost:8000";
-
   let body;
   try {
     body = await request.json();
@@ -23,9 +22,9 @@ export async function PATCH(
     return NextResponse.json({ detail: "Invalid JSON body" }, { status: 400 });
   }
 
-  const targetUrl = `${backendBaseUrl}/kitchen/restaurants/${encodeURIComponent(
+  const targetUrl = backendUrl(`/kitchen/restaurants/${encodeURIComponent(
     restaurantSlug
-  )}/orders/${encodeURIComponent(publicToken)}/status`;
+  )}/orders/${encodeURIComponent(publicToken)}/status`);
 
   try {
     const res = await fetch(targetUrl, {
@@ -51,8 +50,9 @@ export async function PATCH(
     const data = await res.json();
     return NextResponse.json(data);
   } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown connection error";
     return NextResponse.json(
-      { detail: "Could not connect to the backend server." },
+      { detail: `Could not connect to the backend server at ${getBackendBaseUrl()}. ${message}` },
       { status: 500 }
     );
   }

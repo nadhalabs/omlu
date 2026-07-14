@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { DateFilters, EmptyState } from "../historyControls";
-import { fetchHistory, HistoryFilters, PerformanceSummary } from "@/lib/adminHistory";
+import { downloadHistoryPdf, fetchHistory, HistoryFilters, PerformanceSummary } from "@/lib/adminHistory";
 
 const metricLabels: Record<string, string> = {
   total_revenue: "Total revenue",
@@ -73,6 +73,8 @@ export default function PerformanceClient() {
   const [filters, setFilters] = useState<HistoryFilters>({ preset: "today" });
   const [data, setData] = useState<PerformanceSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [pdfLoading, setPdfLoading] = useState<"daily" | "monthly" | "range" | null>(null);
+  const [pdfError, setPdfError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -91,6 +93,25 @@ export default function PerformanceClient() {
 
   const hasData = data && (Number(data.metrics.total_orders) > 0 || Number(data.metrics.total_bills) > 0);
 
+  const handlePdfDownload = async (kind: "daily" | "monthly" | "range") => {
+    if (pdfLoading) return;
+    setPdfLoading(kind);
+    setPdfError(null);
+    const pdfFilters: HistoryFilters =
+      kind === "daily"
+        ? { preset: "today" }
+        : kind === "monthly"
+          ? { preset: "month" }
+          : { ...filters };
+    try {
+      await downloadHistoryPdf("performance", pdfFilters);
+    } catch (err) {
+      setPdfError(err instanceof Error ? err.message : "Could not download PDF report.");
+    } finally {
+      setPdfLoading(null);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -98,9 +119,23 @@ export default function PerformanceClient() {
           <h1 className="text-2xl font-black text-white">Performance</h1>
           <p className="mt-1 text-sm text-zinc-500">Restaurant-scoped revenue, order, session, and staff activity metrics.</p>
         </div>
-        <DateFilters filters={filters} setFilters={setFilters} exportPath="performance" />
+        <div className="flex flex-col items-end gap-3">
+          <DateFilters filters={filters} setFilters={setFilters} exportPath="performance" />
+          <div className="flex flex-wrap justify-end gap-2">
+            <button disabled={Boolean(pdfLoading)} onClick={() => handlePdfDownload("daily")} className="border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs font-black text-zinc-200 disabled:opacity-50">
+              {pdfLoading === "daily" ? "Generating..." : "Download daily PDF"}
+            </button>
+            <button disabled={Boolean(pdfLoading)} onClick={() => handlePdfDownload("monthly")} className="border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs font-black text-zinc-200 disabled:opacity-50">
+              {pdfLoading === "monthly" ? "Generating..." : "Download monthly PDF"}
+            </button>
+            <button disabled={Boolean(pdfLoading)} onClick={() => handlePdfDownload("range")} className="border border-amber-700 bg-amber-600 px-3 py-2 text-xs font-black text-white disabled:opacity-50">
+              {pdfLoading === "range" ? "Generating..." : "Download PDF for active date range"}
+            </button>
+          </div>
+        </div>
       </div>
       {error && <div className="border border-red-900 bg-red-950/30 p-3 text-sm text-red-200">{error}</div>}
+      {pdfError && <div className="border border-red-900 bg-red-950/30 p-3 text-sm text-red-200">{pdfError}</div>}
       {!data ? (
         <EmptyState message="No performance data available" />
       ) : (

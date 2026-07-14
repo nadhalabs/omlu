@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { backendUrl } from "@/lib/backendUrl";
 
 export async function POST(request: NextRequest) {
   const tokenCookie = request.cookies.get("staff_token");
   if (tokenCookie?.value) {
-    const backendBaseUrl = process.env.BACKEND_API_BASE_URL || "http://localhost:8000";
     try {
-      await fetch(`${backendBaseUrl}/auth/staff/logout`, {
+      await fetch(backendUrl("/auth/staff/logout"), {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${tokenCookie.value}`,

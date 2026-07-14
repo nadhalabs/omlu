@@ -12,14 +12,23 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from app.database import get_db
 from app.models.restaurant import Restaurant
 from app.models.restaurant_table import RestaurantTable
-from app.models.menu import MenuItem
 from app.models.dining_session import DiningSession
-from app.models.order import Order, OrderItem, OrderStatusHistory, RestaurantDailySequence
+from app.models.order import Order, OrderItem, OrderItemSelectedOption, OrderStatusHistory, RestaurantDailySequence
 from app.schemas.order import PublicOrderCreateRequest, PublicOrderResponse
 from app.schemas.dining_session import PublicDiningSessionResponse
 from app.services.dining_sessions import (
     calculate_session_subtotal,
     get_or_create_open_session,
+)
+from app.services.order_pricing import validate_and_price_order_items
+from app.services.realtime import (
+    EVENT_ORDER_CREATED,
+    EVENT_SESSION_UPDATED,
+    order_channel,
+    publish_event,
+    restaurant_channel,
+    session_channel,
+    table_channel,
 )
 
 router = APIRouter()
@@ -64,83 +73,12 @@ def validate_public_order_items(
     restaurant: Restaurant,
     order_req: PublicOrderCreateRequest,
 ):
-    if not order_req.items:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Empty cart"
-        )
-
-    merged_items = {}
-    for item in order_req.items:
-        if item.quantity < 1:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Quantity must be greater than zero"
-            )
-        if item.menu_item_id in merged_items:
-            merged_qty = merged_items[item.menu_item_id][0] + item.quantity
-            merged_note = merged_items[item.menu_item_id][1]
-            if item.item_note:
-                merged_note = f"{merged_note}, {item.item_note}" if merged_note else item.item_note
-            merged_items[item.menu_item_id] = (merged_qty, merged_note)
-        else:
-            merged_items[item.menu_item_id] = (item.quantity, item.item_note)
-
-    if len(merged_items) > 50:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Too many unique line items (maximum 50)"
-        )
-
-    db_items = db.query(MenuItem).filter(MenuItem.id.in_(list(merged_items.keys()))).all()
-    db_items_map = {item.id: item for item in db_items}
-
-    order_items_to_create = []
-    subtotal = Decimal("0.00")
-
-    for menu_item_id, (quantity, item_note) in merged_items.items():
-        if menu_item_id not in db_items_map:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Item not found"
-            )
-
-        db_item = db_items_map[menu_item_id]
-        if db_item.restaurant_id != restaurant.id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Item belonging to another restaurant"
-            )
-
-        if not db_item.is_available:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Item unavailable"
-            )
-
-        if quantity < 1 or quantity > 50:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Merged quantity must be between 1 and 50"
-            )
-
-        total_price = db_item.price * quantity
-        subtotal += total_price
-        order_items_to_create.append({
-            "menu_item_id": db_item.id,
-            "item_name": db_item.name_en,
-            "quantity": quantity,
-            "unit_price": db_item.price,
-            "total_price": total_price,
-            "item_note": item_note,
-        })
-
-    return subtotal, order_items_to_create
+    return validate_and_price_order_items(db, restaurant.id, order_req)
 
 
 def load_order_for_response(db: Session, order_id: int) -> Order:
     return db.query(Order).options(
-        selectinload(Order.items),
+        selectinload(Order.items).selectinload(OrderItem.selected_options),
         selectinload(Order.status_history),
         joinedload(Order.table),
         joinedload(Order.restaurant),
@@ -152,7 +90,7 @@ def load_session_for_response(db: Session, session_id: int) -> DiningSession:
     return db.query(DiningSession).options(
         joinedload(DiningSession.restaurant),
         joinedload(DiningSession.table),
-        selectinload(DiningSession.orders).selectinload(Order.items),
+        selectinload(DiningSession.orders).selectinload(Order.items).selectinload(OrderItem.selected_options),
     ).filter(DiningSession.id == session_id).one()
 
 
@@ -245,9 +183,11 @@ def create_order_in_session(
     dining_session: DiningSession,
     order_req: PublicOrderCreateRequest,
     key_clean: str,
+    created_by_staff_id: int | None = None,
+    source: str = "qr",
 ) -> Order:
     existing_order = db.query(Order).options(
-        selectinload(Order.items),
+            selectinload(Order.items).selectinload(OrderItem.selected_options),
         selectinload(Order.status_history),
         joinedload(Order.table),
         joinedload(Order.restaurant),
@@ -293,27 +233,43 @@ def create_order_in_session(
             status="pending",
             subtotal=subtotal,
             customer_note=order_req.customer_note,
+            source=source,
+            created_by_staff_id=created_by_staff_id,
             idempotency_key=key_clean
         )
         db.add(new_order)
         db.flush()
 
         for item_data in order_items_to_create:
-            db.add(OrderItem(
+            order_item = OrderItem(
                 order_id=new_order.id,
-                menu_item_id=item_data["menu_item_id"],
-                item_name=item_data["item_name"],
-                quantity=item_data["quantity"],
-                unit_price=item_data["unit_price"],
-                total_price=item_data["total_price"],
-                item_note=item_data["item_note"]
-            ))
+                menu_item_id=item_data.menu_item_id,
+                item_name=item_data.item_name,
+                quantity=item_data.quantity,
+                unit_price=item_data.unit_price,
+                total_price=item_data.total_price,
+                item_note=item_data.item_note
+            )
+            db.add(order_item)
+            db.flush()
+            for option in item_data.selected_options:
+                db.add(OrderItemSelectedOption(
+                    order_item_id=order_item.id,
+                    menu_option_id=option.menu_option_id,
+                    menu_option_group_id=option.menu_option_group_id,
+                    option_name=option.option_name,
+                    group_name=option.group_name,
+                    option_type=option.option_type,
+                    price_delta=option.price_delta,
+                    quantity=option.quantity,
+                    display_order=option.display_order,
+                ))
 
         db.add(OrderStatusHistory(
             order_id=new_order.id,
             old_status=None,
             new_status="pending",
-            changed_by_staff_id=None
+            changed_by_staff_id=created_by_staff_id
         ))
         db.flush()
         return new_order
@@ -321,7 +277,7 @@ def create_order_in_session(
     except IntegrityError:
         db.rollback()
         existing_order = db.query(Order).options(
-            selectinload(Order.items),
+            selectinload(Order.items).selectinload(OrderItem.selected_options),
             selectinload(Order.status_history),
             joinedload(Order.table),
             joinedload(Order.restaurant),
@@ -399,6 +355,20 @@ def create_public_order(
     dining_session = get_orderable_session_for_table(db, restaurant, table)
     new_order = create_order_in_session(db, restaurant, table, dining_session, order_req, key_clean)
     db.commit()
+    publish_event(
+        EVENT_ORDER_CREATED,
+        restaurant_id=restaurant.id,
+        channels=[
+            restaurant_channel(restaurant.id, "operations"),
+            restaurant_channel(restaurant.id, "kitchen"),
+            restaurant_channel(restaurant.id, "staff"),
+            session_channel(dining_session.public_token),
+            table_channel(restaurant.id, table.id),
+            order_channel(new_order.public_token),
+        ],
+        resource_id=new_order.id,
+        state={"order_number": new_order.order_number, "status": new_order.status, "table_id": table.id, "session_token": dining_session.public_token},
+    )
     return build_order_response(db, load_order_for_response(db, new_order.id))
 
 
@@ -466,6 +436,27 @@ def create_public_session_order(
         key_clean,
     )
     db.commit()
+    publish_event(
+        EVENT_ORDER_CREATED,
+        restaurant_id=dining_session.restaurant_id,
+        channels=[
+            restaurant_channel(dining_session.restaurant_id, "operations"),
+            restaurant_channel(dining_session.restaurant_id, "kitchen"),
+            restaurant_channel(dining_session.restaurant_id, "staff"),
+            session_channel(dining_session.public_token),
+            table_channel(dining_session.restaurant_id, dining_session.table_id),
+            order_channel(new_order.public_token),
+        ],
+        resource_id=new_order.id,
+        state={"order_number": new_order.order_number, "status": new_order.status, "table_id": dining_session.table_id, "session_token": dining_session.public_token},
+    )
+    publish_event(
+        EVENT_SESSION_UPDATED,
+        restaurant_id=dining_session.restaurant_id,
+        channels=[session_channel(dining_session.public_token), table_channel(dining_session.restaurant_id, dining_session.table_id)],
+        resource_id=dining_session.id,
+        state={"session_token": dining_session.public_token},
+    )
     return build_session_response(db, new_order.dining_session)
 
 
@@ -478,7 +469,7 @@ def get_public_order(
     db: Session = Depends(get_db)
 ):
     order = db.query(Order).options(
-        selectinload(Order.items),
+        selectinload(Order.items).selectinload(OrderItem.selected_options),
         selectinload(Order.status_history),
         joinedload(Order.table),
         joinedload(Order.restaurant),

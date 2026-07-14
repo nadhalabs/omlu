@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { CurrentStaffResponse } from "./types";
+import { backendUrl } from "./backendUrl";
 
 export async function requireStaffRole(
   allowedRoles: string[],
@@ -12,10 +13,9 @@ export async function requireStaffRole(
     redirect("/login");
   }
 
-  const backendBaseUrl = process.env.BACKEND_API_BASE_URL || "http://localhost:8000";
   let staffInfo: CurrentStaffResponse;
   try {
-    const res = await fetch(`${backendBaseUrl}/auth/staff/me`, {
+    const res = await fetch(backendUrl("/auth/staff/me"), {
       method: "GET",
       headers: {
         "Authorization": `Bearer ${tokenCookie.value}`,

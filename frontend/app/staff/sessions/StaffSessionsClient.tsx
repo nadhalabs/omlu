@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { getStaffSessions, closeEmptySession, ApiError } from "@/lib/api";
 import { StaffSessionListItem } from "@/lib/types";
+import { useRealtime } from "@/lib/realtime";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -96,6 +97,12 @@ export default function StaffSessionsClient() {
     };
   }, [fetchSessions]);
 
+  const realtimeStatus = useRealtime({
+    target: { kind: "staff", channel: "staff" },
+    onEvent: () => void fetchSessions(false),
+    onReconnect: () => void fetchSessions(false),
+  });
+
   // Open confirm dialog
   const handleAskClose = (token: string) => {
     setConfirmToken(token);
@@ -143,12 +150,24 @@ export default function StaffSessionsClient() {
             </h1>
             <p className="text-zinc-500 text-sm mt-1">
               {lastUpdated
-                ? `Updated: ${lastUpdated.toLocaleTimeString()}`
+                ? `Updated: ${lastUpdated.toLocaleTimeString()} · Real-time: ${realtimeStatus}`
                 : "Loading…"}
             </p>
           </div>
           <div className="flex items-center gap-3 flex-wrap">
             {/* Nav links */}
+            <Link
+              href="/staff/tables"
+              className="text-xs text-zinc-400 hover:text-amber-400 font-semibold transition px-3 py-1.5 rounded-lg border border-zinc-800 hover:border-amber-700/50"
+            >
+              Staff Tables
+            </Link>
+            <Link
+              href="/staff/orders/new"
+              className="text-xs text-zinc-400 hover:text-amber-400 font-semibold transition px-3 py-1.5 rounded-lg border border-zinc-800 hover:border-amber-700/50"
+            >
+              New Order
+            </Link>
             <Link
               href="/staff/requests"
               className="text-xs text-zinc-400 hover:text-amber-400 font-semibold transition px-3 py-1.5 rounded-lg border border-zinc-800 hover:border-amber-700/50"

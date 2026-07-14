@@ -1,7 +1,7 @@
 from app.models.restaurant import Restaurant
 from app.models.restaurant_table import RestaurantTable
-from app.models.menu import MenuCategory, MenuItem
-from app.models.order import Order, OrderItem, OrderStatusHistory, RestaurantDailySequence
+from app.models.menu import MenuCategory, MenuItem, MenuItemOptionGroup, MenuOption, MenuOptionGroup
+from app.models.order import Order, OrderItem, OrderItemSelectedOption, OrderStatusHistory, RestaurantDailySequence
 from app.models.staff_user import AuditLog, StaffSession, StaffUser
 from app.models.service_request import ServiceRequest
 from app.models.dining_session import DiningSession
@@ -12,8 +12,12 @@ __all__ = [
     "RestaurantTable",
     "MenuCategory",
     "MenuItem",
+    "MenuOptionGroup",
+    "MenuOption",
+    "MenuItemOptionGroup",
     "Order",
     "OrderItem",
+    "OrderItemSelectedOption",
     "OrderStatusHistory",
     "RestaurantDailySequence",
     "StaffUser",

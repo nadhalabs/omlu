@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { backendUrl, getBackendBaseUrl } from "./backendUrl";
 
 export async function proxyAdminRequest(
   request: NextRequest,
@@ -11,8 +12,7 @@ export async function proxyAdminRequest(
     return NextResponse.json({ detail: "Not authenticated" }, { status: 401 });
   }
 
-  const backendBaseUrl = process.env.BACKEND_API_BASE_URL || "http://localhost:8000";
-  const targetUrl = `${backendBaseUrl}/admin${subPath}`;
+  const targetUrl = backendUrl(`/admin${subPath}`);
 
   const headers: HeadersInit = {
     "Authorization": `Bearer ${tokenCookie.value}`,
@@ -71,9 +71,10 @@ export async function proxyAdminRequest(
 
     const data = await res.json();
     return NextResponse.json(data);
-  } catch {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown connection error";
     return NextResponse.json(
-      { detail: "Could not connect to the backend server." },
+      { detail: `Could not connect to the backend server at ${getBackendBaseUrl()}. ${message}` },
       { status: 500 }
     );
   }

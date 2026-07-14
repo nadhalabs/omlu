@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ApiError, getPublicBill, requestPayAtCounter } from "@/lib/api";
 import { BillResponse, CounterPaymentMethod } from "@/lib/types";
 import { buildWhatsAppBillShareUrl } from "@/lib/billShare";
+import { useRealtime } from "@/lib/realtime";
 
 interface BillClientProps {
   sessionToken: string;
@@ -122,6 +123,12 @@ export default function BillClient({ sessionToken }: BillClientProps) {
     const timeout = window.setTimeout(() => fetchBill(true), 0);
     return () => window.clearTimeout(timeout);
   }, [fetchBill]);
+
+  useRealtime({
+    target: { kind: "session", token: sessionToken },
+    onEvent: () => void fetchBill(false),
+    onReconnect: () => void fetchBill(false),
+  });
 
   const billUrl =
     typeof window === "undefined"

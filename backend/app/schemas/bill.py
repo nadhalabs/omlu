@@ -3,9 +3,10 @@ from decimal import Decimal
 from typing import List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, field_serializer
+from app.schemas.order import OrderItemSelectedOptionResponse
 
 
-CounterPaymentMethod = Literal["counter_cash", "counter_upi"]
+CounterPaymentMethod = Literal["counter_cash", "counter_upi", "counter_card"]
 
 
 class CounterPaymentRequest(BaseModel):
@@ -17,6 +18,7 @@ class BillItemResponse(BaseModel):
     quantity: int
     unit_price: Decimal
     line_total: Decimal
+    selected_options: List[OrderItemSelectedOptionResponse] = []
 
     @field_serializer("unit_price", "line_total")
     def serialize_money(self, value: Decimal) -> str:

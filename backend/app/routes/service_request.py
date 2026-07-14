@@ -16,6 +16,14 @@ from app.schemas.service_request import ServiceRequestCreate, ServiceRequestResp
 from app.services.dining_sessions import find_current_open_session_for_table
 from app.utils.auth import get_current_staff_user, RoleChecker
 from app.models.staff_user import StaffUser
+from app.services.realtime import (
+    EVENT_SERVICE_REQUEST_CREATED,
+    EVENT_SERVICE_REQUEST_RESOLVED,
+    publish_event,
+    restaurant_channel,
+    session_channel,
+    table_channel,
+)
 
 router = APIRouter()
 
@@ -171,6 +179,22 @@ def create_public_service_request(
 
     db.commit()
     db.refresh(new_request)
+    channels = [
+        restaurant_channel(restaurant.id, "operations"),
+        restaurant_channel(restaurant.id, "staff"),
+        table_channel(restaurant.id, table.id),
+    ]
+    if dining_session_id:
+        session = db.query(DiningSession).filter(DiningSession.id == dining_session_id).first()
+        if session:
+            channels.append(session_channel(session.public_token))
+    publish_event(
+        EVENT_SERVICE_REQUEST_CREATED,
+        restaurant_id=restaurant.id,
+        channels=channels,
+        resource_id=new_request.id,
+        state={"request_type": new_request.request_type, "status": new_request.status, "table_id": table.id},
+    )
     return new_request
 
 
@@ -295,6 +319,11 @@ def resolve_service_request(
 
     db.commit()
     db.refresh(service_req)
+    channels = [
+        restaurant_channel(current_user.restaurant_id, "operations"),
+        restaurant_channel(current_user.restaurant_id, "staff"),
+        table_channel(current_user.restaurant_id, service_req.table_id),
+    ]
 
     # Build enriched response
     table = db.query(RestaurantTable).filter(RestaurantTable.id == service_req.table_id).first()
@@ -309,6 +338,7 @@ def resolve_service_request(
         dining_session = db.query(DiningSession).filter(DiningSession.id == service_req.dining_session_id).first()
         if dining_session:
             dining_session_token = dining_session.public_token
+            channels.append(session_channel(dining_session.public_token))
         bill = db.query(Bill).filter(Bill.dining_session_id == service_req.dining_session_id).first()
         if bill:
             bill_number = bill.bill_number
@@ -317,6 +347,13 @@ def resolve_service_request(
         resolver = db.query(StaffUser).filter(StaffUser.id == service_req.resolved_by_staff_id).first()
         if resolver:
             resolver_name = resolver.name
+    publish_event(
+        EVENT_SERVICE_REQUEST_RESOLVED,
+        restaurant_id=current_user.restaurant_id,
+        channels=channels,
+        resource_id=service_req.id,
+        state={"request_type": service_req.request_type, "status": service_req.status, "table_id": service_req.table_id},
+    )
 
     return StaffServiceRequestResponse(
         id=service_req.id,
@@ -335,3 +372,15 @@ def resolve_service_request(
         bill_number=bill_number,
         resolver_name=resolver_name
     )
+
+
+@router.post(
+    "/staff/requests/{request_id}/resolve",
+    response_model=StaffServiceRequestResponse,
+)
+def resolve_staff_request_alias(
+    request_id: int,
+    current_user: StaffUser = Depends(_staff_resolve_roles),
+    db: Session = Depends(get_db),
+):
+    return resolve_service_request(request_id, current_user=current_user, db=db)

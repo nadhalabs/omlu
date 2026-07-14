@@ -21,6 +21,29 @@ export interface MenuItem {
   image_url: string | null;
   is_available: boolean;
   display_order: number;
+  option_groups?: MenuOptionGroup[];
+}
+
+export interface MenuOption {
+  id: number;
+  group_id: number;
+  name: string;
+  price_delta: string;
+  available: boolean;
+  display_order: number;
+}
+
+export interface MenuOptionGroup {
+  id: number;
+  restaurant_id: number;
+  name: string;
+  type: "variant" | "addon";
+  required: boolean;
+  minimum_selections: number;
+  maximum_selections: number;
+  display_order: number;
+  active: boolean;
+  options: MenuOption[];
 }
 
 export interface MenuCategory {
@@ -41,6 +64,13 @@ export interface OrderItemRequest {
   menu_item_id: number;
   quantity: number;
   item_note: string | null;
+  selected_options?: SelectedOptionRequest[];
+}
+
+export interface SelectedOptionRequest {
+  group_id: number;
+  option_id: number;
+  quantity: number;
 }
 
 export interface PublicOrderCreateRequest {
@@ -55,6 +85,15 @@ export interface PublicOrderResponseItem {
   unit_price: string;
   total_price: string;
   item_note: string | null;
+  selected_options: OrderItemSelectedOption[];
+}
+
+export interface OrderItemSelectedOption {
+  option_name: string;
+  group_name: string;
+  option_type: "variant" | "addon";
+  price_delta: string;
+  quantity: number;
 }
 
 export interface OrderStatusHistoryResponse {
@@ -98,6 +137,7 @@ export interface DiningSessionOrderItem {
   unit_price: string;
   total_price: string;
   item_note: string | null;
+  selected_options: OrderItemSelectedOption[];
 }
 
 export interface DiningSessionOrder {
@@ -139,6 +179,7 @@ export interface BillItem {
   quantity: number;
   unit_price: string;
   line_total: string;
+  selected_options: OrderItemSelectedOption[];
 }
 
 export interface BillOrder {
@@ -162,13 +203,13 @@ export interface BillResponse {
   currency: string;
   generated_at: string;
   paid_at: string | null;
-  payment_method: "counter_cash" | "counter_upi" | "online" | null;
+  payment_method: "counter_cash" | "counter_upi" | "counter_card" | "online" | null;
   payment_reference: string | null;
   paid_by_staff_id: number | null;
 }
 
 export type IssueBillResponse = BillResponse;
-export type CounterPaymentMethod = "counter_cash" | "counter_upi";
+export type CounterPaymentMethod = "counter_cash" | "counter_upi" | "counter_card";
 export type CounterPaymentResponse = BillResponse;
 
 export interface KitchenOrderItemResponse {
@@ -177,6 +218,7 @@ export interface KitchenOrderItemResponse {
   unit_price: string;
   total_price: string;
   item_note: string | null;
+  selected_options: OrderItemSelectedOption[];
 }
 
 export interface KitchenOrderResponse {

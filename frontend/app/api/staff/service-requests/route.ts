@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { backendUrl, getBackendBaseUrl } from "@/lib/backendUrl";
 
 // Staff service requests proxy
 // GET /api/staff/service-requests[?status_filter=...]
@@ -8,11 +9,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ detail: "Not authenticated" }, { status: 401 });
   }
 
-  const backendBaseUrl = process.env.BACKEND_API_BASE_URL || "http://localhost:8000";
   const { searchParams } = new URL(request.url);
   const statusFilter = searchParams.get("status_filter");
   const queryString = statusFilter ? `?status_filter=${encodeURIComponent(statusFilter)}` : "";
-  const targetUrl = `${backendBaseUrl}/staff/service-requests${queryString}`;
+  const targetUrl = backendUrl(`/staff/service-requests${queryString}`);
 
   try {
     const res = await fetch(targetUrl, {
@@ -33,9 +33,10 @@ export async function GET(request: NextRequest) {
 
     const data = await res.json();
     return NextResponse.json(data);
-  } catch {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown connection error";
     return NextResponse.json(
-      { detail: "Could not connect to the backend server." },
+      { detail: `Could not connect to the backend server at ${getBackendBaseUrl()}. ${message}` },
       { status: 500 }
     );
   }

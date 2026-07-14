@@ -5,10 +5,11 @@ from fastapi import APIRouter, Depends, HTTPException, status as fastapi_status
 from sqlalchemy.orm import Session, selectinload, joinedload
 from app.database import get_db
 from app.models.restaurant import Restaurant
-from app.models.order import Order, OrderStatusHistory
+from app.models.order import Order, OrderItem, OrderStatusHistory
 from app.models.staff_user import StaffUser
 from app.schemas.kitchen import KitchenOrderResponse, KitchenStatusUpdateRequest
 from app.utils.auth import get_current_staff_user, RoleChecker
+from app.services.realtime import EVENT_ORDER_STATUS_CHANGED, order_channel, publish_event, restaurant_channel, session_channel, table_channel
 
 router = APIRouter()
 
@@ -64,7 +65,7 @@ def get_kitchen_orders(
     # 5. Build query
     query = db.query(Order).options(
         joinedload(Order.table),
-        selectinload(Order.items),
+        selectinload(Order.items).selectinload(OrderItem.selected_options),
         selectinload(Order.status_history)
     ).filter(
         Order.restaurant_id == restaurant.id,
@@ -183,11 +184,28 @@ def update_kitchen_order_status(
         # Load committed order with relationships loaded separately
         full_order = db.query(Order).options(
             joinedload(Order.table),
-            selectinload(Order.items),
+            joinedload(Order.dining_session),
+            selectinload(Order.items).selectinload(OrderItem.selected_options),
             selectinload(Order.status_history)
         ).filter(
             Order.id == order.id
         ).first()
+        channels = [
+            restaurant_channel(restaurant.id, "operations"),
+            restaurant_channel(restaurant.id, "kitchen"),
+            restaurant_channel(restaurant.id, "staff"),
+            order_channel(full_order.public_token),
+            table_channel(restaurant.id, full_order.table_id),
+        ]
+        if full_order.dining_session:
+            channels.append(session_channel(full_order.dining_session.public_token))
+        publish_event(
+            EVENT_ORDER_STATUS_CHANGED,
+            restaurant_id=restaurant.id,
+            channels=channels,
+            resource_id=full_order.id,
+            state={"order_number": full_order.order_number, "status": full_order.status, "table_id": full_order.table_id},
+        )
 
         # Sort history for response
         full_order.status_history = sorted(full_order.status_history, key=lambda h: h.changed_at)

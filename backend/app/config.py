@@ -4,10 +4,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     database_url: str
-    frontend_url: str = "http://localhost:3000"
-    public_frontend_url: str = "http://localhost:3000"
+    frontend_url: str = "https://omlu.vercel.app"
+    public_frontend_url: str = "https://omlu.vercel.app"
     # FRONTEND_URLS: comma-separated list of allowed CORS origins (no wildcard with credentials)
-    frontend_urls: str = "http://localhost:3000,http://127.0.0.1:3000"
+    frontend_urls: str = "https://omlu.vercel.app,http://localhost:3000,http://127.0.0.1:3000"
     kitchen_api_key: str
     jwt_secret_key: str   # Required secret key for staff JWT token authentication
     jwt_algorithm: str = "HS256"
@@ -20,7 +20,7 @@ class Settings(BaseSettings):
         """
         origins = [o.strip() for o in self.frontend_urls.split(",") if o.strip()]
         # Ensure basic dev origins are always included for local development
-        for dev_origin in ["http://localhost:3000", "http://127.0.0.1:3000"]:
+        for dev_origin in ["https://omlu.vercel.app", "http://localhost:3000", "http://127.0.0.1:3000"]:
             if dev_origin not in origins:
                 origins.append(dev_origin)
         return origins

@@ -10,6 +10,7 @@ import {
 } from "@/lib/api";
 import { PublicOrderResponse } from "@/lib/types";
 import { savePublicSessionToken } from "@/lib/publicSessionStorage";
+import { useRealtime } from "@/lib/realtime";
 
 interface OrderTrackingClientProps {
   publicToken: string;
@@ -132,6 +133,12 @@ export default function OrderTrackingClient({
       if (showLoading) setLoading(false);
     }
   };
+
+  useRealtime({
+    target: { kind: "order", token: publicToken },
+    onEvent: () => void fetchOrder(false),
+    onReconnect: () => void fetchOrder(false),
+  });
 
   // Initial fetch and visibility change handler
   useEffect(() => {

@@ -6,6 +6,7 @@ import {
   ApiError,
 } from "@/lib/api";
 import { DashboardSummaryResponse } from "@/lib/types";
+import { useRealtime } from "@/lib/realtime";
 
 function StatCard({
   label,
@@ -73,6 +74,12 @@ export default function AdminDashboardClient() {
     };
   }, [fetchDashboard]);
 
+  const realtimeStatus = useRealtime({
+    target: { kind: "staff", channel: "admin" },
+    onEvent: () => void fetchDashboard(false),
+    onReconnect: () => void fetchDashboard(false),
+  });
+
   if (loading && !data) {
     return (
       <div className="flex flex-1 items-center justify-center py-20">
@@ -121,6 +128,9 @@ export default function AdminDashboardClient() {
           <h1 className="text-2xl font-black text-white">Admin Home</h1>
           <p className="text-zinc-500 text-sm mt-1">
             Timezone: <span className="text-amber-500 font-bold">{data.timezone}</span>
+          </p>
+          <p className="mt-1 text-[11px] font-bold uppercase tracking-wide text-zinc-600">
+            Real-time: {realtimeStatus}
           </p>
         </div>
         <div className="flex flex-col items-end gap-1">

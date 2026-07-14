@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { backendUrl, getBackendBaseUrl } from "@/lib/backendUrl";
 
 export async function POST(request: NextRequest) {
-  const backendBaseUrl = process.env.BACKEND_API_BASE_URL || "http://localhost:8000";
-
   let body;
   try {
     body = await request.json();
@@ -11,7 +10,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const res = await fetch(`${backendBaseUrl}/public/restaurants/register`, {
+    const res = await fetch(backendUrl("/public/restaurants/register"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -29,9 +28,12 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(data, { status: res.status });
-  } catch {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown connection error";
     return NextResponse.json(
-      { detail: "Could not connect to the backend server." },
+      {
+        detail: `Could not connect to the backend server at ${getBackendBaseUrl()}. ${message}`,
+      },
       { status: 500 }
     );
   }

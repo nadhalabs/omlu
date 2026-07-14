@@ -13,6 +13,7 @@ import {
   clearPublicSessionToken,
   savePublicSessionToken,
 } from "@/lib/publicSessionStorage";
+import { useRealtime } from "@/lib/realtime";
 
 interface SessionClientProps {
   sessionToken: string;
@@ -175,6 +176,12 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
       document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, [fetchSession]);
+
+  useRealtime({
+    target: { kind: "session", token: sessionToken },
+    onEvent: () => void fetchSession(false),
+    onReconnect: () => void fetchSession(false),
+  });
 
   const serviceTypes = [
     { type: "waiter", label: t.callWaiter },

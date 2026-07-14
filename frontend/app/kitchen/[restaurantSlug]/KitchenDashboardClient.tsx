@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getKitchenOrders, updateKitchenOrderStatus, getStaffMe, staffLogout, ApiError } from "@/lib/api";
 import { KitchenOrderResponse, CurrentStaffResponse } from "@/lib/types";
+import { useRealtime } from "@/lib/realtime";
 
 interface KitchenDashboardClientProps {
   restaurantSlug: string;
@@ -235,6 +236,13 @@ export default function KitchenDashboardClient({
     };
   }, [restaurantSlug, authLoading, authError, staffInfo, soundEnabled]);
 
+  const realtimeStatus = useRealtime({
+    enabled: Boolean(staffInfo && !authError),
+    target: { kind: "staff", channel: "kitchen" },
+    onEvent: () => void fetchOrders(false),
+    onReconnect: () => void fetchOrders(false),
+  });
+
   // Handle Logout action
   const handleLogout = async () => {
     try {
@@ -359,6 +367,9 @@ export default function KitchenDashboardClient({
           </h1>
           <p className="text-zinc-500 text-xs mt-1.5 font-bold">
             Logged in as <span className="text-zinc-300 font-black">{staffInfo.name}</span> (Role: <span className="text-amber-500 font-black uppercase text-[10px] bg-amber-950/20 px-2 py-0.5 rounded border border-amber-900/30">{staffInfo.role}</span>)
+          </p>
+          <p className="mt-1 text-[11px] font-bold uppercase tracking-wide text-zinc-600">
+            Real-time: {realtimeStatus}
           </p>
         </div>
 

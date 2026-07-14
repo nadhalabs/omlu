@@ -40,7 +40,7 @@ export default function BillHistoryClient() {
         </select>
         <select value={filters.payment_method || ""} onChange={(event) => setFilters({ ...filters, payment_method: event.target.value, page: 1 })} className="h-10 rounded border border-zinc-800 bg-zinc-950 px-3 text-sm">
           <option value="">All methods</option>
-          {["counter_cash", "counter_upi", "online"].map((method) => <option key={method} value={method}>{method}</option>)}
+          {["counter_cash", "counter_upi", "counter_card", "online"].map((method) => <option key={method} value={method}>{method}</option>)}
         </select>
         <input placeholder="Table ID" value={filters.table_id || ""} onChange={(event) => setFilters({ ...filters, table_id: event.target.value, page: 1 })} className="h-10 rounded border border-zinc-800 bg-zinc-950 px-3 text-sm" />
       </div>

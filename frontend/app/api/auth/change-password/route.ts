@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { backendUrl, getBackendBaseUrl } from "@/lib/backendUrl";
 
 export async function POST(request: NextRequest) {
   const tokenCookie = request.cookies.get("staff_token");
@@ -13,9 +14,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ detail: "Invalid JSON body" }, { status: 400 });
   }
 
-  const backendBaseUrl = process.env.BACKEND_API_BASE_URL || "http://localhost:8000";
   try {
-    const res = await fetch(`${backendBaseUrl}/auth/staff/change-password`, {
+    const res = await fetch(backendUrl("/auth/staff/change-password"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -45,9 +45,10 @@ export async function POST(request: NextRequest) {
       maxAge: data.expires_in,
     });
     return response;
-  } catch {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown connection error";
     return NextResponse.json(
-      { detail: "Could not connect to the backend server." },
+      { detail: `Could not connect to the backend server at ${getBackendBaseUrl()}. ${message}` },
       { status: 500 }
     );
   }

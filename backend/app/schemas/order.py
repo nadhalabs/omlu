@@ -3,14 +3,34 @@ from typing import List, Optional
 from decimal import Decimal
 from datetime import datetime
 
+class SelectedOptionRequest(BaseModel):
+    group_id: int
+    option_id: int
+    quantity: int = Field(default=1, ge=1, le=20)
+
 class OrderItemRequest(BaseModel):
     menu_item_id: int
     quantity: int = Field(..., ge=1, le=50)
     item_note: Optional[str] = Field(None, max_length=300)
+    selected_options: List[SelectedOptionRequest] = Field(default_factory=list, max_length=30)
 
 class PublicOrderCreateRequest(BaseModel):
     items: List[OrderItemRequest] = Field(..., min_length=1, max_length=50)
     customer_note: Optional[str] = Field(None, max_length=500)
+
+class OrderItemSelectedOptionResponse(BaseModel):
+    option_name: str
+    group_name: str
+    option_type: str
+    price_delta: Decimal
+    quantity: int
+
+    @field_serializer("price_delta")
+    def serialize_price_delta(self, price: Decimal) -> str:
+        return f"{price:.2f}"
+
+    model_config = ConfigDict(from_attributes=True)
+
 
 class PublicOrderResponseItem(BaseModel):
     menu_item_id: Optional[int] = None
@@ -19,6 +39,7 @@ class PublicOrderResponseItem(BaseModel):
     unit_price: Decimal
     total_price: Decimal
     item_note: Optional[str] = None
+    selected_options: List[OrderItemSelectedOptionResponse] = Field(default_factory=list)
 
     @field_serializer("unit_price")
     def serialize_unit_price(self, price: Decimal) -> str:

@@ -53,6 +53,8 @@ class Order(Base):
         CheckConstraint("subtotal >= 0", name="chk_order_subtotal_positive")
     )
     customer_note: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    source: Mapped[str] = mapped_column(String(50), default="qr", server_default="qr")
+    created_by_staff_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
     idempotency_key: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -125,6 +127,50 @@ class OrderItem(Base):
         "MenuItem",
         back_populates="order_items"
     )
+    selected_options: Mapped[List["OrderItemSelectedOption"]] = relationship(
+        "OrderItemSelectedOption",
+        back_populates="order_item",
+        cascade="all, delete-orphan",
+    )
+
+
+class OrderItemSelectedOption(Base):
+    __tablename__ = "order_item_selected_options"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    order_item_id: Mapped[int] = mapped_column(
+        ForeignKey("order_items.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    menu_option_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("menu_options.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    menu_option_group_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("menu_option_groups.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    option_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    group_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    option_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    price_delta: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2),
+        CheckConstraint("price_delta >= 0", name="chk_order_item_selected_option_price_delta_non_negative"),
+        nullable=False,
+    )
+    quantity: Mapped[int] = mapped_column(
+        Integer,
+        CheckConstraint("quantity > 0", name="chk_order_item_selected_option_quantity_positive"),
+        default=1,
+        server_default="1",
+        nullable=False,
+    )
+    display_order: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+
+    order_item: Mapped["OrderItem"] = relationship("OrderItem", back_populates="selected_options")
 
 class OrderStatusHistory(Base):
     __tablename__ = "order_status_history"

@@ -67,6 +67,9 @@ from app.routes import (
     staff_management_router,
     registration_router,
     history_router,
+    menu_options_router,
+    realtime_router,
+    staff_tables_router,
 )
 
 app.include_router(health_router)
@@ -83,6 +86,9 @@ app.include_router(sessions_router)
 app.include_router(staff_management_router)
 app.include_router(registration_router)
 app.include_router(history_router)
+app.include_router(menu_options_router)
+app.include_router(realtime_router)
+app.include_router(staff_tables_router)
 
 
 @app.get("/")

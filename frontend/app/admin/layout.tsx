@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import React from "react";
 import AdminSidebarLink from "./AdminSidebarLink";
 import AdminLogoutButton from "./AdminLogoutButton";
+import { backendUrl } from "@/lib/backendUrl";
 
 export default async function AdminLayout({
   children,
@@ -17,11 +18,10 @@ export default async function AdminLayout({
     redirect("/login");
   }
 
-  const backendBaseUrl = process.env.BACKEND_API_BASE_URL || "http://localhost:8000";
   let staffInfo = null;
 
   try {
-    const res = await fetch(`${backendBaseUrl}/auth/staff/me`, {
+    const res = await fetch(backendUrl("/auth/staff/me"), {
       method: "GET",
       headers: {
         "Authorization": `Bearer ${tokenCookie.value}`,

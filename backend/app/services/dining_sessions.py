@@ -44,6 +44,7 @@ def create_session_safely(
     db: Session,
     restaurant: Restaurant,
     table: RestaurantTable,
+    opened_by_staff_id: int | None = None,
 ) -> DiningSession:
     validate_restaurant_table_ownership(restaurant, table)
 
@@ -55,6 +56,7 @@ def create_session_safely(
                     table_id=table.id,
                     public_token=generate_session_token(),
                     status="open",
+                    opened_by_staff_id=opened_by_staff_id,
                 )
                 db.add(session)
                 db.flush()
@@ -71,6 +73,7 @@ def get_or_create_open_session(
     db: Session,
     restaurant: Restaurant,
     table: RestaurantTable,
+    opened_by_staff_id: int | None = None,
 ) -> DiningSession:
     validate_restaurant_table_ownership(restaurant, table)
 
@@ -90,7 +93,7 @@ def get_or_create_open_session(
     if existing:
         return existing
 
-    return create_session_safely(db, restaurant, table)
+    return create_session_safely(db, restaurant, table, opened_by_staff_id=opened_by_staff_id)
 
 
 def calculate_session_subtotal(db: Session, dining_session_id: int) -> Decimal:

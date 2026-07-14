@@ -7,18 +7,52 @@ from sqlalchemy.orm import Session, selectinload, joinedload
 
 from app.models.bill import Bill, RestaurantBillDailySequence
 from app.models.dining_session import DiningSession
-from app.models.order import Order
+from app.models.order import Order, OrderItem
 from app.models.restaurant import Restaurant
 from app.models.staff_user import StaffUser
 
 
-COUNTER_PAYMENT_METHODS = {"counter_cash", "counter_upi"}
+COUNTER_PAYMENT_METHODS = {"counter_cash", "counter_upi", "counter_card"}
+ACTIVE_BILL_SESSION_STATUSES = {"open", "payment_requested", "payment_pending"}
+
+
+def _lock_session(db: Session, session_id: int) -> DiningSession:
+    locked_session = (
+        db.query(DiningSession)
+        .filter(DiningSession.id == session_id)
+        .with_for_update()
+        .first()
+    )
+    if not locked_session:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dining session not found")
+    return locked_session
+
+
+def _lock_bill_for_session(db: Session, session_id: int) -> Bill | None:
+    return (
+        db.query(Bill)
+        .filter(Bill.dining_session_id == session_id)
+        .with_for_update()
+        .first()
+    )
+
+
+def _lock_bill_after_session(db: Session, bill_id: int, session_id: int) -> Bill:
+    locked_bill = (
+        db.query(Bill)
+        .filter(Bill.id == bill_id, Bill.dining_session_id == session_id)
+        .with_for_update()
+        .first()
+    )
+    if not locked_bill:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
+    return locked_bill
 
 
 def get_billable_orders(db: Session, dining_session_id: int) -> list[Order]:
     return (
         db.query(Order)
-        .options(selectinload(Order.items))
+        .options(selectinload(Order.items).selectinload(OrderItem.selected_options))
         .filter(
             Order.dining_session_id == dining_session_id,
             Order.status != "rejected",
@@ -60,41 +94,34 @@ def apply_draft_totals(db: Session, bill: Bill) -> Bill:
 def create_or_refresh_bill_for_session(
     db: Session,
     dining_session: DiningSession,
+    generated_by_staff_id: int | None = None,
 ) -> Bill:
-    if dining_session.status == "cancelled":
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Cannot generate a bill for a cancelled dining session.",
-        )
+    locked_session = _lock_session(db, dining_session.id)
 
-    valid_orders = get_billable_orders(db, dining_session.id)
-    if not valid_orders:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Cannot generate a bill before the session has valid orders.",
-        )
-
-    locked_session = (
-        db.query(DiningSession)
-        .filter(DiningSession.id == dining_session.id)
-        .with_for_update()
-        .first()
-    )
-    if not locked_session:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dining session not found")
-
-    bill = (
-        db.query(Bill)
-        .filter(Bill.dining_session_id == locked_session.id)
-        .with_for_update()
-        .first()
-    )
-
+    bill = _lock_bill_for_session(db, locked_session.id)
     if bill:
         if bill.status == "draft":
             apply_draft_totals(db, bill)
             db.flush()
         return bill
+
+    if locked_session.status in {"cancelled", "closed"}:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Cannot generate a bill for a {locked_session.status} dining session.",
+        )
+    if locked_session.status not in ACTIVE_BILL_SESSION_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Cannot generate a bill while session status is {locked_session.status}.",
+        )
+
+    valid_orders = get_billable_orders(db, locked_session.id)
+    if not valid_orders:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cannot generate a bill before the session has valid orders.",
+        )
 
     bill = Bill(
         restaurant_id=locked_session.restaurant_id,
@@ -102,6 +129,7 @@ def create_or_refresh_bill_for_session(
         bill_number=generate_bill_number(db, locked_session.restaurant_id),
         status="draft",
         currency=getattr(locked_session.restaurant, "currency", None) or "INR",
+        generated_by_staff_id=generated_by_staff_id,
     )
     db.add(bill)
     db.flush()
@@ -111,14 +139,8 @@ def create_or_refresh_bill_for_session(
 
 
 def issue_bill(db: Session, bill: Bill) -> Bill:
-    locked_bill = (
-        db.query(Bill)
-        .filter(Bill.id == bill.id)
-        .with_for_update()
-        .first()
-    )
-    if not locked_bill:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
+    locked_session = _lock_session(db, bill.dining_session_id)
+    locked_bill = _lock_bill_after_session(db, bill.id, locked_session.id)
 
     if locked_bill.status == "paid":
         return locked_bill
@@ -129,14 +151,11 @@ def issue_bill(db: Session, bill: Bill) -> Bill:
             detail="Cancelled bill cannot be issued.",
         )
 
-    locked_session = (
-        db.query(DiningSession)
-        .filter(DiningSession.id == locked_bill.dining_session_id)
-        .with_for_update()
-        .first()
-    )
-    if not locked_session:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dining session not found")
+    if locked_session.status not in {"open", "payment_requested"}:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Cannot issue bill while session status is {locked_session.status}.",
+        )
 
     apply_draft_totals(db, locked_bill)
     locked_bill.status = "issued"
@@ -157,21 +176,8 @@ def request_pay_at_counter(
             detail="Invalid counter payment method.",
         )
 
-    locked_session = (
-        db.query(DiningSession)
-        .filter(DiningSession.id == dining_session.id)
-        .with_for_update()
-        .first()
-    )
-    if not locked_session:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dining session not found")
-
-    bill = (
-        db.query(Bill)
-        .filter(Bill.dining_session_id == locked_session.id)
-        .with_for_update()
-        .first()
-    )
+    locked_session = _lock_session(db, dining_session.id)
+    bill = _lock_bill_for_session(db, locked_session.id)
     if not bill:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
 
@@ -209,17 +215,14 @@ def confirm_counter_payment(
             detail="Invalid counter payment method.",
         )
 
-    locked_bill = (
-        db.query(Bill)
-        .filter(Bill.id == bill.id)
-        .with_for_update()
-        .first()
-    )
-    if not locked_bill:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
+    locked_session = _lock_session(db, bill.dining_session_id)
+    locked_bill = _lock_bill_after_session(db, bill.id, locked_session.id)
 
     if locked_bill.status == "paid":
-        return locked_bill
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Bill has already been paid.",
+        )
 
     if locked_bill.status not in {"issued", "payment_pending"}:
         raise HTTPException(
@@ -227,14 +230,11 @@ def confirm_counter_payment(
             detail="Bill must be issued or payment pending before confirming counter payment.",
         )
 
-    locked_session = (
-        db.query(DiningSession)
-        .filter(DiningSession.id == locked_bill.dining_session_id)
-        .with_for_update()
-        .first()
-    )
-    if not locked_session:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dining session not found")
+    if locked_session.status not in {"payment_requested", "payment_pending"}:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Cannot confirm payment while session status is {locked_session.status}.",
+        )
 
     now = datetime.datetime.now(datetime.timezone.utc)
     locked_bill.status = "paid"
@@ -244,6 +244,7 @@ def confirm_counter_payment(
     locked_session.status = "closed"
     locked_session.paid_at = now
     locked_session.closed_at = now
+    locked_session.closed_by_staff_id = staff_user.id
     db.flush()
     return locked_bill
 
@@ -281,6 +282,7 @@ def build_bill_response(db: Session, bill: Bill):
                         "quantity": item.quantity,
                         "unit_price": item.unit_price,
                         "line_total": item.total_price,
+                        "selected_options": item.selected_options,
                     }
                     for item in order.items
                 ],

@@ -12,6 +12,9 @@ from app.routes.sessions import router as sessions_router
 from app.routes.staff_management import router as staff_management_router
 from app.routes.registration import router as registration_router
 from app.routes.history import router as history_router
+from app.routes.menu_options import router as menu_options_router
+from app.routes.realtime import router as realtime_router
+from app.routes.staff_tables import router as staff_tables_router
 
 __all__ = [
     "public_menu_router",
@@ -28,4 +31,7 @@ __all__ = [
     "staff_management_router",
     "registration_router",
     "history_router",
+    "menu_options_router",
+    "realtime_router",
+    "staff_tables_router",
 ]

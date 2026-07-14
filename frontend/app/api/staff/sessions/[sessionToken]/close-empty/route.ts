@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { backendUrl, getBackendBaseUrl } from "@/lib/backendUrl";
 
 type Params = Promise<{ sessionToken: string }>;
 
@@ -12,11 +13,9 @@ export async function POST(
   }
 
   const { sessionToken } = await params;
-  const backendBaseUrl =
-    process.env.BACKEND_API_BASE_URL || "http://localhost:8000";
-  const targetUrl = `${backendBaseUrl}/staff/sessions/${encodeURIComponent(
+  const targetUrl = backendUrl(`/staff/sessions/${encodeURIComponent(
     sessionToken
-  )}/close-empty`;
+  )}/close-empty`);
 
   try {
     const res = await fetch(targetUrl, {
@@ -38,9 +37,10 @@ export async function POST(
 
     const data = await res.json();
     return NextResponse.json(data);
-  } catch {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown connection error";
     return NextResponse.json(
-      { detail: "Could not connect to the backend server." },
+      { detail: `Could not connect to the backend server at ${getBackendBaseUrl()}. ${message}` },
       { status: 500 }
     );
   }

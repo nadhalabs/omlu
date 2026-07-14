@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, getStaffServiceRequests, getStaffSessions } from "@/lib/api";
 import { StaffServiceRequestResponse, StaffSessionListItem } from "@/lib/types";
+import { useRealtime } from "@/lib/realtime";
 
 export default function StaffHomeClient() {
   const [sessions, setSessions] = useState<StaffSessionListItem[]>([]);
@@ -37,6 +38,12 @@ export default function StaffHomeClient() {
     };
   }, [load]);
 
+  const realtimeStatus = useRealtime({
+    target: { kind: "staff", channel: "staff" },
+    onEvent: () => void load(),
+    onReconnect: () => void load(),
+  });
+
   const billRequests = requests.filter((request) => request.request_type === "bill");
   const paymentPending = sessions.filter((session) => session.status === "payment_pending" || session.status === "payment_requested");
   const readyToServe = sessions.filter((session) => session.latest_order_status === "ready");
@@ -48,8 +55,12 @@ export default function StaffHomeClient() {
           <div>
             <h1 className="text-2xl font-black text-white">Staff Home</h1>
             <p className="text-sm text-zinc-500 mt-1">Active tables, requests, bills, and ready orders.</p>
+            <p className="mt-1 text-[11px] font-bold uppercase tracking-wide text-zinc-600">Real-time: {realtimeStatus}</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
+            <Link href="/staff/tables" className="px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-sm font-bold">Tables</Link>
+            <Link href="/staff/orders/new" className="px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-sm font-bold">New Order</Link>
+            <Link href="/staff/availability" className="px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-sm font-bold">Availability</Link>
             <Link href="/staff/sessions" className="px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-sm font-bold">Active Tables</Link>
             <Link href="/staff/requests" className="px-3 py-2 rounded-lg bg-amber-600 text-sm font-bold text-white">Requests</Link>
           </div>
