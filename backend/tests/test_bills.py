@@ -822,6 +822,66 @@ def test_new_session_can_start_for_same_table_after_counter_payment(bill_context
     assert old_session_order.status_code == 409
 
 
+def test_paid_customer_data_is_isolated_from_fresh_qr_scan_and_new_session(bill_context):
+    customer_a_order_token = add_order(bill_context, item_name="Customer A Item")
+    issued = issue_bill_for(bill_context)
+    request_counter_payment(bill_context, "counter_cash")
+    paid = confirm_counter_payment(bill_context, issued["bill_number"], method="counter_cash")
+    assert paid.status_code == 200
+
+    active_lookup = client.get(
+        f"/public/restaurants/{bill_context['restaurant_slug']}/tables/{bill_context['table_code']}/session"
+    )
+    assert active_lookup.status_code == 404
+
+    menu_response = client.get(
+        f"/public/restaurants/{bill_context['restaurant_slug']}/tables/{bill_context['table_code']}/menu"
+    )
+    assert menu_response.status_code == 200
+    menu_body = menu_response.json()
+    assert set(menu_body.keys()) == {"restaurant", "table", "categories"}
+    assert "orders" not in menu_body
+    assert "bill" not in menu_body
+    assert "payment_status" not in menu_body
+    assert "receipt" not in menu_body
+
+    customer_b_order = client.post(
+        f"/public/restaurants/{bill_context['restaurant_slug']}/tables/{bill_context['table_code']}/orders",
+        json={"items": [{"menu_item_id": bill_context["item_id"], "quantity": 1}]},
+        headers={"Idempotency-Key": f"idemp-{uuid.uuid4().hex}"},
+    )
+    assert customer_b_order.status_code == 201
+    customer_b_token = customer_b_order.json()["dining_session_token"]
+    assert customer_b_token != bill_context["session_token"]
+
+    customer_b_session = client.get(f"/public/sessions/{customer_b_token}")
+    assert customer_b_session.status_code == 200
+    customer_b_body = customer_b_session.json()
+    assert customer_b_body["public_token"] == customer_b_token
+    assert customer_b_body["order_count"] == 1
+    assert customer_b_body["bill"] is None
+    assert customer_b_body["service_requests"] == []
+    assert customer_b_body["orders"][0]["public_token"] != customer_a_order_token
+    assert customer_b_body["orders"][0]["items"][0]["item_name"] != "Customer A Item"
+
+    customer_a_receipt = client.get(f"/public/sessions/{bill_context['session_token']}/bill")
+    assert customer_a_receipt.status_code == 200
+    customer_a_bill = customer_a_receipt.json()
+    assert customer_a_bill["session_token"] == bill_context["session_token"]
+    assert customer_a_bill["status"] == "paid"
+    assert customer_a_bill["orders"][0]["items"][0]["item_name"] == "Customer A Item"
+
+    customer_b_bill_from_a_receipt = client.get(f"/public/sessions/{customer_b_token}/bill")
+    assert customer_b_bill_from_a_receipt.status_code == 404
+
+    customer_a_session = client.get(f"/public/sessions/{bill_context['session_token']}")
+    assert customer_a_session.status_code == 200
+    customer_a_body = customer_a_session.json()
+    assert customer_a_body["public_token"] == bill_context["session_token"]
+    assert customer_a_body["public_token"] != customer_b_token
+    assert customer_a_body["orders"][0]["public_token"] == customer_a_order_token
+
+
 def test_paid_bill_generation_returns_existing_paid_bill(bill_context):
     add_order(bill_context)
     issued = issue_bill_for(bill_context)

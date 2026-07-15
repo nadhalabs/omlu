@@ -10,9 +10,8 @@ import {
 } from "@/lib/api";
 import { PublicDiningSessionResponse } from "@/lib/types";
 import {
-  clearPublicReceiptToken,
+  clearLegacyPublicReceiptToken,
   clearPublicSessionToken,
-  savePublicReceiptToken,
   savePublicSessionToken,
 } from "@/lib/publicSessionStorage";
 import { useRealtime } from "@/lib/realtime";
@@ -195,10 +194,10 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
 
             if (["closed", "cancelled"].includes(data.status)) {
               clearPublicSessionToken(data.restaurant_slug, data.table_code);
-              savePublicReceiptToken(data.restaurant_slug, data.table_code, data.public_token);
+              clearLegacyPublicReceiptToken(data.restaurant_slug, data.table_code);
             } else {
               savePublicSessionToken(data.restaurant_slug, data.table_code, data.public_token);
-              clearPublicReceiptToken(data.restaurant_slug, data.table_code);
+              clearLegacyPublicReceiptToken(data.restaurant_slug, data.table_code);
             }
           } catch (err) {
             if (err instanceof ApiError) {

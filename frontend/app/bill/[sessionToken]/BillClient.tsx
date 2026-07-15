@@ -7,11 +7,10 @@ import { BillResponse, CounterPaymentMethod } from "@/lib/types";
 import { buildWhatsAppBillShareUrl } from "@/lib/billShare";
 import { useRealtime } from "@/lib/realtime";
 import {
-  clearPublicReceiptToken,
+  clearLegacyPublicReceiptToken,
   clearPublicSessionToken,
   hasSeenPaymentSuccess,
   markPaymentSuccessSeen,
-  savePublicReceiptToken,
 } from "@/lib/publicSessionStorage";
 
 interface BillClientProps {
@@ -179,8 +178,7 @@ export default function BillClient({ sessionToken }: BillClientProps) {
       }
 
       clearPublicSessionToken(data.restaurant_slug, data.table_code);
-      clearPublicReceiptToken(data.restaurant_slug, data.table_code);
-      savePublicReceiptToken(data.restaurant_slug, data.table_code, data.session_token);
+      clearLegacyPublicReceiptToken(data.restaurant_slug, data.table_code);
 
       if (!hasLoadedBillRef.current && source === "initial") {
         markPaymentSuccessSeen(sessionToken, billKey);

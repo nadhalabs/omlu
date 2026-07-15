@@ -39,42 +39,23 @@ export function clearPublicSessionToken(
   window.sessionStorage.removeItem(key);
 }
 
-function getPublicReceiptStorageKey(
+function getLegacyPublicReceiptStorageKey(
   restaurantSlug: string,
   tableCode: string
 ): string {
   return `${RECEIPT_PREFIX}:${restaurantSlug}:${tableCode}`;
 }
 
-export function savePublicReceiptToken(
-  restaurantSlug: string,
-  tableCode: string,
-  sessionToken: string
-): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(
-    getPublicReceiptStorageKey(restaurantSlug, tableCode),
-    sessionToken
-  );
-}
-
-export function readPublicReceiptToken(
-  restaurantSlug: string,
-  tableCode: string
-): string | null {
-  if (typeof window === "undefined") return null;
-  return window.localStorage.getItem(
-    getPublicReceiptStorageKey(restaurantSlug, tableCode)
-  );
-}
-
-export function clearPublicReceiptToken(
+export function clearLegacyPublicReceiptToken(
   restaurantSlug: string,
   tableCode: string
 ): void {
   if (typeof window === "undefined") return;
   window.localStorage.removeItem(
-    getPublicReceiptStorageKey(restaurantSlug, tableCode)
+    getLegacyPublicReceiptStorageKey(restaurantSlug, tableCode)
+  );
+  window.sessionStorage.removeItem(
+    getLegacyPublicReceiptStorageKey(restaurantSlug, tableCode)
   );
 }
 

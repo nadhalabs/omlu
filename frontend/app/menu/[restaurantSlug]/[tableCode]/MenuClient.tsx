@@ -1,12 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   getPublicMenu,
   createPublicOrder,
   getPublicDiningSession,
-  getActivePublicDiningSession,
   addOrderToDiningSession,
   ApiError,
 } from "@/lib/api";
@@ -18,11 +17,9 @@ import {
   SelectedOptionRequest,
 } from "@/lib/types";
 import {
-  clearPublicReceiptToken,
+  clearLegacyPublicReceiptToken,
   clearPublicSessionToken,
-  readPublicReceiptToken,
   readPublicSessionToken,
-  savePublicReceiptToken,
   savePublicSessionToken,
 } from "@/lib/publicSessionStorage";
 import { useRealtime } from "@/lib/realtime";
@@ -69,8 +66,8 @@ export default function MenuClient({
     useState<PublicDiningSessionResponse | null>(null);
   const [sessionLoading, setSessionLoading] = useState<boolean>(false);
   const [sessionNotice, setSessionNotice] = useState<string | null>(null);
-  const [receiptToken, setReceiptToken] = useState<string | null>(null);
-  const [completedSessionToken, setCompletedSessionToken] = useState<string | null>(null);
+  const [sessionCompleteNotice, setSessionCompleteNotice] = useState<string | null>(null);
+  const [expiredSessionNotice, setExpiredSessionNotice] = useState<string | null>(null);
 
   // Fetch menu data
   const fetchMenu = async () => {
@@ -107,98 +104,123 @@ export default function MenuClient({
     onReconnect: () => void fetchMenu(),
   });
 
-  useEffect(() => {
-    const validateSavedSession = async () => {
-      const queryToken = new URLSearchParams(window.location.search).get("session");
-      const savedToken = readPublicSessionToken(restaurantSlug, tableCode);
-      const savedReceiptToken = readPublicReceiptToken(restaurantSlug, tableCode);
+  const clearOrderingState = useCallback(() => {
+    setCurrentSession(null);
+    setCart({});
+    setCustomerNote("");
+    setIsCartOpen(false);
+    setCheckoutError(null);
+    setCustomisingItem(null);
+    setDraftOptions({});
+  }, []);
 
-      setSessionLoading(true);
-      if (!queryToken) {
-        try {
-          const activeSession = await getActivePublicDiningSession(restaurantSlug, tableCode);
-          savePublicSessionToken(restaurantSlug, tableCode, activeSession.public_token);
-          clearPublicReceiptToken(restaurantSlug, tableCode);
-          setCurrentSession(activeSession);
-          setReceiptToken(null);
-          setCompletedSessionToken(null);
-          setSessionNotice(
-            activeSession.status === "open"
-              ? null
-              : "This table session is no longer open. New ordering is disabled."
-          );
-          setSessionLoading(false);
-          return;
-        } catch (err) {
-          setCurrentSession(null);
-          if (err instanceof ApiError && err.status !== 404) {
-            setSessionNotice(err.message);
-            setSessionLoading(false);
-            return;
-          }
+  const removeSessionQueryParam = useCallback(() => {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("session")) return;
+    url.searchParams.delete("session");
+    const nextUrl = `${url.pathname}${url.search}${url.hash}`;
+    window.history.replaceState(window.history.state, "", nextUrl);
+  }, []);
+
+  const validateSavedSession = useCallback(async (
+    options: { clearCachedStateFirst?: boolean } = {}
+  ) => {
+    const queryToken = new URLSearchParams(window.location.search).get("session");
+    const savedToken = readPublicSessionToken(restaurantSlug, tableCode);
+
+    setSessionLoading(true);
+    clearLegacyPublicReceiptToken(restaurantSlug, tableCode);
+    if (options.clearCachedStateFirst) {
+      clearOrderingState();
+      setSessionCompleteNotice(null);
+      setExpiredSessionNotice(null);
+      setSessionNotice(null);
+    }
+
+    const tokenToValidate = queryToken || savedToken;
+    if (!tokenToValidate) {
+      clearOrderingState();
+      setSessionCompleteNotice(null);
+      setExpiredSessionNotice(null);
+      setSessionNotice(null);
+      setSessionLoading(false);
+      return;
+    }
+
+    try {
+      const session = await getPublicDiningSession(tokenToValidate);
+      const belongsToThisTable =
+        session.restaurant_slug === restaurantSlug &&
+        session.table_code === tableCode;
+
+      if (!belongsToThisTable) {
+        clearPublicSessionToken(restaurantSlug, tableCode);
+        clearOrderingState();
+        setSessionCompleteNotice(null);
+        if (queryToken) {
+          removeSessionQueryParam();
+          setExpiredSessionNotice("This table session link is no longer valid. Scan the table QR again to start a new order.");
+          setSessionNotice(null);
+        } else {
+          setExpiredSessionNotice(null);
+          setSessionNotice(null);
         }
-      }
-
-      const tokenToValidate = queryToken || savedToken;
-      if (!tokenToValidate) {
-        setReceiptToken(savedReceiptToken);
-        setCompletedSessionToken(null);
-        setSessionNotice(null);
-        setSessionLoading(false);
         return;
       }
 
-      try {
-        const session = await getPublicDiningSession(tokenToValidate);
-        const belongsToThisTable =
-          session.restaurant_slug === restaurantSlug &&
-          session.table_code === tableCode;
-
-        if (!belongsToThisTable) {
-          clearPublicSessionToken(restaurantSlug, tableCode);
-          setCurrentSession(null);
-          setCompletedSessionToken(null);
-          setSessionNotice("Saved table session did not match this QR table and was removed.");
-          return;
-        }
-
-        if (["closed", "cancelled"].includes(session.status)) {
-          clearPublicSessionToken(restaurantSlug, tableCode);
-          savePublicReceiptToken(restaurantSlug, tableCode, session.public_token);
-          setReceiptToken(session.public_token);
-          setCurrentSession(null);
-          setCart({});
-          setIsCartOpen(false);
-          setCustomisingItem(null);
-          setDraftOptions({});
-          setCompletedSessionToken(session.public_token);
-          setSessionNotice(null);
-          return;
-        }
-
-        savePublicSessionToken(restaurantSlug, tableCode, session.public_token);
-        clearPublicReceiptToken(restaurantSlug, tableCode);
-        setReceiptToken(null);
-        setCompletedSessionToken(null);
-        setCurrentSession(session);
-        setSessionNotice(
-          session.status === "open"
-            ? null
-            : "This table session is no longer open. New ordering is disabled."
-        );
-      } catch {
+      if (["closed", "cancelled"].includes(session.status)) {
         clearPublicSessionToken(restaurantSlug, tableCode);
-        setCurrentSession(null);
-        setCompletedSessionToken(null);
-        setReceiptToken(savedReceiptToken);
-        setSessionNotice(savedReceiptToken ? null : "Saved table session could not be verified and was removed.");
-      } finally {
-        setSessionLoading(false);
+        clearLegacyPublicReceiptToken(restaurantSlug, tableCode);
+        clearOrderingState();
+        removeSessionQueryParam();
+        setSessionCompleteNotice(queryToken ? "complete" : null);
+        setExpiredSessionNotice(queryToken ? null : null);
+        setSessionNotice(null);
+        return;
       }
+
+      savePublicSessionToken(restaurantSlug, tableCode, session.public_token);
+      clearLegacyPublicReceiptToken(restaurantSlug, tableCode);
+      setSessionCompleteNotice(null);
+      setExpiredSessionNotice(null);
+      setCurrentSession(session);
+      setSessionNotice(
+        session.status === "open"
+          ? null
+          : "This table session is no longer open. New ordering is disabled."
+      );
+    } catch {
+      clearPublicSessionToken(restaurantSlug, tableCode);
+      clearLegacyPublicReceiptToken(restaurantSlug, tableCode);
+      clearOrderingState();
+      setSessionCompleteNotice(null);
+      if (queryToken) {
+        removeSessionQueryParam();
+        setExpiredSessionNotice("This table session link is no longer valid. Scan the table QR again to start a new order.");
+        setSessionNotice(null);
+      } else {
+        setExpiredSessionNotice(null);
+        setSessionNotice(null);
+      }
+    } finally {
+      setSessionLoading(false);
+    }
+  }, [clearOrderingState, removeSessionQueryParam, restaurantSlug, tableCode]);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => void validateSavedSession(), 0);
+    return () => window.clearTimeout(timeout);
+  }, [validateSavedSession]);
+
+  useEffect(() => {
+    const handlePageShow = (event: PageTransitionEvent) => {
+      if (!event.persisted) return;
+      void validateSavedSession({ clearCachedStateFirst: true });
     };
 
-    validateSavedSession();
-  }, [restaurantSlug, tableCode]);
+    window.addEventListener("pageshow", handlePageShow);
+    return () => window.removeEventListener("pageshow", handlePageShow);
+  }, [validateSavedSession]);
 
   // Local translations for UI labels
   const translations = {
@@ -540,7 +562,7 @@ export default function MenuClient({
   };
 
   const draftSelectedOptions = selectedOptionsFromDraft();
-  const orderingDisabled = Boolean(completedSessionToken);
+  const orderingDisabled = Boolean(sessionCompleteNotice || expiredSessionNotice);
 
   Object.values(cart).forEach((line) => {
     const item = allItemsMap[line.menu_item_id];
@@ -634,20 +656,6 @@ export default function MenuClient({
             </div>
           )}
 
-          {!currentSession && receiptToken && (
-            <div className="flex items-center justify-between gap-3 rounded-2xl border border-zinc-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900">
-              <p className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">
-                {language === "en" ? "Final bill from your last visit is still available." : "കഴിഞ്ഞ സന്ദർശനത്തിലെ അവസാന ബിൽ ലഭ്യമാണ്."}
-              </p>
-              <button
-                onClick={() => router.push(`/bill/${receiptToken}`)}
-                className="min-h-9 shrink-0 rounded-xl bg-zinc-900 px-3 py-2 text-xs font-black text-white dark:bg-zinc-100 dark:text-zinc-950"
-              >
-                {t.viewFinalReceipt}
-              </button>
-            </div>
-          )}
-
           {sessionNotice && (
             <div className="text-xs font-semibold text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-900/40 rounded-xl px-3 py-2">
               {language === "en" ? sessionNotice : t.billLocked}
@@ -692,20 +700,16 @@ export default function MenuClient({
 
       {/* Main Content Area */}
       <main className="max-w-3xl mx-auto px-4 mt-6 sm:px-6 w-full flex-1">
-        {completedSessionToken ? (
+        {sessionCompleteNotice || expiredSessionNotice ? (
           <div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-6 text-center shadow-sm dark:border-emerald-900/50 dark:bg-emerald-950/30">
             <h2 className="text-xl font-black text-emerald-950 dark:text-emerald-50">
-              {language === "en" ? "Dining session complete" : "ഡൈനിംഗ് സെഷൻ പൂർത്തിയായി"}
+              {sessionCompleteNotice
+                ? language === "en" ? "Dining session complete" : "ഡൈനിംഗ് സെഷൻ പൂർത്തിയായി"
+                : language === "en" ? "Session link expired" : "സെഷൻ ലിങ്ക് കാലഹരണപ്പെട്ടു"}
             </h2>
             <p className="mt-3 text-sm font-bold text-emerald-900 dark:text-emerald-100">
-              {t.sessionComplete}
+              {sessionCompleteNotice ? t.sessionComplete : expiredSessionNotice}
             </p>
-            <button
-              onClick={() => router.push(`/bill/${completedSessionToken}`)}
-              className="mt-5 min-h-11 rounded-2xl bg-emerald-700 px-5 py-3 text-sm font-black text-white shadow-md transition hover:bg-emerald-800"
-            >
-              {t.viewFinalReceipt}
-            </button>
           </div>
         ) : displayCategories.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
