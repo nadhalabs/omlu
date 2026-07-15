@@ -268,7 +268,9 @@ def build_bill_response(db: Session, bill: Bill):
     return {
         "bill_number": bill.bill_number,
         "restaurant_name": bill.restaurant.name,
+        "restaurant_slug": bill.restaurant.slug,
         "table_number": bill.dining_session.table.table_number,
+        "table_code": bill.dining_session.table.table_code,
         "session_token": bill.dining_session.public_token,
         "status": bill.status,
         "orders": [

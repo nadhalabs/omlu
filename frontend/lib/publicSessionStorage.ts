@@ -15,10 +15,9 @@ export function savePublicSessionToken(
   sessionToken: string
 ): void {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(
-    getPublicSessionStorageKey(restaurantSlug, tableCode),
-    sessionToken
-  );
+  const key = getPublicSessionStorageKey(restaurantSlug, tableCode);
+  window.localStorage.setItem(key, sessionToken);
+  window.sessionStorage.setItem(key, sessionToken);
 }
 
 export function readPublicSessionToken(
@@ -26,9 +25,8 @@ export function readPublicSessionToken(
   tableCode: string
 ): string | null {
   if (typeof window === "undefined") return null;
-  return window.localStorage.getItem(
-    getPublicSessionStorageKey(restaurantSlug, tableCode)
-  );
+  const key = getPublicSessionStorageKey(restaurantSlug, tableCode);
+  return window.localStorage.getItem(key) || window.sessionStorage.getItem(key);
 }
 
 export function clearPublicSessionToken(
@@ -36,9 +34,9 @@ export function clearPublicSessionToken(
   tableCode: string
 ): void {
   if (typeof window === "undefined") return;
-  window.localStorage.removeItem(
-    getPublicSessionStorageKey(restaurantSlug, tableCode)
-  );
+  const key = getPublicSessionStorageKey(restaurantSlug, tableCode);
+  window.localStorage.removeItem(key);
+  window.sessionStorage.removeItem(key);
 }
 
 function getPublicReceiptStorageKey(

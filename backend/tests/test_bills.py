@@ -784,6 +784,20 @@ def test_counter_payment_closes_session_and_blocks_old_session_orders(bill_conte
     assert response.status_code == 409
 
 
+def test_paid_bill_response_includes_table_identity_for_customer_cleanup(bill_context):
+    add_order(bill_context)
+    issued = issue_bill_for(bill_context)
+    request_counter_payment(bill_context, "counter_cash")
+
+    paid = confirm_counter_payment(bill_context, issued["bill_number"], method="counter_cash")
+
+    assert paid.status_code == 200
+    body = paid.json()
+    assert body["status"] == "paid"
+    assert body["restaurant_slug"] == bill_context["restaurant_slug"]
+    assert body["table_code"] == bill_context["table_code"]
+
+
 def test_new_session_can_start_for_same_table_after_counter_payment(bill_context):
     add_order(bill_context)
     issued = issue_bill_for(bill_context)
@@ -799,6 +813,13 @@ def test_new_session_can_start_for_same_table_after_counter_payment(bill_context
     assert response.status_code == 201
     body = response.json()
     assert body["dining_session_token"] != bill_context["session_token"]
+
+    old_session_order = client.post(
+        f"/public/sessions/{bill_context['session_token']}/orders",
+        json={"items": [{"menu_item_id": bill_context["item_id"], "quantity": 1}]},
+        headers={"Idempotency-Key": f"idemp-{uuid.uuid4().hex}"},
+    )
+    assert old_session_order.status_code == 409
 
 
 def test_paid_bill_generation_returns_existing_paid_bill(bill_context):

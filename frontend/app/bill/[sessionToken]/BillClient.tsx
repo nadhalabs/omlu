@@ -7,8 +7,11 @@ import { BillResponse, CounterPaymentMethod } from "@/lib/types";
 import { buildWhatsAppBillShareUrl } from "@/lib/billShare";
 import { useRealtime } from "@/lib/realtime";
 import {
+  clearPublicReceiptToken,
+  clearPublicSessionToken,
   hasSeenPaymentSuccess,
   markPaymentSuccessSeen,
+  savePublicReceiptToken,
 } from "@/lib/publicSessionStorage";
 
 interface BillClientProps {
@@ -55,6 +58,7 @@ export default function BillClient({ sessionToken }: BillClientProps) {
       paymentReceived: "Payment received",
       receiptAction: "View receipt",
       paidAmount: "Paid amount",
+      sessionComplete: "Your dining session is complete. Scan the table QR again to start a new order.",
       paymentLabels: {
         counter_cash: "Cash at counter",
         counter_upi: "UPI at counter",
@@ -96,6 +100,7 @@ export default function BillClient({ sessionToken }: BillClientProps) {
       paymentReceived: "പണം ലഭിച്ചു",
       receiptAction: "രസീത് കാണുക",
       paidAmount: "അടച്ച തുക",
+      sessionComplete: "നിങ്ങളുടെ ഡൈനിംഗ് സെഷൻ പൂർത്തിയായി. പുതിയ ഓർഡർ തുടങ്ങാൻ ടേബിൾ QR വീണ്ടും സ്കാൻ ചെയ്യുക.",
       paymentLabels: {
         counter_cash: "കൗണ്ടറിൽ കാഷ്",
         counter_upi: "കൗണ്ടറിൽ UPI",
@@ -172,6 +177,10 @@ export default function BillClient({ sessionToken }: BillClientProps) {
         hasLoadedBillRef.current = true;
         return;
       }
+
+      clearPublicSessionToken(data.restaurant_slug, data.table_code);
+      clearPublicReceiptToken(data.restaurant_slug, data.table_code);
+      savePublicReceiptToken(data.restaurant_slug, data.table_code, data.session_token);
 
       if (!hasLoadedBillRef.current && source === "initial") {
         markPaymentSuccessSeen(sessionToken, billKey);
@@ -305,13 +314,15 @@ export default function BillClient({ sessionToken }: BillClientProps) {
   return (
     <div className="min-h-screen bg-zinc-100 px-4 py-6 text-zinc-950 dark:bg-zinc-950 dark:text-zinc-100 sm:px-6 print:bg-white print:px-0 print:py-0 print:text-black">
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 print:max-w-none print:gap-0">
-        <div className="print-hidden flex flex-wrap items-center justify-between gap-3">
-          <button
-            onClick={() => router.push(`/session/${bill.session_token}`)}
-            className="min-h-11 rounded-2xl border border-zinc-200 bg-white px-4 py-2 text-sm font-bold text-zinc-700 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200"
-          >
-            {t.back}
-          </button>
+        <div className="print-hidden flex flex-wrap items-center justify-end gap-3">
+          {bill.status !== "paid" && (
+            <button
+              onClick={() => router.push(`/session/${bill.session_token}`)}
+              className="min-h-11 rounded-2xl border border-zinc-200 bg-white px-4 py-2 text-sm font-bold text-zinc-700 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200"
+            >
+              {t.back}
+            </button>
+          )}
           <button
             onClick={() => setLanguage(language === "en" ? "ml" : "en")}
             className="min-h-11 rounded-2xl border border-zinc-200 bg-white px-4 py-2 text-sm font-bold text-amber-700 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900 dark:text-amber-500"
@@ -473,6 +484,9 @@ export default function BillClient({ sessionToken }: BillClientProps) {
               </div>
               <div className="min-w-0 flex-1">
                 <h2 className="text-2xl font-black">{t.paymentReceived}</h2>
+                <p className="mt-2 text-sm font-bold text-emerald-900 dark:text-emerald-100">
+                  {t.sessionComplete}
+                </p>
                 <div className="mt-2 grid grid-cols-1 gap-1 text-sm font-bold text-emerald-800 dark:text-emerald-200 sm:grid-cols-2">
                   <p>
                     {t.paidAmount}: {formatBillTotal(bill)}

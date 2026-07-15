@@ -43,7 +43,9 @@ class BillOrderResponse(BaseModel):
 class BillResponse(BaseModel):
     bill_number: str
     restaurant_name: str
+    restaurant_slug: str
     table_number: str
+    table_code: str
     session_token: str
     status: str
     orders: List[BillOrderResponse]

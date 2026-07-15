@@ -70,6 +70,7 @@ export default function MenuClient({
   const [sessionLoading, setSessionLoading] = useState<boolean>(false);
   const [sessionNotice, setSessionNotice] = useState<string | null>(null);
   const [receiptToken, setReceiptToken] = useState<string | null>(null);
+  const [completedSessionToken, setCompletedSessionToken] = useState<string | null>(null);
 
   // Fetch menu data
   const fetchMenu = async () => {
@@ -113,31 +114,35 @@ export default function MenuClient({
       const savedReceiptToken = readPublicReceiptToken(restaurantSlug, tableCode);
 
       setSessionLoading(true);
-      try {
-        const activeSession = await getActivePublicDiningSession(restaurantSlug, tableCode);
-        savePublicSessionToken(restaurantSlug, tableCode, activeSession.public_token);
-        clearPublicReceiptToken(restaurantSlug, tableCode);
-        setCurrentSession(activeSession);
-        setReceiptToken(null);
-        setSessionNotice(
-          activeSession.status === "open"
-            ? null
-            : "This table session is no longer open. New ordering is disabled."
-        );
-        setSessionLoading(false);
-        return;
-      } catch (err) {
-        setCurrentSession(null);
-        if (err instanceof ApiError && err.status !== 404) {
-          setSessionNotice(err.message);
+      if (!queryToken) {
+        try {
+          const activeSession = await getActivePublicDiningSession(restaurantSlug, tableCode);
+          savePublicSessionToken(restaurantSlug, tableCode, activeSession.public_token);
+          clearPublicReceiptToken(restaurantSlug, tableCode);
+          setCurrentSession(activeSession);
+          setReceiptToken(null);
+          setCompletedSessionToken(null);
+          setSessionNotice(
+            activeSession.status === "open"
+              ? null
+              : "This table session is no longer open. New ordering is disabled."
+          );
           setSessionLoading(false);
           return;
+        } catch (err) {
+          setCurrentSession(null);
+          if (err instanceof ApiError && err.status !== 404) {
+            setSessionNotice(err.message);
+            setSessionLoading(false);
+            return;
+          }
         }
       }
 
       const tokenToValidate = queryToken || savedToken;
       if (!tokenToValidate) {
         setReceiptToken(savedReceiptToken);
+        setCompletedSessionToken(null);
         setSessionNotice(null);
         setSessionLoading(false);
         return;
@@ -152,6 +157,7 @@ export default function MenuClient({
         if (!belongsToThisTable) {
           clearPublicSessionToken(restaurantSlug, tableCode);
           setCurrentSession(null);
+          setCompletedSessionToken(null);
           setSessionNotice("Saved table session did not match this QR table and was removed.");
           return;
         }
@@ -161,13 +167,19 @@ export default function MenuClient({
           savePublicReceiptToken(restaurantSlug, tableCode, session.public_token);
           setReceiptToken(session.public_token);
           setCurrentSession(null);
-          setSessionNotice("This table session is finished. You can still view the final bill.");
+          setCart({});
+          setIsCartOpen(false);
+          setCustomisingItem(null);
+          setDraftOptions({});
+          setCompletedSessionToken(session.public_token);
+          setSessionNotice(null);
           return;
         }
 
         savePublicSessionToken(restaurantSlug, tableCode, session.public_token);
         clearPublicReceiptToken(restaurantSlug, tableCode);
         setReceiptToken(null);
+        setCompletedSessionToken(null);
         setCurrentSession(session);
         setSessionNotice(
           session.status === "open"
@@ -177,6 +189,7 @@ export default function MenuClient({
       } catch {
         clearPublicSessionToken(restaurantSlug, tableCode);
         setCurrentSession(null);
+        setCompletedSessionToken(null);
         setReceiptToken(savedReceiptToken);
         setSessionNotice(savedReceiptToken ? null : "Saved table session could not be verified and was removed.");
       } finally {
@@ -216,6 +229,7 @@ export default function MenuClient({
       checkingSession: "Checking current table bill...",
       viewFullBill: "View full table bill",
       viewFinalReceipt: "View final bill",
+      sessionComplete: "Your dining session is complete. Scan the table QR again to start a new order.",
     },
     ml: {
       searchPlaceholder: "വിഭവങ്ങൾ തിരയുക...",
@@ -244,6 +258,7 @@ export default function MenuClient({
       checkingSession: "നിലവിലെ ടേബിൾ ബിൽ പരിശോധിക്കുന്നു...",
       viewFullBill: "മുഴുവൻ ടേബിൾ ബിൽ കാണുക",
       viewFinalReceipt: "അവസാന ബിൽ കാണുക",
+      sessionComplete: "നിങ്ങളുടെ ഡൈനിംഗ് സെഷൻ പൂർത്തിയായി. പുതിയ ഓർഡർ തുടങ്ങാൻ ടേബിൾ QR വീണ്ടും സ്കാൻ ചെയ്യുക.",
     },
   };
 
@@ -525,6 +540,7 @@ export default function MenuClient({
   };
 
   const draftSelectedOptions = selectedOptionsFromDraft();
+  const orderingDisabled = Boolean(completedSessionToken);
 
   Object.values(cart).forEach((line) => {
     const item = allItemsMap[line.menu_item_id];
@@ -638,21 +654,23 @@ export default function MenuClient({
             </div>
           )}
 
-          <div className="relative">
-            <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-zinc-400">
-              🔍
-            </span>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={t.searchPlaceholder}
-              className="w-full pl-9 pr-4 py-2 bg-zinc-100 dark:bg-zinc-800 border-0 rounded-xl text-sm focus:ring-2 focus:ring-amber-600 outline-none text-zinc-900 dark:text-zinc-100 placeholder-zinc-400"
-            />
-          </div>
+          {!orderingDisabled && (
+            <div className="relative">
+              <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-zinc-400">
+                🔍
+              </span>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={t.searchPlaceholder}
+                className="w-full pl-9 pr-4 py-2 bg-zinc-100 dark:bg-zinc-800 border-0 rounded-xl text-sm focus:ring-2 focus:ring-amber-600 outline-none text-zinc-900 dark:text-zinc-100 placeholder-zinc-400"
+              />
+            </div>
+          )}
 
           {/* Category Tabs */}
-          {displayCategories.length > 0 && (
+          {displayCategories.length > 0 && !orderingDisabled && (
             <div className="flex gap-2 overflow-x-auto no-scrollbar py-1">
               {displayCategories.map((category) => (
                 <button
@@ -674,7 +692,22 @@ export default function MenuClient({
 
       {/* Main Content Area */}
       <main className="max-w-3xl mx-auto px-4 mt-6 sm:px-6 w-full flex-1">
-        {displayCategories.length === 0 ? (
+        {completedSessionToken ? (
+          <div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-6 text-center shadow-sm dark:border-emerald-900/50 dark:bg-emerald-950/30">
+            <h2 className="text-xl font-black text-emerald-950 dark:text-emerald-50">
+              {language === "en" ? "Dining session complete" : "ഡൈനിംഗ് സെഷൻ പൂർത്തിയായി"}
+            </h2>
+            <p className="mt-3 text-sm font-bold text-emerald-900 dark:text-emerald-100">
+              {t.sessionComplete}
+            </p>
+            <button
+              onClick={() => router.push(`/bill/${completedSessionToken}`)}
+              className="mt-5 min-h-11 rounded-2xl bg-emerald-700 px-5 py-3 text-sm font-black text-white shadow-md transition hover:bg-emerald-800"
+            >
+              {t.viewFinalReceipt}
+            </button>
+          </div>
+        ) : displayCategories.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <div className="text-zinc-300 dark:text-zinc-700 text-5xl mb-4">
               🍽️
@@ -723,7 +756,7 @@ export default function MenuClient({
                             <span className="font-bold text-amber-600 dark:text-amber-500 text-sm">
                               ₹{Number(item.price).toFixed(2)}
                             </span>
-                            {!item.is_available ? (
+                            {orderingDisabled ? null : !item.is_available ? (
                               <span className="text-xs font-semibold text-red-500 bg-red-50 dark:bg-red-950/20 px-2.5 py-1 rounded-md">
                                 Unavailable
                               </span>
@@ -775,7 +808,7 @@ export default function MenuClient({
       </main>
 
       {/* Sticky Bottom Cart Bar */}
-      {totalQty > 0 && (
+      {totalQty > 0 && !orderingDisabled && (
         <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-t border-zinc-200 dark:border-zinc-800 shadow-lg px-4 py-4 sm:px-6">
           <button
             onClick={() => setIsCartOpen(true)}
