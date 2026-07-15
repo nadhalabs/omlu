@@ -93,7 +93,10 @@ def load_session_for_response(db: Session, session_id: int) -> DiningSession:
         joinedload(DiningSession.restaurant),
         joinedload(DiningSession.table),
         joinedload(DiningSession.bill),
-        selectinload(DiningSession.orders).selectinload(Order.items).selectinload(OrderItem.selected_options),
+        selectinload(DiningSession.orders).options(
+            selectinload(Order.items).selectinload(OrderItem.selected_options),
+            selectinload(Order.status_history),
+        ),
     ).filter(DiningSession.id == session_id).one()
 
 
@@ -135,6 +138,8 @@ def build_order_response(db: Session, order: Order):
 def build_session_response(db: Session, dining_session: DiningSession):
     dining_session = load_session_for_response(db, dining_session.id)
     orders = sorted(dining_session.orders, key=lambda order: (order.created_at, order.id))
+    for order in orders:
+        order.status_history = sorted(order.status_history, key=lambda h: h.changed_at)
     service_requests = db.query(ServiceRequest).filter(
         ServiceRequest.restaurant_id == dining_session.restaurant_id,
         ServiceRequest.table_id == dining_session.table_id,

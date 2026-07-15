@@ -39,6 +39,25 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
   const fetchInFlightRef = useRef(false);
   const pendingFetchRef = useRef(false);
 
+  const [expandedOrders, setExpandedOrders] = useState<Record<string, boolean>>({});
+  const [animatedStages, setAnimatedStages] = useState<Record<string, string>>({});
+  const prevStatusesRef = useRef<Record<string, string>>({});
+
+  useEffect(() => {
+    if (!session || !session.orders) return;
+    const newAnimatedStages: Record<string, string> = {};
+    session.orders.forEach((order) => {
+      const prevStatus = prevStatusesRef.current[order.public_token];
+      if (prevStatus && prevStatus !== order.status) {
+        newAnimatedStages[order.public_token] = order.status;
+      }
+      prevStatusesRef.current[order.public_token] = order.status;
+    });
+    if (Object.keys(newAnimatedStages).length > 0) {
+      setAnimatedStages((prev) => ({ ...prev, ...newAnimatedStages }));
+    }
+  }, [session]);
+
   const translations = {
     en: {
       table: "Table",
@@ -104,6 +123,20 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
         served: "Served",
         rejected: "Rejected",
       } as Record<string, string>,
+      timeline: {
+        orderPlaced: "Order placed",
+        orderPlacedDesc: "Your order was sent to the restaurant.",
+        accepted: "Accepted",
+        acceptedDesc: "The restaurant accepted your order.",
+        preparing: "Preparing",
+        preparingDesc: "Your food is being prepared.",
+        ready: "Ready",
+        readyDesc: "Your order is ready.",
+        served: "Served",
+        servedDesc: "Your order has been served.",
+        cancelled: "Cancelled",
+        cancelledDesc: "Your order was cancelled.",
+      },
     },
     ml: {
       table: "മേശ",
@@ -147,7 +180,7 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
       billNotRequested: "ബിൽ ചോദിച്ചിട്ടില്ല",
       billRequested: "ബിൽ ചോദിച്ചു",
       billIssued: "ബിൽ നൽകി",
-      paymentPending: "പേയ്മെന്റ് കാത്തിരിക്കുന്നു",
+      paymentPending: "ബിൽ കുടിശ്ശിക",
       paidConfirmation: "പണം ലഭിച്ചു",
       paidAt: "പണം നൽകിയ സമയം",
       sessionClosed: "സെഷൻ അടച്ചു",
@@ -169,6 +202,20 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
         served: "നൽകി",
         rejected: "നിരസിച്ചു",
       } as Record<string, string>,
+      timeline: {
+        orderPlaced: "ഓർഡർ സമർപ്പിച്ചു",
+        orderPlacedDesc: "നിങ്ങളുടെ ഓർഡർ റെസ്റ്റോറന്റിലേക്ക് അയച്ചു.",
+        accepted: "സ്വീകരിച്ചു",
+        acceptedDesc: "റെസ്റ്റോറന്റ് നിങ്ങളുടെ ഓർഡർ സ്വീകരിച്ചു.",
+        preparing: "തയ്യാറാക്കുന്നു",
+        preparingDesc: "നിങ്ങളുടെ ഭക്ഷണം തയ്യാറാക്കുകയാണ്.",
+        ready: "തയ്യാറായി",
+        readyDesc: "നിങ്ങളുടെ ഓർഡർ തയ്യാറായിക്കഴിഞ്ഞു.",
+        served: "നൽകി",
+        servedDesc: "നിങ്ങളുടെ ഓർഡർ വിതരണം ചെയ്തു.",
+        cancelled: "റദ്ദാക്കി",
+        cancelledDesc: "നിങ്ങളുടെ ഓർഡർ റദ്ദാക്കിയിരിക്കുന്നു.",
+      },
     },
   };
 
@@ -380,6 +427,17 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
   }
 
   if (!session) return null;
+
+  const latestActiveOrderToken = (() => {
+    if (!session.orders || session.orders.length === 0) return null;
+    const activeStatuses = ["pending", "accepted", "preparing", "ready"];
+    for (let i = session.orders.length - 1; i >= 0; i--) {
+      if (activeStatuses.includes(session.orders[i].status)) {
+        return session.orders[i].public_token;
+      }
+    }
+    return session.orders[session.orders.length - 1].public_token;
+  })();
 
   const canOrderMore = session.can_order_more && session.status === "open";
   const billStatus = session.bill?.status;
@@ -643,63 +701,229 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
               <p className="mt-2 text-sm text-zinc-500">{t.noOrdersDesc}</p>
             </section>
           ) : (
-            session.orders.map((order, index) => (
-              <section
-                key={order.public_token}
-                className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-xs dark:border-zinc-800 dark:bg-zinc-900"
-              >
-                <div className="flex items-start justify-between gap-3 border-b border-zinc-100 pb-3 dark:border-zinc-800">
-                  <div>
-                    <p className="text-xs font-bold uppercase text-zinc-400">
-                      Order {index + 1} of {session.order_count}
-                    </p>
-                    <h2 className="text-lg font-black text-zinc-950 dark:text-zinc-50">
-                      {order.order_number}
-                    </h2>
-                  </div>
-                  <p className="rounded-xl bg-zinc-100 px-3 py-1 text-xs font-black text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-                    {t.statusLabels[order.status] || order.status}
-                  </p>
-                </div>
+            session.orders.map((order, index) => {
+              const isExpanded = expandedOrders[order.public_token] !== undefined
+                ? expandedOrders[order.public_token]
+                : (order.public_token === latestActiveOrderToken);
 
-                <div className="mt-4 flex flex-col gap-3">
-                  {order.items.map((item, itemIndex) => (
-                    <div
-                      key={`${order.public_token}-${itemIndex}`}
-                      className="flex items-start justify-between gap-4"
-                    >
-                      <div>
-                        <p className="text-sm font-bold">{item.item_name}</p>
-                        <p className="text-xs font-semibold text-zinc-500">
-                          ₹{Number(item.unit_price).toFixed(2)} × {item.quantity}
-                        </p>
-                        {item.item_note && (
-                          <p className="mt-1 text-xs italic text-amber-700 dark:text-amber-500">
-                            {t.note}: {item.item_note}
-                          </p>
-                        )}
+              const handleToggle = () => {
+                setExpandedOrders(prev => ({
+                  ...prev,
+                  [order.public_token]: !isExpanded
+                }));
+              };
+
+              const stages = order.status === "rejected"
+                ? [
+                    { key: "pending" },
+                    { key: "rejected" }
+                  ]
+                : [
+                    { key: "pending" },
+                    { key: "accepted" },
+                    { key: "preparing" },
+                    { key: "ready" },
+                    { key: "served" }
+                  ];
+
+              const getStageConfig = (key: string) => {
+                switch (key) {
+                  case "pending":
+                    return { title: t.timeline.orderPlaced, desc: t.timeline.orderPlacedDesc };
+                  case "accepted":
+                    return { title: t.timeline.accepted, desc: t.timeline.acceptedDesc };
+                  case "preparing":
+                    return { title: t.timeline.preparing, desc: t.timeline.preparingDesc };
+                  case "ready":
+                    return { title: t.timeline.ready, desc: t.timeline.readyDesc };
+                  case "served":
+                    return { title: t.timeline.served, desc: t.timeline.servedDesc };
+                  case "rejected":
+                    return { title: t.timeline.cancelled, desc: t.timeline.cancelledDesc };
+                  default:
+                    return { title: key, desc: "" };
+                }
+              };
+
+              const normalStatuses = ["pending", "accepted", "preparing", "ready", "served"];
+              const currentIdx = normalStatuses.indexOf(order.status);
+
+              return (
+                <section
+                  key={order.public_token}
+                  className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-xs dark:border-zinc-800 dark:bg-zinc-900"
+                >
+                  <div
+                    onClick={handleToggle}
+                    className="flex cursor-pointer items-center justify-between gap-3 border-b border-zinc-100 pb-3 dark:border-zinc-800 select-none"
+                  >
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-bold uppercase text-zinc-400">
+                          Order {index + 1} of {session.order_count}
+                        </span>
+                        <span className="text-[10px] font-semibold text-zinc-400">
+                          • {new Date(order.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        </span>
                       </div>
-                      <p className="text-sm font-black">
-                        ₹{Number(item.total_price).toFixed(2)}
-                      </p>
+                      <h2 className="text-lg font-black text-zinc-950 dark:text-zinc-50 flex items-center gap-2">
+                        {order.order_number}
+                      </h2>
                     </div>
-                  ))}
-                </div>
-
-                {order.customer_note && (
-                  <div className="mt-4 rounded-2xl bg-zinc-50 p-3 text-xs text-zinc-600 dark:bg-zinc-800/50 dark:text-zinc-300">
-                    <span className="font-bold">{t.note}:</span> {order.customer_note}
+                    <div className="flex items-center gap-2">
+                      <p className="rounded-xl bg-zinc-100 px-3 py-1 text-xs font-black text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                        {t.statusLabels[order.status] || order.status}
+                      </p>
+                      <svg
+                        className={`h-5 w-5 text-zinc-400 transition-transform duration-200 ${
+                          isExpanded ? "rotate-180" : ""
+                        }`}
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
                   </div>
-                )}
 
-                <div className="mt-4 flex items-center justify-between border-t border-zinc-100 pt-3 dark:border-zinc-800">
-                  <p className="text-sm font-bold text-zinc-500">{t.subtotal}</p>
-                  <p className="text-lg font-black text-amber-700 dark:text-amber-500">
-                    ₹{Number(order.subtotal).toFixed(2)}
-                  </p>
-                </div>
-              </section>
-            ))
+                  {isExpanded && (
+                    <div className="mt-6 border-b border-zinc-100 pb-5 dark:border-zinc-800">
+                      <div className="flex flex-col">
+                        {stages.map((stage, sIdx) => {
+                          let state: "completed" | "current" | "future" = "future";
+                          if (order.status === "rejected") {
+                            if (stage.key === "pending") state = "completed";
+                            else if (stage.key === "rejected") state = "current";
+                          } else {
+                            const stageIdx = normalStatuses.indexOf(stage.key);
+                            if (stageIdx < currentIdx) state = "completed";
+                            else if (stageIdx === currentIdx) state = "current";
+                            else state = "future";
+                          }
+
+                          let timestamp: string | null = null;
+                          if (order.status_history) {
+                            const historyEntry = order.status_history.find(h => h.new_status === stage.key);
+                            if (historyEntry) {
+                              timestamp = new Date(historyEntry.changed_at).toLocaleTimeString([], {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              });
+                            }
+                          }
+                          if (stage.key === "pending" && !timestamp) {
+                            timestamp = new Date(order.created_at).toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            });
+                          }
+
+                          const { title, desc } = getStageConfig(stage.key);
+                          const isLast = sIdx === stages.length - 1;
+                          const isAnimated = animatedStages[order.public_token] === stage.key;
+
+                          return (
+                            <div key={stage.key} className="flex min-h-[64px] last:min-h-0">
+                              {/* Left: Time */}
+                              <div className="w-16 flex-none pr-3 pt-1 text-right text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+                                {timestamp || ""}
+                              </div>
+
+                              {/* Middle: Circle and connector */}
+                              <div className="relative flex w-8 flex-none flex-col items-center">
+                                <div
+                                  className={`z-10 flex h-6 w-6 items-center justify-center rounded-full text-white transition-all duration-300 ${
+                                    state === "completed"
+                                      ? "bg-emerald-600 text-xs font-bold"
+                                      : state === "current"
+                                      ? "bg-amber-600 ring-4 ring-amber-100 dark:ring-amber-950/40"
+                                      : "bg-zinc-200 dark:bg-zinc-800"
+                                  } ${isAnimated ? "motion-safe:animate-[bounce_0.6s_ease-in-out_2]" : ""}`}
+                                >
+                                  {state === "completed" ? (
+                                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                  ) : state === "current" ? (
+                                    <div className="h-2 w-2 rounded-full bg-white" />
+                                  ) : null}
+                                </div>
+
+                                {!isLast && (
+                                  <div
+                                    className={`absolute top-6 bottom-0 w-[2px] ${
+                                      state === "completed" ? "bg-emerald-600" : "bg-zinc-200 dark:bg-zinc-800"
+                                    }`}
+                                  />
+                                )}
+                              </div>
+
+                              {/* Right: Content */}
+                              <div className="flex-1 pb-6 pl-2">
+                                <h3
+                                  className={`text-sm font-black transition-colors duration-300 ${
+                                    state === "current"
+                                      ? "text-zinc-950 dark:text-zinc-50"
+                                      : state === "completed"
+                                      ? "text-zinc-700 dark:text-zinc-300"
+                                      : "text-zinc-400 dark:text-zinc-600"
+                                  }`}
+                                >
+                                  {title}
+                                </h3>
+                                {state !== "future" && (
+                                  <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                                    {desc}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="mt-4 flex flex-col gap-3">
+                    {order.items.map((item, itemIndex) => (
+                      <div
+                        key={`${order.public_token}-${itemIndex}`}
+                        className="flex items-start justify-between gap-4"
+                      >
+                        <div>
+                          <p className="text-sm font-bold">{item.item_name}</p>
+                          <p className="text-xs font-semibold text-zinc-500">
+                            ₹{Number(item.unit_price).toFixed(2)} × {item.quantity}
+                          </p>
+                          {item.item_note && (
+                            <p className="mt-1 text-xs italic text-amber-700 dark:text-amber-500">
+                              {t.note}: {item.item_note}
+                            </p>
+                          )}
+                        </div>
+                        <p className="text-sm font-black">
+                          ₹{Number(item.total_price).toFixed(2)}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {order.customer_note && (
+                    <div className="mt-4 rounded-2xl bg-zinc-50 p-3 text-xs text-zinc-600 dark:bg-zinc-800/50 dark:text-zinc-300">
+                      <span className="font-bold">{t.note}:</span> {order.customer_note}
+                    </div>
+                  )}
+
+                  <div className="mt-4 flex items-center justify-between border-t border-zinc-100 pt-3 dark:border-zinc-800">
+                    <p className="text-sm font-bold text-zinc-500">{t.subtotal}</p>
+                    <p className="text-lg font-black text-amber-700 dark:text-amber-500">
+                      ₹{Number(order.subtotal).toFixed(2)}
+                    </p>
+                  </div>
+                </section>
+              );
+            })
           )}
         </main>
       </div>

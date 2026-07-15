@@ -148,6 +148,7 @@ export interface DiningSessionOrder {
   created_at: string;
   customer_note: string | null;
   items: DiningSessionOrderItem[];
+  status_history?: OrderStatusHistoryResponse[];
 }
 
 export interface PublicDiningSessionResponse {

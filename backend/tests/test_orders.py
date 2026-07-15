@@ -677,3 +677,69 @@ def test_public_order_rate_limiting(setup_test_data):
     )
     assert response.status_code == 429
     assert "too many order submissions" in response.json()["detail"].lower()
+
+
+def test_dining_session_order_status_history(setup_test_data):
+    data = setup_test_data
+    table_code = create_test_table(data, "STH")
+    res = post_table_order(data, table_code=table_code).json()
+    order_token = res["public_token"]
+    session_token = res["dining_session_token"]
+
+    db = SessionLocal()
+    # Let's find the order and transition its status
+    order = db.query(Order).filter(Order.public_token == order_token).one()
+    
+    # We add historical transitions
+    # Note: Placed (pending) history is created automatically during order placement.
+    # Let's add 'accepted' and 'preparing' status history with future timestamps
+    # so they sort correctly after the auto-created 'pending' entry.
+    h1 = OrderStatusHistory(
+        order_id=order.id,
+        old_status="pending",
+        new_status="accepted",
+        changed_at=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=5),
+        changed_by_staff_id=999
+    )
+    h2 = OrderStatusHistory(
+        order_id=order.id,
+        old_status="accepted",
+        new_status="preparing",
+        changed_at=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=10),
+        changed_by_staff_id=888
+    )
+    order.status = "preparing"
+    db.add_all([h1, h2])
+    db.commit()
+    db.close()
+
+    # Fetch the public session details
+    response = client.get(f"/public/sessions/{session_token}")
+    assert response.status_code == 200
+    body = response.json()
+    
+    # Verify the order status history is present and correct
+    orders_list = body["orders"]
+    assert len(orders_list) == 1
+    o = orders_list[0]
+    assert o["status"] == "preparing"
+    assert "status_history" in o
+    sh = o["status_history"]
+    
+    # We should have 3 history entries: pending (auto), accepted (h1), preparing (h2)
+    assert len(sh) == 3
+    # Check that they are sorted oldest to newest
+    t0 = datetime.datetime.fromisoformat(sh[0]["changed_at"].replace("Z", "+00:00"))
+    t1 = datetime.datetime.fromisoformat(sh[1]["changed_at"].replace("Z", "+00:00"))
+    t2 = datetime.datetime.fromisoformat(sh[2]["changed_at"].replace("Z", "+00:00"))
+    assert t0 <= t1 <= t2
+    
+    assert sh[0]["new_status"] == "pending"
+    assert sh[1]["new_status"] == "accepted"
+    assert sh[2]["new_status"] == "preparing"
+    
+    # Verify no staff ID or ID is exposed
+    for entry in sh:
+        assert "changed_by_staff_id" not in entry
+        assert "staff_id" not in entry
+        assert "id" not in entry

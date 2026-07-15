@@ -2,9 +2,9 @@ from datetime import datetime
 from decimal import Decimal
 from typing import List, Optional
 
-from pydantic import BaseModel, ConfigDict, field_serializer
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
-from app.schemas.order import PublicOrderResponseItem
+from app.schemas.order import PublicOrderResponseItem, OrderStatusHistoryResponse
 
 
 class DiningSessionSummary(BaseModel):
@@ -33,6 +33,7 @@ class DiningSessionOrderSummary(BaseModel):
     created_at: datetime
     customer_note: Optional[str] = None
     items: List[PublicOrderResponseItem]
+    status_history: list[OrderStatusHistoryResponse] = Field(default_factory=list)
 
     @field_serializer("subtotal")
     def serialize_subtotal(self, subtotal: Decimal) -> str:
