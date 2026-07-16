@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { closeEmptySession, confirmStaffCounterPayment, getStaffMe, issueStaffBill, requestStaffPaymentAssistance, resolveStaffServiceRequest } from "@/lib/api";
-import { generateStaffTableBill, getStaffTableDetail, startStaffTableSession, StaffTableDetail } from "@/lib/staffTables";
+import { confirmStaffCounterPayment, getStaffMe, issueStaffBill, requestStaffPaymentAssistance, resolveStaffServiceRequest } from "@/lib/api";
+import { generateStaffTableBill, getStaffTableDetail, StaffTableDetail } from "@/lib/staffTables";
 import { useRealtime } from "@/lib/realtime";
 import { CurrentStaffResponse } from "@/lib/types";
 
@@ -75,8 +75,7 @@ export default function StaffTableDetailClient({ tableId }: { tableId: number })
             </div>
             <div className="flex flex-wrap gap-2">
               <button disabled={Boolean(busy)} onClick={() => void load()} className="rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-3 text-sm font-black text-zinc-100 disabled:opacity-50">Refresh</button>
-              {!detail?.session && <button disabled={busy === "session"} onClick={() => run("session", () => startStaffTableSession(tableId))} className="rounded-lg bg-amber-600 px-4 py-3 text-sm font-black text-white disabled:opacity-50">Start Session</button>}
-              {detail?.session && <Link href={`/staff/orders/new?tableId=${tableId}`} className="rounded-lg bg-amber-600 px-4 py-3 text-sm font-black text-white">Add Order</Link>}
+              <Link href={`/staff/orders/new?tableId=${tableId}`} className="rounded-lg bg-amber-600 px-4 py-3 text-sm font-black text-white">Add Order</Link>
             </div>
           </div>
         </div>
@@ -85,8 +84,9 @@ export default function StaffTableDetailClient({ tableId }: { tableId: number })
           <div className="text-sm text-zinc-500">Loading table...</div>
         ) : !detail.session ? (
           <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-8 text-center">
-            <div className="text-xl font-black text-white">No active session</div>
-            <p className="mt-2 text-sm text-zinc-500">Start a session before placing a staff-assisted order.</p>
+            <div className="text-xl font-black text-white">No active order</div>
+            <p className="mt-2 text-sm text-zinc-500">Add items to start an order for this table.</p>
+            <Link href={`/staff/orders/new?tableId=${tableId}`} className="mt-5 inline-flex rounded-lg bg-amber-600 px-5 py-3 text-sm font-black text-white">Add Order</Link>
           </div>
         ) : (
           <>
@@ -133,7 +133,6 @@ export default function StaffTableDetailClient({ tableId }: { tableId: number })
                       <button key={method} disabled={Boolean(busy)} onClick={() => run(method, () => confirmStaffCounterPayment(bill.bill_number, method as "counter_cash" | "counter_upi" | "counter_card"))} className="rounded-lg bg-emerald-700 px-3 py-2 text-sm font-bold">{method.replace("counter_", "")}</button>
                     ))}
                     {!canRecordPayments && bill && bill.status !== "paid" && <button disabled={Boolean(busy)} onClick={() => run("payment-assistance", () => requestStaffPaymentAssistance(bill.bill_number))} className="rounded-lg bg-sky-700 px-3 py-2 text-sm font-bold">Notify admin for payment</button>}
-                    {detail.session.orders.length === 0 && <button disabled={Boolean(busy)} onClick={() => window.confirm("Close this empty session?") && run("close", () => closeEmptySession(detail.session!.session_token))} className="rounded-lg bg-red-950/80 px-3 py-2 text-sm font-bold text-red-100">Close Session</button>}
                   </div>
                   {bill && <div className="mt-4 text-sm text-zinc-400">Bill {bill.bill_number} · ₹{bill.total_amount} · {bill.status}</div>}
                 </div>

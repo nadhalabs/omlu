@@ -10,3 +10,6 @@ __pycache__/
 *.key
 *.jks
 .DS_Store
+
+backend/.venv/
+backend/venv/

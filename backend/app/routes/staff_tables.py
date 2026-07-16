@@ -19,7 +19,7 @@ from app.models.staff_user import AuditLog, StaffUser
 from app.routes.orders import build_order_response, create_order_in_session, load_order_for_response, validate_idempotency_key
 from app.schemas.order import PublicOrderCreateRequest
 from app.services.bills import build_bill_response, create_or_refresh_bill_for_session
-from app.services.dining_sessions import create_session_safely, find_current_open_session_for_table
+from app.services.dining_sessions import create_session_safely, find_current_open_session_for_table, get_or_create_open_session
 from app.services.menu_options import serialize_item_option_groups
 from app.services.realtime import (
     EVENT_BILL_GENERATED,
@@ -303,9 +303,13 @@ def create_staff_table_order(
     ).first()
     if not table:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Table not found")
-    session = find_current_open_session_for_table(db, table.id)
-    if not session:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Start a table session before placing an order.")
+    existing_session = find_current_open_session_for_table(db, table.id)
+    session = get_or_create_open_session(
+        db,
+        current_user.restaurant,
+        table,
+        opened_by_staff_id=current_user.id,
+    )
     if session.status != "open":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ordering is locked for this table session.")
     order = create_order_in_session(
@@ -319,7 +323,17 @@ def create_staff_table_order(
         source="staff_assisted",
     )
     _audit(db, current_user, "staff_manual_order_created", "order", str(order.id), {"table_id": table.id, "source": "staff_assisted"})
+    if not existing_session:
+        _audit(db, current_user, "staff_session_opened", "dining_session", str(session.id), {"table_id": table.id, "opened_by": "staff_order"})
     db.commit()
+    if not existing_session:
+        publish_event(
+            EVENT_SESSION_OPENED,
+            restaurant_id=current_user.restaurant_id,
+            channels=[restaurant_channel(current_user.restaurant_id, "operations"), restaurant_channel(current_user.restaurant_id, "staff"), session_channel(session.public_token), table_channel(current_user.restaurant_id, table.id)],
+            resource_id=session.id,
+            state={"table_id": table.id, "session_token": session.public_token},
+        )
     publish_event(
         EVENT_ORDER_CREATED,
         restaurant_id=current_user.restaurant_id,
@@ -333,6 +347,13 @@ def create_staff_table_order(
         ],
         resource_id=order.id,
         state={"order_number": order.order_number, "status": order.status, "table_id": table.id, "source": "staff_assisted"},
+    )
+    publish_event(
+        EVENT_TABLE_UPDATED,
+        restaurant_id=current_user.restaurant_id,
+        channels=[restaurant_channel(current_user.restaurant_id, "staff"), table_channel(current_user.restaurant_id, table.id)],
+        resource_id=table.id,
+        state={"table_id": table.id},
     )
     return build_order_response(db, load_order_for_response(db, order.id))
 

@@ -244,6 +244,75 @@ def test_manual_order_uses_existing_order_and_kitchen_workflow(staff_order_conte
     db.close()
 
 
+def test_staff_order_auto_creates_session_on_first_order(staff_order_context):
+    response = create_manual_order(staff_order_context)
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["status"] == "pending"
+
+    db = SessionLocal()
+    sessions = db.query(DiningSession).filter(
+        DiningSession.table_id == staff_order_context["table_id"],
+        DiningSession.status == "open",
+    ).all()
+    assert len(sessions) == 1
+    assert sessions[0].opened_by_staff_id == staff_order_context["staff_id"]
+    order = db.query(Order).filter(Order.public_token == body["public_token"]).one()
+    assert order.dining_session_id == sessions[0].id
+    assert order.source == "staff_assisted"
+    assert order.created_by_staff_id == staff_order_context["staff_id"]
+    db.close()
+
+
+def test_staff_order_reuses_existing_active_session(staff_order_context):
+    first = create_manual_order(staff_order_context, payload=order_payload(staff_order_context, quantity=1))
+    second = create_manual_order(staff_order_context, payload=order_payload(staff_order_context, quantity=2))
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+
+    db = SessionLocal()
+    sessions = db.query(DiningSession).filter(
+        DiningSession.table_id == staff_order_context["table_id"],
+        DiningSession.status == "open",
+    ).all()
+    assert len(sessions) == 1
+    orders = db.query(Order).filter(Order.dining_session_id == sessions[0].id).all()
+    assert len(orders) == 2
+    db.close()
+
+
+def test_staff_order_idempotency_prevents_duplicate_session_and_order(staff_order_context):
+    key = f"staff-test-fixed-{uuid.uuid4().hex}"
+    headers = {**auth(staff_order_context), "Idempotency-Key": key}
+
+    first = client.post(
+        f"/staff/tables/{staff_order_context['table_id']}/orders",
+        headers=headers,
+        json=order_payload(staff_order_context),
+    )
+    second = client.post(
+        f"/staff/tables/{staff_order_context['table_id']}/orders",
+        headers=headers,
+        json=order_payload(staff_order_context),
+    )
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+    assert first.json()["public_token"] == second.json()["public_token"]
+
+    db = SessionLocal()
+    sessions = db.query(DiningSession).filter(
+        DiningSession.table_id == staff_order_context["table_id"],
+        DiningSession.status == "open",
+    ).all()
+    assert len(sessions) == 1
+    orders = db.query(Order).filter(Order.dining_session_id == sessions[0].id).all()
+    assert len(orders) == 1
+    db.close()
+
+
 def test_manual_order_rejects_unavailable_items(staff_order_context):
     start_session(staff_order_context)
 
@@ -256,17 +325,26 @@ def test_manual_order_rejects_unavailable_items(staff_order_context):
     assert "unavailable" in response.json()["detail"].lower()
 
 
-def test_manual_order_rejects_closed_session(staff_order_context):
+def test_manual_order_ignores_closed_historical_session(staff_order_context):
     created = start_session(staff_order_context).json()
     db = SessionLocal()
     session = db.query(DiningSession).filter(DiningSession.public_token == created["session_token"]).one()
     session.status = "closed"
+    closed_session_id = session.id
     db.commit()
     db.close()
 
     response = create_manual_order(staff_order_context)
 
-    assert response.status_code == 409
+    assert response.status_code == 201
+    db = SessionLocal()
+    active_sessions = db.query(DiningSession).filter(
+        DiningSession.table_id == staff_order_context["table_id"],
+        DiningSession.status == "open",
+    ).all()
+    assert len(active_sessions) == 1
+    assert active_sessions[0].id != closed_session_id
+    db.close()
 
 
 def test_resolve_table_request_records_staff_resolver(staff_order_context):

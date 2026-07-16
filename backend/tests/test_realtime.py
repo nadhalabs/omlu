@@ -8,7 +8,9 @@ from starlette.websockets import WebSocketDisconnect
 
 from app.database import SessionLocal
 from app.main import app
+from app.models.dining_session import DiningSession
 from app.models.menu import MenuCategory, MenuItem
+from app.models.order import Order
 from app.models.restaurant import Restaurant
 from app.models.restaurant_table import RestaurantTable
 from app.models.staff_user import StaffUser
@@ -137,6 +139,17 @@ def create_staff_order(data):
         json={
             "items": [{"menu_item_id": data["item_id"], "quantity": 1}],
             "customer_note": "Real-time test",
+        },
+    )
+
+
+def create_invalid_staff_order(data):
+    return client.post(
+        f"/staff/tables/{data['table_id']}/orders",
+        headers={**auth(data), "Idempotency-Key": f"rt-invalid-{uuid.uuid4().hex}"},
+        json={
+            "items": [{"menu_item_id": data["item_id"], "quantity": 0}],
+            "customer_note": "Invalid real-time test",
         },
     )
 
@@ -490,10 +503,21 @@ def test_failed_order_validation_does_not_publish(monkeypatch, realtime_context)
     published = []
     monkeypatch.setattr(realtime.broker, "publish", lambda event: published.append(event))
 
-    response = create_staff_order(realtime_context)
+    response = create_invalid_staff_order(realtime_context)
 
-    assert response.status_code == 409
+    assert response.status_code == 422
     assert published == []
+
+    db = SessionLocal()
+    try:
+        assert db.query(DiningSession).filter(
+            DiningSession.table_id == realtime_context["table_id"],
+        ).count() == 0
+        assert db.query(Order).filter(
+            Order.table_id == realtime_context["table_id"],
+        ).count() == 0
+    finally:
+        db.close()
 
 
 # ---------------------------------------------------------------------------
