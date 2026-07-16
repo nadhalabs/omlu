@@ -1,20 +1,27 @@
 class AppConfig {
   AppConfig({
-    required this.initialUrl,
+    required this.frontendUrl,
+    required this.backendUrl,
     required this.allowedHosts,
     required this.allowHttp,
   });
 
-  static const String fallbackUrl = 'https://omlu.vercel.app';
+  static const String fallbackFrontendUrl = 'https://omlu.vercel.app';
+  static const String fallbackBackendUrl = 'https://omlu-api.onrender.com';
 
-  final Uri initialUrl;
+  final Uri frontendUrl;
+  final Uri backendUrl;
   final Set<String> allowedHosts;
   final bool allowHttp;
 
   static AppConfig fromEnvironment() {
-    const configuredUrl = String.fromEnvironment(
-      'OMLU_APP_URL',
-      defaultValue: fallbackUrl,
+    const configuredFrontend = String.fromEnvironment(
+      'OMLU_FRONTEND_URL',
+      defaultValue: fallbackFrontendUrl,
+    );
+    const configuredBackend = String.fromEnvironment(
+      'OMLU_BACKEND_URL',
+      defaultValue: fallbackBackendUrl,
     );
     const allowedDomains = String.fromEnvironment('OMLU_ALLOWED_DOMAINS');
     const allowHttpValue = bool.fromEnvironment(
@@ -23,35 +30,57 @@ class AppConfig {
     );
 
     return AppConfig.fromValues(
-      configuredUrl: configuredUrl,
+      configuredFrontendUrl: configuredFrontend,
+      configuredBackendUrl: configuredBackend,
       allowedDomains: allowedDomains,
       allowHttp: allowHttpValue,
     );
   }
 
-  static AppConfig fromValues({
-    required String configuredUrl,
-    required String allowedDomains,
-    required bool allowHttp,
-  }) {
-    final parsed = Uri.parse(configuredUrl.trim());
+  static Uri _parseAndNormalize(String url, {required bool allowHttp}) {
+    var trimmed = url.trim();
+    while (trimmed.endsWith('/')) {
+      trimmed = trimmed.substring(0, trimmed.length - 1);
+    }
+    final parsed = Uri.parse(trimmed);
     if (!parsed.hasScheme || parsed.host.isEmpty) {
-      throw ArgumentError('OMLU_APP_URL must be an absolute URL.');
+      throw ArgumentError('OMLU URL must be an absolute URL: $url');
     }
     if (parsed.scheme != 'https' && !(allowHttp && parsed.scheme == 'http')) {
       throw ArgumentError(
-        'OMLU_APP_URL must use HTTPS unless OMLU_ALLOW_HTTP=true is set for development.',
+        'OMLU URL must use HTTPS unless OMLU_ALLOW_HTTP=true is set for development: $url',
       );
     }
+    return parsed;
+  }
 
-    final hosts = <String>{parsed.host.toLowerCase()};
+  static AppConfig fromValues({
+    required String configuredFrontendUrl,
+    required String configuredBackendUrl,
+    required String allowedDomains,
+    required bool allowHttp,
+  }) {
+    final frontend = _parseAndNormalize(
+      configuredFrontendUrl,
+      allowHttp: allowHttp,
+    );
+    final backend = _parseAndNormalize(
+      configuredBackendUrl,
+      allowHttp: allowHttp,
+    );
+
+    final hosts = <String>{
+      frontend.host.toLowerCase(),
+      backend.host.toLowerCase(),
+    };
     for (final host in allowedDomains.split(',')) {
       final normalized = host.trim().toLowerCase();
       if (normalized.isNotEmpty) hosts.add(normalized);
     }
 
     return AppConfig(
-      initialUrl: parsed,
+      frontendUrl: frontend,
+      backendUrl: backend,
       allowedHosts: hosts,
       allowHttp: allowHttp,
     );

@@ -67,7 +67,7 @@ class _OmluWebViewShellState extends State<OmluWebViewShell> {
       _handleConnectivityChange,
     );
     _checkInitialConnectivity();
-    unawaited(_controller.loadRequest(widget.config.initialUrl));
+    unawaited(_controller.loadRequest(widget.config.frontendUrl));
   }
 
   @override
@@ -159,7 +159,7 @@ class _OmluWebViewShellState extends State<OmluWebViewShell> {
           _controller.loadRequest(
             _navigationPolicy.roleHomeFor(
               _currentUri ?? uri,
-              widget.config.initialUrl,
+              widget.config.frontendUrl,
             ),
           ),
         );
@@ -261,7 +261,7 @@ class _OmluWebViewShellState extends State<OmluWebViewShell> {
         await _controller.loadRequest(
           _navigationPolicy.roleHomeFor(
             currentUri ?? nextUri,
-            widget.config.initialUrl,
+            widget.config.frontendUrl,
           ),
         );
       }

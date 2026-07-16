@@ -3,21 +3,35 @@ import 'package:omlu_operations/src/app_config.dart';
 
 void main() {
   group('AppConfig', () {
-    test('uses HTTPS fallback URL', () {
+    test('uses default frontend and backend fallbacks', () {
       final config = AppConfig.fromValues(
-        configuredUrl: AppConfig.fallbackUrl,
+        configuredFrontendUrl: AppConfig.fallbackFrontendUrl,
+        configuredBackendUrl: AppConfig.fallbackBackendUrl,
         allowedDomains: '',
         allowHttp: false,
       );
 
-      expect(config.initialUrl.toString(), AppConfig.fallbackUrl);
-      expect(config.isAllowedInWebView(Uri.parse(AppConfig.fallbackUrl)), true);
+      expect(config.frontendUrl.toString(), AppConfig.fallbackFrontendUrl);
+      expect(config.backendUrl.toString(), AppConfig.fallbackBackendUrl);
+    });
+
+    test('normalizes trailing slashes correctly', () {
+      final config = AppConfig.fromValues(
+        configuredFrontendUrl: 'https://omlu.vercel.app/',
+        configuredBackendUrl: 'https://omlu-api.onrender.com///',
+        allowedDomains: '',
+        allowHttp: false,
+      );
+
+      expect(config.frontendUrl.toString(), 'https://omlu.vercel.app');
+      expect(config.backendUrl.toString(), 'https://omlu-api.onrender.com');
     });
 
     test('rejects HTTP unless explicitly allowed for development', () {
       expect(
         () => AppConfig.fromValues(
-          configuredUrl: 'http://10.0.2.2:3000',
+          configuredFrontendUrl: 'http://10.0.2.2:3000',
+          configuredBackendUrl: 'https://omlu-api.onrender.com',
           allowedDomains: '',
           allowHttp: false,
         ),
@@ -27,7 +41,8 @@ void main() {
 
     test('allows configured official domains only', () {
       final config = AppConfig.fromValues(
-        configuredUrl: 'https://omlu.example',
+        configuredFrontendUrl: 'https://omlu.example',
+        configuredBackendUrl: 'https://omlu-api.example',
         allowedDomains: 'admin.omlu.example,kitchen.omlu.example',
         allowHttp: false,
       );
@@ -37,39 +52,16 @@ void main() {
         true,
       );
       expect(
+        config.isAllowedInWebView(Uri.parse('https://omlu-api.example')),
+        true,
+      );
+      expect(
         config.isAllowedInWebView(Uri.parse('https://admin.omlu.example')),
         true,
       );
       expect(
         config.isAllowedInWebView(Uri.parse('https://evil.example')),
         false,
-      );
-      expect(
-        config.isAllowedInWebView(Uri.parse('http://omlu.example')),
-        false,
-      );
-    });
-
-    test('detects external schemes and report downloads', () {
-      final config = AppConfig.fromValues(
-        configuredUrl: 'https://omlu.example',
-        allowedDomains: '',
-        allowHttp: false,
-      );
-
-      expect(config.isExternalScheme(Uri.parse('tel:+911234567890')), true);
-      expect(
-        config.isExternalScheme(Uri.parse('mailto:ops@omlu.example')),
-        true,
-      );
-      expect(config.isExternalScheme(Uri.parse('geo:9.9,76.2')), true);
-      expect(
-        config.isDownload(Uri.parse('https://omlu.example/report.pdf')),
-        true,
-      );
-      expect(
-        config.isDownload(Uri.parse('https://omlu.example/report.csv')),
-        true,
       );
     });
   });

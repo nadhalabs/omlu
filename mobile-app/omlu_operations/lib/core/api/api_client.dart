@@ -201,6 +201,15 @@ class ApiClient {
       }
       final httpResponse = await httpRequest.close();
       final text = await utf8.decoder.bind(httpResponse).join();
+      final contentType = httpResponse.headers.contentType?.value ?? '';
+
+      if (text.isNotEmpty && !contentType.contains('application/json')) {
+        throw ApiException(
+          'Non-JSON response received. Status: ${httpResponse.statusCode}, URL: ${request.uri}, Content-Type: $contentType',
+          statusCode: httpResponse.statusCode,
+        );
+      }
+
       final decoded = text.isEmpty ? null : jsonDecode(text);
       return ApiResponse(
         statusCode: httpResponse.statusCode,

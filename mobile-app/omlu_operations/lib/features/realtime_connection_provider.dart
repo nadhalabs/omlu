@@ -20,7 +20,7 @@ final realtimeClientProvider = Provider<RealtimeClient?>((ref) {
   };
 
   final client = RealtimeClient(
-    baseUrl: config.initialUrl,
+    baseUrl: config.backendUrl,
     accessToken: session.accessToken,
     channel: channel,
   );

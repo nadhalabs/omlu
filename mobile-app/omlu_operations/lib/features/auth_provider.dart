@@ -17,7 +17,7 @@ final tokenStorageProvider = Provider<TokenStorage>((ref) {
 
 final apiClientProvider = Provider<ApiClient>((ref) {
   final config = ref.watch(appConfigProvider);
-  return ApiClient(baseUrl: config.initialUrl);
+  return ApiClient(baseUrl: config.backendUrl);
 });
 
 final operationsApiProvider = Provider<OperationsApi>((ref) {
