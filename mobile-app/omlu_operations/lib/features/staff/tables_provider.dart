@@ -4,6 +4,8 @@ import '../../core/api/operations_api.dart';
 import '../../core/models/operations_models.dart';
 import '../auth_provider.dart';
 import '../realtime_connection_provider.dart';
+import 'menu_provider.dart';
+import 'cart_provider.dart';
 
 class TablesNotifier
     extends StateNotifier<AsyncValue<List<StaffTableSummary>>> {
@@ -22,10 +24,15 @@ class TablesNotifier
           'service_request.created',
           'service_request.resolved',
           'bill.generated',
+          'bill.updated',
           'bill.paid',
         };
         if (types.contains(event.type)) {
           fetchTables(silent: true);
+          final selectedId = ref.read(selectedTableIdProvider);
+          if (selectedId != null) {
+            ref.invalidate(tableDetailProvider(selectedId));
+          }
         }
       });
     });

@@ -12,6 +12,8 @@ import 'tables_provider.dart';
 import 'menu_provider.dart';
 import 'cart_provider.dart';
 import 'cart_screen.dart';
+import '../../core/models/operations_models.dart';
+import '../auth_provider.dart';
 
 class NewOrderScreen extends ConsumerStatefulWidget {
   const NewOrderScreen({super.key});
@@ -414,6 +416,7 @@ class _OrderMenuView extends ConsumerWidget {
                   Center(child: Text('Error loading menu: $err')),
             ),
           ),
+          _BillingStatusCardView(tableId: tableId),
         ],
       ),
       // Floating Bottom Cart Bar
@@ -489,5 +492,160 @@ class _QuantityButton extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _BillingStatusCardView extends ConsumerWidget {
+  const _BillingStatusCardView({required this.tableId});
+  final int tableId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final detailAsync = ref.watch(tableDetailProvider(tableId));
+
+    return detailAsync.when(
+      data: (detail) {
+        final table = StaffTableSummary.fromDetailJson(detail);
+        return Padding(
+          padding: const EdgeInsets.all(OmluSpacing.md),
+          child: _BillingStatusCard(table: table),
+        );
+      },
+      loading: () => const Padding(
+        padding: EdgeInsets.all(OmluSpacing.md),
+        child: OmluSkeletonLoader(width: double.infinity, height: 80),
+      ),
+      error: (err, st) => const SizedBox.shrink(),
+    );
+  }
+}
+
+class _BillingStatusCard extends ConsumerStatefulWidget {
+  const _BillingStatusCard({required this.table});
+  final StaffTableSummary table;
+
+  @override
+  ConsumerState<_BillingStatusCard> createState() => _BillingStatusCardState();
+}
+
+class _BillingStatusCardState extends ConsumerState<_BillingStatusCard> {
+  bool _submitting = false;
+
+  Future<void> _handleRequestBill() async {
+    setState(() {
+      _submitting = true;
+    });
+
+    try {
+      final api = ref.read(operationsApiProvider);
+      await api.requestTableBill(widget.table.id);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Bill request submitted successfully!'),
+            backgroundColor: OmluColors.statusAvailable,
+          ),
+        );
+      }
+      ref.invalidate(tableDetailProvider(widget.table.id));
+      await ref.read(tablesProvider.notifier).fetchTables();
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _submitting = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final table = widget.table;
+
+    // session closed or bill paid → show nothing
+    final isClosedOrPaid = !table.hasOpenSession ||
+        table.sessionStatus == 'closed' ||
+        table.billStatus == 'paid';
+
+    if (isClosedOrPaid) {
+      return const SizedBox.shrink();
+    }
+
+    // bill exists → Bill Issued
+    final billExists = table.billNumber != null || table.billStatus != null || table.billId != null;
+    if (billExists) {
+      return OmluCard(
+        color: OmluColors.statusReady.withValues(alpha: 0.1),
+        borderColor: OmluColors.statusReady.withValues(alpha: 0.3),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Bill Issued',
+              style: OmluTypography.h3.copyWith(color: OmluColors.statusReady),
+            ),
+            if (table.billNumber != null) ...[
+              const SizedBox(height: OmluSpacing.xxs),
+              Text(
+                'Bill: ${table.billNumber}',
+                style: OmluTypography.bodyMedium,
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+
+    // active bill request exists → Waiting for owner/admin
+    if (table.hasActiveBillRequest) {
+      return OmluCard(
+        color: OmluColors.statusNeedsBill.withValues(alpha: 0.1),
+        borderColor: OmluColors.statusNeedsBill.withValues(alpha: 0.3),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Bill requested',
+              style: OmluTypography.h3.copyWith(color: OmluColors.statusNeedsBill),
+            ),
+            const SizedBox(height: OmluSpacing.xxs),
+            const Text(
+              'Waiting for owner/admin',
+              style: OmluTypography.bodyMedium,
+            ),
+          ],
+        ),
+      );
+    }
+
+    // active session + orders → Request Bill
+    if (table.hasOpenSession && table.activeOrderCount > 0) {
+      return OmluCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Table billing',
+              style: OmluTypography.h3,
+            ),
+            const SizedBox(height: OmluSpacing.xs),
+            OmluButton(
+              text: 'Request Bill',
+              isLoading: _submitting,
+              onPressed: _submitting ? null : _handleRequestBill,
+            ),
+          ],
+        ),
+      );
+    }
+
+    return const SizedBox.shrink();
   }
 }

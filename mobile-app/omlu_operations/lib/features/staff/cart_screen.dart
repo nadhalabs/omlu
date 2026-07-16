@@ -9,7 +9,6 @@ import '../../design_system/widgets/omlu_button.dart';
 import 'cart_provider.dart';
 import 'menu_provider.dart';
 import 'tables_provider.dart';
-import 'staff_shell.dart';
 
 class CartScreen extends ConsumerWidget {
   const CartScreen({super.key});
@@ -152,13 +151,9 @@ class CartScreen extends ConsumerWidget {
                                     backgroundColor: OmluColors.statusAvailable,
                                   ),
                                 );
-                                ref.read(cartProvider.notifier).clearAll();
-                                ref
-                                        .read(selectedTableIdProvider.notifier)
-                                        .state =
-                                    null;
-                                ref.read(staffTabProvider.notifier).state =
-                                    0; // Return to active tables
+                                ref.read(cartProvider.notifier).clear();
+                                ref.read(tablesProvider.notifier).fetchTables();
+                                ref.invalidate(tableDetailProvider(tableId));
                                 Navigator.of(context).pop();
                               }
                             } catch (_) {

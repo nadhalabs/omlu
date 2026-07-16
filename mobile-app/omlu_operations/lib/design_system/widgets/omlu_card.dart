@@ -10,17 +10,19 @@ class OmluCard extends StatelessWidget {
     this.padding = const EdgeInsets.all(16.0),
     this.onTap,
     this.borderColor,
+    this.color,
   });
 
   final Widget child;
   final EdgeInsetsGeometry padding;
   final VoidCallback? onTap;
   final Color? borderColor;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
     final decoration = BoxDecoration(
-      color: OmluColors.surface,
+      color: color ?? OmluColors.surface,
       borderRadius: OmluRadius.borderLg,
       border: Border.all(color: borderColor ?? OmluColors.border, width: 1),
       boxShadow: OmluShadows.minimal,
