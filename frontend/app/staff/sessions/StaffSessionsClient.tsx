@@ -178,7 +178,7 @@ export default function StaffSessionsClient() {
               Staff Tables
             </Link>
             <Link
-              href="/staff/orders/new"
+              href="/staff/tables"
               className="text-xs text-zinc-400 hover:text-amber-400 font-semibold transition px-3 py-1.5 rounded-lg border border-zinc-800 hover:border-amber-700/50"
             >
               New Order

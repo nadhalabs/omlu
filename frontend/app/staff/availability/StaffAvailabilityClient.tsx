@@ -89,7 +89,7 @@ export default function StaffAvailabilityClient() {
             <h1 className="mt-2 text-3xl font-black text-white">Availability</h1>
             <p className="mt-1 text-[11px] font-bold uppercase tracking-wide text-zinc-600">Real-time: {realtimeStatus}</p>
           </div>
-          <Link href="/staff/orders/new" className="rounded-lg bg-amber-600 px-4 py-3 text-sm font-black text-white">New Order</Link>
+          <Link href="/staff/tables" className="rounded-lg bg-amber-600 px-4 py-3 text-sm font-black text-white">New Order</Link>
         </div>
         <section className="grid gap-3 md:grid-cols-[1fr_220px]">
           <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search menu" className="rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-4 text-white outline-none focus:border-amber-500" />

@@ -7,13 +7,7 @@ import { FormToast } from "@/components/FormToast";
 import { PasswordInput } from "@/components/PasswordInput";
 import { ApiError, changeStaffPassword } from "@/lib/api";
 import { FieldErrors, firstError, focusField, validatePassword } from "@/lib/formValidation";
-
-function destinationForRole(role: string, restaurantSlug: string) {
-  if (role === "owner" || role === "admin") return "/admin/dashboard";
-  if (role === "staff") return "/staff";
-  if (role === "kitchen") return `/kitchen/${restaurantSlug}`;
-  return "/staff/login";
-}
+import { roleHomePath } from "@/lib/roleRoutes";
 
 export default function ChangePasswordClient() {
   const router = useRouter();
@@ -69,7 +63,7 @@ export default function ChangePasswordClient() {
         current_password: currentPassword,
         new_password: newPassword,
       });
-      router.replace(destinationForRole(response.staff.role, response.staff.restaurant_slug));
+      router.replace(roleHomePath({ ...response.staff, must_change_password: false }));
       router.refresh();
     } catch (err) {
       if (err instanceof ApiError) {

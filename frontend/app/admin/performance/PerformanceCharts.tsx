@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { formatCurrency } from "./performanceFormatters";
 
 interface ChartPoint {
@@ -410,15 +410,17 @@ export function ChartEmptyState({ message }: { message: string }) {
 }
 
 export function ChartSkeleton() {
+  const barHeights = [36, 68, 44, 82, 56, 72, 48, 88, 62, 74, 52, 66];
+
   return (
     <div className="flex h-[220px] animate-pulse flex-col justify-between rounded border border-zinc-850 bg-zinc-900/20 p-4">
       <div className="h-4 w-32 rounded bg-zinc-800" />
       <div className="flex items-end gap-2 h-[130px]">
-        {Array.from({ length: 12 }).map((_, i) => (
+        {barHeights.map((height, i) => (
           <div
             key={i}
             className="flex-1 bg-zinc-800 rounded-t"
-            style={{ height: `${20 + Math.random() * 80}%` }}
+            style={{ height: `${height}%` }}
           />
         ))}
       </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   createStaffTableOrder,
@@ -40,6 +41,7 @@ function currency(value: number) {
 }
 
 export default function NewStaffOrderClient({ initialTableId }: { initialTableId: number | null }) {
+  const router = useRouter();
   const [tables, setTables] = useState<StaffTableSummary[]>([]);
   const [tableId, setTableId] = useState<number | null>(initialTableId);
   const [detail, setDetail] = useState<StaffTableDetail | null>(null);
@@ -259,6 +261,7 @@ export default function NewStaffOrderClient({ initialTableId }: { initialTableId
       window.localStorage.removeItem(cartKey(tableId));
       setSuccess(`Order ${order.order_number} sent to kitchen.`);
       await loadDetail();
+      window.setTimeout(() => router.replace(`/staff/tables/${tableId}`), 700);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not submit order.");
     } finally {
@@ -277,7 +280,7 @@ export default function NewStaffOrderClient({ initialTableId }: { initialTableId
             <div>
               <Link href="/staff/tables" className="text-sm font-bold text-amber-400">Back to tables</Link>
               <h1 className="mt-2 text-3xl font-black text-white">New Staff Order</h1>
-              <p className="mt-1 text-sm text-zinc-500">Manual ordering for customers seated at restaurant tables.</p>
+              <p className="mt-1 text-sm text-zinc-500">Staff-assisted ordering for the selected table.</p>
               <p className="mt-1 text-[11px] font-bold uppercase tracking-wide text-zinc-600">Real-time: {realtimeStatus}</p>
             </div>
             {activeTable && <Link href={`/staff/tables/${activeTable.id}`} className="rounded-lg border border-zinc-800 px-4 py-3 text-sm font-bold text-zinc-200">Table {activeTable.table_number}</Link>}
@@ -290,7 +293,11 @@ export default function NewStaffOrderClient({ initialTableId }: { initialTableId
             <label className="text-xs font-black uppercase tracking-wider text-zinc-500">Table</label>
             <select
               value={tableId ?? ""}
-              onChange={(event) => setTableId(event.target.value ? Number(event.target.value) : null)}
+              onChange={(event) => {
+                const nextTableId = event.target.value ? Number(event.target.value) : null;
+                setTableId(nextTableId);
+                if (nextTableId) router.replace(`/staff/orders/new?tableId=${nextTableId}`);
+              }}
               className="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 text-base font-bold text-white outline-none focus:border-amber-500"
             >
               <option value="">Choose table</option>

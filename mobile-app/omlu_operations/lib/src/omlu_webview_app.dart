@@ -9,6 +9,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 
 import 'app_config.dart';
+import 'navigation_policy.dart';
 
 class OmluOperationsApp extends StatelessWidget {
   const OmluOperationsApp({required this.config, super.key});
@@ -47,12 +48,15 @@ class _OmluWebViewShellState extends State<OmluWebViewShell> {
   );
 
   late final WebViewController _controller;
+  final NavigationPolicy _navigationPolicy = const NavigationPolicy();
   late final StreamSubscription<List<ConnectivityResult>>
   _connectivitySubscription;
 
   bool _isLoading = true;
   bool _isOffline = false;
+  bool _hasAuthenticatedWorkspace = false;
   String? _connectionError;
+  Uri? _currentUri;
   int _progress = 0;
 
   @override
@@ -82,14 +86,16 @@ class _OmluWebViewShellState extends State<OmluWebViewShell> {
               onProgress: (progress) {
                 if (mounted) setState(() => _progress = progress);
               },
-              onPageStarted: (_) {
+              onPageStarted: (url) {
+                _rememberUrl(url);
                 if (!mounted) return;
                 setState(() {
                   _isLoading = true;
                   _connectionError = null;
                 });
               },
-              onPageFinished: (_) {
+              onPageFinished: (url) {
+                _rememberUrl(url);
                 if (!mounted) return;
                 setState(() {
                   _isLoading = false;
@@ -148,11 +154,31 @@ class _OmluWebViewShellState extends State<OmluWebViewShell> {
     }
 
     if (widget.config.isAllowedInWebView(uri)) {
+      if (_hasAuthenticatedWorkspace && _navigationPolicy.isAuthRoute(uri)) {
+        unawaited(
+          _controller.loadRequest(
+            _navigationPolicy.roleHomeFor(
+              _currentUri ?? uri,
+              widget.config.initialUrl,
+            ),
+          ),
+        );
+        return NavigationDecision.prevent;
+      }
       return NavigationDecision.navigate;
     }
 
     unawaited(_openExternal(uri));
     return NavigationDecision.prevent;
+  }
+
+  void _rememberUrl(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null || !widget.config.isAllowedInWebView(uri)) return;
+    _currentUri = uri;
+    if (_navigationPolicy.isAuthenticatedWorkspace(uri)) {
+      _hasAuthenticatedWorkspace = true;
+    }
   }
 
   Future<void> _handleWebPermissionRequest(
@@ -216,10 +242,35 @@ class _OmluWebViewShellState extends State<OmluWebViewShell> {
   }
 
   Future<void> _handleBackPressed() async {
-    if (await _controller.canGoBack()) {
-      await _controller.goBack();
+    final currentUrl = await _controller.currentUrl();
+    final currentUri = currentUrl == null
+        ? _currentUri
+        : Uri.tryParse(currentUrl);
+    if (currentUri != null && _navigationPolicy.isRoleRoot(currentUri)) {
+      await _confirmExit();
       return;
     }
+    if (await _controller.canGoBack()) {
+      await _controller.goBack();
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+      final nextUrl = await _controller.currentUrl();
+      final nextUri = nextUrl == null ? null : Uri.tryParse(nextUrl);
+      if (_hasAuthenticatedWorkspace &&
+          nextUri != null &&
+          _navigationPolicy.isAuthRoute(nextUri)) {
+        await _controller.loadRequest(
+          _navigationPolicy.roleHomeFor(
+            currentUri ?? nextUri,
+            widget.config.initialUrl,
+          ),
+        );
+      }
+      return;
+    }
+    await _confirmExit();
+  }
+
+  Future<void> _confirmExit() async {
     if (!mounted) return;
     final shouldExit = await showDialog<bool>(
       context: context,

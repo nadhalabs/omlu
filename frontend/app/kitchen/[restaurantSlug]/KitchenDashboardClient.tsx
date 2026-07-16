@@ -165,7 +165,7 @@ export default function KitchenDashboardClient({
       if (err instanceof ApiError) {
         if (err.status === 401) {
           // Token expired or invalid
-          router.push("/staff/login");
+          router.replace("/login");
         } else {
           setError(err.message);
         }
@@ -206,7 +206,7 @@ export default function KitchenDashboardClient({
         fetchOrders(true);
       } catch (err) {
         // Redirect to login if unauthenticated or token expired
-        router.push("/staff/login");
+        router.replace("/login");
       }
     };
 
@@ -248,7 +248,7 @@ export default function KitchenDashboardClient({
   const handleLogout = async () => {
     try {
       await staffLogout();
-      router.push("/staff/login");
+      router.replace("/login");
     } catch (err) {
       alert("Failed to sign out. Please try again.");
     }
@@ -276,7 +276,7 @@ export default function KitchenDashboardClient({
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.status === 401) {
-          router.push("/staff/login");
+          router.replace("/login");
         } else {
           alert(`Failed to update status: ${err.message}`);
         }

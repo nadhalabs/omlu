@@ -1,4 +1,5 @@
 import { requireStaffRole } from "@/lib/serverAuth";
+import { redirect } from "next/navigation";
 import NewStaffOrderClient from "./NewStaffOrderClient";
 
 export const metadata = {
@@ -14,6 +15,7 @@ export default async function NewStaffOrderPage({
   const { tableId } = await searchParams;
   const parsedTableId = tableId ? Number(tableId) : null;
   const initialTableId = parsedTableId !== null && Number.isFinite(parsedTableId) ? parsedTableId : null;
+  if (!initialTableId) redirect("/staff/tables");
 
   return <NewStaffOrderClient initialTableId={initialTableId} />;
 }

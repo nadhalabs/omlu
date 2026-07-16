@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { fetchHistory, downloadHistoryPdf, exportHistory, HistoryFilters, PerformanceSummary } from "@/lib/adminHistory";
 import { formatCurrency, formatAverageOrderValue, formatDurationMinutes } from "./performanceFormatters";
 import { TrendChart, HourBarChart, HorizontalBarList, ChartEmptyState, ChartSkeleton } from "./PerformanceCharts";
 
 type DatePreset = "today" | "last_7_days" | "month" | "custom";
 
-const presetsList = [
+const presetsList: { value: DatePreset; label: string }[] = [
   { value: "today", label: "Today" },
   { value: "last_7_days", label: "Week" },
   { value: "month", label: "Month" },
@@ -92,7 +92,7 @@ export default function PerformanceClient() {
     }
     e.preventDefault();
     const nextPreset = presetsList[nextIndex].value;
-    setFilters({ ...filters, preset: nextPreset as any, page: 1 });
+    setFilters({ ...filters, preset: nextPreset, page: 1 });
     const btn = document.getElementById(`preset-btn-${nextPreset}`);
     btn?.focus();
   };
@@ -431,7 +431,7 @@ export default function PerformanceClient() {
     </div>
   );
 
-  function handlePresetChange(preset: any) {
+  function handlePresetChange(preset: DatePreset) {
     setFilters({ ...filters, preset, page: 1 });
   }
 }

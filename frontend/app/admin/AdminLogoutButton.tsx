@@ -9,7 +9,7 @@ export default function AdminLogoutButton() {
   const handleLogout = async () => {
     try {
       await staffLogout();
-      router.push("/staff/login");
+      router.replace("/login");
     } catch {
       alert("Failed to sign out. Please try again.");
     }
