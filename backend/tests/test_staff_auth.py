@@ -451,6 +451,53 @@ def test_suspend_staff_revokes_login_session(setup_auth_test_data):
     assert me_response.status_code == 401
 
 
+def test_admin_revoke_sessions_invalidates_current_token(setup_auth_test_data):
+    data = setup_auth_test_data
+    owner_token = create_access_token(
+        data={"sub": str(data["owner_id"]), "restaurant_id": data["restaurant_id"], "role": "owner"}
+    )
+    suffix = datetime.datetime.now(datetime.timezone.utc).strftime("%H%M%S%f")
+    username = f"revokedstaff{suffix}"
+    create_response = client.post(
+        "/admin/staff",
+        headers={"Authorization": f"Bearer {owner_token}"},
+        json={
+            "name": "Revoked Session Staff",
+            "username": username,
+            "email": f"revoked-session-{suffix}@test.local",
+            "role": "staff",
+            "temporary_password": "Temporary123!",
+        },
+    )
+    assert create_response.status_code == 201
+    staff_id = create_response.json()["id"]
+
+    login_response = client.post(
+        "/auth/staff/login",
+        json={
+            "login": username,
+            "password": "Temporary123!",
+            "restaurant_slug": data["restaurant_slug"],
+        },
+    )
+    assert login_response.status_code == 200
+    staff_token = login_response.json()["access_token"]
+
+    revoke_response = client.post(
+        f"/admin/staff/{staff_id}/sessions/revoke",
+        headers={"Authorization": f"Bearer {owner_token}"},
+    )
+    assert revoke_response.status_code == 200
+    assert revoke_response.json()["active_session_count"] == 0
+
+    me_response = client.get(
+        "/auth/staff/me",
+        headers={"Authorization": f"Bearer {staff_token}"},
+    )
+    assert me_response.status_code == 401
+    assert "revoked" in me_response.json()["detail"].lower()
+
+
 def test_kitchen_denied_staff_endpoint(setup_auth_test_data):
     data = setup_auth_test_data
     login_response = client.post(
