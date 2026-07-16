@@ -261,7 +261,7 @@ class _OwnerTablesTab extends ConsumerWidget {
                           ),
                           Text(
                             isOccupied
-                                ? 'Occupied - ₹${t.currentBillAmount}'
+                                ? 'Occupied - ₹${t.currentBillAmount.toStringAsFixed(2)}'
                                 : 'Available',
                             style: OmluTypography.bodyMedium.copyWith(
                               color: isOccupied

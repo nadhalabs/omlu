@@ -180,7 +180,7 @@ class TablesScreen extends ConsumerWidget {
                           const SizedBox(height: OmluSpacing.xs),
                           if (showBill)
                             Text(
-                              'Total: ₹${table.currentBillAmount}',
+                              'Total: ₹${table.currentBillAmount.toStringAsFixed(2)}',
                               style: OmluTypography.bodyMedium.copyWith(
                                 fontWeight: FontWeight.w600,
                               ),

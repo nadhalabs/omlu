@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/models/operations_models.dart';
 import '../auth_provider.dart';
 
 class MenuItem {
@@ -14,20 +15,24 @@ class MenuItem {
 
   factory MenuItem.fromJson(Map<String, Object?> json) {
     return MenuItem(
-      id: json['id'] as int? ?? json['menu_item_id'] as int? ?? 0,
-      name: json['name'] as String? ?? '',
-      price: (json['price'] ?? '0.00').toString(),
+      id: readRequiredId(json['id'] ?? json['menu_item_id'], 'menu_item_id'),
+      name: readString(json['name']),
+      price: readDouble(json['price']),
       isAvailable:
           json['is_available'] as bool? ?? json['available'] as bool? ?? true,
-      description: json['description'] as String?,
-      imageUrl: json['image_url'] as String? ?? json['image'] as String?,
+      description: json['description'] == null
+          ? null
+          : readString(json['description']),
+      imageUrl: json['image_url'] == null
+          ? null
+          : readString(json['image_url'] ?? json['image']),
       optionGroups: json['option_groups'] as List? ?? const [],
     );
   }
 
   final int id;
   final String name;
-  final String price;
+  final double price;
   final bool isAvailable;
   final String? description;
   final String? imageUrl;
@@ -45,8 +50,8 @@ class MenuCategory {
     final rawItems =
         json['items'] as List? ?? json['menu_items'] as List? ?? const [];
     return MenuCategory(
-      id: json['id'] as int? ?? 0,
-      name: json['name'] as String? ?? '',
+      id: readRequiredId(json['id'], 'category_id'),
+      name: readString(json['name']),
       items: [
         for (final item in rawItems)
           MenuItem.fromJson(Map<String, Object?>.from(item as Map)),

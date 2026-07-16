@@ -1,3 +1,30 @@
+String readString(dynamic value, {String fallback = ''}) {
+  if (value == null) return fallback;
+  return value.toString();
+}
+
+double readDouble(dynamic value, {double fallback = 0}) {
+  if (value is num) return value.toDouble();
+  return double.tryParse(value?.toString() ?? '') ?? fallback;
+}
+
+int readInt(dynamic value, {int fallback = 0}) {
+  if (value is num) return value.toInt();
+  return int.tryParse(value?.toString() ?? '') ?? fallback;
+}
+
+int readRequiredId(dynamic value, String fieldName) {
+  if (value == null) {
+    throw FormatException('Missing required identifier: $fieldName');
+  }
+  if (value is num) return value.toInt();
+  final parsed = int.tryParse(value.toString());
+  if (parsed == null) {
+    throw FormatException('Invalid identifier for $fieldName: $value');
+  }
+  return parsed;
+}
+
 class MenuOptionSelection {
   const MenuOptionSelection({
     required this.groupId,
@@ -66,18 +93,24 @@ class StaffTableSummary {
 
   factory StaffTableSummary.fromJson(Map<String, Object?> json) {
     return StaffTableSummary(
-      id: json['id'] as int,
-      tableNumber: json['table_number'] as String? ?? '',
-      state: json['state'] as String? ?? 'available',
+      id: readRequiredId(json['id'], 'id'),
+      tableNumber: readString(json['table_number']),
+      state: readString(json['state'], fallback: 'available'),
       hasOpenSession: json['has_open_session'] as bool? ?? false,
-      sessionToken: json['session_token'] as String?,
-      sessionStatus: json['session_status'] as String?,
-      activeOrderCount: json['active_order_count'] as int? ?? 0,
-      currentBillAmount: json['current_bill_amount'] as String? ?? '0.00',
-      openedMinutesAgo: json['opened_minutes_ago'] as int?,
+      sessionToken: json['session_token'] == null
+          ? null
+          : readString(json['session_token']),
+      sessionStatus: json['session_status'] == null
+          ? null
+          : readString(json['session_status']),
+      activeOrderCount: readInt(json['active_order_count']),
+      currentBillAmount: readDouble(json['current_bill_amount']),
+      openedMinutesAgo: json['opened_minutes_ago'] == null
+          ? null
+          : readInt(json['opened_minutes_ago']),
       attention: [
         for (final value in (json['attention'] as List? ?? const []))
-          value.toString(),
+          readString(value),
       ],
       billRequested: json['bill_requested'] as bool? ?? false,
     );
@@ -90,7 +123,7 @@ class StaffTableSummary {
   final String? sessionToken;
   final String? sessionStatus;
   final int activeOrderCount;
-  final String currentBillAmount;
+  final double currentBillAmount;
   final int? openedMinutesAgo;
   final List<String> attention;
   final bool billRequested;
@@ -107,18 +140,20 @@ class OrderSummary {
 
   factory OrderSummary.fromJson(Map<String, Object?> json) {
     return OrderSummary(
-      orderNumber: json['order_number'] as String? ?? '',
-      publicToken: json['public_token'] as String? ?? '',
-      status: json['status'] as String? ?? '',
-      subtotal: json['subtotal'] as String? ?? '0.00',
-      diningSessionToken: json['dining_session_token'] as String?,
+      orderNumber: readString(json['order_number']),
+      publicToken: readString(json['public_token']),
+      status: readString(json['status']),
+      subtotal: readDouble(json['subtotal']),
+      diningSessionToken: json['dining_session_token'] == null
+          ? null
+          : readString(json['dining_session_token']),
     );
   }
 
   final String orderNumber;
   final String publicToken;
   final String status;
-  final String subtotal;
+  final double subtotal;
   final String? diningSessionToken;
 }
 
@@ -131,9 +166,9 @@ class KitchenOrderItem {
 
   factory KitchenOrderItem.fromJson(Map<String, Object?> json) {
     return KitchenOrderItem(
-      name: json['name'] as String? ?? json['menu_item_name'] as String? ?? '',
-      quantity: json['quantity'] as int? ?? 1,
-      note: json['note'] as String? ?? json['item_note'] as String?,
+      name: readString(json['name'] ?? json['menu_item_name']),
+      quantity: readInt(json['quantity'], fallback: 1),
+      note: json['note'] == null ? null : readString(json['note']),
     );
   }
 
@@ -157,17 +192,19 @@ class KitchenOrder {
   factory KitchenOrder.fromJson(Map<String, Object?> json) {
     final rawItems = json['items'] as List? ?? const [];
     return KitchenOrder(
-      orderNumber: json['order_number'] as String? ?? '',
-      publicToken: json['public_token'] as String? ?? '',
-      tableNumber: json['table_number'] as String? ?? '',
-      status: json['status'] as String? ?? '',
-      subtotal: json['subtotal'] as String? ?? '0.00',
-      createdAt: DateTime.parse(json['created_at'] as String),
+      orderNumber: readString(json['order_number']),
+      publicToken: readString(json['public_token']),
+      tableNumber: readString(json['table_number']),
+      status: readString(json['status']),
+      subtotal: readDouble(json['subtotal']),
+      createdAt: DateTime.parse(readString(json['created_at'])),
       items: [
         for (final item in rawItems)
           KitchenOrderItem.fromJson(Map<String, Object?>.from(item as Map)),
       ],
-      customerNote: json['customer_note'] as String?,
+      customerNote: json['customer_note'] == null
+          ? null
+          : readString(json['customer_note']),
     );
   }
 
@@ -175,7 +212,7 @@ class KitchenOrder {
   final String publicToken;
   final String tableNumber;
   final String status;
-  final String subtotal;
+  final double subtotal;
   final DateTime createdAt;
   final List<KitchenOrderItem> items;
   final String? customerNote;

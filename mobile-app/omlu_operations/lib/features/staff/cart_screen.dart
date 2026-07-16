@@ -53,7 +53,7 @@ class CartScreen extends ConsumerWidget {
             final menuItem = allMenuItems[itemId];
             if (menuItem == null) return;
 
-            final price = double.tryParse(menuItem.price) ?? 0.0;
+            final price = menuItem.price;
             final subtotal = price * cartItem.quantity;
             totalAmount += subtotal;
 
