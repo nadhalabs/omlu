@@ -82,6 +82,10 @@ class OperationsApi {
     return _client.postJson('/staff/tables/$tableId/bill');
   }
 
+  Future<Map<String, Object?>> requestTableBill(int tableId) {
+    return _client.postJson('/staff/tables/$tableId/bill-request');
+  }
+
   Future<List<Object?>> fetchServiceRequests({
     String statusFilter = 'pending',
   }) {

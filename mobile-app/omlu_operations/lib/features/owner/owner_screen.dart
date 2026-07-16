@@ -356,7 +356,7 @@ class _MetricCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return OmluCard(
-      borderColor: color.withOpacity(0.3),
+      borderColor: color.withValues(alpha: 0.3),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

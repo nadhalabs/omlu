@@ -129,7 +129,7 @@ class TablesScreen extends ConsumerWidget {
               return OmluCard(
                 padding: EdgeInsets.zero,
                 onTap: () => _handleTableTap(context, ref, table),
-                borderColor: statusColor.withOpacity(0.3),
+                borderColor: statusColor.withValues(alpha: 0.3),
                 child: Padding(
                   padding: const EdgeInsets.all(OmluSpacing.md),
                   child: Column(
@@ -166,7 +166,7 @@ class TablesScreen extends ConsumerWidget {
                               vertical: 4,
                             ),
                             decoration: BoxDecoration(
-                              color: statusColor.withOpacity(0.12),
+                              color: statusColor.withValues(alpha: 0.12),
                               borderRadius: OmluRadius.borderSm,
                             ),
                             child: Text(

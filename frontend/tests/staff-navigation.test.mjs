@@ -9,6 +9,7 @@ const roleRoutes = readFileSync(new URL("../lib/roleRoutes.ts", import.meta.url)
 const staffOrderPage = readFileSync(new URL("../app/staff/orders/new/page.tsx", import.meta.url), "utf8");
 const staffOrderClient = readFileSync(new URL("../app/staff/orders/new/NewStaffOrderClient.tsx", import.meta.url), "utf8");
 const staffTablesClient = readFileSync(new URL("../app/staff/tables/StaffTablesClient.tsx", import.meta.url), "utf8");
+const staffTableDetailClient = readFileSync(new URL("../app/staff/tables/[tableId]/StaffTableDetailClient.tsx", import.meta.url), "utf8");
 const staffRequestsClient = readFileSync(new URL("../app/staff/requests/StaffRequestsClient.tsx", import.meta.url), "utf8");
 const staffRequestsPage = readFileSync(new URL("../app/staff/requests/page.tsx", import.meta.url), "utf8");
 const adminRequestsPage = readFileSync(new URL("../app/admin/requests/page.tsx", import.meta.url), "utf8");
@@ -65,6 +66,16 @@ test("staff requests use realtime active/completed flow with one resolve action"
   assert.match(staffRequestsClient, /Completed/);
   assert.match(staffRequestsClient, /resolveStaffServiceRequest/);
   assert.doesNotMatch(staffRequestsClient, /confirmStaffCounterPayment/);
+});
+
+test("staff table detail requests bill without exposing payment collection", () => {
+  assert.match(staffTableDetailClient, /requestStaffTableBill/);
+  assert.match(staffTableDetailClient, /Request Bill/);
+  assert.match(staffTableDetailClient, /Bill requested/);
+  assert.match(staffTableDetailClient, /Waiting for owner\/admin/);
+  assert.match(staffTableDetailClient, /View Bill|Bill Issued/);
+  assert.doesNotMatch(staffTableDetailClient, /confirmStaffCounterPayment/);
+  assert.doesNotMatch(staffTableDetailClient, /requestStaffPaymentAssistance/);
 });
 
 test("staff bottom navigation exposes only tables new order and requests with badge", () => {

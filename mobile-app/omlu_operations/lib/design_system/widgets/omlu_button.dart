@@ -42,7 +42,7 @@ class OmluButton extends StatelessWidget {
       style: ElevatedButton.styleFrom(
         backgroundColor: backgroundColor,
         foregroundColor: textColor,
-        disabledBackgroundColor: backgroundColor.withOpacity(0.5),
+        disabledBackgroundColor: backgroundColor.withValues(alpha: 0.5),
         elevation: 0,
         shape: RoundedRectangleBorder(borderRadius: OmluRadius.borderMd),
         padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 24),

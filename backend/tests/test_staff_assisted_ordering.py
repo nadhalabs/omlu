@@ -170,6 +170,14 @@ def create_manual_order(data, table_key="table_id", token_key="staff_token", pay
     )
 
 
+def request_staff_table_bill(data, table_key="table_id", token_key="staff_token"):
+    return client.post(
+        f"/staff/tables/{data[table_key]}/bill-request",
+        headers=auth(data, token_key),
+        json={},
+    )
+
+
 @pytest.mark.parametrize("token_key", ["owner_token", "admin_token", "staff_token"])
 def test_staff_table_access_allows_owner_admin_and_staff(staff_order_context, token_key):
     response = client.get("/staff/tables", headers=auth(staff_order_context, token_key))
@@ -281,6 +289,127 @@ def test_staff_order_reuses_existing_active_session(staff_order_context):
     orders = db.query(Order).filter(Order.dining_session_id == sessions[0].id).all()
     assert len(orders) == 2
     db.close()
+
+
+def test_staff_bill_request_requires_valid_order(staff_order_context):
+    start_session(staff_order_context)
+
+    response = request_staff_table_bill(staff_order_context)
+
+    assert response.status_code == 409
+    assert "valid order" in response.json()["detail"].lower()
+
+
+def test_staff_bill_request_after_assisted_order_is_idempotent_and_visible(staff_order_context):
+    create_manual_order(staff_order_context)
+
+    detail_before = client.get(
+        f"/staff/tables/{staff_order_context['table_id']}",
+        headers=auth(staff_order_context),
+    )
+    assert detail_before.status_code == 200
+    assert detail_before.json()["session"] is not None
+    assert detail_before.json()["session"]["orders"]
+    assert detail_before.json()["session"]["bill"] is None
+
+    first = request_staff_table_bill(staff_order_context)
+    second = request_staff_table_bill(staff_order_context)
+
+    assert first.status_code == 201
+    assert second.status_code == 200
+    assert first.json()["id"] == second.json()["id"]
+    assert first.json()["request_type"] == "bill"
+    assert first.json()["bill_number"] is not None
+
+    db = SessionLocal()
+    requests = db.query(ServiceRequest).filter(
+        ServiceRequest.restaurant_id == staff_order_context["restaurant_id"],
+        ServiceRequest.table_id == staff_order_context["table_id"],
+        ServiceRequest.request_type == "bill",
+        ServiceRequest.status == "pending",
+    ).all()
+    bills = db.query(Bill).filter(Bill.restaurant_id == staff_order_context["restaurant_id"]).all()
+    assert len(requests) == 1
+    assert len(bills) == 1
+    assert requests[0].dining_session_id == bills[0].dining_session_id
+    db.close()
+
+    detail_after = client.get(
+        f"/staff/tables/{staff_order_context['table_id']}",
+        headers=auth(staff_order_context),
+    )
+    assert detail_after.status_code == 200
+    body = detail_after.json()
+    assert body["table"]["bill_requested"] is True
+    assert body["session"]["bill"]["bill_number"] == first.json()["bill_number"]
+    assert any(request["request_type"] == "bill" for request in body["requests"])
+
+
+def test_owner_admin_service_requests_include_staff_bill_request(staff_order_context):
+    create_manual_order(staff_order_context)
+    requested = request_staff_table_bill(staff_order_context)
+    assert requested.status_code == 201
+
+    owner_requests = client.get(
+        "/staff/service-requests",
+        headers=auth(staff_order_context, "owner_token"),
+    )
+    admin_requests = client.get(
+        "/staff/service-requests",
+        headers=auth(staff_order_context, "admin_token"),
+    )
+
+    assert owner_requests.status_code == 200
+    assert admin_requests.status_code == 200
+    for response in (owner_requests, admin_requests):
+        bill_requests = [item for item in response.json() if item["request_type"] == "bill"]
+        assert len(bill_requests) == 1
+        assert bill_requests[0]["id"] == requested.json()["id"]
+        assert bill_requests[0]["bill_number"] == requested.json()["bill_number"]
+
+
+def test_staff_bill_request_reuses_customer_created_session(staff_order_context):
+    public_order = client.post(
+        f"/public/restaurants/{staff_order_context['restaurant_slug']}/tables/{staff_order_context['second_table_code']}/orders",
+        headers={"Idempotency-Key": f"qr-test-{uuid.uuid4().hex}"},
+        json=order_payload(staff_order_context, quantity=1),
+    )
+    assert public_order.status_code == 201
+
+    response = request_staff_table_bill(staff_order_context, table_key="second_table_id")
+
+    assert response.status_code == 201
+    db = SessionLocal()
+    order = db.query(Order).filter(Order.public_token == public_order.json()["public_token"]).one()
+    request = db.query(ServiceRequest).filter(ServiceRequest.id == response.json()["id"]).one()
+    assert request.dining_session_id == order.dining_session_id
+    db.close()
+
+
+def test_staff_bill_request_hidden_after_payment_closes_session(staff_order_context):
+    create_manual_order(staff_order_context)
+    requested = request_staff_table_bill(staff_order_context).json()
+    issued = client.post(
+        f"/staff/bills/{requested['bill_number']}/issue",
+        headers=auth(staff_order_context, "owner_token"),
+    )
+    assert issued.status_code == 200
+    paid = client.post(
+        f"/staff/bills/{requested['bill_number']}/confirm-counter-payment",
+        headers=auth(staff_order_context, "owner_token"),
+        json={"method": "counter_cash"},
+    )
+    assert paid.status_code == 200
+
+    detail = client.get(
+        f"/staff/tables/{staff_order_context['table_id']}",
+        headers=auth(staff_order_context),
+    )
+    assert detail.status_code == 200
+    assert detail.json()["session"] is None
+
+    repeated = request_staff_table_bill(staff_order_context)
+    assert repeated.status_code == 404
 
 
 def test_staff_order_idempotency_prevents_duplicate_session_and_order(staff_order_context):

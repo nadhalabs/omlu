@@ -151,6 +151,29 @@ void main() {
       expect(captured?.headers['Idempotency-Key'], 'send-order-123');
       expect(captured?.headers['Authorization'], 'Bearer staff-token');
     });
+
+    test('requests staff table bill through bill-request route', () async {
+      ApiRequest? captured;
+      final api = OperationsApi(
+        ApiClient(
+          baseUrl: Uri.parse('https://api.example'),
+          accessToken: 'staff-token',
+          transport: (request) async {
+            captured = request;
+            return const ApiResponse(
+              statusCode: 201,
+              body: {'id': 42, 'request_type': 'bill', 'status': 'pending'},
+            );
+          },
+        ),
+      );
+
+      final response = await api.requestTableBill(12);
+
+      expect(response['request_type'], 'bill');
+      expect(captured?.method, 'POST');
+      expect(captured?.uri.path, '/staff/tables/12/bill-request');
+    });
   });
 
   group('Realtime', () {

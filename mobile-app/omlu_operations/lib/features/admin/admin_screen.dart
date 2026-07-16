@@ -271,7 +271,7 @@ class _AdminStaffTab extends ConsumerWidget {
                       ),
                       decoration: BoxDecoration(
                         color: status == 'active'
-                            ? OmluColors.statusAvailable.withOpacity(0.1)
+                            ? OmluColors.statusAvailable.withValues(alpha: 0.1)
                             : Colors.red.shade50,
                         borderRadius: OmluRadius.borderSm,
                       ),

@@ -125,7 +125,7 @@ class CartScreen extends ConsumerWidget {
                   color: Colors.white,
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.08),
+                      color: Colors.black.withValues(alpha: 0.08),
                       blurRadius: 10,
                       offset: const Offset(0, -4),
                     ),
@@ -301,7 +301,7 @@ class _CartQtyBtn extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: OmluColors.border.withOpacity(0.5),
+      color: OmluColors.border.withValues(alpha: 0.5),
       borderRadius: OmluRadius.borderSm,
       child: InkWell(
         onTap: onPressed,

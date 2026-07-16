@@ -47,7 +47,7 @@ class _OmluSkeletonLoaderState extends State<OmluSkeletonLoader>
         width: widget.width,
         height: widget.height,
         decoration: BoxDecoration(
-          color: OmluColors.border.withOpacity(0.5),
+          color: OmluColors.border.withValues(alpha: 0.5),
           borderRadius: widget.borderRadius ?? OmluRadius.borderMd,
         ),
       ),

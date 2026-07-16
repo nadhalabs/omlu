@@ -4,7 +4,7 @@ import uuid
 from decimal import Decimal
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload, selectinload
 
@@ -18,12 +18,14 @@ from app.models.service_request import ServiceRequest
 from app.models.staff_user import AuditLog, StaffUser
 from app.routes.orders import build_order_response, create_order_in_session, load_order_for_response, validate_idempotency_key
 from app.schemas.order import PublicOrderCreateRequest
+from app.schemas.service_request import StaffServiceRequestResponse
 from app.services.bills import build_bill_response, create_or_refresh_bill_for_session
 from app.services.dining_sessions import create_session_safely, find_current_open_session_for_table, get_or_create_open_session
 from app.services.menu_options import serialize_item_option_groups
 from app.services.realtime import (
     EVENT_BILL_GENERATED,
     EVENT_ORDER_CREATED,
+    EVENT_SERVICE_REQUEST_CREATED,
     EVENT_SESSION_OPENED,
     EVENT_TABLE_UPDATED,
     publish_event,
@@ -111,6 +113,46 @@ def _table_summary(db: Session, table: RestaurantTable, session: DiningSession |
         "attention": attention,
         "bill_requested": bool(session and session.status in {"payment_requested", "payment_pending"}) or "bill" in attention,
     }
+
+
+def _staff_request_response(db: Session, request: ServiceRequest) -> StaffServiceRequestResponse:
+    table = db.query(RestaurantTable).filter(RestaurantTable.id == request.table_id).first()
+    order_number = None
+    dining_session_token = None
+    bill_number = None
+    resolver_name = None
+    if request.order_id:
+        order = db.query(Order).filter(Order.id == request.order_id).first()
+        if order:
+            order_number = order.order_number
+    if request.dining_session_id:
+        dining_session = db.query(DiningSession).filter(DiningSession.id == request.dining_session_id).first()
+        if dining_session:
+            dining_session_token = dining_session.public_token
+        bill = db.query(Bill).filter(Bill.dining_session_id == request.dining_session_id).first()
+        if bill:
+            bill_number = bill.bill_number
+    if request.resolved_by_staff_id:
+        resolver = db.query(StaffUser).filter(StaffUser.id == request.resolved_by_staff_id).first()
+        if resolver:
+            resolver_name = resolver.name
+    return StaffServiceRequestResponse(
+        id=request.id,
+        restaurant_id=request.restaurant_id,
+        table_id=request.table_id,
+        order_id=request.order_id,
+        dining_session_id=request.dining_session_id,
+        request_type=request.request_type,
+        status=request.status,
+        created_at=request.created_at,
+        resolved_at=request.resolved_at,
+        resolved_by_staff_id=request.resolved_by_staff_id,
+        table_number=table.table_number if table else None,
+        order_number=order_number,
+        dining_session_token=dining_session_token,
+        bill_number=bill_number,
+        resolver_name=resolver_name,
+    )
 
 
 @router.get("")
@@ -386,3 +428,115 @@ def create_staff_table_bill(
         state={"bill_number": bill.bill_number, "session_token": session.public_token, "status": bill.status},
     )
     return build_bill_response(db, bill)
+
+
+@router.post("/{table_id}/bill-request", response_model=StaffServiceRequestResponse)
+def request_staff_table_bill(
+    table_id: int,
+    response: Response,
+    current_user: StaffUser = Depends(_staff_roles),
+    db: Session = Depends(get_db),
+):
+    table = db.query(RestaurantTable).filter(
+        RestaurantTable.id == table_id,
+        RestaurantTable.restaurant_id == current_user.restaurant_id,
+        RestaurantTable.is_active == True,
+    ).first()
+    if not table:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Table not found")
+
+    session = find_current_open_session_for_table(db, table.id)
+    if not session:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Active session not found")
+    session = db.query(DiningSession).filter(
+        DiningSession.id == session.id,
+        DiningSession.restaurant_id == current_user.restaurant_id,
+        DiningSession.table_id == table.id,
+    ).with_for_update().first()
+    if not session:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Active session not found")
+
+    existing_request = (
+        db.query(ServiceRequest)
+        .filter(
+            ServiceRequest.restaurant_id == current_user.restaurant_id,
+            ServiceRequest.table_id == table.id,
+            ServiceRequest.dining_session_id == session.id,
+            ServiceRequest.request_type == "bill",
+            ServiceRequest.status == "pending",
+        )
+        .with_for_update()
+        .first()
+    )
+    if existing_request:
+        return _staff_request_response(db, existing_request)
+
+    if session.status != "open":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Bill request is not available for this session.")
+
+    valid_order_count = db.query(Order).filter(
+        Order.restaurant_id == current_user.restaurant_id,
+        Order.table_id == table.id,
+        Order.dining_session_id == session.id,
+        Order.status != "rejected",
+    ).count()
+    if valid_order_count < 1:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="At least one valid order is required before requesting a bill.")
+
+    if session.bill:
+        if session.bill.status == "paid":
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Bill has already been paid.")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Bill has already been generated.")
+
+    bill = create_or_refresh_bill_for_session(db, session, generated_by_staff_id=current_user.id)
+    if not bill.generated_by_staff_id:
+        bill.generated_by_staff_id = current_user.id
+    bill_request = ServiceRequest(
+        restaurant_id=current_user.restaurant_id,
+        table_id=table.id,
+        dining_session_id=session.id,
+        request_type="bill",
+        status="pending",
+    )
+    db.add(bill_request)
+    db.flush()
+    _audit(db, current_user, "staff_bill_requested", "service_request", str(bill_request.id), {"table_id": table.id, "session_token": session.public_token})
+    db.commit()
+    db.refresh(bill_request)
+
+    publish_event(
+        EVENT_BILL_GENERATED,
+        restaurant_id=current_user.restaurant_id,
+        channels=[
+            restaurant_channel(current_user.restaurant_id, "operations"),
+            restaurant_channel(current_user.restaurant_id, "staff"),
+            session_channel(session.public_token),
+            table_channel(current_user.restaurant_id, table.id),
+        ],
+        resource_id=bill.id,
+        state={"bill_number": bill.bill_number, "session_token": session.public_token, "status": bill.status},
+    )
+    publish_event(
+        EVENT_SERVICE_REQUEST_CREATED,
+        restaurant_id=current_user.restaurant_id,
+        channels=[
+            restaurant_channel(current_user.restaurant_id, "operations"),
+            restaurant_channel(current_user.restaurant_id, "staff"),
+            table_channel(current_user.restaurant_id, table.id),
+            session_channel(session.public_token),
+        ],
+        resource_id=bill_request.id,
+        state={"request_type": "bill", "status": bill_request.status, "table_id": table.id},
+    )
+    publish_event(
+        EVENT_TABLE_UPDATED,
+        restaurant_id=current_user.restaurant_id,
+        channels=[
+            restaurant_channel(current_user.restaurant_id, "staff"),
+            table_channel(current_user.restaurant_id, table.id),
+        ],
+        resource_id=table.id,
+        state={"table_id": table.id},
+    )
+    response.status_code = status.HTTP_201_CREATED
+    return _staff_request_response(db, bill_request)

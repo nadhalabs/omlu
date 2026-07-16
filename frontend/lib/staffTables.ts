@@ -1,4 +1,4 @@
-import { BillResponse, MenuOptionGroup, PublicOrderResponse, SelectedOptionRequest } from "./types";
+import { BillResponse, MenuOptionGroup, PublicOrderResponse, SelectedOptionRequest, StaffServiceRequestResponse } from "./types";
 
 export type StaffTableSummary = {
   id: number;
@@ -80,5 +80,11 @@ export async function createStaffTableOrder(tableId: number, payload: ManualOrde
 export async function generateStaffTableBill(tableId: number): Promise<BillResponse> {
   const res = await fetch(`/api/staff/tables/${tableId}/bill`, { method: "POST", body: "{}" });
   if (!res.ok) throw new Error(await parseError(res, "Could not generate bill."));
+  return res.json();
+}
+
+export async function requestStaffTableBill(tableId: number): Promise<StaffServiceRequestResponse> {
+  const res = await fetch(`/api/staff/tables/${tableId}/bill-request`, { method: "POST", body: "{}" });
+  if (!res.ok) throw new Error(await parseError(res, "Could not request bill."));
   return res.json();
 }

@@ -12,6 +12,7 @@ import 'package:omlu_operations/core/auth/auth_repository.dart';
 import 'package:omlu_operations/core/storage/token_storage.dart';
 
 class MockKitchenOrdersNotifier extends KitchenOrdersNotifier {
+  // ignore: use_super_parameters
   MockKitchenOrdersNotifier(
     OperationsApi api,
     String slug,

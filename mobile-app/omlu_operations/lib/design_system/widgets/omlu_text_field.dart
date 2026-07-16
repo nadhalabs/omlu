@@ -42,7 +42,7 @@ class OmluTextField extends StatelessWidget {
           decoration: InputDecoration(
             hintText: hintText,
             hintStyle: OmluTypography.bodyMedium.copyWith(
-              color: OmluColors.textSecondary.withOpacity(0.6),
+              color: OmluColors.textSecondary.withValues(alpha: 0.6),
             ),
             prefixIcon: prefixIcon,
             contentPadding: const EdgeInsets.symmetric(

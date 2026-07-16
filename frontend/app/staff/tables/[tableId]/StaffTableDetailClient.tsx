@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { confirmStaffCounterPayment, getStaffMe, issueStaffBill, requestStaffPaymentAssistance, resolveStaffServiceRequest } from "@/lib/api";
-import { generateStaffTableBill, getStaffTableDetail, StaffTableDetail } from "@/lib/staffTables";
+import { getStaffMe, resolveStaffServiceRequest } from "@/lib/api";
+import { getStaffTableDetail, requestStaffTableBill, StaffTableDetail } from "@/lib/staffTables";
 import { useRealtime } from "@/lib/realtime";
 import { CurrentStaffResponse } from "@/lib/types";
 
@@ -61,7 +61,11 @@ export default function StaffTableDetailClient({ tableId }: { tableId: number })
     }
   };
   const bill = detail?.session?.bill;
-  const canRecordPayments = staffInfo?.role === "owner" || staffInfo?.role === "admin";
+  const hasValidOrder = Boolean(detail?.session?.orders.some((order) => order.status !== "rejected"));
+  const pendingBillRequest = detail?.requests.find((request) => request.request_type === "bill" && request.status === "pending");
+  const sessionClosedForBilling = detail?.session?.status === "closed" || detail?.session?.status === "paid" || bill?.status === "paid";
+  const canRequestBill = Boolean(detail?.session && hasValidOrder && !bill && !pendingBillRequest && !sessionClosedForBilling);
+  const billUrl = detail?.session?.session_token ? `/bill/${encodeURIComponent(detail.session.session_token)}` : null;
   return (
     <div className="min-h-screen bg-zinc-950 px-3 py-5 text-zinc-100 sm:px-4 sm:py-8">
       <div className="mx-auto flex max-w-6xl flex-col gap-5">
@@ -126,15 +130,25 @@ export default function StaffTableDetailClient({ tableId }: { tableId: number })
                 </div>
                 <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-5">
                   <h2 className="font-black text-white">Billing</h2>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <button disabled={Boolean(busy)} onClick={() => run("bill", () => generateStaffTableBill(tableId))} className="rounded-lg bg-zinc-800 px-3 py-2 text-sm font-bold">Generate Bill</button>
-                    {bill && bill.status !== "paid" && <button disabled={Boolean(busy)} onClick={() => run("issue", () => issueStaffBill(bill.bill_number))} className="rounded-lg bg-zinc-800 px-3 py-2 text-sm font-bold">Request Payment</button>}
-                    {canRecordPayments && bill && bill.status !== "paid" && ["counter_cash", "counter_upi", "counter_card"].map((method) => (
-                      <button key={method} disabled={Boolean(busy)} onClick={() => run(method, () => confirmStaffCounterPayment(bill.bill_number, method as "counter_cash" | "counter_upi" | "counter_card"))} className="rounded-lg bg-emerald-700 px-3 py-2 text-sm font-bold">{method.replace("counter_", "")}</button>
-                    ))}
-                    {!canRecordPayments && bill && bill.status !== "paid" && <button disabled={Boolean(busy)} onClick={() => run("payment-assistance", () => requestStaffPaymentAssistance(bill.bill_number))} className="rounded-lg bg-sky-700 px-3 py-2 text-sm font-bold">Notify admin for payment</button>}
+                  <div className="mt-4 flex flex-wrap items-center gap-2">
+                    {canRequestBill && (
+                      <button disabled={Boolean(busy)} onClick={() => run("bill-request", () => requestStaffTableBill(tableId))} className="rounded-lg bg-amber-600 px-4 py-3 text-sm font-black text-white disabled:opacity-50">Request Bill</button>
+                    )}
+                    {pendingBillRequest && (
+                      <div className="rounded-lg border border-amber-700/50 bg-amber-950/30 px-4 py-3 text-sm font-bold text-amber-300">
+                        Bill requested
+                        <span className="block text-xs font-medium text-amber-200/80">Waiting for owner/admin</span>
+                      </div>
+                    )}
+                    {bill && bill.status !== "paid" && billUrl && (
+                      <Link href={billUrl} className="rounded-lg bg-zinc-800 px-4 py-3 text-sm font-black text-white">
+                        {bill.status === "issued" || bill.status === "payment_pending" ? "Bill Issued" : "View Bill"}
+                      </Link>
+                    )}
                   </div>
+                  {!hasValidOrder && !bill && <div className="mt-4 text-sm text-zinc-500">Add at least one order before requesting a bill.</div>}
                   {bill && <div className="mt-4 text-sm text-zinc-400">Bill {bill.bill_number} · ₹{bill.total_amount} · {bill.status}</div>}
+                  {staffInfo?.role === "staff" && <div className="mt-3 text-xs text-zinc-500">Owner/admin will issue the bill and record payment.</div>}
                 </div>
               </div>
             </section>

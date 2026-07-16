@@ -261,13 +261,13 @@ class _KitchenColumn extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: color.withOpacity(0.02),
+      color: color.withValues(alpha: 0.02),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Container(
             padding: const EdgeInsets.all(OmluSpacing.md),
-            color: color.withOpacity(0.08),
+            color: color.withValues(alpha: 0.08),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
