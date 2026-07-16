@@ -184,14 +184,14 @@ export default function AdminDashboardClient() {
           label="Payment Pending"
           value={data.payment_pending_count}
           icon="₹"
-          href="/staff/requests"
+          href="/admin/requests"
         />
         <StatCard
           label="Service Requests"
           value={data.active_service_request_count}
           sub="Pending only"
           icon="!"
-          href="/staff/requests"
+          href="/admin/requests"
           accent={data.active_service_request_count > 0 ? "border-amber-600/50" : ""}
         />
         <StatCard
@@ -231,7 +231,7 @@ export default function AdminDashboardClient() {
                   <div className="flex flex-wrap gap-2">
                     <a href="/staff/sessions" className="text-[11px] px-2 py-1 rounded bg-zinc-800 text-zinc-200 font-bold">Open Session</a>
                     <a href={`/kitchen/${data.restaurant_slug}`} className="text-[11px] px-2 py-1 rounded bg-zinc-800 text-zinc-200 font-bold">View Orders</a>
-                    <a href="/staff/requests" className="text-[11px] px-2 py-1 rounded bg-zinc-800 text-zinc-200 font-bold">View Bill</a>
+                    <a href="/admin/requests" className="text-[11px] px-2 py-1 rounded bg-zinc-800 text-zinc-200 font-bold">View Bill</a>
                   </div>
                 </div>
               ))}
@@ -288,7 +288,7 @@ export default function AdminDashboardClient() {
               ["Open New Table Session", "/staff/sessions"],
               ["View All Tables", "/admin/tables"],
               ["View Orders", `/kitchen/${data.restaurant_slug}`],
-              ["View Bills", "/staff/requests"],
+              ["View Bills", "/admin/requests"],
               ["Manage Menu", "/admin/menu"],
               ["Staff Management", "/admin/staff"],
               ["Restaurant Settings", "/admin/settings"],

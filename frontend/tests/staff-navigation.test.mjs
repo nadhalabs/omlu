@@ -10,6 +10,11 @@ const staffOrderPage = readFileSync(new URL("../app/staff/orders/new/page.tsx", 
 const staffOrderClient = readFileSync(new URL("../app/staff/orders/new/NewStaffOrderClient.tsx", import.meta.url), "utf8");
 const staffTablesClient = readFileSync(new URL("../app/staff/tables/StaffTablesClient.tsx", import.meta.url), "utf8");
 const staffRequestsClient = readFileSync(new URL("../app/staff/requests/StaffRequestsClient.tsx", import.meta.url), "utf8");
+const staffRequestsPage = readFileSync(new URL("../app/staff/requests/page.tsx", import.meta.url), "utf8");
+const adminRequestsPage = readFileSync(new URL("../app/admin/requests/page.tsx", import.meta.url), "utf8");
+const adminRequestsClient = readFileSync(new URL("../app/admin/requests/AdminRequestsClient.tsx", import.meta.url), "utf8");
+const adminLayout = readFileSync(new URL("../app/admin/layout.tsx", import.meta.url), "utf8");
+const adminDashboard = readFileSync(new URL("../app/admin/dashboard/AdminDashboardClient.tsx", import.meta.url), "utf8");
 const staffBottomNav = readFileSync(new URL("../components/staff/StaffBottomNav.tsx", import.meta.url), "utf8");
 
 test("authenticated users are redirected away from /login before the client form renders", () => {
@@ -68,4 +73,24 @@ test("staff bottom navigation exposes only tables new order and requests with ba
   assert.match(staffBottomNav, /href="\/staff\/requests"/);
   assert.match(staffBottomNav, /pendingRequests > 0/);
   assert.doesNotMatch(staffBottomNav, /performance|settings|history|staff management/i);
+});
+
+test("role-based service requests navigation and action access is correct", () => {
+  // Staff page redirects owner/admin to /admin/requests
+  assert.match(staffRequestsPage, /redirect\("\/admin\/requests"\)/);
+  assert.match(staffRequestsPage, /requireStaffRole\(\["owner", "admin", "staff"\]\)/);
+
+  // Admin page requires owner/admin roles
+  assert.match(adminRequestsPage, /requireStaffRole\(\["owner", "admin"\]\)/);
+
+  // Admin Requests screen contains payment/bill actions
+  assert.match(adminRequestsClient, /confirmStaffCounterPayment/);
+  assert.match(adminRequestsClient, /issueStaffBill/);
+  assert.match(adminRequestsClient, /requestStaffPaymentAssistance/);
+
+  // Layout and Dashboard point to /admin/requests instead of /staff/requests
+  assert.match(adminLayout, /href="\/admin\/requests"/);
+  assert.doesNotMatch(adminLayout, /href="\/staff\/requests"/);
+  assert.match(adminDashboard, /href="\/admin\/requests"/);
+  assert.doesNotMatch(adminDashboard, /href="\/staff\/requests"/);
 });

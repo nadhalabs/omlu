@@ -96,7 +96,7 @@ export default async function AdminLayout({
             <AdminSidebarLink href="/admin/performance" label="Performance" />
             <AdminSidebarLink href="/admin/settings" label="⚙️ Settings" />
             <AdminSidebarLink href={`/kitchen/${staffInfo.restaurant_slug}`} label="🧑‍🍳 Kitchen Dashboard" />
-            <AdminSidebarLink href="/staff/requests" label="🔔 Service Requests" />
+            <AdminSidebarLink href="/admin/requests" label="🔔 Service Requests" />
           </nav>
         </div>
 
