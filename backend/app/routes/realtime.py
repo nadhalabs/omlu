@@ -29,6 +29,12 @@ from app.utils.auth import decode_access_token
 router = APIRouter()
 
 STAFF_CHANNELS = {"operations", "kitchen", "staff", "admin", "availability"}
+ROLE_CHANNELS = {
+    "owner": STAFF_CHANNELS,
+    "admin": STAFF_CHANNELS,
+    "staff": {"operations", "staff", "availability"},
+    "kitchen": {"kitchen"},
+}
 _active_total = 0
 _active_by_ip: Counter[str] = Counter()
 _active_by_limit_key: Counter[str] = Counter()
@@ -170,22 +176,12 @@ async def staff_realtime(websocket: WebSocket):
         if not staff or not staff.restaurant or not staff.restaurant.is_active:
             await websocket.close(code=1008)
             return
-        if requested not in STAFF_CHANNELS:
+        if requested not in ROLE_CHANNELS.get(staff.role, set()):
             await websocket.close(code=1008)
             return
-        if requested == "kitchen" and staff.role not in {"owner", "admin", "kitchen"}:
-            await websocket.close(code=1008)
-            return
-        if requested in {"staff", "availability"} and staff.role not in {"owner", "admin", "staff"}:
-            await websocket.close(code=1008)
-            return
-        if requested == "admin" and staff.role not in {"owner", "admin"}:
-            await websocket.close(code=1008)
-            return
-        channels = {
-            restaurant_channel(staff.restaurant_id, requested),
-            restaurant_channel(staff.restaurant_id, "operations"),
-        }
+        channels = {restaurant_channel(staff.restaurant_id, requested)}
+        if staff.role != "kitchen":
+            channels.add(restaurant_channel(staff.restaurant_id, "operations"))
     finally:
         db.close()
     await _event_loop(websocket, channels, include_restaurant_id=True, limit_key=f"staff:{staff.restaurant_id}:{requested}")

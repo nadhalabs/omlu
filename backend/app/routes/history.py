@@ -24,6 +24,7 @@ from app.utils.auth import RoleChecker
 
 router = APIRouter(prefix="/admin/history")
 _owner_admin = RoleChecker(["owner", "admin"])
+_history_roles = RoleChecker(["owner", "admin", "staff"])
 
 COMPLETED_ORDER_STATUSES = {"served", "rejected"}
 VALID_ORDER_STATUSES = {"pending", "accepted", "preparing", "ready", "served", "rejected"}
@@ -205,7 +206,7 @@ def order_history(
     order_number: str | None = None,
     page: int = 1,
     page_size: int = 25,
-    current_user: StaffUser = Depends(_owner_admin),
+    current_user: StaffUser = Depends(_history_roles),
     db: Session = Depends(get_db),
 ):
     start_utc, end_utc = _utc_bounds(staff=current_user, preset=preset, start_date=start_date, end_date=end_date)
@@ -291,7 +292,7 @@ def bill_history(
     table_id: int | None = None,
     page: int = 1,
     page_size: int = 25,
-    current_user: StaffUser = Depends(_owner_admin),
+    current_user: StaffUser = Depends(_history_roles),
     db: Session = Depends(get_db),
 ):
     start_utc, end_utc = _utc_bounds(staff=current_user, preset=preset, start_date=start_date, end_date=end_date)
@@ -368,7 +369,7 @@ def session_history(
     closed_by: int | None = None,
     page: int = 1,
     page_size: int = 25,
-    current_user: StaffUser = Depends(_owner_admin),
+    current_user: StaffUser = Depends(_history_roles),
     db: Session = Depends(get_db),
 ):
     if closed_by:
@@ -784,7 +785,7 @@ def export_orders(
     table_id: int | None = None,
     staff_id: int | None = None,
     order_number: str | None = None,
-    current_user: StaffUser = Depends(_owner_admin),
+    current_user: StaffUser = Depends(_history_roles),
     db: Session = Depends(get_db),
 ):
     start_utc, end_utc = _utc_bounds(staff=current_user, preset=preset, start_date=start_date, end_date=end_date)
@@ -799,7 +800,7 @@ def export_orders(
 @router.get("/orders/{order_id}")
 def order_history_detail(
     order_id: int,
-    current_user: StaffUser = Depends(_owner_admin),
+    current_user: StaffUser = Depends(_history_roles),
     db: Session = Depends(get_db),
 ):
     order = (
@@ -861,7 +862,7 @@ def export_bills(
     status_filter: str | None = None,
     payment_method: str | None = None,
     table_id: int | None = None,
-    current_user: StaffUser = Depends(_owner_admin),
+    current_user: StaffUser = Depends(_history_roles),
     db: Session = Depends(get_db),
 ):
     start_utc, end_utc = _utc_bounds(staff=current_user, preset=preset, start_date=start_date, end_date=end_date)
@@ -876,7 +877,7 @@ def export_sessions(
     end_date: date | None = None,
     status_filter: str | None = None,
     table_id: int | None = None,
-    current_user: StaffUser = Depends(_owner_admin),
+    current_user: StaffUser = Depends(_history_roles),
     db: Session = Depends(get_db),
 ):
     start_utc, end_utc = _utc_bounds(staff=current_user, preset=preset, start_date=start_date, end_date=end_date)

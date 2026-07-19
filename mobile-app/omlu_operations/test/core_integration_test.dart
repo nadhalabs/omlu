@@ -174,6 +174,50 @@ void main() {
       expect(captured?.method, 'POST');
       expect(captured?.uri.path, '/staff/tables/12/bill-request');
     });
+
+    test(
+      'records only backend-confirmed Cash or UPI counter payment',
+      () async {
+        final requests = <ApiRequest>[];
+        final api = OperationsApi(
+          ApiClient(
+            baseUrl: Uri.parse('https://api.example'),
+            accessToken: 'staff-token',
+            transport: (request) async {
+              requests.add(request);
+              return const ApiResponse(
+                statusCode: 200,
+                body: {
+                  'bill_number': 'BILL-12',
+                  'status': 'paid',
+                  'payment_method': 'counter_upi',
+                  'total_amount': '567.00',
+                },
+              );
+            },
+          ),
+        );
+
+        final paid = await api.confirmCounterPayment(
+          billNumber: 'BILL-12',
+          method: 'counter_upi',
+        );
+
+        expect(paid['status'], 'paid');
+        expect(
+          requests.single.uri.path,
+          '/staff/bills/BILL-12/confirm-counter-payment',
+        );
+        expect(requests.single.body, {'method': 'counter_upi'});
+        expect(
+          () => api.confirmCounterPayment(
+            billNumber: 'BILL-12',
+            method: 'counter_card',
+          ),
+          throwsArgumentError,
+        );
+      },
+    );
   });
 
   group('Realtime', () {

@@ -2,6 +2,7 @@ import datetime
 import io
 import uuid
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 import pytest
 from fastapi.testclient import TestClient
@@ -51,7 +52,10 @@ def history_data():
     db.add_all([category, item])
     db.flush()
 
-    today = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=1)
+    # Keep fixture records inside the restaurant's local calendar day even when
+    # the suite runs around midnight or while UTC is still on the prior date.
+    restaurant_now = datetime.datetime.now(ZoneInfo(restaurant.timezone))
+    today = restaurant_now.replace(hour=12, minute=0, second=0, microsecond=0).astimezone(datetime.timezone.utc)
     yesterday = today - datetime.timedelta(days=1)
 
     session = DiningSession(restaurant_id=restaurant.id, table_id=table.id, public_token=uuid.uuid4().hex, status="paid", opened_at=today - datetime.timedelta(hours=1), closed_at=today)
@@ -124,10 +128,12 @@ def _pdf_text(response) -> str:
     return "\n".join(page.extract_text() or "" for page in reader.pages)
 
 
-def test_history_owner_admin_only(history_data):
+def test_operational_history_owner_admin_staff(history_data):
     assert client.get("/admin/history/orders", headers=_auth(history_data["owner_token"])).status_code == 200
     assert client.get("/admin/history/orders", headers=_auth(history_data["admin_token"])).status_code == 200
-    assert client.get("/admin/history/orders", headers=_auth(history_data["staff_token"])).status_code == 403
+    assert client.get("/admin/history/orders", headers=_auth(history_data["staff_token"])).status_code == 200
+    assert client.get("/admin/history/orders", headers=_auth(history_data["kitchen_token"])).status_code == 403
+    assert client.get("/admin/history/performance", headers=_auth(history_data["staff_token"])).status_code == 403
 
 
 def test_today_yesterday_and_pagination(history_data):

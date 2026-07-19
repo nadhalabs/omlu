@@ -8,7 +8,6 @@ import 'package:omlu_operations/features/staff/menu_provider.dart';
 import 'package:omlu_operations/features/staff/cart_provider.dart';
 import 'package:omlu_operations/features/staff/new_order_screen.dart';
 import 'package:omlu_operations/features/staff/staff_shell.dart';
-import 'package:omlu_operations/design_system/widgets/omlu_button.dart';
 import 'package:omlu_operations/features/auth_provider.dart';
 
 void main() {
@@ -56,8 +55,8 @@ void main() {
                   'attention': mockAttention,
                   'bill_requested': mockBillRequested,
                   'session_status': mockSessionStatus,
-                }
-              ]
+                },
+              ],
             },
           );
         } else if (path == '/staff/tables/12') {
@@ -107,9 +106,9 @@ void main() {
                       'price': '40.00',
                       'is_available': true,
                       'option_groups': [],
-                    }
+                    },
                   ],
-                }
+                },
               ],
               'activity': [],
             },
@@ -203,14 +202,10 @@ void main() {
         'session_token': 'tok',
         'status': 'open',
         'orders': [{}, {}],
-        'bill': {
-          'id': 200,
-          'bill_number': 'BILL-99',
-          'status': 'issued',
-        },
+        'bill': {'id': 200, 'bill_number': 'BILL-99', 'status': 'issued'},
       },
       'requests': [
-        {'request_type': 'bill', 'status': 'pending'}
+        {'request_type': 'bill', 'status': 'pending'},
       ],
     };
     final summary = StaffTableSummary.fromDetailJson(detail);
@@ -226,100 +221,104 @@ void main() {
     expect(summary.hasActiveBillRequest, true);
   });
 
+  testWidgets('Request Bill UI State Machine rendering validation', (
+    tester,
+  ) async {
+    // 1. Empty table: no open session, no orders → show nothing
+    mockHasOpenSession = false;
+    mockOrderCount = 0;
+    await tester.pumpWidget(buildTestApp());
+    await tester.pumpAndSettle();
+
+    // Go to Table 12
+    await tester.tap(find.text('12'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Session & billing'), findsNothing);
+    expect(find.text('View Session & Bill'), findsNothing);
+
+    // Back to tables
+    await tester.tap(find.byIcon(Icons.arrow_back_ios_new_rounded));
+    await tester.pumpAndSettle();
+
+    // 2. Active session + orders → shows contextual session and bill entry
+    mockHasOpenSession = true;
+    mockOrderCount = 1;
+    mockSessionStatus = 'open';
+    await tester.tap(find.text('12'));
+    await tester.pumpAndSettle();
+    refresher(tester);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Session & billing'), findsOneWidget);
+    expect(find.text('View Session & Bill'), findsOneWidget);
+    expect(apiRequestCount, 0);
+
+    // 3. Unresolved customer bill request → Staff can handle it directly
+    mockBillRequested = true;
+    mockAttention = ['bill'];
+    mockRequestsList = [
+      {'request_type': 'bill', 'status': 'pending'},
+    ];
+    // Force reload page
+    refresher(tester);
+    await tester.pumpAndSettle();
+    expect(find.text('Bill requested'), findsOneWidget);
+    expect(find.text('Review & Generate Bill'), findsOneWidget);
+    expect(find.text('Waiting for owner/admin'), findsNothing);
+
+    // 4. Generated bill exists → Bill Issued
+    mockBillData = {'id': 200, 'bill_number': 'BILL-12', 'status': 'issued'};
+    mockBillRequested = false;
+    mockAttention = [];
+    mockRequestsList = [];
+    refresher(tester);
+    await tester.pumpAndSettle();
+    expect(find.text('Bill Issued'), findsOneWidget);
+    expect(find.text('Bill: BILL-12'), findsOneWidget);
+    expect(find.text('Open Bill'), findsOneWidget);
+    expect(find.text('Waiting for owner/admin'), findsNothing);
+
+    // 5. Session closed → hides actions
+    mockSessionStatus = 'closed';
+    refresher(tester);
+    await tester.pumpAndSettle();
+    expect(find.text('Bill Issued'), findsNothing);
+    expect(find.text('Open Bill'), findsNothing);
+
+    // 6. Paid bill → hides actions
+    mockSessionStatus = 'open';
+    mockBillData = {'id': 200, 'bill_number': 'BILL-12', 'status': 'paid'};
+    refresher(tester);
+    await tester.pumpAndSettle();
+    expect(find.text('Bill Issued'), findsNothing);
+    expect(find.text('Open Bill'), findsNothing);
+
+    // 7. Verify staff never sees payment controls (cash, UPI, card confirm, close session)
+    expect(
+      find.textContaining(RegExp('cash', caseSensitive: false)),
+      findsNothing,
+    );
+    expect(
+      find.textContaining(RegExp('upi', caseSensitive: false)),
+      findsNothing,
+    );
+    expect(
+      find.textContaining(RegExp('card', caseSensitive: false)),
+      findsNothing,
+    );
+    expect(
+      find.textContaining(RegExp('mark paid', caseSensitive: false)),
+      findsNothing,
+    );
+    expect(
+      find.textContaining(RegExp('close session', caseSensitive: false)),
+      findsNothing,
+    );
+  });
+
   testWidgets(
-    'Request Bill UI State Machine rendering validation',
-    (tester) async {
-      // 1. Empty table: no open session, no orders → show nothing
-      mockHasOpenSession = false;
-      mockOrderCount = 0;
-      await tester.pumpWidget(buildTestApp());
-      await tester.pumpAndSettle();
-
-      // Go to Table 12
-      await tester.tap(find.text('12'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Table billing'), findsNothing);
-      expect(find.text('Request Bill'), findsNothing);
-
-      // Back to tables
-      await tester.tap(find.byIcon(Icons.arrow_back_ios_new_rounded));
-      await tester.pumpAndSettle();
-
-      // 2. Active session + orders → shows Request Bill
-      mockHasOpenSession = true;
-      mockOrderCount = 1;
-      mockSessionStatus = 'open';
-      await tester.tap(find.text('12'));
-      await tester.pumpAndSettle();
-      refresher(tester);
-      await tester.pumpAndSettle();
-
-      expect(find.text('Table billing'), findsOneWidget);
-      expect(find.text('Request Bill'), findsOneWidget);
-
-      // Tapping calls API once and disables button during submission
-      await tester.tap(find.text('Request Bill'));
-      // Note: we pump immediately without delay to check the loading/disabled state
-      await tester.pump();
-      expect(find.byType(CircularProgressIndicator), findsOneWidget);
-      expect(tester.widget<OmluButton>(find.byType(OmluButton)).onPressed, isNull);
-
-      // Complete request
-      await tester.pump();
-      expect(apiRequestCount, 1);
-
-      // 3. Unresolved bill request exists → Waiting for owner/admin
-      mockBillRequested = true;
-      mockAttention = ['bill'];
-      mockRequestsList = [
-        {'request_type': 'bill', 'status': 'pending'}
-      ];
-      // Force reload page
-      refresher(tester);
-      await tester.pumpAndSettle();
-      expect(find.text('Bill requested'), findsOneWidget);
-      expect(find.text('Waiting for owner/admin'), findsOneWidget);
-      expect(find.text('Request Bill'), findsNothing);
-
-      // 4. Generated bill exists → Bill Issued
-      mockBillData = {'id': 200, 'bill_number': 'BILL-12', 'status': 'issued'};
-      mockBillRequested = false;
-      mockAttention = [];
-      mockRequestsList = [];
-      refresher(tester);
-      await tester.pumpAndSettle();
-      expect(find.text('Bill Issued'), findsOneWidget);
-      expect(find.text('Bill: BILL-12'), findsOneWidget);
-      expect(find.text('Request Bill'), findsNothing);
-      expect(find.text('Waiting for owner/admin'), findsNothing);
-
-      // 5. Session closed → hides actions
-      mockSessionStatus = 'closed';
-      refresher(tester);
-      await tester.pumpAndSettle();
-      expect(find.text('Bill Issued'), findsNothing);
-      expect(find.text('Request Bill'), findsNothing);
-
-      // 6. Paid bill → hides actions
-      mockSessionStatus = 'open';
-      mockBillData = {'id': 200, 'bill_number': 'BILL-12', 'status': 'paid'};
-      refresher(tester);
-      await tester.pumpAndSettle();
-      expect(find.text('Bill Issued'), findsNothing);
-      expect(find.text('Request Bill'), findsNothing);
-
-      // 7. Verify staff never sees payment controls (cash, UPI, card confirm, close session)
-      expect(find.textContaining(RegExp('cash', caseSensitive: false)), findsNothing);
-      expect(find.textContaining(RegExp('upi', caseSensitive: false)), findsNothing);
-      expect(find.textContaining(RegExp('card', caseSensitive: false)), findsNothing);
-      expect(find.textContaining(RegExp('mark paid', caseSensitive: false)), findsNothing);
-      expect(find.textContaining(RegExp('close session', caseSensitive: false)), findsNothing);
-    },
-  );
-
-  testWidgets(
-    'Cart submission clears cart items, selected table remains, table detail refreshes, Request Bill appears',
+    'Cart submission clears cart items, keeps table selected, and reveals session billing',
     (tester) async {
       mockHasOpenSession = false;
       mockOrderCount = 0;
@@ -333,7 +332,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // No billing card should be visible yet
-      expect(find.text('Request Bill'), findsNothing);
+      expect(find.text('View Session & Bill'), findsNothing);
 
       // Add item to cart
       await tester.tap(find.text('Add'));
@@ -348,13 +347,13 @@ void main() {
       await tester.pumpAndSettle();
 
       // CartScreen pops, returning to NewOrderScreen for table 12 (remains selected)
-      expect(find.textContaining('New Order: 12'), findsOneWidget);
+      expect(find.textContaining('Staff · 12'), findsOneWidget);
 
       // Cart cleared
       expect(find.text('1 Items selected'), findsNothing);
 
-      // Request Bill card immediately visible without leaving or restarting
-      expect(find.text('Request Bill'), findsOneWidget);
+      // Session billing is immediately visible without leaving or restarting
+      expect(find.text('View Session & Bill'), findsOneWidget);
       expect(orderRequestCount, 1);
     },
   );

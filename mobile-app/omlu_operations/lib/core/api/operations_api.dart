@@ -82,6 +82,27 @@ class OperationsApi {
     return _client.postJson('/staff/tables/$tableId/bill');
   }
 
+  Future<Map<String, Object?>> issueBill(String billNumber) {
+    return _client.postJson('/staff/bills/$billNumber/issue');
+  }
+
+  Future<Map<String, Object?>> confirmCounterPayment({
+    required String billNumber,
+    required String method,
+  }) {
+    if (method != 'counter_cash' && method != 'counter_upi') {
+      throw ArgumentError.value(
+        method,
+        'method',
+        'Only Cash or UPI is supported',
+      );
+    }
+    return _client.postJson(
+      '/staff/bills/$billNumber/confirm-counter-payment',
+      body: {'method': method},
+    );
+  }
+
   Future<Map<String, Object?>> requestTableBill(int tableId) {
     return _client.postJson('/staff/tables/$tableId/bill-request');
   }
@@ -92,6 +113,13 @@ class OperationsApi {
     return _client.getList(
       '/staff/service-requests',
       query: {'status_filter': statusFilter},
+    );
+  }
+
+  Future<Map<String, Object?>> fetchOperationalOrderHistory() {
+    return _client.getJson(
+      '/admin/history/orders',
+      query: {'page': '1', 'page_size': '50', 'preset': 'today'},
     );
   }
 

@@ -45,7 +45,7 @@ export default function AdminRequestsClient() {
   const [requestingAssistanceId, setRequestingAssistanceId] = useState<number | null>(null);
   const [staffInfo, setStaffInfo] = useState<CurrentStaffResponse | null>(null);
   const [paidBills, setPaidBills] = useState<
-    Record<number, { method: CounterPaymentMethod | "online"; paidAt: string }>
+    Record<number, { method: CounterPaymentMethod | "counter_card" | "online"; paidAt: string }>
   >({});
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);

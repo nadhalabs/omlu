@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, field_serializer
 from app.schemas.order import OrderItemSelectedOptionResponse
 
 
-CounterPaymentMethod = Literal["counter_cash", "counter_upi", "counter_card"]
+CounterPaymentMethod = Literal["counter_cash", "counter_upi"]
 
 
 class CounterPaymentRequest(BaseModel):

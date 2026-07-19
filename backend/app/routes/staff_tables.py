@@ -219,9 +219,25 @@ def get_staff_table(
     if session:
         activity.append({"type": "session_opened", "label": "Session opened", "timestamp": session.opened_at.isoformat() if session.opened_at else None})
         for order in sorted(session.orders, key=lambda item: item.created_at):
-            activity.append({"type": "order", "label": f"Order {order.order_number} {order.status}", "timestamp": order.created_at.isoformat()})
+            source_label = "Manual order added" if order.source == "staff_assisted" else "Customer order placed"
+            activity.append({"type": "order_created", "label": f"{source_label} · {order.order_number}", "timestamp": order.created_at.isoformat()})
+            status_labels = {
+                "accepted": "Kitchen received order",
+                "preparing": "Kitchen started preparing",
+                "ready": "Order marked ready",
+                "served": "Order served",
+                "rejected": "Order cancelled",
+            }
+            for transition in sorted(order.status_history, key=lambda item: item.changed_at):
+                label = status_labels.get(transition.new_status)
+                if label:
+                    activity.append({"type": "order_status", "label": f"{label} · {order.order_number}", "timestamp": transition.changed_at.isoformat()})
+        for request in requests:
+            request_labels = {"waiter": "Staff requested", "water": "Water requested", "bill": "Bill requested"}
+            activity.append({"type": "request", "label": request_labels.get(request.request_type, "Assistance requested"), "timestamp": request.created_at.isoformat()})
         if session.bill:
-            activity.append({"type": "bill", "label": f"Bill {session.bill.bill_number} {session.bill.status}", "timestamp": session.bill.generated_at.isoformat()})
+            activity.append({"type": "bill", "label": f"Bill generated · {session.bill.bill_number}", "timestamp": session.bill.generated_at.isoformat()})
+        activity.sort(key=lambda item: item["timestamp"] or "")
     return {
         "table": _table_summary(db, table, session),
         "session": {

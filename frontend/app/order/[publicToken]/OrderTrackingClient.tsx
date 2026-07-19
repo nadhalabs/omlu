@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   getPublicOrder,
@@ -116,7 +116,7 @@ export default function OrderTrackingClient({
   ] as const;
 
   // Fetch Order function
-  const fetchOrder = async (showLoading = true) => {
+  const fetchOrder = useCallback(async (showLoading = true) => {
     if (showLoading) setLoading(true);
     try {
       const data = await getPublicOrder(publicToken);
@@ -132,7 +132,7 @@ export default function OrderTrackingClient({
     } finally {
       if (showLoading) setLoading(false);
     }
-  };
+  }, [publicToken]);
 
   useRealtime({
     target: { kind: "order", token: publicToken },
@@ -155,7 +155,7 @@ export default function OrderTrackingClient({
       window.clearTimeout(timeout);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [publicToken]);
+  }, [fetchOrder]);
 
   // Polling setup
   useEffect(() => {
@@ -173,7 +173,7 @@ export default function OrderTrackingClient({
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [orderData]);
+  }, [fetchOrder, orderData]);
 
   const stages = ["pending", "accepted", "preparing", "ready", "served"];
 

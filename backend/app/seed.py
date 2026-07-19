@@ -186,6 +186,70 @@ def seed_database():
             db.add_all(menu_items)
             db.flush()
 
+        # Bring older demo databases up to the complete pilot dataset as well.
+        existing_table_numbers = {
+            row[0] for row in db.query(RestaurantTable.table_number).filter(
+                RestaurantTable.restaurant_id == restaurant.id
+            ).all()
+        }
+        for number in range(1, 13):
+            table_number = str(number)
+            if table_number not in existing_table_numbers:
+                db.add(RestaurantTable(
+                    restaurant_id=restaurant.id,
+                    table_number=table_number,
+                    table_code=f"T{number}-DEMO",
+                    is_active=True,
+                ))
+
+        dessert_category = db.query(MenuCategory).filter(
+            MenuCategory.restaurant_id == restaurant.id,
+            MenuCategory.name_en == "Desserts",
+        ).first()
+        if not dessert_category:
+            dessert_category = MenuCategory(
+                restaurant_id=restaurant.id,
+                name_en="Desserts",
+                name_ml="മധുരപലഹാരങ്ങൾ",
+                display_order=4,
+                is_active=True,
+            )
+            db.add(dessert_category)
+            db.flush()
+
+        existing_item_names = {
+            row[0] for row in db.query(MenuItem.name_en).filter(
+                MenuItem.restaurant_id == restaurant.id
+            ).all()
+        }
+        additional_items = [
+            ("Paneer Tikka", "പനീർ ടിക്ക", "Char-grilled spiced paneer", "മസാല ചേർത്ത ഗ്രിൽഡ് പനീർ", "180.00"),
+            ("Gobi Manchurian", "ഗോബി മഞ്ചൂരിയൻ", "Crispy cauliflower in tangy sauce", "മസാല സോസിലുള്ള കോളിഫ്ലവർ", "140.00"),
+            ("Fish Fry", "മീൻ ഫ്രൈ", "Kerala-style spiced fish fry", "കേരള സ്റ്റൈൽ മീൻ ഫ്രൈ", "220.00"),
+            ("Egg Fried Rice", "എഗ് ഫ്രൈഡ് റൈസ്", "Wok-tossed rice with egg", "മുട്ട ചേർത്ത ഫ്രൈഡ് റൈസ്", "145.00"),
+            ("Chicken Noodles", "ചിക്കൻ നൂഡിൽസ്", "Wok-tossed noodles with chicken", "ചിക്കൻ ചേർത്ത നൂഡിൽസ്", "170.00"),
+            ("Kerala Meals", "കേരള സദ്യ", "Rice meal with seasonal curries", "ചോറും കറികളും", "160.00"),
+            ("Cold Coffee", "കോൾഡ് കോഫി", "Chilled creamy coffee", "തണുത്ത ക്രീമി കോഫി", "90.00"),
+            ("Mango Lassi", "മാംഗോ ലസ്സി", "Yoghurt drink with mango", "മാങ്ങ ചേർത്ത ലസ്സി", "85.00"),
+            ("Gulab Jamun", "ഗുലാബ് ജാമുൻ", "Warm milk dumplings in syrup", "പഞ്ചസാര പാനിയിലെ മധുരപലഹാരം", "70.00"),
+            ("Ice Cream Sundae", "ഐസ്‌ക്രീം സൺഡേ", "Vanilla sundae with chocolate sauce", "ചോക്ലേറ്റ് സോസോടുകൂടിയ ഐസ്‌ക്രീം", "110.00"),
+        ]
+        for order, item in enumerate(additional_items, start=1):
+            name_en, name_ml, description_en, description_ml, price = item
+            if name_en not in existing_item_names:
+                db.add(MenuItem(
+                    restaurant_id=restaurant.id,
+                    category_id=dessert_category.id,
+                    name_en=name_en,
+                    name_ml=name_ml,
+                    description_en=description_en,
+                    description_ml=description_ml,
+                    price=Decimal(price),
+                    image_url=None,
+                    is_available=True,
+                    display_order=order,
+                ))
+
         # Seed staff users (Idempotent check per email inside nadha-demo-cafe)
         owner_email = "owner@nadhaserve.local"
         kitchen_email = "kitchen@nadhaserve.local"
@@ -221,6 +285,30 @@ def seed_database():
                 role="kitchen",
                 is_active=True
             ))
+
+        demo_staff = [
+            ("Demo Admin", "admin@nadhaserve.local", "admin123", "admin"),
+            ("Demo Waiter", "waiter@nadhaserve.local", "waiter123", "staff"),
+            ("Demo Cashier", "cashier@nadhaserve.local", "cashier123", "staff"),
+        ]
+        for name, email, password, role in demo_staff:
+            existing_user = db.query(StaffUser).filter(
+                StaffUser.restaurant_id == restaurant.id,
+                StaffUser.email == email,
+            ).first()
+            if not existing_user:
+                print(f"Creating demo {name.lower()} user...")
+                db.add(StaffUser(
+                    restaurant_id=restaurant.id,
+                    name=name,
+                    email=email,
+                    password_hash=hash_password(password),
+                    role=role,
+                    is_active=True,
+                ))
+            elif existing_user.role != role:
+                existing_user.role = role
+                existing_user.security_version = (existing_user.security_version or 0) + 1
 
         db.commit()
         print("Demo database seeding complete!")

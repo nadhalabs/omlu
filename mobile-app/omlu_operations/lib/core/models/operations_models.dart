@@ -145,46 +145,66 @@ class StaffTableSummary {
   factory StaffTableSummary.fromDetailJson(Map<String, Object?> json) {
     final tableMap = json['table'] as Map<String, Object?>? ?? const {};
     final sessionMap = json['session'] as Map<String, Object?>?;
-    final billMap = sessionMap != null ? (sessionMap['bill'] as Map<String, Object?>?) : null;
+    final billMap = sessionMap != null
+        ? (sessionMap['bill'] as Map<String, Object?>?)
+        : null;
 
     final id = readRequiredId(tableMap['id'] ?? json['id'], 'id');
-    final tableNumber = readString(tableMap['table_number'] ?? json['table_number']);
-    final state = readString(tableMap['state'] ?? json['state'], fallback: 'available');
-    final hasOpenSession = tableMap['has_open_session'] as bool? ?? (sessionMap != null);
-    
+    final tableNumber = readString(
+      tableMap['table_number'] ?? json['table_number'],
+    );
+    final state = readString(
+      tableMap['state'] ?? json['state'],
+      fallback: 'available',
+    );
+    final hasOpenSession =
+        tableMap['has_open_session'] as bool? ?? (sessionMap != null);
+
     final sessionToken = tableMap['session_token'] != null
         ? readString(tableMap['session_token'])
         : (sessionMap != null && sessionMap['session_token'] != null
-            ? readString(sessionMap['session_token'])
-            : (json['session_token'] != null ? readString(json['session_token']) : null));
-                         
+              ? readString(sessionMap['session_token'])
+              : (json['session_token'] != null
+                    ? readString(json['session_token'])
+                    : null));
+
     final sessionStatus = tableMap['session_status'] != null
         ? readString(tableMap['session_status'])
         : (sessionMap != null && sessionMap['status'] != null
-            ? readString(sessionMap['status'])
-            : (json['session_status'] != null
-                ? readString(json['session_status'])
-                : (json['status'] != null ? readString(json['status']) : null)));
+              ? readString(sessionMap['status'])
+              : (json['session_status'] != null
+                    ? readString(json['session_status'])
+                    : (json['status'] != null
+                          ? readString(json['status'])
+                          : null)));
 
     final activeOrderCount = tableMap['active_order_count'] != null
         ? readInt(tableMap['active_order_count'])
         : (sessionMap != null
-            ? (sessionMap['orders'] as List?)?.length ?? 0
-            : 0);
-                             
-    final currentBillAmount = readDouble(tableMap['current_bill_amount'] ?? json['current_bill_amount']);
-    
+              ? (sessionMap['orders'] as List?)?.length ?? 0
+              : 0);
+
+    final currentBillAmount = readDouble(
+      tableMap['current_bill_amount'] ?? json['current_bill_amount'],
+    );
+
     final openedMinutesAgo = tableMap['opened_minutes_ago'] != null
         ? readInt(tableMap['opened_minutes_ago'])
         : (json['opened_minutes_ago'] != null
-            ? readInt(json['opened_minutes_ago'])
-            : null);
+              ? readInt(json['opened_minutes_ago'])
+              : null);
 
     final attention = [
-      for (final value in (tableMap['attention'] as List? ?? json['attention'] as List? ?? const []))
+      for (final value
+          in (tableMap['attention'] as List? ??
+              json['attention'] as List? ??
+              const []))
         readString(value),
     ];
-    final billRequested = tableMap['bill_requested'] as bool? ?? json['bill_requested'] as bool? ?? false;
+    final billRequested =
+        tableMap['bill_requested'] as bool? ??
+        json['bill_requested'] as bool? ??
+        false;
 
     final activeSessionId = (sessionMap != null && sessionMap['id'] != null)
         ? readInt(sessionMap['id'])
@@ -199,14 +219,17 @@ class StaffTableSummary {
         ? readString(billMap['bill_number'])
         : null;
     final requestsList = json['requests'] as List?;
-    final hasPendingBillRequest = requestsList != null && requestsList.any((req) {
-      if (req is Map) {
-        return readString(req['request_type']) == 'bill' &&
-               readString(req['status']) == 'pending';
-      }
-      return false;
-    });
-    final hasActiveBillRequest = billRequested || attention.contains('bill') || hasPendingBillRequest;
+    final hasPendingBillRequest =
+        requestsList != null &&
+        requestsList.any((req) {
+          if (req is Map) {
+            return readString(req['request_type']) == 'bill' &&
+                readString(req['status']) == 'pending';
+          }
+          return false;
+        });
+    final hasActiveBillRequest =
+        billRequested || attention.contains('bill') || hasPendingBillRequest;
 
     return StaffTableSummary(
       id: id,

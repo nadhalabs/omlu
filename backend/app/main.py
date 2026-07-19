@@ -10,7 +10,7 @@ from app.config import settings
 
 # Configure structured logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=getattr(logging, settings.log_level.upper(), logging.INFO),
     format='%(asctime)s %(levelname)s [%(name)s] %(message)s'
 )
 logger = logging.getLogger("nadha_serve")

@@ -5,9 +5,11 @@ import '../../design_system/spacing.dart';
 import '../../design_system/typography.dart';
 import '../../design_system/widgets/omlu_card.dart';
 import '../../design_system/widgets/omlu_skeleton_loader.dart';
+import '../../design_system/widgets/realtime_status_chip.dart';
 import '../auth_provider.dart';
 import '../staff/tables_provider.dart';
 import '../staff/service_requests_provider.dart';
+import '../staff/staff_bill_screen.dart';
 
 final ownerTabProvider = StateProvider<int>((ref) => 0);
 final dashboardSummaryProvider = FutureProvider<Map<String, Object?>>((
@@ -127,11 +129,12 @@ class _OwnerDashboardTab extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Owner Dashboard', style: OmluTypography.h1),
+        title: const Text('OMLU Owner · Dashboard', style: OmluTypography.h1),
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: false,
         actions: [
+          const RealtimeStatusChip(),
           IconButton(
             icon: const Icon(
               Icons.refresh_rounded,
@@ -250,6 +253,13 @@ class _OwnerTablesTab extends ConsumerWidget {
                     final isOccupied =
                         t.state == 'occupied' || t.hasOpenSession;
                     return OmluCard(
+                      onTap: isOccupied
+                          ? () => Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => StaffBillScreen(tableId: t.id),
+                              ),
+                            )
+                          : null,
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [

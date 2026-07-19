@@ -273,6 +273,14 @@ def test_staff_websocket_rejects_kitchen_user_from_staff_channel(realtime_contex
             pass
 
 
+def test_kitchen_websocket_rejects_general_operations_channel(realtime_context):
+    with pytest.raises(WebSocketDisconnect):
+        with client.websocket_connect(
+            f"/ws/staff?channel=operations&token={realtime_context['kitchen_token']}"
+        ):
+            pass
+
+
 def test_staff_websocket_receives_order_created_after_commit(realtime_context):
     assert start_session(realtime_context).status_code == 201
 

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import Image from "next/image";
 import {
   getAdminTables,
   createAdminTable,
@@ -201,11 +202,14 @@ export default function AdminTablesPage() {
             </div>
 
             {/* Render dynamically via proxy PNG URL */}
-            <div className="w-48 h-48 border border-zinc-200 p-2 rounded-xl flex items-center justify-center bg-white">
-              <img
+            <div className="relative w-48 h-48 border border-zinc-200 p-2 rounded-xl flex items-center justify-center bg-white">
+              <Image
                 src={`/api/admin/tables/${t.id}/qr`}
                 alt={`Table ${t.table_number} QR Code`}
-                className="w-full h-full object-contain"
+                fill
+                sizes="192px"
+                unoptimized
+                className="object-contain p-2"
               />
             </div>
 
@@ -348,11 +352,14 @@ export default function AdminTablesPage() {
                     <div className="flex flex-col sm:flex-row gap-4 items-center sm:items-start justify-between">
                       {/* Interactive Preview & Download */}
                       <div className="flex flex-col items-center gap-2">
-                        <div className="w-32 h-32 border border-zinc-800 p-1.5 rounded-xl bg-white flex items-center justify-center">
-                          <img
+                        <div className="relative w-32 h-32 border border-zinc-800 p-1.5 rounded-xl bg-white flex items-center justify-center">
+                          <Image
                             src={`/api/admin/tables/${t.id}/qr`}
                             alt={`Table ${t.table_number} QR Preview`}
-                            className="w-full h-full object-contain"
+                            fill
+                            sizes="128px"
+                            unoptimized
+                            className="object-contain p-1.5"
                           />
                         </div>
                         {/* Download link through binary proxy route */}

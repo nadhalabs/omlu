@@ -242,8 +242,8 @@ This contract documents the existing backend surface that the native Flutter OML
 ### Confirm Counter Payment
 
 - Method/path: `POST /staff/bills/{bill_number}/confirm-counter-payment`
-- Allowed roles: `owner`, `admin`
-- Request body: `{"method":"counter_cash|counter_upi|counter_card"}`
+- Allowed roles: `owner`, `admin`, `staff`
+- Request body: `{"method":"counter_cash|counter_upi"}`
 - Response body: paid bill response
 - Error responses: `401`, `403`, `404`, `409`, `422`
 - Realtime events emitted: `bill.paid`, `session.closed`

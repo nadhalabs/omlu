@@ -8,12 +8,13 @@ import '../../design_system/radius.dart';
 import '../../design_system/widgets/omlu_card.dart';
 import '../../design_system/widgets/omlu_button.dart';
 import '../../design_system/widgets/omlu_skeleton_loader.dart';
+import '../../design_system/widgets/realtime_status_chip.dart';
 import 'tables_provider.dart';
 import 'menu_provider.dart';
 import 'cart_provider.dart';
 import 'cart_screen.dart';
 import '../../core/models/operations_models.dart';
-import '../auth_provider.dart';
+import 'staff_bill_screen.dart';
 
 class NewOrderScreen extends ConsumerStatefulWidget {
   const NewOrderScreen({super.key});
@@ -69,7 +70,10 @@ class _TablePickerView extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Select a Table', style: OmluTypography.h2),
+        title: const Text(
+          'OMLU Staff · Select Table',
+          style: OmluTypography.h2,
+        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: false,
@@ -182,9 +186,10 @@ class _OrderMenuView extends ConsumerWidget {
             ref.read(selectedTableIdProvider.notifier).state = null;
           },
         ),
-        title: Text('New Order: $tableNumber', style: OmluTypography.h2),
+        title: Text('Staff · $tableNumber', style: OmluTypography.h2),
         backgroundColor: Colors.transparent,
         elevation: 0,
+        actions: const [RealtimeStatusChip()],
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -529,48 +534,17 @@ class _BillingStatusCard extends ConsumerStatefulWidget {
 }
 
 class _BillingStatusCardState extends ConsumerState<_BillingStatusCard> {
-  bool _submitting = false;
-
-  Future<void> _handleRequestBill() async {
-    setState(() {
-      _submitting = true;
-    });
-
-    try {
-      final api = ref.read(operationsApiProvider);
-      await api.requestTableBill(widget.table.id);
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Bill request submitted successfully!'),
-            backgroundColor: OmluColors.statusAvailable,
-          ),
-        );
-      }
-      ref.invalidate(tableDetailProvider(widget.table.id));
-      await ref.read(tablesProvider.notifier).fetchTables();
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _submitting = false;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
+  void _openBill() {
+    OmluRouter.push(context, StaffBillScreen(tableId: widget.table.id));
   }
 
   @override
   Widget build(BuildContext context) {
     final table = widget.table;
 
-    // session closed or bill paid → show nothing
-    final isClosedOrPaid = !table.hasOpenSession ||
+    // Closed or paid sessions must not expose stale financial actions.
+    final isClosedOrPaid =
+        !table.hasOpenSession ||
         table.sessionStatus == 'closed' ||
         table.billStatus == 'paid';
 
@@ -578,8 +552,11 @@ class _BillingStatusCardState extends ConsumerState<_BillingStatusCard> {
       return const SizedBox.shrink();
     }
 
-    // bill exists → Bill Issued
-    final billExists = table.billNumber != null || table.billStatus != null || table.billId != null;
+    // A generated bill is always opened contextually from the table.
+    final billExists =
+        table.billNumber != null ||
+        table.billStatus != null ||
+        table.billId != null;
     if (billExists) {
       return OmluCard(
         color: OmluColors.statusReady.withValues(alpha: 0.1),
@@ -598,12 +575,14 @@ class _BillingStatusCardState extends ConsumerState<_BillingStatusCard> {
                 style: OmluTypography.bodyMedium,
               ),
             ],
+            const SizedBox(height: OmluSpacing.md),
+            OmluButton(text: 'Open Bill', onPressed: _openBill),
           ],
         ),
       );
     }
 
-    // active bill request exists → Waiting for owner/admin
+    // A customer bill request can be handled immediately by Staff/Admin/Owner.
     if (table.hasActiveBillRequest) {
       return OmluCard(
         color: OmluColors.statusNeedsBill.withValues(alpha: 0.1),
@@ -613,34 +592,31 @@ class _BillingStatusCardState extends ConsumerState<_BillingStatusCard> {
           children: [
             Text(
               'Bill requested',
-              style: OmluTypography.h3.copyWith(color: OmluColors.statusNeedsBill),
+              style: OmluTypography.h3.copyWith(
+                color: OmluColors.statusNeedsBill,
+              ),
             ),
             const SizedBox(height: OmluSpacing.xxs),
             const Text(
-              'Waiting for owner/admin',
+              'Customer is waiting. Review the session and generate the final bill.',
               style: OmluTypography.bodyMedium,
             ),
+            const SizedBox(height: OmluSpacing.md),
+            OmluButton(text: 'Review & Generate Bill', onPressed: _openBill),
           ],
         ),
       );
     }
 
-    // active session + orders → Request Bill
+    // Active sessions expose a single contextual session/bill entry point.
     if (table.hasOpenSession && table.activeOrderCount > 0) {
       return OmluCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
-              'Table billing',
-              style: OmluTypography.h3,
-            ),
+            const Text('Session & billing', style: OmluTypography.h3),
             const SizedBox(height: OmluSpacing.xs),
-            OmluButton(
-              text: 'Request Bill',
-              isLoading: _submitting,
-              onPressed: _submitting ? null : _handleRequestBill,
-            ),
+            OmluButton(text: 'View Session & Bill', onPressed: _openBill),
           ],
         ),
       );

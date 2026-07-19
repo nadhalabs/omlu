@@ -30,7 +30,7 @@ from app.services.realtime import (
 router = APIRouter()
 
 _bill_issue_roles = RoleChecker(["owner", "admin", "staff"])
-_payment_record_roles = RoleChecker(["owner", "admin"])
+_payment_record_roles = RoleChecker(["owner", "admin", "staff"])
 
 
 @router.post(

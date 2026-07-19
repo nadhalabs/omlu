@@ -90,12 +90,14 @@ class RealtimeClient {
 
   WebSocket? _socket;
   bool _closedByClient = false;
+  bool _opening = false;
   int _attempt = 0;
 
   Stream<RealtimeEvent> get events => _events.stream;
   Stream<RealtimeConnectionState> get states => _states.stream;
 
   Future<void> connect() async {
+    if (_socket != null || _opening) return;
     _closedByClient = false;
     await _open(RealtimeConnectionState.connecting);
   }
@@ -114,14 +116,20 @@ class RealtimeClient {
   }
 
   Future<void> _open(RealtimeConnectionState state) async {
+    if (_opening || _socket != null || _closedByClient) return;
+    _opening = true;
     _states.add(state);
     try {
       _socket = await _connector(_staffWsUri());
+      _socket?.pingInterval = const Duration(seconds: 20);
       _attempt = 0;
       _states.add(RealtimeConnectionState.connected);
       unawaited(_listen());
     } catch (_) {
+      _opening = false;
       await _scheduleReconnect();
+    } finally {
+      _opening = false;
     }
   }
 
@@ -133,6 +141,7 @@ class RealtimeClient {
         _handleMessage(message);
       }
     } finally {
+      if (identical(_socket, socket)) _socket = null;
       if (!_closedByClient) {
         await _scheduleReconnect();
       }

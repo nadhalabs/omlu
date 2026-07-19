@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import Image from "next/image";
 import {
   getAdminCategories,
   createAdminCategory,
@@ -527,10 +528,13 @@ export default function AdminMenuPage() {
                     {/* Item Image Preview or Placeholder */}
                     <div className="w-16 h-16 rounded-xl bg-zinc-955 border border-zinc-800 shrink-0 overflow-hidden flex items-center justify-center text-lg text-zinc-500 font-bold relative">
                       {item.image_url ? (
-                        <img
+                        <Image
                           src={item.image_url}
                           alt={item.name_en}
-                          className="w-full h-full object-cover"
+                          fill
+                          sizes="64px"
+                          unoptimized
+                          className="object-cover"
                         />
                       ) : (
                         "🍲"

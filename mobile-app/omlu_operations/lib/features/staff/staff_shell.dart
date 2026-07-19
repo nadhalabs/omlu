@@ -9,6 +9,7 @@ import 'tables_screen.dart';
 import 'new_order_screen.dart';
 import 'requests_screen.dart';
 import 'service_requests_provider.dart';
+import 'staff_history_screen.dart';
 
 final staffTabProvider = StateProvider<int>((ref) => 0);
 
@@ -24,6 +25,7 @@ class StaffShell extends ConsumerWidget {
       TablesScreen(),
       NewOrderScreen(),
       RequestsScreen(),
+      StaffHistoryScreen(),
     ];
 
     return LayoutBuilder(
@@ -59,6 +61,10 @@ class StaffShell extends ConsumerWidget {
                     child: const Icon(OmluIcons.requests),
                   ),
                   label: 'Requests',
+                ),
+                const BottomNavigationBarItem(
+                  icon: Icon(Icons.history_rounded),
+                  label: 'History',
                 ),
               ],
             ),
@@ -102,6 +108,10 @@ class StaffShell extends ConsumerWidget {
                         child: const Icon(OmluIcons.requests),
                       ),
                       label: const Text('Requests'),
+                    ),
+                    const NavigationRailDestination(
+                      icon: Icon(Icons.history_rounded),
+                      label: Text('History'),
                     ),
                   ],
                   trailing: Expanded(

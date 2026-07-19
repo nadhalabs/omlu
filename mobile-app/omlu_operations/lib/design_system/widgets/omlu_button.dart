@@ -46,10 +46,7 @@ class OmluButton extends StatelessWidget {
         elevation: 0,
         shape: RoundedRectangleBorder(borderRadius: OmluRadius.borderMd),
         padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 24),
-        minimumSize: const Size(
-          88,
-          48,
-        ), // Conforms to 48px minimum touch target height
+        minimumSize: const Size(88, 52),
       ),
       child: buttonContent,
     );

@@ -67,6 +67,12 @@ async def readiness_check(db: Session = Depends(get_db)):
     return JSONResponse(status_code=status_code, content={"status": "healthy" if status_code == 200 else "unavailable", "checks": checks})
 
 
+@router.get("/ready")
+async def ready(db: Session = Depends(get_db)):
+    """Render-compatible readiness alias with dependency checks."""
+    return await readiness_check(db)
+
+
 @router.get("/metrics/realtime")
 def realtime_metrics():
     return realtime_metrics_snapshot()

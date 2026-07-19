@@ -12,7 +12,7 @@ from app.models.restaurant import Restaurant
 from app.models.staff_user import StaffUser
 
 
-COUNTER_PAYMENT_METHODS = {"counter_cash", "counter_upi", "counter_card"}
+COUNTER_PAYMENT_METHODS = {"counter_cash", "counter_upi"}
 ACTIVE_BILL_SESSION_STATUSES = {"open", "payment_requested", "payment_pending"}
 
 

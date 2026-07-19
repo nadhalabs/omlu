@@ -231,7 +231,7 @@ export interface PublicDiningSessionServiceRequest {
 }
 
 export type IssueBillResponse = BillResponse;
-export type CounterPaymentMethod = "counter_cash" | "counter_upi" | "counter_card";
+export type CounterPaymentMethod = "counter_cash" | "counter_upi";
 export type CounterPaymentResponse = BillResponse;
 
 export interface KitchenOrderItemResponse {

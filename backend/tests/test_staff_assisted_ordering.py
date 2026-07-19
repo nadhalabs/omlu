@@ -499,7 +499,7 @@ def test_resolve_table_request_records_staff_resolver(staff_order_context):
     assert body["resolved_by_staff_id"] == staff_order_context["staff_id"]
 
 
-def test_staff_bill_generation_allows_assistance_but_not_payment_recording(staff_order_context):
+def test_staff_bill_generation_and_payment_recording(staff_order_context):
     start_session(staff_order_context)
     create_manual_order(staff_order_context)
 
@@ -521,15 +521,17 @@ def test_staff_bill_generation_allows_assistance_but_not_payment_recording(staff
     paid = client.post(
         f"/staff/bills/{bill['bill_number']}/confirm-counter-payment",
         headers=auth(staff_order_context),
-        json={"method": "counter_card"},
+        json={"method": "counter_upi"},
     )
-    assert paid.status_code == 403
+    assert paid.status_code == 200
+    assert paid.json()["status"] == "paid"
+    assert paid.json()["payment_method"] == "counter_upi"
 
     assistance = client.post(
         f"/staff/bills/{bill['bill_number']}/payment-assistance",
         headers=auth(staff_order_context),
     )
-    assert assistance.status_code == 200
+    assert assistance.status_code == 409
 
     db = SessionLocal()
     stored_bill = db.query(Bill).filter(
@@ -538,11 +540,11 @@ def test_staff_bill_generation_allows_assistance_but_not_payment_recording(staff
     ).one()
     session = db.query(DiningSession).filter(DiningSession.id == stored_bill.dining_session_id).one()
     assert stored_bill.generated_by_staff_id == staff_order_context["staff_id"]
-    assert stored_bill.status == "issued"
-    assert stored_bill.payment_method is None
-    assert stored_bill.paid_by_staff_id is None
-    assert session.status == "payment_requested"
-    assert session.closed_by_staff_id is None
+    assert stored_bill.status == "paid"
+    assert stored_bill.payment_method == "counter_upi"
+    assert stored_bill.paid_by_staff_id == staff_order_context["staff_id"]
+    assert session.status == "closed"
+    assert session.closed_by_staff_id == staff_order_context["staff_id"]
     db.close()
 
 

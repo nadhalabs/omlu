@@ -427,11 +427,12 @@ def test_pay_at_counter_request(bill_context, method):
     db.close()
 
 
-def test_invalid_counter_payment_method_rejected(bill_context):
+@pytest.mark.parametrize("method", ["online", "counter_card"])
+def test_invalid_counter_payment_method_rejected(bill_context, method):
     add_order(bill_context)
     issue_bill_for(bill_context)
 
-    response = request_counter_payment(bill_context, "online")
+    response = request_counter_payment(bill_context, method)
 
     assert response.status_code == 422
 
@@ -463,11 +464,11 @@ def test_repeated_customer_counter_payment_request_is_idempotent(bill_context):
     [
         ("owner_token", "owner_id", "counter_cash"),
         ("owner_token", "owner_id", "counter_upi"),
-        ("owner_token", "owner_id", "counter_card"),
         ("admin_token", "admin_id", "counter_cash"),
+        ("staff_token", "staff_id", "counter_upi"),
     ],
 )
-def test_owner_and_admin_can_confirm_counter_payment(bill_context, token_key, staff_id_key, method):
+def test_owner_admin_and_staff_can_confirm_counter_payment(bill_context, token_key, staff_id_key, method):
     add_order(bill_context)
     issued = issue_bill_for(bill_context)
     request_counter_payment(bill_context, method)
@@ -485,19 +486,6 @@ def test_owner_and_admin_can_confirm_counter_payment(bill_context, token_key, st
     assert body["payment_method"] == method
     assert body["paid_at"] is not None
     assert body["paid_by_staff_id"] == bill_context[staff_id_key]
-
-
-def test_staff_denied_confirm_counter_payment(bill_context):
-    add_order(bill_context)
-    issued = issue_bill_for(bill_context)
-
-    response = confirm_counter_payment(
-        bill_context,
-        issued["bill_number"],
-        token_key="staff_token",
-    )
-
-    assert response.status_code == 403
 
 
 def test_kitchen_denied_confirm_counter_payment(bill_context):
@@ -561,7 +549,7 @@ def test_repeated_confirmation_preserves_first_payment_time_and_staff(bill_conte
     assert "already" in second.json()["detail"].lower()
 
 
-def test_staff_payment_authorization_failure_publishes_no_success_event(monkeypatch, bill_context):
+def test_kitchen_payment_authorization_failure_publishes_no_success_event(monkeypatch, bill_context):
     from app.services import realtime
 
     add_order(bill_context)
@@ -573,7 +561,7 @@ def test_staff_payment_authorization_failure_publishes_no_success_event(monkeypa
     response = confirm_counter_payment(
         bill_context,
         issued["bill_number"],
-        token_key="staff_token",
+        token_key="kitchen_token",
         method="counter_cash",
     )
 

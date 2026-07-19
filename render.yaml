@@ -1,0 +1,46 @@
+services:
+  - type: web
+    name: omlu-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    preDeployCommand: alembic upgrade head
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /ready
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: APP_ENVIRONMENT
+        value: production
+      - key: LOG_LEVEL
+        value: INFO
+      - key: REQUIRE_REDIS
+        value: "true"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: omlu-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: omlu-redis
+          type: keyvalue
+          property: connectionString
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: KITCHEN_API_KEY
+        generateValue: true
+      - key: FRONTEND_URLS
+        sync: false
+      - key: PUBLIC_FRONTEND_URL
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+
+  - type: keyvalue
+    name: omlu-redis
+    plan: starter
+    ipAllowList: []
+
+databases:
+  - name: omlu-db
+    plan: basic-256mb

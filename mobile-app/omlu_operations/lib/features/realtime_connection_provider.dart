@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/models/role_session.dart';
 import '../core/realtime/realtime_client.dart';
+import '../core/realtime/lifecycle_realtime_controller.dart';
 import 'auth_provider.dart';
 
 final realtimeClientProvider = Provider<RealtimeClient?>((ref) {
@@ -24,10 +25,12 @@ final realtimeClientProvider = Provider<RealtimeClient?>((ref) {
     accessToken: session.accessToken,
     channel: channel,
   );
+  final lifecycle = LifecycleRealtimeController(client)..attach();
 
   // Auto connect/disconnect based on provider lifecycle
   client.connect();
   ref.onDispose(() {
+    lifecycle.detach();
     client.disconnect();
     client.dispose();
   });

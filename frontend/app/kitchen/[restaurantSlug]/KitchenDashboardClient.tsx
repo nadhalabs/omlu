@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getKitchenOrders, updateKitchenOrderStatus, getStaffMe, staffLogout, ApiError } from "@/lib/api";
@@ -68,7 +68,7 @@ export default function KitchenDashboardClient({
   }, []);
 
   // Web Audio synth beep
-  const playNewOrderBeep = () => {
+  const playNewOrderBeep = useCallback(() => {
     if (!soundEnabled) return;
     try {
       const audioWindow = window as Window & typeof globalThis & {
@@ -104,7 +104,7 @@ export default function KitchenDashboardClient({
     } catch (e) {
       console.warn("AudioContext playback failed", e);
     }
-  };
+  }, [soundEnabled]);
 
   // Toggle sound and activate context (required by browser audio security model)
   const handleToggleSound = () => {
@@ -129,7 +129,7 @@ export default function KitchenDashboardClient({
   };
 
   // Fetch kitchen orders
-  const fetchOrders = async (showLoading = true) => {
+  const fetchOrders = useCallback(async (showLoading = true) => {
     if (isFetchingRef.current) return;
     isFetchingRef.current = true;
 
@@ -176,7 +176,7 @@ export default function KitchenDashboardClient({
       if (showLoading) setLoading(false);
       isFetchingRef.current = false;
     }
-  };
+  }, [playNewOrderBeep, restaurantSlug, router]);
 
   // Auth check on mount
   useEffect(() => {
@@ -204,7 +204,7 @@ export default function KitchenDashboardClient({
         
         // Trigger initial data load
         fetchOrders(true);
-      } catch (err) {
+      } catch {
         // Redirect to login if unauthenticated or token expired
         router.replace("/login");
       }
@@ -212,7 +212,7 @@ export default function KitchenDashboardClient({
 
     const timeout = window.setTimeout(() => checkAuth(), 0);
     return () => window.clearTimeout(timeout);
-  }, [restaurantSlug]);
+  }, [fetchOrders, restaurantSlug, router]);
 
   // Setup tab visible events and polling loop
   useEffect(() => {
@@ -235,7 +235,7 @@ export default function KitchenDashboardClient({
       document.removeEventListener("visibilitychange", handleVisibility);
       clearInterval(interval);
     };
-  }, [restaurantSlug, authLoading, authError, staffInfo, soundEnabled]);
+  }, [authLoading, authError, fetchOrders, staffInfo]);
 
   const realtimeStatus = useRealtime({
     enabled: Boolean(staffInfo && !authError),
@@ -249,7 +249,7 @@ export default function KitchenDashboardClient({
     try {
       await staffLogout();
       router.replace("/login");
-    } catch (err) {
+    } catch {
       alert("Failed to sign out. Please try again.");
     }
   };
@@ -304,6 +304,7 @@ export default function KitchenDashboardClient({
 
   // Render elapsed duration
   const getElapsedTime = (createdStr: string) => {
+    void tick;
     const created = new Date(createdStr);
     const diffMs = new Date().getTime() - created.getTime();
     const diffMins = Math.floor(diffMs / 60000);
@@ -375,6 +376,7 @@ export default function KitchenDashboardClient({
           </p>
           <p className="mt-1 text-[11px] font-bold uppercase tracking-wide text-zinc-600">
             Real-time: {realtimeStatus}
+            {lastUpdated ? ` • Updated ${lastUpdated.toLocaleTimeString()}` : ""}
           </p>
         </div>
 

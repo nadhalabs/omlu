@@ -6,6 +6,7 @@ import '../../design_system/typography.dart';
 import '../../design_system/radius.dart';
 import '../../design_system/widgets/omlu_card.dart';
 import '../../design_system/widgets/omlu_skeleton_loader.dart';
+import '../../design_system/widgets/realtime_status_chip.dart';
 import '../../core/models/operations_models.dart';
 import 'tables_provider.dart';
 import 'cart_provider.dart';
@@ -85,11 +86,12 @@ class TablesScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Tables', style: OmluTypography.h2),
+        title: const Text('OMLU Staff · Tables', style: OmluTypography.h2),
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: false,
         actions: [
+          const RealtimeStatusChip(),
           IconButton(
             icon: const Icon(
               Icons.refresh_rounded,

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/operations_api.dart';
 import '../../core/models/operations_models.dart';
+import '../../core/realtime/realtime_client.dart';
 import '../auth_provider.dart';
 import '../realtime_connection_provider.dart';
 
@@ -16,6 +17,16 @@ class KitchenOrdersNotifier
       next.whenData((event) {
         if (event.type == 'order.created' ||
             event.type == 'order.status_changed') {
+          fetchOrders(silent: true);
+        }
+      });
+    });
+    ref.listen(realtimeStateStreamProvider, (previous, next) {
+      final previousState = previous?.valueOrNull;
+      next.whenData((connection) {
+        if (connection == RealtimeConnectionState.connected &&
+            (previousState == RealtimeConnectionState.reconnecting ||
+                previousState == RealtimeConnectionState.disconnected)) {
           fetchOrders(silent: true);
         }
       });

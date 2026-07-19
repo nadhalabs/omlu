@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import {
   getPublicMenu,
   createPublicOrder,
@@ -70,7 +71,7 @@ export default function MenuClient({
   const [expiredSessionNotice, setExpiredSessionNotice] = useState<string | null>(null);
 
   // Fetch menu data
-  const fetchMenu = async () => {
+  const fetchMenu = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -88,7 +89,7 @@ export default function MenuClient({
     } finally {
       setLoading(false);
     }
-  };
+  }, [restaurantSlug, tableCode]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -96,7 +97,7 @@ export default function MenuClient({
       setIdempotencyKey(crypto.randomUUID());
     }, 0);
     return () => window.clearTimeout(timeout);
-  }, [restaurantSlug, tableCode]);
+  }, [fetchMenu]);
 
   useRealtime({
     target: { kind: "menu", restaurantSlug, tableCode },
@@ -793,11 +794,14 @@ export default function MenuClient({
                           </div>
                         </div>
                         {item.image_url && (
-                          <div className="w-20 h-20 bg-zinc-100 dark:bg-zinc-800 rounded-lg overflow-hidden flex-shrink-0">
-                            <img
+                          <div className="relative w-20 h-20 bg-zinc-100 dark:bg-zinc-800 rounded-lg overflow-hidden flex-shrink-0">
+                            <Image
                               src={item.image_url}
                               alt={item.name_en}
-                              className="w-full h-full object-cover"
+                              fill
+                              sizes="80px"
+                              unoptimized
+                              className="object-cover"
                             />
                           </div>
                         )}

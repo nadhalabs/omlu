@@ -6,6 +6,7 @@ import '../../design_system/typography.dart';
 import '../../design_system/radius.dart';
 import '../../design_system/widgets/omlu_card.dart';
 import '../../design_system/widgets/omlu_button.dart';
+import '../../design_system/widgets/realtime_status_chip.dart';
 import '../../core/models/operations_models.dart';
 import '../auth_provider.dart';
 import 'kitchen_orders_provider.dart';
@@ -86,11 +87,15 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
           Expanded(
             child: Scaffold(
               appBar: AppBar(
-                title: const Text('Kitchen Orders', style: OmluTypography.h1),
+                title: const Text(
+                  'OMLU Kitchen · Orders',
+                  style: OmluTypography.h1,
+                ),
                 centerTitle: false,
                 backgroundColor: Colors.transparent,
                 elevation: 0,
                 actions: [
+                  const RealtimeStatusChip(),
                   IconButton(
                     icon: const Icon(
                       Icons.refresh_rounded,

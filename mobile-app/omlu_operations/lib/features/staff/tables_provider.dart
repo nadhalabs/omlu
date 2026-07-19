@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/operations_api.dart';
 import '../../core/models/operations_models.dart';
+import '../../core/realtime/realtime_client.dart';
 import '../auth_provider.dart';
 import '../realtime_connection_provider.dart';
 import 'menu_provider.dart';
@@ -33,6 +34,16 @@ class TablesNotifier
           if (selectedId != null) {
             ref.invalidate(tableDetailProvider(selectedId));
           }
+        }
+      });
+    });
+    ref.listen(realtimeStateStreamProvider, (previous, next) {
+      final previousState = previous?.valueOrNull;
+      next.whenData((connection) {
+        if (connection == RealtimeConnectionState.connected &&
+            (previousState == RealtimeConnectionState.reconnecting ||
+                previousState == RealtimeConnectionState.disconnected)) {
+          fetchTables(silent: true);
         }
       });
     });

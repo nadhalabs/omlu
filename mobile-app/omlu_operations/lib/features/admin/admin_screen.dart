@@ -5,8 +5,10 @@ import '../../design_system/spacing.dart';
 import '../../design_system/typography.dart';
 import '../../design_system/radius.dart';
 import '../../design_system/widgets/omlu_card.dart';
+import '../../design_system/widgets/realtime_status_chip.dart';
 import '../auth_provider.dart';
 import '../staff/tables_provider.dart';
+import '../staff/staff_bill_screen.dart';
 
 final adminTabProvider = StateProvider<int>((ref) => 0);
 
@@ -125,10 +127,11 @@ class _AdminOverviewTab extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Admin Console', style: OmluTypography.h1),
+        title: const Text('OMLU Admin · Overview', style: OmluTypography.h1),
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: false,
+        actions: const [RealtimeStatusChip()],
       ),
       body: ListView(
         padding: const EdgeInsets.all(OmluSpacing.md),
@@ -187,7 +190,15 @@ class _AdminTablesTab extends ConsumerWidget {
                 const SizedBox(height: OmluSpacing.sm),
             itemBuilder: (context, index) {
               final t = tables[index];
+              final hasSession = t.hasOpenSession || t.state == 'occupied';
               return OmluCard(
+                onTap: hasSession
+                    ? () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => StaffBillScreen(tableId: t.id),
+                        ),
+                      )
+                    : null,
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
