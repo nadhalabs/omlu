@@ -133,6 +133,8 @@ def test_operational_history_owner_admin_staff(history_data):
     assert client.get("/admin/history/orders", headers=_auth(history_data["admin_token"])).status_code == 200
     assert client.get("/admin/history/orders", headers=_auth(history_data["staff_token"])).status_code == 200
     assert client.get("/admin/history/orders", headers=_auth(history_data["kitchen_token"])).status_code == 403
+    assert client.get("/admin/history/bills", headers=_auth(history_data["staff_token"])).status_code == 403
+    assert client.get("/admin/history/bills/export", headers=_auth(history_data["staff_token"])).status_code == 403
     assert client.get("/admin/history/performance", headers=_auth(history_data["staff_token"])).status_code == 403
 
 

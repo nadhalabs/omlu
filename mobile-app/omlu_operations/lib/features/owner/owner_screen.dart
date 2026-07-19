@@ -7,6 +7,7 @@ import '../../design_system/widgets/omlu_card.dart';
 import '../../design_system/widgets/omlu_skeleton_loader.dart';
 import '../../design_system/widgets/realtime_status_chip.dart';
 import '../auth_provider.dart';
+import '../payments/pending_payments_tab.dart';
 import '../staff/tables_provider.dart';
 import '../staff/service_requests_provider.dart';
 import '../staff/staff_bill_screen.dart';
@@ -29,6 +30,7 @@ class OwnerScreen extends ConsumerWidget {
     final List<Widget> screens = const [
       _OwnerDashboardTab(),
       _OwnerTablesTab(),
+      PendingPaymentsTab(),
       _OwnerRequestsTab(),
     ];
 
@@ -41,6 +43,7 @@ class OwnerScreen extends ConsumerWidget {
             return Scaffold(
               body: IndexedStack(index: activeTab, children: screens),
               bottomNavigationBar: BottomNavigationBar(
+                type: BottomNavigationBarType.fixed,
                 currentIndex: activeTab,
                 selectedItemColor: OmluColors.accent,
                 unselectedItemColor: OmluColors.textSecondary,
@@ -53,6 +56,10 @@ class OwnerScreen extends ConsumerWidget {
                   BottomNavigationBarItem(
                     icon: Icon(Icons.grid_view_rounded),
                     label: 'Tables',
+                  ),
+                  BottomNavigationBarItem(
+                    icon: Icon(Icons.payments_rounded),
+                    label: 'Payments',
                   ),
                   BottomNavigationBarItem(
                     icon: Icon(Icons.notifications_rounded),
@@ -80,6 +87,10 @@ class OwnerScreen extends ConsumerWidget {
                     NavigationRailDestination(
                       icon: Icon(Icons.grid_view_rounded),
                       label: Text('Tables'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.payments_rounded),
+                      label: Text('Payments'),
                     ),
                     NavigationRailDestination(
                       icon: Icon(Icons.notifications_rounded),

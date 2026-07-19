@@ -8,7 +8,7 @@ OMLU has exactly four backend roles:
 | --- | --- |
 | `owner` | Full restaurant, financial, staff, menu, table, settings, billing and audit access |
 | `admin` | Daily operations, staff/menu administration, billing, payments and basic reports; cannot manage the owner |
-| `staff` | Waiter and cashier workflow: tables, orders, requests, bills, counter payments and operational history |
+| `staff` | Tables, orders, requests and session-specific billing; sends bills to Owner/Admin for payment |
 | `kitchen` | Kitchen tickets and Received → Preparing → Ready transitions only |
 
 The backend checks every protected endpoint. Flutter navigation is a convenience,
@@ -71,16 +71,17 @@ Deploy the customer frontend to Vercel with `NEXT_PUBLIC_BACKEND_URL` and
 
 ## Flutter native-screen audit
 
-Native today: login/session restore, role landing, owner dashboard/tables/requests,
-admin overview/tables/staff directory, staff table grid/manual ordering/requests,
+Native today: login/session restore, role landing, owner dashboard/tables/requests/pending payments,
+admin overview/tables/staff directory/pending payments, staff table grid/manual ordering/requests,
 kitchen board, active-session bill breakdown, bill generation, and full Cash/UPI
-counter confirmation. WebView is disabled by default and can be enabled explicitly
+counter confirmation by Owner/Admin. Staff generates and sends a bill to the counter,
+then sees realtime pending/paid status. WebView is disabled by default and can be enabled explicitly
 as a fallback. Full menu editing, settings, and historical reporting do not yet have
 complete native Flutter screens.
 
 ## Operational limitations
 
-- Full-balance counter Cash/UPI recording is implemented. Card, partial/multiple
+- Full-balance counter Cash/UPI recording is restricted to Owner/Admin. Card, partial/multiple
   payments, discounts and split billing are intentionally outside V1.
 - The generated QR administration page is print-friendly; there is no separate
   server-generated multi-table QR PDF.

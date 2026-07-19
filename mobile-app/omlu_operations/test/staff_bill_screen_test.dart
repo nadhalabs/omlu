@@ -1,25 +1,29 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omlu_operations/core/api/api_client.dart';
 import 'package:omlu_operations/core/api/operations_api.dart';
+import 'package:omlu_operations/core/realtime/realtime_client.dart';
 import 'package:omlu_operations/features/auth_provider.dart';
+import 'package:omlu_operations/features/realtime_connection_provider.dart';
 import 'package:omlu_operations/features/staff/staff_bill_screen.dart';
 
 void main() {
   testWidgets(
-    'renders complete bill and records manual UPI only after backend confirmation',
+    'staff renders complete bill and sends it to counter without payment controls',
     (tester) async {
-      var paymentCalls = 0;
+      var sentToCounter = false;
       final api = OperationsApi(
         ApiClient(
           baseUrl: Uri.parse('https://api.example'),
           accessToken: 'staff-token',
           transport: (request) async {
             if (request.uri.path == '/staff/tables/12') {
-              return const ApiResponse(
+              return ApiResponse(
                 statusCode: 200,
-                body: {
+                body: <String, Object?>{
                   'table': {
                     'id': 12,
                     'table_number': '6',
@@ -29,7 +33,9 @@ void main() {
                   'session': {
                     'id': 100,
                     'session_token': 'session-100',
-                    'status': 'payment_requested',
+                    'status': sentToCounter
+                        ? 'payment_pending'
+                        : 'payment_requested',
                     'opened_at': '2026-07-20T12:00:00Z',
                     'orders': [
                       {
@@ -53,7 +59,7 @@ void main() {
                     ],
                     'bill': {
                       'bill_number': 'BILL-12',
-                      'status': 'issued',
+                      'status': sentToCounter ? 'payment_pending' : 'issued',
                       'subtotal': '520.00',
                       'tax_amount': '26.00',
                       'discount_amount': '0.00',
@@ -70,20 +76,17 @@ void main() {
                 },
               );
             }
-            if (request.uri.path ==
-                '/staff/bills/BILL-12/confirm-counter-payment') {
-              paymentCalls += 1;
+            if (request.uri.path == '/staff/bills/BILL-12/send-to-counter') {
+              sentToCounter = true;
               return const ApiResponse(
                 statusCode: 200,
                 body: {
                   'bill_number': 'BILL-12',
-                  'status': 'paid',
+                  'status': 'payment_pending',
                   'subtotal': '520.00',
                   'tax_amount': '26.00',
                   'discount_amount': '0.00',
                   'total_amount': '546.00',
-                  'payment_method': 'counter_upi',
-                  'paid_at': '2026-07-20T12:30:00Z',
                 },
               );
             }
@@ -112,26 +115,89 @@ void main() {
       expect(find.text('Tax'), findsOneWidget);
       expect(find.text('Service charge'), findsOneWidget);
       expect(find.text('Balance'), findsOneWidget);
-      expect(find.textContaining('Accept Full Payment'), findsOneWidget);
+      expect(find.text('Send bill to counter'), findsOneWidget);
+      expect(find.textContaining('Record full payment'), findsNothing);
+      expect(find.text('Cash'), findsNothing);
+      expect(find.text('UPI'), findsNothing);
       expect(find.textContaining('Card'), findsNothing);
-      expect(find.text('Payment recorded'), findsNothing);
 
       await tester.drag(find.byType(ListView).first, const Offset(0, -500));
       await tester.pumpAndSettle();
-      await tester.tap(find.textContaining('Accept Full Payment'));
+      await tester.tap(find.text('Send bill to counter'));
       await tester.pumpAndSettle();
-      expect(find.text('Cash'), findsOneWidget);
-      expect(find.text('UPI'), findsOneWidget);
-      expect(find.textContaining('Card'), findsNothing);
-
-      await tester.tap(find.text('UPI'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.textContaining('Confirm UPI'));
+      await tester.tap(find.text('Send bill to counter').last);
       await tester.pumpAndSettle();
 
-      expect(paymentCalls, 1);
-      expect(find.text('Payment recorded'), findsOneWidget);
-      expect(find.textContaining('UPI at counter'), findsOneWidget);
+      expect(sentToCounter, isTrue);
+      expect(find.text('Waiting for payment'), findsOneWidget);
+      expect(find.text('Cash'), findsNothing);
+      expect(find.text('UPI'), findsNothing);
     },
   );
+
+  testWidgets('staff sees realtime payment confirmation without payment data', (
+    tester,
+  ) async {
+    final events = StreamController<RealtimeEvent>();
+    addTearDown(events.close);
+    final api = OperationsApi(
+      ApiClient(
+        baseUrl: Uri.parse('https://api.example'),
+        accessToken: 'staff-token',
+        transport: (request) async => const ApiResponse(
+          statusCode: 200,
+          body: {
+            'table': {
+              'id': 12,
+              'table_number': '6',
+              'state': 'occupied',
+              'has_open_session': true,
+            },
+            'session': {
+              'id': 100,
+              'session_token': 'session-100',
+              'status': 'payment_pending',
+              'opened_at': '2026-07-20T12:00:00Z',
+              'orders': <Object?>[],
+              'bill': {
+                'bill_number': 'BILL-12',
+                'status': 'payment_pending',
+                'subtotal': '567.00',
+                'tax_amount': '0.00',
+                'discount_amount': '0.00',
+                'total_amount': '567.00',
+              },
+            },
+            'activity': <Object?>[],
+          },
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          operationsApiProvider.overrideWithValue(api),
+          realtimeEventStreamProvider.overrideWith((ref) => events.stream),
+        ],
+        child: const MaterialApp(home: StaffBillScreen(tableId: 12)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Waiting for payment'), findsOneWidget);
+
+    events.add(
+      RealtimeEvent(
+        id: 'payment-event-1',
+        type: 'bill.payment_recorded',
+        timestamp: DateTime.now(),
+        state: const {'bill_number': 'BILL-12', 'status': 'paid'},
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Payment confirmed'), findsOneWidget);
+    expect(find.textContaining('Cash'), findsNothing);
+    expect(find.textContaining('UPI'), findsNothing);
+  });
 }

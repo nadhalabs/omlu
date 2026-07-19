@@ -9,6 +9,7 @@ import '../../design_system/widgets/omlu_card.dart';
 import '../../design_system/widgets/omlu_skeleton_loader.dart';
 import '../../design_system/widgets/realtime_status_chip.dart';
 import '../auth_provider.dart';
+import '../realtime_connection_provider.dart';
 import 'menu_provider.dart';
 import 'tables_provider.dart';
 
@@ -24,6 +25,8 @@ class StaffBillScreen extends ConsumerStatefulWidget {
 class _StaffBillScreenState extends ConsumerState<StaffBillScreen> {
   bool _submitting = false;
   Map<String, Object?>? _confirmedBill;
+  bool _paymentCompleted = false;
+  String? _currentBillNumber;
 
   Future<void> _refresh() async {
     ref.invalidate(tableDetailProvider(widget.tableId));
@@ -64,11 +67,16 @@ class _StaffBillScreenState extends ConsumerState<StaffBillScreen> {
 
   Future<void> _acceptPayment(Map<String, Object?> bill) async {
     if (_submitting) return;
+    final role = ref.read(authProvider).valueOrNull?.role.name;
+    if (role != 'owner' && role != 'admin') return;
     final method = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (sheetContext) => _PaymentConfirmationSheet(bill: bill),
+      builder: (sheetContext) => _PaymentConfirmationSheet(
+        bill: bill,
+        tableNumber: _text(bill['table_number'], fallback: 'this table'),
+      ),
     );
     if (method == null || _submitting) return;
 
@@ -104,6 +112,47 @@ class _StaffBillScreenState extends ConsumerState<StaffBillScreen> {
     }
   }
 
+  Future<void> _sendToCounter(Map<String, Object?> bill) async {
+    if (_submitting) return;
+    final total = _money(_amount(bill['total_amount']));
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Send bill to counter?'),
+        content: Text(
+          'Send the full $total bill to Owner or Admin for payment confirmation?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Send bill to counter'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || _submitting) return;
+    setState(() => _submitting = true);
+    try {
+      final pending = await ref
+          .read(operationsApiProvider)
+          .sendBillToCounter(_text(bill['bill_number']));
+      _currentBillNumber = _text(pending['bill_number']);
+      await _refresh();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Bill sent to the counter.')),
+      );
+    } catch (error) {
+      await _handleFailure(error);
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
   Future<void> _handleFailure(Object error) async {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -122,6 +171,16 @@ class _StaffBillScreenState extends ConsumerState<StaffBillScreen> {
   @override
   Widget build(BuildContext context) {
     final role = ref.watch(authProvider).valueOrNull?.role.name ?? 'staff';
+    ref.listen(realtimeEventStreamProvider, (previous, next) {
+      next.whenData((event) {
+        if ((event.type == 'bill.payment_recorded' ||
+                event.type == 'bill.paid') &&
+            event.state['bill_number'] == _currentBillNumber &&
+            mounted) {
+          setState(() => _paymentCompleted = true);
+        }
+      });
+    });
     final paid = _confirmedBill;
     return Scaffold(
       appBar: AppBar(
@@ -130,6 +189,10 @@ class _StaffBillScreenState extends ConsumerState<StaffBillScreen> {
       ),
       body: paid != null
           ? _PaidBillView(bill: paid, onDone: () => Navigator.of(context).pop())
+          : _paymentCompleted
+          ? _StaffPaymentConfirmedView(
+              onDone: () => Navigator.of(context).pop(),
+            )
           : ref
                 .watch(tableDetailProvider(widget.tableId))
                 .when(
@@ -159,6 +222,10 @@ class _StaffBillScreenState extends ConsumerState<StaffBillScreen> {
       );
     }
     final bill = session['bill'] is Map ? _map(session['bill']) : null;
+    if (bill != null) {
+      _currentBillNumber = _text(bill['bill_number']);
+      bill['table_number'] = table['table_number'];
+    }
     final orders = _listOfMaps(session['orders']);
     final activity = _listOfMaps(detail['activity']);
     return RefreshIndicator(
@@ -215,7 +282,11 @@ class _StaffBillScreenState extends ConsumerState<StaffBillScreen> {
           else
             _BillBreakdown(
               bill: bill,
+              canRecordPayment:
+                  ref.read(authProvider).valueOrNull?.role.name == 'owner' ||
+                  ref.read(authProvider).valueOrNull?.role.name == 'admin',
               isSubmitting: _submitting,
+              onSendToCounter: () => _sendToCounter(bill),
               onAcceptPayment: () => _acceptPayment(bill),
             ),
           if (activity.isNotEmpty) ...[
@@ -355,11 +426,15 @@ class _OrderBillCard extends StatelessWidget {
 class _BillBreakdown extends StatelessWidget {
   const _BillBreakdown({
     required this.bill,
+    required this.canRecordPayment,
     required this.isSubmitting,
+    required this.onSendToCounter,
     required this.onAcceptPayment,
   });
   final Map<String, Object?> bill;
+  final bool canRecordPayment;
   final bool isSubmitting;
+  final VoidCallback onSendToCounter;
   final VoidCallback onAcceptPayment;
 
   @override
@@ -398,17 +473,45 @@ class _BillBreakdown extends StatelessWidget {
           _MoneyRow(label: 'Balance', value: balance, strong: true),
           if (status == 'paid') ...[
             const SizedBox(height: OmluSpacing.md),
-            _PaymentHistory(bill: bill),
-          ] else ...[
+            if (canRecordPayment)
+              _PaymentHistory(bill: bill)
+            else
+              const Text(
+                'Payment confirmed by Owner or Admin.',
+                style: OmluTypography.bodyMedium,
+              ),
+          ] else if (status == 'payment_pending' && !canRecordPayment) ...[
+            const SizedBox(height: OmluSpacing.md),
+            OmluButton(text: 'Waiting for payment', onPressed: null),
+            const SizedBox(height: OmluSpacing.xs),
+            const Text(
+              'Owner or Admin will confirm Cash or UPI at the counter. This screen updates automatically.',
+              textAlign: TextAlign.center,
+              style: OmluTypography.bodySmall,
+            ),
+          ] else if (status == 'payment_pending' && canRecordPayment) ...[
             const SizedBox(height: OmluSpacing.md),
             OmluButton(
-              text: 'Accept Full Payment · ${_money(total)}',
+              text: 'Record full payment · ${_money(total)}',
               isLoading: isSubmitting,
               onPressed: isSubmitting ? null : onAcceptPayment,
             ),
             const SizedBox(height: OmluSpacing.xs),
             const Text(
               'Manual counter confirmation only. No online payment is initiated.',
+              textAlign: TextAlign.center,
+              style: OmluTypography.bodySmall,
+            ),
+          ] else ...[
+            const SizedBox(height: OmluSpacing.md),
+            OmluButton(
+              text: 'Send bill to counter',
+              isLoading: isSubmitting,
+              onPressed: isSubmitting ? null : onSendToCounter,
+            ),
+            const SizedBox(height: OmluSpacing.xs),
+            const Text(
+              'Cash and UPI confirmation is restricted to Owner and Admin.',
               textAlign: TextAlign.center,
               style: OmluTypography.bodySmall,
             ),
@@ -420,8 +523,12 @@ class _BillBreakdown extends StatelessWidget {
 }
 
 class _PaymentConfirmationSheet extends StatefulWidget {
-  const _PaymentConfirmationSheet({required this.bill});
+  const _PaymentConfirmationSheet({
+    required this.bill,
+    required this.tableNumber,
+  });
   final Map<String, Object?> bill;
+  final String tableNumber;
 
   @override
   State<_PaymentConfirmationSheet> createState() =>
@@ -449,7 +556,7 @@ class _PaymentConfirmationSheetState extends State<_PaymentConfirmationSheet> {
             Text('Confirm payment received', style: OmluTypography.h2),
             const SizedBox(height: OmluSpacing.xs),
             Text(
-              'Full balance: ${_money(total)}',
+              'Table ${widget.tableNumber} · ${_money(total)}',
               style: OmluTypography.h1.copyWith(color: OmluColors.accent),
             ),
             const SizedBox(height: OmluSpacing.md),
@@ -473,8 +580,8 @@ class _PaymentConfirmationSheetState extends State<_PaymentConfirmationSheet> {
             const SizedBox(height: OmluSpacing.md),
             Text(
               _method == 'counter_upi'
-                  ? 'Confirm only after the restaurant sees the UPI payment in its own account.'
-                  : 'Confirm only after the full cash amount has been received.',
+                  ? 'Confirm ${_money(total)} received by UPI for Table ${widget.tableNumber}? Check the restaurant account first.'
+                  : 'Confirm ${_money(total)} received in Cash for Table ${widget.tableNumber}? Count the full amount first.',
               style: OmluTypography.bodyMedium,
             ),
             const SizedBox(height: OmluSpacing.lg),
@@ -524,6 +631,39 @@ class _PaidBillView extends StatelessWidget {
         ),
         const SizedBox(height: OmluSpacing.lg),
         OmluCard(child: _PaymentHistory(bill: bill)),
+        const SizedBox(height: OmluSpacing.lg),
+        OmluButton(text: 'Back to Tables', onPressed: onDone),
+      ],
+    );
+  }
+}
+
+class _StaffPaymentConfirmedView extends StatelessWidget {
+  const _StaffPaymentConfirmedView({required this.onDone});
+  final VoidCallback onDone;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(OmluSpacing.md),
+      children: [
+        const Icon(
+          Icons.check_circle_rounded,
+          size: 72,
+          color: OmluColors.statusAvailable,
+        ),
+        const SizedBox(height: OmluSpacing.md),
+        Text(
+          'Payment confirmed',
+          textAlign: TextAlign.center,
+          style: OmluTypography.h1,
+        ),
+        const SizedBox(height: OmluSpacing.xs),
+        const Text(
+          'Owner or Admin confirmed payment. The backend closed the session and released the table.',
+          textAlign: TextAlign.center,
+          style: OmluTypography.bodyMedium,
+        ),
         const SizedBox(height: OmluSpacing.lg),
         OmluButton(text: 'Back to Tables', onPressed: onDone),
       ],

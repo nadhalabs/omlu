@@ -350,38 +350,6 @@ export async function issueStaffBill(
   }
 }
 
-export async function requestPayAtCounter(
-  sessionToken: string,
-  method: CounterPaymentMethod
-): Promise<CounterPaymentResponse> {
-  const baseUrl = publicBackendBaseUrl();
-  const url = `${baseUrl}/public/sessions/${encodeURIComponent(sessionToken)}/pay-at-counter`;
-
-  try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ method }),
-    });
-
-    if (!response.ok) {
-      let message = "Failed to request counter payment.";
-      try {
-        const errorData = await response.json();
-        if (errorData && typeof errorData.detail === "string") {
-          message = errorData.detail;
-        }
-      } catch {}
-      throw new ApiError(response.status, message);
-    }
-
-    return await response.json();
-  } catch (error) {
-    if (error instanceof ApiError) throw error;
-    throw new ApiError(500, "Could not connect to the backend server.");
-  }
-}
-
 export async function confirmStaffCounterPayment(
   billNumber: string,
   method: CounterPaymentMethod
@@ -419,12 +387,12 @@ export async function requestStaffPaymentAssistance(
 ): Promise<BillResponse> {
   try {
     const response = await fetch(
-      `/api/staff/bills/${encodeURIComponent(billNumber)}/payment-assistance`,
+      `/api/staff/bills/${encodeURIComponent(billNumber)}/send-to-counter`,
       { method: "POST" }
     );
 
     if (!response.ok) {
-      let message = "Failed to notify admin for payment.";
+      let message = "Failed to send bill to counter.";
       try {
         const errorData = await response.json();
         if (errorData && typeof errorData.detail === "string") {

@@ -111,6 +111,7 @@ export default function StaffSessionsClient() {
     staffInfo?.role === "owner" || staffInfo?.role === "admin"
       ? "/admin/dashboard"
       : "/staff";
+  const canCloseSession = staffInfo?.role === "owner" || staffInfo?.role === "admin";
 
   // Open confirm dialog
   const handleAskClose = (token: string) => {
@@ -338,7 +339,7 @@ export default function StaffSessionsClient() {
                   )}
 
                   {/* Close action */}
-                  {!isConfirming ? (
+                  {canCloseSession && (!isConfirming ? (
                     <button
                       id={`close-btn-${s.session_token}`}
                       disabled={isClosing}
@@ -369,7 +370,7 @@ export default function StaffSessionsClient() {
                         </button>
                       </div>
                     </div>
-                  )}
+                  ))}
                 </div>
               );
             })}

@@ -237,6 +237,14 @@ def get_staff_table(
             activity.append({"type": "request", "label": request_labels.get(request.request_type, "Assistance requested"), "timestamp": request.created_at.isoformat()})
         if session.bill:
             activity.append({"type": "bill", "label": f"Bill generated · {session.bill.bill_number}", "timestamp": session.bill.generated_at.isoformat()})
+            sent_audit = db.query(AuditLog).filter(
+                AuditLog.restaurant_id == current_user.restaurant_id,
+                AuditLog.target_type == "bill",
+                AuditLog.target_id == str(session.bill.id),
+                AuditLog.action == "bill.sent_to_counter",
+            ).order_by(AuditLog.created_at.desc(), AuditLog.id.desc()).first()
+            if sent_audit:
+                activity.append({"type": "bill_sent", "label": "Bill sent to counter", "timestamp": sent_audit.created_at.isoformat()})
         activity.sort(key=lambda item: item["timestamp"] or "")
     return {
         "table": _table_summary(db, table, session),

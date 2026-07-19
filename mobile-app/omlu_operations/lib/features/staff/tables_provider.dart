@@ -26,7 +26,11 @@ class TablesNotifier
           'service_request.resolved',
           'bill.generated',
           'bill.updated',
+          'bill.sent_to_counter',
+          'bill.payment_pending',
+          'bill.payment_recorded',
           'bill.paid',
+          'table.status_changed',
         };
         if (types.contains(event.type)) {
           fetchTables(silent: true);

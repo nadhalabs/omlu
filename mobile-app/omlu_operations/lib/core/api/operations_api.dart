@@ -86,6 +86,15 @@ class OperationsApi {
     return _client.postJson('/staff/bills/$billNumber/issue');
   }
 
+  Future<Map<String, Object?>> sendBillToCounter(String billNumber) {
+    return _client.postJson('/staff/bills/$billNumber/send-to-counter');
+  }
+
+  Future<List<Object?>> fetchPendingPayments() async {
+    final response = await _client.getJson('/staff/bills/pending-payments');
+    return (response['items'] as List<Object?>?) ?? const [];
+  }
+
   Future<Map<String, Object?>> confirmCounterPayment({
     required String billNumber,
     required String method,

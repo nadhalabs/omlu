@@ -292,7 +292,7 @@ def bill_history(
     table_id: int | None = None,
     page: int = 1,
     page_size: int = 25,
-    current_user: StaffUser = Depends(_history_roles),
+    current_user: StaffUser = Depends(_owner_admin),
     db: Session = Depends(get_db),
 ):
     start_utc, end_utc = _utc_bounds(staff=current_user, preset=preset, start_date=start_date, end_date=end_date)
@@ -862,7 +862,7 @@ def export_bills(
     status_filter: str | None = None,
     payment_method: str | None = None,
     table_id: int | None = None,
-    current_user: StaffUser = Depends(_history_roles),
+    current_user: StaffUser = Depends(_owner_admin),
     db: Session = Depends(get_db),
 ):
     start_utc, end_utc = _utc_bounds(staff=current_user, preset=preset, start_date=start_date, end_date=end_date)

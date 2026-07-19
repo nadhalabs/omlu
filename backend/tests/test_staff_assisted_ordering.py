@@ -394,6 +394,11 @@ def test_staff_bill_request_hidden_after_payment_closes_session(staff_order_cont
         headers=auth(staff_order_context, "owner_token"),
     )
     assert issued.status_code == 200
+    sent = client.post(
+        f"/staff/bills/{requested['bill_number']}/send-to-counter",
+        headers=auth(staff_order_context),
+    )
+    assert sent.status_code == 200
     paid = client.post(
         f"/staff/bills/{requested['bill_number']}/confirm-counter-payment",
         headers=auth(staff_order_context, "owner_token"),
@@ -499,7 +504,7 @@ def test_resolve_table_request_records_staff_resolver(staff_order_context):
     assert body["resolved_by_staff_id"] == staff_order_context["staff_id"]
 
 
-def test_staff_bill_generation_and_payment_recording(staff_order_context):
+def test_staff_bill_generation_and_counter_handoff(staff_order_context):
     start_session(staff_order_context)
     create_manual_order(staff_order_context)
 
@@ -518,20 +523,27 @@ def test_staff_bill_generation_and_payment_recording(staff_order_context):
     )
     assert issued.status_code == 200
 
-    paid = client.post(
+    sent = client.post(
+        f"/staff/bills/{bill['bill_number']}/send-to-counter",
+        headers=auth(staff_order_context),
+    )
+    assert sent.status_code == 200
+    assert sent.json()["status"] == "payment_pending"
+
+    denied = client.post(
         f"/staff/bills/{bill['bill_number']}/confirm-counter-payment",
         headers=auth(staff_order_context),
         json={"method": "counter_upi"},
     )
+    assert denied.status_code == 403
+
+    paid = client.post(
+        f"/staff/bills/{bill['bill_number']}/confirm-counter-payment",
+        headers=auth(staff_order_context, "admin_token"),
+        json={"method": "counter_upi"},
+    )
     assert paid.status_code == 200
     assert paid.json()["status"] == "paid"
-    assert paid.json()["payment_method"] == "counter_upi"
-
-    assistance = client.post(
-        f"/staff/bills/{bill['bill_number']}/payment-assistance",
-        headers=auth(staff_order_context),
-    )
-    assert assistance.status_code == 409
 
     db = SessionLocal()
     stored_bill = db.query(Bill).filter(
@@ -542,9 +554,9 @@ def test_staff_bill_generation_and_payment_recording(staff_order_context):
     assert stored_bill.generated_by_staff_id == staff_order_context["staff_id"]
     assert stored_bill.status == "paid"
     assert stored_bill.payment_method == "counter_upi"
-    assert stored_bill.paid_by_staff_id == staff_order_context["staff_id"]
+    assert stored_bill.paid_by_staff_id == staff_order_context["admin_id"]
     assert session.status == "closed"
-    assert session.closed_by_staff_id == staff_order_context["staff_id"]
+    assert session.closed_by_staff_id == staff_order_context["admin_id"]
     db.close()
 
 

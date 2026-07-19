@@ -22,9 +22,13 @@ EVENT_SESSION_UPDATED = "session.updated"
 EVENT_SESSION_CLOSED = "session.closed"
 EVENT_BILL_GENERATED = "bill.generated"
 EVENT_BILL_UPDATED = "bill.updated"
+EVENT_BILL_SENT_TO_COUNTER = "bill.sent_to_counter"
+EVENT_BILL_PAYMENT_PENDING = "bill.payment_pending"
+EVENT_BILL_PAYMENT_RECORDED = "bill.payment_recorded"
 EVENT_BILL_PAID = "bill.paid"
 EVENT_PAYMENT_ASSISTANCE_REQUESTED = "payment.assistance_requested"
 EVENT_TABLE_UPDATED = "table.updated"
+EVENT_TABLE_STATUS_CHANGED = "table.status_changed"
 EVENT_AVAILABILITY_UPDATED = "availability.updated"
 
 

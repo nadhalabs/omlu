@@ -43,6 +43,7 @@ export default function AdminRequestsClient() {
   const [issuingId, setIssuingId] = useState<number | null>(null);
   const [confirmingPayment, setConfirmingPayment] = useState<string | null>(null);
   const [requestingAssistanceId, setRequestingAssistanceId] = useState<number | null>(null);
+  const [sentToCounter, setSentToCounter] = useState<Set<number>>(new Set());
   const [staffInfo, setStaffInfo] = useState<CurrentStaffResponse | null>(null);
   const [paidBills, setPaidBills] = useState<
     Record<number, { method: CounterPaymentMethod | "counter_card" | "online"; paidAt: string }>
@@ -215,6 +216,7 @@ export default function AdminRequestsClient() {
       }
       const issued = await issueStaffBill(billNumber);
       await requestStaffPaymentAssistance(issued.bill_number);
+      setSentToCounter((previous) => new Set(previous).add(req.id));
       setRequests((prev) =>
         prev.map((item) =>
           item.id === req.id
@@ -417,6 +419,10 @@ export default function AdminRequestsClient() {
                                       : "Confirm UPI Payment"}
                                   </button>
                                 </>
+                              ) : sentToCounter.has(req.id) ? (
+                                <div className="rounded-xl border border-sky-700/40 bg-sky-950/30 px-3 py-2 text-center text-xs font-bold text-sky-300">
+                                  Waiting for payment
+                                </div>
                               ) : (
                                 <button
                                   onClick={() => handleRequestPaymentAssistance(req)}
@@ -424,8 +430,8 @@ export default function AdminRequestsClient() {
                                   className="px-4 py-2 bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition cursor-pointer"
                                 >
                                   {requestingAssistanceId === req.id
-                                    ? "Notifying…"
-                                    : "Customer ready to pay"}
+                                    ? "Sending…"
+                                    : "Send bill to counter"}
                                 </button>
                               )}
                             </div>

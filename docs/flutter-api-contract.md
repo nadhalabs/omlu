@@ -228,27 +228,34 @@ This contract documents the existing backend surface that the native Flutter OML
 - Flutter optimistic update: no
 - Idempotency required: no
 
-### Payment Assistance
+### Send Bill To Counter
 
-- Method/path: `POST /staff/bills/{bill_number}/payment-assistance`
+- Method/path: `POST /staff/bills/{bill_number}/send-to-counter`
 - Allowed roles: `owner`, `admin`, `staff`
 - Request body: none
 - Response body: bill response
 - Error responses: `401`, `403`, `404`, `409`
-- Realtime events emitted: `payment.assistance_requested`
-- Flutter optimistic update: yes for local requested indicator, then refresh
+- Realtime events emitted: `bill.sent_to_counter`, `bill.payment_pending`, `table.status_changed`
+- Flutter optimistic update: no
 - Idempotency required: no
 
 ### Confirm Counter Payment
 
 - Method/path: `POST /staff/bills/{bill_number}/confirm-counter-payment`
-- Allowed roles: `owner`, `admin`, `staff`
+- Allowed roles: `owner`, `admin`; Staff and Kitchen receive `403`
 - Request body: `{"method":"counter_cash|counter_upi"}`
 - Response body: paid bill response
 - Error responses: `401`, `403`, `404`, `409`, `422`
-- Realtime events emitted: `bill.paid`, `session.closed`
+- Realtime events emitted: `bill.payment_recorded`, `bill.paid`, `session.closed`, `table.status_changed`
 - Flutter optimistic update: no
 - Idempotency required: no
+
+### Pending Payments
+
+- Method/path: `GET /staff/bills/pending-payments`
+- Allowed roles: `owner`, `admin`; Staff and Kitchen receive `403`
+- Response body: table/session, grand total, request time, sender and payment status
+- Realtime refresh triggers: `bill.sent_to_counter`, `bill.payment_pending`, `bill.payment_recorded`, `bill.paid`, `session.closed`
 
 ## Kitchen Tablet And Large Screen
 

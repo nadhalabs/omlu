@@ -203,6 +203,31 @@ def request_pay_at_counter(
     return bill
 
 
+def send_bill_to_counter(db: Session, bill: Bill) -> Bill:
+    """Persist the staff-to-counter handoff without selecting a payment method."""
+    locked_session = _lock_session(db, bill.dining_session_id)
+    locked_bill = _lock_bill_after_session(db, bill.id, locked_session.id)
+
+    if locked_bill.status == "payment_pending" and locked_session.status == "payment_pending":
+        return locked_bill
+    if locked_bill.status != "issued":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Bill must be issued before it can be sent to the counter.",
+        )
+    if locked_session.status != "payment_requested":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Session must be waiting for payment before it can be sent to the counter.",
+        )
+
+    locked_bill.status = "payment_pending"
+    locked_bill.payment_method = None
+    locked_session.status = "payment_pending"
+    db.flush()
+    return locked_bill
+
+
 def confirm_counter_payment(
     db: Session,
     bill: Bill,
@@ -224,13 +249,13 @@ def confirm_counter_payment(
             detail="Bill has already been paid.",
         )
 
-    if locked_bill.status not in {"issued", "payment_pending"}:
+    if locked_bill.status != "payment_pending":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Bill must be issued or payment pending before confirming counter payment.",
+            detail="Bill must be sent to the counter before confirming payment.",
         )
 
-    if locked_session.status not in {"payment_requested", "payment_pending"}:
+    if locked_session.status != "payment_pending":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Cannot confirm payment while session status is {locked_session.status}.",

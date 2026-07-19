@@ -137,7 +137,7 @@ export default function StaffTableDetailClient({ tableId }: { tableId: number })
                     {pendingBillRequest && (
                       <div className="rounded-lg border border-amber-700/50 bg-amber-950/30 px-4 py-3 text-sm font-bold text-amber-300">
                         Bill requested
-                        <span className="block text-xs font-medium text-amber-200/80">Waiting for owner/admin</span>
+                        <span className="block text-xs font-medium text-amber-200/80">Review and send to counter</span>
                       </div>
                     )}
                     {bill && bill.status !== "paid" && billUrl && (
@@ -148,7 +148,7 @@ export default function StaffTableDetailClient({ tableId }: { tableId: number })
                   </div>
                   {!hasValidOrder && !bill && <div className="mt-4 text-sm text-zinc-500">Add at least one order before requesting a bill.</div>}
                   {bill && <div className="mt-4 text-sm text-zinc-400">Bill {bill.bill_number} · ₹{bill.total_amount} · {bill.status}</div>}
-                  {staffInfo?.role === "staff" && <div className="mt-3 text-xs text-zinc-500">Owner/admin will issue the bill and record payment.</div>}
+                  {staffInfo?.role === "staff" && <div className="mt-3 text-xs text-zinc-500">Staff can generate and send the bill. Only Owner/Admin can record payment.</div>}
                 </div>
               </div>
             </section>

@@ -352,6 +352,12 @@ def test_public_session_websocket_receives_bill_payment_and_close_events(realtim
         )
         assert issue_response.status_code == 200
         issue_event = receive_event(ws, realtime.EVENT_BILL_UPDATED)
+        sent_response = client.post(
+            f"/staff/bills/{bill_number}/send-to-counter",
+            headers=auth(realtime_context),
+        )
+        assert sent_response.status_code == 200
+        pending_event = receive_event(ws, realtime.EVENT_BILL_PAYMENT_PENDING)
 
         paid_response = client.post(
             f"/staff/bills/{bill_number}/confirm-counter-payment",
@@ -359,12 +365,15 @@ def test_public_session_websocket_receives_bill_payment_and_close_events(realtim
             json={"method": "counter_cash"},
         )
         assert paid_response.status_code == 200
+        payment_event = receive_event(ws, realtime.EVENT_BILL_PAYMENT_RECORDED)
         paid_event = receive_event(ws, realtime.EVENT_BILL_PAID)
         closed_event = receive_event(ws, realtime.EVENT_SESSION_CLOSED)
 
     assert "restaurant_id" not in bill_event
     assert bill_event["state"]["bill_number"] == bill_number
     assert issue_event["state"]["status"] == "issued"
+    assert pending_event["state"]["status"] == "payment_pending"
+    assert payment_event["state"]["status"] == "paid"
     assert paid_event["state"]["status"] == "paid"
     assert closed_event["state"]["status"] == "closed"
 
@@ -457,6 +466,12 @@ def test_staff_websocket_receives_session_bill_and_payment_events(realtime_conte
         )
         assert issue_response.status_code == 200
         receive_event(ws, realtime.EVENT_BILL_UPDATED)
+        sent_response = client.post(
+            f"/staff/bills/{bill_number}/send-to-counter",
+            headers=auth(realtime_context),
+        )
+        assert sent_response.status_code == 200
+        pending_event = receive_event(ws, realtime.EVENT_BILL_PAYMENT_PENDING)
 
         paid_response = client.post(
             f"/staff/bills/{bill_number}/confirm-counter-payment",
@@ -464,12 +479,16 @@ def test_staff_websocket_receives_session_bill_and_payment_events(realtime_conte
             json={"method": "counter_cash"},
         )
         assert paid_response.status_code == 200
+        payment_event = receive_event(ws, realtime.EVENT_BILL_PAYMENT_RECORDED)
         paid_event = receive_event(ws, realtime.EVENT_BILL_PAID)
         closed_event = receive_event(ws, realtime.EVENT_SESSION_CLOSED)
 
     assert session_event["state"]["table_id"] == realtime_context["table_id"]
     assert bill_event["state"]["bill_number"] == bill_number
+    assert pending_event["state"]["status"] == "payment_pending"
+    assert payment_event["state"] == {"bill_number": bill_number, "status": "paid"}
     assert paid_event["state"]["status"] == "paid"
+    assert "payment_method" not in paid_event["state"]
     assert closed_event["state"]["status"] == "closed"
 
 
@@ -601,6 +620,7 @@ def test_closed_session_websocket_rejected(realtime_context):
     bill_number = bill_resp.json()["bill_number"]
 
     client.post(f"/staff/bills/{bill_number}/issue", headers=auth(realtime_context))
+    client.post(f"/staff/bills/{bill_number}/send-to-counter", headers=auth(realtime_context))
 
     pay_resp = client.post(
         f"/staff/bills/{bill_number}/confirm-counter-payment",
@@ -622,7 +642,7 @@ def test_cancelled_session_websocket_rejected(realtime_context):
 
     cancel_resp = client.post(
         f"/staff/sessions/{session_token}/close-empty",
-        headers=auth(realtime_context),
+        headers=auth(realtime_context, "owner_token"),
     )
     assert cancel_resp.status_code == 200
 
@@ -655,6 +675,7 @@ def test_old_session_token_cannot_receive_new_session_events(realtime_context):
     assert bill_resp.status_code == 201
     bill_number = bill_resp.json()["bill_number"]
     client.post(f"/staff/bills/{bill_number}/issue", headers=auth(realtime_context))
+    client.post(f"/staff/bills/{bill_number}/send-to-counter", headers=auth(realtime_context))
     pay_resp = client.post(
         f"/staff/bills/{bill_number}/confirm-counter-payment",
         headers=auth(realtime_context, "owner_token"),

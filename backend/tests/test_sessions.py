@@ -328,13 +328,12 @@ def test_admin_can_close_empty_session(sess_ctx):
     assert res.json()["status"] == "cancelled"
 
 
-def test_staff_can_close_empty_session(sess_ctx):
+def test_staff_cannot_close_session_manually(sess_ctx):
     res = client.post(
         f"/staff/sessions/{sess_ctx['session_token']}/close-empty",
         headers={"Authorization": f"Bearer {sess_ctx['staff_token']}"},
     )
-    assert res.status_code == 200
-    assert res.json()["status"] == "cancelled"
+    assert res.status_code == 403
 
 
 def test_kitchen_cannot_close_session(sess_ctx):

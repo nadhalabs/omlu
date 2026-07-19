@@ -7,6 +7,7 @@ import '../../design_system/radius.dart';
 import '../../design_system/widgets/omlu_card.dart';
 import '../../design_system/widgets/realtime_status_chip.dart';
 import '../auth_provider.dart';
+import '../payments/pending_payments_tab.dart';
 import '../staff/tables_provider.dart';
 import '../staff/staff_bill_screen.dart';
 
@@ -27,6 +28,7 @@ class AdminScreen extends ConsumerWidget {
     final List<Widget> screens = const [
       _AdminOverviewTab(),
       _AdminTablesTab(),
+      PendingPaymentsTab(),
       _AdminStaffTab(),
     ];
 
@@ -39,6 +41,7 @@ class AdminScreen extends ConsumerWidget {
             return Scaffold(
               body: IndexedStack(index: activeTab, children: screens),
               bottomNavigationBar: BottomNavigationBar(
+                type: BottomNavigationBarType.fixed,
                 currentIndex: activeTab,
                 selectedItemColor: OmluColors.accent,
                 unselectedItemColor: OmluColors.textSecondary,
@@ -51,6 +54,10 @@ class AdminScreen extends ConsumerWidget {
                   BottomNavigationBarItem(
                     icon: Icon(Icons.grid_view_rounded),
                     label: 'Tables',
+                  ),
+                  BottomNavigationBarItem(
+                    icon: Icon(Icons.payments_rounded),
+                    label: 'Payments',
                   ),
                   BottomNavigationBarItem(
                     icon: Icon(Icons.people_rounded),
@@ -78,6 +85,10 @@ class AdminScreen extends ConsumerWidget {
                     NavigationRailDestination(
                       icon: Icon(Icons.grid_view_rounded),
                       label: Text('Tables'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.payments_rounded),
+                      label: Text('Payments'),
                     ),
                     NavigationRailDestination(
                       icon: Icon(Icons.people_rounded),

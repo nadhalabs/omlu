@@ -18,8 +18,8 @@ router = APIRouter()
 
 # View: all authenticated staff may list active sessions
 _view_roles = RoleChecker(["owner", "admin", "staff"])
-# Close: owner, admin, staff only
-_close_roles = RoleChecker(["owner", "admin", "staff"])
+# Manual closure is a management action. Payment closes its session atomically.
+_close_roles = RoleChecker(["owner", "admin"])
 
 # Statuses that block closing an empty session
 _BLOCKING_ORDER_STATUSES = {"accepted", "preparing", "ready", "served"}

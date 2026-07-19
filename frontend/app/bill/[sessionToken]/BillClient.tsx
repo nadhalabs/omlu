@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ApiError, getPublicBill, requestPayAtCounter } from "@/lib/api";
-import { BillResponse, CounterPaymentMethod } from "@/lib/types";
+import { ApiError, getPublicBill } from "@/lib/api";
+import { BillResponse } from "@/lib/types";
 import { buildWhatsAppBillShareUrl } from "@/lib/billShare";
 import { useRealtime } from "@/lib/realtime";
 import {
@@ -22,8 +22,6 @@ export default function BillClient({ sessionToken }: BillClientProps) {
   const [bill, setBill] = useState<BillResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [paymentAction, setPaymentAction] = useState<CounterPaymentMethod | null>(null);
-  const [paymentError, setPaymentError] = useState<string | null>(null);
   const [language, setLanguage] = useState<"en" | "ml">("en");
   const [showPaymentSuccess, setShowPaymentSuccess] = useState<boolean>(false);
   const hasLoadedBillRef = useRef(false);
@@ -47,9 +45,7 @@ export default function BillClient({ sessionToken }: BillClientProps) {
       total: "Final total",
       print: "Download / Print Bill",
       whatsapp: "Share on WhatsApp",
-      payAtCounter: "Pay at Counter",
-      cash: "Cash",
-      upi: "UPI at Counter",
+      payAtCounter: "Payment is handled at the counter",
       paymentPending: "Payment pending at counter",
       paymentMethod: "Payment method",
       paidAt: "Paid at",
@@ -89,9 +85,7 @@ export default function BillClient({ sessionToken }: BillClientProps) {
       total: "അവസാന തുക",
       print: "ബിൽ ഡൗൺലോഡ് / പ്രിന്റ് ചെയ്യുക",
       whatsapp: "WhatsApp-ൽ പങ്കിടുക",
-      payAtCounter: "കൗണ്ടറിൽ പണമടയ്ക്കുക",
-      cash: "കാഷ്",
-      upi: "കൗണ്ടറിൽ UPI",
+      payAtCounter: "പേയ്മെന്റ് കൗണ്ടറിൽ കൈകാര്യം ചെയ്യും",
       paymentPending: "കൗണ്ടറിൽ പേയ്മെന്റ് കാത്തിരിക്കുന്നു",
       paymentMethod: "പേയ്മെന്റ് രീതി",
       paidAt: "പണം നൽകിയ സമയം",
@@ -254,21 +248,6 @@ export default function BillClient({ sessionToken }: BillClientProps) {
     typeof window === "undefined"
       ? ""
       : `${window.location.origin}/bill/${encodeURIComponent(sessionToken)}`;
-
-  const handlePayAtCounter = async (method: CounterPaymentMethod) => {
-    if (!bill || paymentAction) return;
-    setPaymentAction(method);
-    setPaymentError(null);
-    try {
-      const updated = await requestPayAtCounter(sessionToken, method);
-      applyFetchedBill(updated, "action");
-    } catch (err) {
-      if (err instanceof ApiError) setPaymentError(err.message);
-      else setPaymentError("Failed to request counter payment.");
-    } finally {
-      setPaymentAction(null);
-    }
-  };
 
   if (loading && !bill) {
     return (
@@ -506,25 +485,9 @@ export default function BillClient({ sessionToken }: BillClientProps) {
 
         <div className="print-hidden rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
           {bill.status === "issued" && (
-            <div className="flex flex-col gap-3">
-              <h2 className="text-base font-black">{t.payAtCounter}</h2>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <button
-                  onClick={() => handlePayAtCounter("counter_cash")}
-                  disabled={paymentAction !== null}
-                  className="min-h-14 rounded-2xl bg-zinc-950 px-5 py-4 text-base font-black text-white shadow-md transition hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-950"
-                >
-                  {paymentAction === "counter_cash" ? "..." : t.cash}
-                </button>
-                <button
-                  onClick={() => handlePayAtCounter("counter_upi")}
-                  disabled={paymentAction !== null}
-                  className="min-h-14 rounded-2xl bg-emerald-600 px-5 py-4 text-base font-black text-white shadow-md transition hover:bg-emerald-700 disabled:opacity-50"
-                >
-                  {paymentAction === "counter_upi" ? "..." : t.upi}
-                </button>
-              </div>
-            </div>
+            <p className="rounded-2xl bg-amber-50 px-4 py-3 text-sm font-black text-amber-800 dark:bg-amber-950/30 dark:text-amber-400">
+              {t.payAtCounter}. Please wait while Staff sends the bill to Owner or Admin.
+            </p>
           )}
           {bill.status === "payment_pending" && (
             <p className="rounded-2xl bg-amber-50 px-4 py-3 text-sm font-black text-amber-800 dark:bg-amber-950/30 dark:text-amber-400">
@@ -534,11 +497,6 @@ export default function BillClient({ sessionToken }: BillClientProps) {
           {bill.status === "paid" && (
             <p className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm font-black text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400">
               {t.statusLabels.paid}
-            </p>
-          )}
-          {paymentError && (
-            <p className="mt-3 rounded-2xl bg-red-50 px-4 py-3 text-sm font-bold text-red-700 dark:bg-red-950/30 dark:text-red-400">
-              {paymentError}
             </p>
           )}
         </div>
