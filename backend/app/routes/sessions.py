@@ -71,6 +71,8 @@ def _build_list_item(session: DiningSession) -> StaffSessionListItem:
         order_count=order_count,
         combined_subtotal=subtotal,
         latest_order_status=_latest_order_status(session),
+        bill_id=session.bill.id if session.bill else None,
+        bill_number=session.bill.bill_number if session.bill else None,
     )
 
 

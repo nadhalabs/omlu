@@ -1,3 +1,4 @@
+import datetime
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
@@ -443,6 +444,33 @@ def test_staff_sends_issued_bill_to_counter_without_payment_method(bill_context)
     assert item["bill_number"] == issued["bill_number"]
     assert item["sent_by_staff_id"] == bill_context["staff_id"]
     assert item["sent_by_staff_name"] == "Bill Waiter"
+    assert item["bill_id"]
+    assert item["session_id"] == bill_context["session_id"]
+    assert item["table_name"] == "Table 4"
+    assert item["amount_paid"] == "0.00"
+    assert item["remaining_amount"] == item["grand_total"]
+    assert item["session_opened_at"]
+
+
+def test_old_pending_bill_is_recovered_by_authoritative_queue(bill_context):
+    add_order(bill_context)
+    issued = issue_bill_for(bill_context, token_key="staff_token")
+    send_to_counter(bill_context, issued["bill_number"])
+
+    db = SessionLocal()
+    bill = db.query(Bill).filter(Bill.bill_number == issued["bill_number"]).one()
+    bill.generated_at = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=11)
+    bill.updated_at = bill.generated_at
+    db.commit()
+    db.close()
+
+    response = client.get(
+        "/staff/bills/pending-payments",
+        headers={"Authorization": f"Bearer {bill_context['owner_token']}"},
+    )
+
+    assert response.status_code == 200
+    assert [item["bill_number"] for item in response.json()["items"]] == [issued["bill_number"]]
 
 
 @pytest.mark.parametrize("token_key", ["staff_token", "kitchen_token"])
@@ -481,6 +509,42 @@ def test_owner_and_admin_can_confirm_counter_payment(bill_context, token_key, st
     assert body["payment_method"] == method
     assert body["paid_at"] is not None
     assert body["paid_by_staff_id"] == bill_context[staff_id_key]
+
+
+def test_payment_confirmation_updates_queue_table_and_histories(bill_context):
+    add_order(bill_context)
+    issued = issue_bill_for(bill_context)
+    send_to_counter(bill_context, issued["bill_number"])
+
+    paid = confirm_counter_payment(
+        bill_context, issued["bill_number"], token_key="admin_token", method="counter_upi"
+    )
+    assert paid.status_code == 200
+
+    pending = client.get(
+        "/staff/bills/pending-payments",
+        headers={"Authorization": f"Bearer {bill_context['owner_token']}"},
+    ).json()["items"]
+    assert pending == []
+
+    db = SessionLocal()
+    session = db.query(DiningSession).filter(DiningSession.id == bill_context["session_id"]).one()
+    assert session.status == "closed"
+    assert session.closed_at is not None
+    assert db.query(DiningSession).filter(
+        DiningSession.table_id == bill_context["table_id"],
+        DiningSession.status.in_(["open", "payment_requested", "payment_pending"]),
+    ).count() == 0
+    db.close()
+
+    headers = {"Authorization": f"Bearer {bill_context['owner_token']}"}
+    bills = client.get("/admin/history/bills?preset=today", headers=headers).json()["items"]
+    sessions = client.get("/admin/history/sessions?preset=today", headers=headers).json()["items"]
+    assert any(row["bill_number"] == issued["bill_number"] and row["payment_status"] == "paid" for row in bills)
+    assert any(row["session_token"] == bill_context["session_token"] and row["status"] == "closed" for row in sessions)
+
+    requests = client.get("/staff/service-requests?status_filter=pending", headers=headers).json()
+    assert all(request.get("request_type") != "payment_pending" for request in requests)
 
 
 @pytest.mark.parametrize(("method"), ["counter_cash", "counter_upi"])

@@ -4,6 +4,7 @@ import React from "react";
 import AdminSidebarLink from "./AdminSidebarLink";
 import AdminLogoutButton from "./AdminLogoutButton";
 import { backendUrl } from "@/lib/backendUrl";
+import PendingPaymentsSidebarLink from "./PendingPaymentsSidebarLink";
 
 export default async function AdminLayout({
   children,
@@ -19,6 +20,7 @@ export default async function AdminLayout({
   }
 
   let staffInfo = null;
+  let pendingPaymentCount = 0;
 
   try {
     const res = await fetch(backendUrl("/auth/staff/me"), {
@@ -35,6 +37,16 @@ export default async function AdminLayout({
     }
 
     staffInfo = await res.json();
+    if (["owner", "admin"].includes(staffInfo.role)) {
+      const pendingResponse = await fetch(backendUrl("/staff/bills/pending-payments"), {
+        headers: { Authorization: `Bearer ${tokenCookie.value}` },
+        cache: "no-store",
+      });
+      if (pendingResponse.ok) {
+        const pending = await pendingResponse.json();
+        pendingPaymentCount = Array.isArray(pending.items) ? pending.items.length : 0;
+      }
+    }
   } catch {
     // If backend connection fails, redirect to login
     redirect("/login");
@@ -97,6 +109,7 @@ export default async function AdminLayout({
             <AdminSidebarLink href="/admin/settings" label="⚙️ Settings" />
             <AdminSidebarLink href={`/kitchen/${staffInfo.restaurant_slug}`} label="🧑‍🍳 Kitchen Dashboard" />
             <AdminSidebarLink href="/admin/requests" label="🔔 Service Requests" />
+            <PendingPaymentsSidebarLink initialCount={pendingPaymentCount} />
           </nav>
         </div>
 

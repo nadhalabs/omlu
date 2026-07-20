@@ -26,6 +26,7 @@ import {
   StaffSessionDetail,
   StaffAccountCreateRequest,
   StaffAccountResponse,
+  PendingPaymentItem,
 } from "./types";
 
 export class ApiError extends Error {
@@ -1315,4 +1316,29 @@ export async function closeEmptySession(
     if (error instanceof ApiError) throw error;
     throw new ApiError(500, "Could not connect to proxy server.");
   }
+}
+
+export async function getPendingPayments(): Promise<PendingPaymentItem[]> {
+  const res = await fetch("/api/staff/bills/pending-payments", { cache: "no-store" });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, body.detail || "Failed to load pending payments.");
+  }
+  const body = await res.json();
+  return body.items || [];
+}
+
+export async function confirmPendingPayment(
+  billNumber: string,
+  method: "counter_cash" | "counter_upi",
+): Promise<Record<string, unknown>> {
+  const res = await fetch(
+    `/api/staff/bills/${encodeURIComponent(billNumber)}/confirm-counter-payment`,
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ method }) },
+  );
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, body.detail || "Payment confirmation failed.");
+  }
+  return res.json();
 }

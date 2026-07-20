@@ -14,6 +14,8 @@ class StaffSessionListItem(BaseModel):
     order_count: int
     combined_subtotal: Decimal
     latest_order_status: Optional[str] = None
+    bill_id: Optional[int] = None
+    bill_number: Optional[str] = None
 
     @field_serializer("combined_subtotal")
     def serialize_subtotal(self, v: Decimal) -> str:
@@ -32,6 +34,8 @@ class StaffSessionDetail(BaseModel):
     order_count: int
     combined_subtotal: Decimal
     latest_order_status: Optional[str] = None
+    bill_id: Optional[int] = None
+    bill_number: Optional[str] = None
 
     @field_serializer("combined_subtotal")
     def serialize_subtotal(self, v: Decimal) -> str:

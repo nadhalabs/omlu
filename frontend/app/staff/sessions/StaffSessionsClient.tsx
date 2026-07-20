@@ -338,8 +338,22 @@ export default function StaffSessionsClient() {
                     </p>
                   )}
 
+                  {/* Payment-pending sessions must go through counter review. */}
+                  {canCloseSession && s.status === "payment_pending" && s.bill_number && (
+                    <div className="mt-auto flex flex-col gap-2">
+                      <Link
+                        href={`/admin/payments/pending?bill=${encodeURIComponent(s.bill_number)}`}
+                        className="rounded-xl bg-amber-600 px-4 py-2 text-center text-xs font-black text-white hover:bg-amber-500"
+                      >
+                        Review Pending Payment
+                      </Link>
+                      <p className="text-center text-[10px] text-zinc-500">
+                        Cannot close a session with a payment_pending bill.
+                      </p>
+                    </div>
+                  )}
                   {/* Close action */}
-                  {canCloseSession && (!isConfirming ? (
+                  {canCloseSession && s.status !== "payment_pending" && (!isConfirming ? (
                     <button
                       id={`close-btn-${s.session_token}`}
                       disabled={isClosing}

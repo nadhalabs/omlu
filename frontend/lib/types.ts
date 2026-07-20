@@ -496,6 +496,29 @@ export interface StaffSessionListItem {
   order_count: number;
   combined_subtotal: string;
   latest_order_status: string | null;
+  bill_id: number | null;
+  bill_number: string | null;
+}
+
+export interface PendingPaymentItem {
+  bill_id: number;
+  bill_number: string;
+  session_id: number;
+  session_token: string;
+  table_id: number;
+  table_number: string;
+  table_name: string;
+  grand_total: string;
+  total_amount: string;
+  amount_paid: string;
+  remaining_amount: string;
+  currency: string;
+  requested_at: string;
+  sent_at: string | null;
+  sent_by_staff_id: number | null;
+  sent_by_staff_name: string | null;
+  session_opened_at: string;
+  status: "payment_pending";
 }
 
 export interface StaffSessionDetail extends StaffSessionListItem {
