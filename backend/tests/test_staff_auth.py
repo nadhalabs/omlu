@@ -581,7 +581,7 @@ def test_operational_account_can_be_created_without_email_and_login_with_usernam
     create_response = client.post(
         "/admin/staff",
         headers={"Authorization": f"Bearer {owner_token}"},
-        json={"name": f"No Email {role.title()}", "username": username, "role": role, "temporary_password": "246810"},
+        json={"name": f"No Email {role.title()}", "username": username, "role": role, "pin": "246810", "confirm_pin": "246810"},
     )
     assert create_response.status_code == 201
     assert create_response.json()["email"] is None
@@ -603,7 +603,7 @@ def test_operational_account_username_is_required(setup_auth_test_data, role):
     response = client.post(
         "/admin/staff",
         headers={"Authorization": f"Bearer {owner_token}"},
-        json={"name": "Missing Username", "username": "", "role": role, "temporary_password": "246810"},
+        json={"name": "Missing Username", "username": "", "role": role, "pin": "246810", "confirm_pin": "246810"},
     )
     assert response.status_code == 422
 
@@ -671,9 +671,20 @@ def test_staff_pin_must_be_exactly_six_digits(setup_auth_test_data, pin):
     owner_token = create_access_token(data={"sub": str(data["owner_id"]), "restaurant_id": data["restaurant_id"], "role": "owner"})
     response = client.post("/admin/staff", headers={"Authorization": f"Bearer {owner_token}"}, json={
         "name": "Bad Pin Staff", "username": f"bad_pin_{len(pin)}_{pin[-1]}",
-        "email": f"bad-{len(pin)}-{pin[-1]}@test.local", "role": "staff", "temporary_password": pin,
+        "role": "staff", "pin": pin, "confirm_pin": pin,
     })
     assert response.status_code in {400, 422}
+
+
+def test_staff_pin_confirmation_must_match(setup_auth_test_data):
+    data = setup_auth_test_data
+    owner_token = create_access_token(data={"sub": str(data["owner_id"]), "restaurant_id": data["restaurant_id"], "role": "owner"})
+    response = client.post("/admin/staff", headers={"Authorization": f"Bearer {owner_token}"}, json={
+        "name": "Mismatch Pin Staff", "username": "mismatch_pin_staff", "role": "staff",
+        "pin": "123456", "confirm_pin": "654321",
+    })
+    assert response.status_code == 422
+    assert response.json()["detail"] == {"field": "confirm_pin", "message": "PINs do not match"}
 
 
 def test_logout_revokes_current_session(setup_auth_test_data):

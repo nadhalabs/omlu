@@ -34,7 +34,8 @@ const EMPTY_FORM: StaffAccountCreateRequest = {
   email: "",
   role: "staff",
   temporary_password: "",
-  pin_confirmation: "",
+  pin: "",
+  confirm_pin: "",
 };
 
 function fmt(value: string | null) {
@@ -56,7 +57,7 @@ export default function StaffManagementClient() {
   const [resetPasswordValue, setResetPasswordValue] = useState("");
   const [resetPasswordError, setResetPasswordError] = useState<string | undefined>();
   const [resetSaving, setResetSaving] = useState(false);
-  const createFieldOrder: (keyof StaffAccountCreateRequest)[] = ["name", "username", "role", "email", "temporary_password", "pin_confirmation"];
+  const createFieldOrder: (keyof StaffAccountCreateRequest)[] = ["name", "username", "role", "email", "temporary_password", "pin", "confirm_pin"];
 
   const loadStaff = useCallback(async () => {
     setLoading(true);
@@ -79,6 +80,19 @@ export default function StaffManagementClient() {
 
   const replaceStaff = (updated: StaffAccountResponse) => {
     setStaff((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+  };
+
+  const changeCreateRole = (role: StaffAccountCreateRequest["role"]) => {
+    setFieldErrors({});
+    setError(null);
+    setForm((current) => ({
+      ...current,
+      role,
+      email: role === "admin" ? current.email || "" : "",
+      temporary_password: "",
+      pin: "",
+      confirm_pin: "",
+    }));
   };
 
   const submitCreate = async (event: React.FormEvent) => {
@@ -256,18 +270,18 @@ export default function StaffManagementClient() {
 
       <form onSubmit={submitCreate} className="grid grid-cols-1 lg:grid-cols-7 gap-3 bg-zinc-950 border border-zinc-800 rounded-xl p-4">
         <FieldInput name="name" placeholder="Name" value={form.name} error={fieldErrors.name} disabled={saving} onChange={(value) => setForm({ ...form, name: value })} />
-        <FieldInput name="username" placeholder="username" value={form.username} error={fieldErrors.username} disabled={saving} onChange={(value) => setForm({ ...form, username: value.toLowerCase() })} />
-        <select name="role" className="bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-sm" value={form.role} disabled={saving} onChange={(e) => setForm({ ...form, role: e.target.value as StaffAccountCreateRequest["role"], temporary_password: "", pin_confirmation: "" })}>
+        <FieldInput name="username" placeholder="e.g. nadha" value={form.username} error={fieldErrors.username} disabled={saving} onChange={(value) => setForm({ ...form, username: value.toLowerCase() })} />
+        <select name="role" className="bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-sm" value={form.role} disabled={saving} onChange={(e) => changeCreateRole(e.target.value as StaffAccountCreateRequest["role"])}>
           <option value="staff">Staff</option>
           <option value="kitchen">Kitchen</option>
           <option value="admin">Admin</option>
         </select>
         {form.role === "admin" && <FieldInput name="email" placeholder="Email" type="email" value={form.email || ""} error={fieldErrors.email} disabled={saving} onChange={(value) => setForm({ ...form, email: value })} />}
         {form.role === "staff" || form.role === "kitchen" ? <>
-          <FieldInput name="temporary_password" placeholder="6-digit PIN" type="password" value={form.temporary_password} error={fieldErrors.temporary_password} disabled={saving} inputMode="numeric" maxLength={6} onChange={(value) => setForm({ ...form, temporary_password: value.replace(/\D/g, "").slice(0, 6) })} />
-          <FieldInput name="pin_confirmation" placeholder="Confirm PIN" type="password" value={form.pin_confirmation} error={fieldErrors.pin_confirmation} disabled={saving} inputMode="numeric" maxLength={6} onChange={(value) => setForm({ ...form, pin_confirmation: value.replace(/\D/g, "").slice(0, 6) })} />
+          <FieldInput name="pin" placeholder="6-digit PIN" type="password" value={form.pin || ""} error={fieldErrors.pin} disabled={saving} inputMode="numeric" maxLength={6} onChange={(value) => setForm({ ...form, pin: value.replace(/\D/g, "").slice(0, 6) })} />
+          <FieldInput name="confirm_pin" placeholder="Confirm PIN" type="password" value={form.confirm_pin || ""} error={fieldErrors.confirm_pin} disabled={saving} inputMode="numeric" maxLength={6} onChange={(value) => setForm({ ...form, confirm_pin: value.replace(/\D/g, "").slice(0, 6) })} />
         </> : <>
-          <PasswordInput name="temporary_password" label="Temporary password" value={form.temporary_password} error={fieldErrors.temporary_password} disabled={saving} autoComplete="new-password" showChecklist dark onChange={(value) => setForm({ ...form, temporary_password: value })} />
+          <PasswordInput name="temporary_password" label="Temporary password" value={form.temporary_password || ""} error={fieldErrors.temporary_password} disabled={saving} autoComplete="new-password" showChecklist dark onChange={(value) => setForm({ ...form, temporary_password: value })} />
           <div />
         </>}
         <button disabled={saving} className="rounded-lg bg-amber-600 hover:bg-amber-700 disabled:bg-zinc-800 px-4 py-2 text-sm font-black text-white">

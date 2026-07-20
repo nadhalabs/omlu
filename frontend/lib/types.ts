@@ -483,8 +483,9 @@ export interface StaffAccountCreateRequest {
   username: string;
   email?: string;
   role: "admin" | "staff" | "kitchen";
-  temporary_password: string;
-  pin_confirmation: string;
+  temporary_password?: string;
+  pin?: string;
+  confirm_pin?: string;
 }
 
 

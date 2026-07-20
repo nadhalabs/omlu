@@ -9,7 +9,9 @@ class StaffAccountCreate(BaseModel):
     username: str = Field(..., min_length=3, max_length=255)
     email: Optional[str] = Field(default=None, max_length=255)
     role: str
-    temporary_password: str = Field(..., min_length=6, max_length=256)
+    temporary_password: Optional[str] = Field(default=None, min_length=6, max_length=256)
+    pin: Optional[str] = Field(default=None, max_length=6)
+    confirm_pin: Optional[str] = Field(default=None, max_length=6)
 
 
 class StaffAccountUpdate(BaseModel):

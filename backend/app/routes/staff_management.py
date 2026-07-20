@@ -261,10 +261,16 @@ def create_staff_account(
         if not body.email:
             field_error("email", "Email is required for Admin accounts")
         email = validate_email(body.email, "email", "Enter a valid email address.")
+    credential = (body.pin or body.temporary_password) if role in {"staff", "kitchen"} else body.temporary_password
+    credential_field = "pin" if role in {"staff", "kitchen"} else "temporary_password"
+    if not credential:
+        field_error(credential_field, "PIN is required" if credential_field == "pin" else "Temporary password is required")
+    if role in {"staff", "kitchen"} and body.pin is not None and body.confirm_pin != body.pin:
+        field_error("confirm_pin", "PINs do not match")
     _validate_managed_credential(
-        body.temporary_password,
+        credential,
         role,
-        field="temporary_password",
+        field=credential_field,
         restaurant_username=current_user.restaurant.slug if current_user.restaurant else None,
         personal_username=username,
     )
@@ -282,7 +288,7 @@ def create_staff_account(
         name=name,
         username=username,
         email=email,
-        password_hash=hash_password(body.temporary_password),
+        password_hash=hash_password(credential),
         role=role,
         status="active",
         is_active=True,

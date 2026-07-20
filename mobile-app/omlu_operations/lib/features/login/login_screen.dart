@@ -148,7 +148,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         OmluTextField(
                           label: 'Personal username',
                           controller: _loginController,
-                          hintText: 'rijo',
+                          hintText: 'e.g. nadha',
                           validator: (val) {
                             if (val == null || val.trim().isEmpty) {
                               return 'Personal username is required';

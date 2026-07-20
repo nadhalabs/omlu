@@ -133,13 +133,18 @@ export function validateStaffAccount(form: StaffAccountCreateRequest) {
     errors.email = "Enter a valid email address.";
   }
   if (form.role === "staff" || form.role === "kitchen") {
-    if (!/^\d{6}$/.test(form.temporary_password)) errors.temporary_password = "PIN must be exactly 6 digits.";
-    if (form.pin_confirmation !== form.temporary_password) errors.pin_confirmation = "PINs do not match.";
+    if (!/^\d{6}$/.test(form.pin || "")) errors.pin = "PIN must be exactly 6 digits.";
+    if (form.confirm_pin !== form.pin) errors.confirm_pin = "PINs do not match.";
   } else {
-    const passwordError = validatePassword(form.temporary_password, { personalUsername: username });
+    const passwordError = validatePassword(form.temporary_password || "", { personalUsername: username });
     if (passwordError) errors.temporary_password = passwordError;
   }
-  return { errors, normalized: { ...form, name, username, ...(form.role === "admin" ? { email } : { email: undefined }) } };
+  return {
+    errors,
+    normalized: form.role === "admin"
+      ? { ...form, name, username, email, pin: undefined, confirm_pin: undefined }
+      : { ...form, name, username, email: undefined, temporary_password: undefined },
+  };
 }
 
 export function firstError<T extends string>(errors: FieldErrors<T>, order: T[]) {
