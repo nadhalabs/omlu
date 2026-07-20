@@ -95,6 +95,10 @@ class OperationsApi {
     return (response['items'] as List<Object?>?) ?? const [];
   }
 
+  Future<Map<String, Object?>> fetchBill(String billNumber) {
+    return _client.getJson('/staff/bills/$billNumber');
+  }
+
   Future<Map<String, Object?>> confirmCounterPayment({
     required String billNumber,
     required String method,

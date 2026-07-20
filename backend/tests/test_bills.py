@@ -741,6 +741,24 @@ def test_failed_payment_transition_does_not_publish_realtime_event(monkeypatch, 
     assert published == []
 
 
+def test_repeated_send_to_counter_does_not_publish_duplicate_banner_event(monkeypatch, bill_context):
+    from app.services import realtime
+
+    add_order(bill_context)
+    issued = issue_bill_for(bill_context)
+    published = []
+    monkeypatch.setattr(realtime.broker, "publish", lambda event: published.append(event))
+
+    first = send_to_counter(bill_context, issued["bill_number"])
+    first_count = len(published)
+    second = send_to_counter(bill_context, issued["bill_number"])
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first_count == 3
+    assert len(published) == first_count
+
+
 def test_invalid_payment_transition_rolls_back_bill_and_session(bill_context):
     add_order(bill_context)
     issued = issue_bill_for(bill_context)

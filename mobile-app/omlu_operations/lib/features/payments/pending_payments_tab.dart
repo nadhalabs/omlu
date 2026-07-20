@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/api/operations_api.dart';
+import '../../core/realtime/realtime_client.dart';
 
 import '../../design_system/colors.dart';
 import '../../design_system/spacing.dart';
@@ -9,17 +11,82 @@ import '../../design_system/widgets/omlu_card.dart';
 import '../../design_system/widgets/realtime_status_chip.dart';
 import '../auth_provider.dart';
 import '../realtime_connection_provider.dart';
-import '../staff/staff_bill_screen.dart';
+import 'pending_bill_review_screen.dart';
 
-final pendingPaymentsProvider = FutureProvider<List<Map<String, Object?>>>((
-  ref,
-) async {
-  final items = await ref.watch(operationsApiProvider).fetchPendingPayments();
-  return items
-      .whereType<Map>()
-      .map((item) => Map<String, Object?>.from(item))
-      .toList();
-});
+class PendingPaymentsNotifier
+    extends StateNotifier<AsyncValue<List<Map<String, Object?>>>> {
+  PendingPaymentsNotifier(this._api, Ref ref)
+    : super(const AsyncValue.loading()) {
+    fetch();
+    ref.listen(realtimeEventStreamProvider, (previous, next) {
+      next.whenData((event) {
+        if (event.type == 'bill.payment_pending') {
+          final number = event.state['bill_number']?.toString();
+          final current = state.valueOrNull ?? const <Map<String, Object?>>[];
+          if (number != null &&
+              !current.any((item) => item['bill_number'] == number)) {
+            state = AsyncValue.data([
+              {
+                ...event.state,
+                'bill_number': number,
+                'table_number': (event.state['table_name']?.toString() ?? '')
+                    .replaceFirst(RegExp(r'^Table '), ''),
+                'total_amount': event.state['grand_total'],
+                'sent_by_staff_name': event.state['sent_by_name'],
+              },
+              ...current,
+            ]);
+          }
+        }
+        if ({
+          'bill.sent_to_counter',
+          'bill.payment_pending',
+          'bill.payment_recorded',
+          'bill.paid',
+          'session.closed',
+          'bill.cancelled',
+          'bill.invalidated',
+        }.contains(event.type)) {
+          fetch(silent: true);
+        }
+      });
+    });
+    ref.listen(realtimeStateStreamProvider, (previous, next) {
+      final before = previous?.valueOrNull;
+      next.whenData((connection) {
+        if (connection == RealtimeConnectionState.connected &&
+            before != RealtimeConnectionState.connected) {
+          fetch(silent: true);
+        }
+      });
+    });
+  }
+
+  final OperationsApi _api;
+
+  Future<void> fetch({bool silent = false}) async {
+    if (!silent) state = const AsyncValue.loading();
+    try {
+      final items = await _api.fetchPendingPayments();
+      state = AsyncValue.data([
+        for (final item in items.whereType<Map>())
+          Map<String, Object?>.from(item),
+      ]);
+    } catch (error, stack) {
+      if (!silent) state = AsyncValue.error(error, stack);
+    }
+  }
+}
+
+final pendingPaymentsProvider =
+    StateNotifierProvider<
+      PendingPaymentsNotifier,
+      AsyncValue<List<Map<String, Object?>>>
+    >((ref) => PendingPaymentsNotifier(ref.watch(operationsApiProvider), ref));
+
+final pendingPaymentsCountProvider = Provider<int>(
+  (ref) => ref.watch(pendingPaymentsProvider).valueOrNull?.length ?? 0,
+);
 
 class PendingPaymentsTab extends ConsumerStatefulWidget {
   const PendingPaymentsTab({super.key});
@@ -62,7 +129,7 @@ class _PendingPaymentsTabState extends ConsumerState<PendingPaymentsTab> {
       await ref
           .read(operationsApiProvider)
           .confirmCounterPayment(billNumber: billNumber, method: method);
-      ref.invalidate(pendingPaymentsProvider);
+      await ref.read(pendingPaymentsProvider.notifier).fetch(silent: true);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -71,7 +138,7 @@ class _PendingPaymentsTabState extends ConsumerState<PendingPaymentsTab> {
         ),
       );
     } catch (error) {
-      ref.invalidate(pendingPaymentsProvider);
+      await ref.read(pendingPaymentsProvider.notifier).fetch(silent: true);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('$error Latest payment state was loaded.')),
@@ -83,19 +150,6 @@ class _PendingPaymentsTabState extends ConsumerState<PendingPaymentsTab> {
 
   @override
   Widget build(BuildContext context) {
-    ref.listen(realtimeEventStreamProvider, (previous, next) {
-      next.whenData((event) {
-        if ({
-          'bill.sent_to_counter',
-          'bill.payment_pending',
-          'bill.payment_recorded',
-          'bill.paid',
-          'session.closed',
-        }.contains(event.type)) {
-          ref.invalidate(pendingPaymentsProvider);
-        }
-      });
-    });
     final payments = ref.watch(pendingPaymentsProvider);
     return Scaffold(
       appBar: AppBar(
@@ -103,7 +157,7 @@ class _PendingPaymentsTabState extends ConsumerState<PendingPaymentsTab> {
         actions: const [RealtimeStatusChip()],
       ),
       body: RefreshIndicator(
-        onRefresh: () async => ref.refresh(pendingPaymentsProvider.future),
+        onRefresh: () => ref.read(pendingPaymentsProvider.notifier).fetch(),
         child: payments.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (error, stack) => ListView(
@@ -113,7 +167,8 @@ class _PendingPaymentsTabState extends ConsumerState<PendingPaymentsTab> {
               const SizedBox(height: OmluSpacing.md),
               OmluButton(
                 text: 'Retry',
-                onPressed: () => ref.invalidate(pendingPaymentsProvider),
+                onPressed: () =>
+                    ref.read(pendingPaymentsProvider.notifier).fetch(),
               ),
             ],
           ),
@@ -143,9 +198,6 @@ class _PendingPaymentsTabState extends ConsumerState<PendingPaymentsTab> {
                     final item = items[index];
                     final billNumber = item['bill_number']?.toString() ?? '';
                     final busy = _confirmingBill == billNumber;
-                    final tableId = int.tryParse(
-                      item['table_id']?.toString() ?? '',
-                    );
                     return OmluCard(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -182,14 +234,15 @@ class _PendingPaymentsTabState extends ConsumerState<PendingPaymentsTab> {
                             child: Chip(label: Text('Payment pending')),
                           ),
                           const SizedBox(height: OmluSpacing.md),
-                          if (tableId != null)
+                          if (billNumber.isNotEmpty)
                             OutlinedButton(
                               onPressed: busy
                                   ? null
                                   : () => Navigator.of(context).push(
                                       MaterialPageRoute<void>(
-                                        builder: (_) =>
-                                            StaffBillScreen(tableId: tableId),
+                                        builder: (_) => PendingBillReviewScreen(
+                                          billNumber: billNumber,
+                                        ),
                                       ),
                                     ),
                               child: const Text('View bill'),

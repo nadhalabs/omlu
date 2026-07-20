@@ -122,7 +122,7 @@ def list_pending_counter_payments(
             Bill.restaurant_id == current_user.restaurant_id,
             Bill.status == "payment_pending",
         )
-        .order_by(Bill.updated_at.asc(), Bill.id.asc())
+        .order_by(Bill.updated_at.desc(), Bill.id.desc())
         .all()
     )
     items = []
@@ -141,7 +141,9 @@ def list_pending_counter_payments(
         sender = db.query(StaffUser).filter(StaffUser.id == sent_audit.actor_user_id).first() if sent_audit and sent_audit.actor_user_id else bill.generated_by_staff
         session = bill.dining_session
         items.append({
+            "bill_id": bill.id,
             "bill_number": bill.bill_number,
+            "session_id": session.id,
             "table_id": session.table_id,
             "table_number": session.table.table_number,
             "session_token": session.public_token,
@@ -154,6 +156,22 @@ def list_pending_counter_payments(
             "status": bill.status,
         })
     return {"items": items}
+
+
+@router.get("/staff/bills/{bill_number}", response_model=BillResponse)
+def get_staff_bill(
+    bill_number: str,
+    current_user: StaffUser = Depends(_payment_record_roles),
+    db: Session = Depends(get_db),
+):
+    """Return the authoritative state for an Owner/Admin bill deep link."""
+    bill = db.query(Bill).filter(
+        Bill.restaurant_id == current_user.restaurant_id,
+        Bill.bill_number == bill_number,
+    ).first()
+    if not bill:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
+    return build_bill_response(db, bill)
 
 
 @router.post(
@@ -255,6 +273,7 @@ def confirm_staff_counter_payment(
 
 
 def _send_counter_handoff(db: Session, bill: Bill, current_user: StaffUser) -> Bill:
+    already_pending = bill.status == "payment_pending"
     if bill.status == "draft":
         bill = issue_bill(db, bill)
     pending = send_bill_to_counter(db, bill)
@@ -274,6 +293,10 @@ def _send_counter_handoff(db: Session, bill: Bill, current_user: StaffUser) -> B
             action="bill.sent_to_counter",
         ))
     db.commit()
+    # Idempotent retries return the current bill without producing a second
+    # card/banner event with a different event id.
+    if already_pending:
+        return pending
     channels = [
         restaurant_channel(current_user.restaurant_id, "operations"),
         restaurant_channel(current_user.restaurant_id, "staff"),
@@ -281,10 +304,18 @@ def _send_counter_handoff(db: Session, bill: Bill, current_user: StaffUser) -> B
         table_channel(current_user.restaurant_id, pending.dining_session.table_id),
     ]
     state = {
+        "bill_id": pending.id,
         "bill_number": pending.bill_number,
         "status": pending.status,
+        "session_id": pending.dining_session.id,
         "table_id": pending.dining_session.table_id,
+        "table_name": f"Table {pending.dining_session.table.table_number}",
         "session_token": pending.dining_session.public_token,
+        "grand_total": float(pending.total_amount),
+        "sent_by_name": current_user.name,
+        "requested_at": (
+            pending.dining_session.payment_requested_at or pending.generated_at
+        ).isoformat(),
     }
     for event_type in (EVENT_BILL_SENT_TO_COUNTER, EVENT_BILL_PAYMENT_PENDING):
         publish_event(

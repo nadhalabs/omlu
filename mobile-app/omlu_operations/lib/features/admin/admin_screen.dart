@@ -8,6 +8,8 @@ import '../../design_system/widgets/omlu_card.dart';
 import '../../design_system/widgets/realtime_status_chip.dart';
 import '../auth_provider.dart';
 import '../payments/pending_payments_tab.dart';
+import '../payments/pending_bill_review_screen.dart';
+import '../realtime_connection_provider.dart';
 import '../staff/tables_provider.dart';
 import '../staff/staff_bill_screen.dart';
 
@@ -24,6 +26,39 @@ class AdminScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final activeTab = ref.watch(adminTabProvider);
+    final pendingCount = ref.watch(pendingPaymentsCountProvider);
+    ref.listen(realtimeEventStreamProvider, (previous, next) {
+      next.whenData((event) {
+        if (event.type != 'bill.payment_pending') return;
+        final state = event.state;
+        final billNumber = state['bill_number']?.toString();
+        final table = state['table_name']?.toString() ?? 'Table';
+        final amount =
+            double.tryParse(state['grand_total']?.toString() ?? '') ?? 0;
+        final sender = state['sent_by_name']?.toString() ?? 'Staff';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Payment pending\n$table · ₹${amount.toStringAsFixed(2)}\nSent by $sender',
+            ),
+            action: SnackBarAction(
+              label: 'Tap to review',
+              onPressed: () {
+                ref.read(adminTabProvider.notifier).state = 2;
+                if (billNumber != null) {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) =>
+                          PendingBillReviewScreen(billNumber: billNumber),
+                    ),
+                  );
+                }
+              },
+            ),
+          ),
+        );
+      });
+    });
 
     final List<Widget> screens = const [
       _AdminOverviewTab(),
@@ -46,20 +81,21 @@ class AdminScreen extends ConsumerWidget {
                 selectedItemColor: OmluColors.accent,
                 unselectedItemColor: OmluColors.textSecondary,
                 onTap: (idx) => ref.read(adminTabProvider.notifier).state = idx,
-                items: const [
-                  BottomNavigationBarItem(
+                items: [
+                  const BottomNavigationBarItem(
                     icon: Icon(Icons.admin_panel_settings_rounded),
                     label: 'Overview',
                   ),
-                  BottomNavigationBarItem(
+                  const BottomNavigationBarItem(
                     icon: Icon(Icons.grid_view_rounded),
                     label: 'Tables',
                   ),
                   BottomNavigationBarItem(
-                    icon: Icon(Icons.payments_rounded),
-                    label: 'Payments',
+                    icon: _PaymentBadge(count: pendingCount),
+                    label:
+                        'Pending payments${pendingCount > 0 ? '  $pendingCount' : ''}',
                   ),
-                  BottomNavigationBarItem(
+                  const BottomNavigationBarItem(
                     icon: Icon(Icons.people_rounded),
                     label: 'Staff',
                   ),
@@ -77,7 +113,7 @@ class AdminScreen extends ConsumerWidget {
                   selectedIconTheme: const IconThemeData(
                     color: OmluColors.accent,
                   ),
-                  destinations: const [
+                  destinations: [
                     NavigationRailDestination(
                       icon: Icon(Icons.admin_panel_settings_rounded),
                       label: Text('Overview'),
@@ -87,8 +123,10 @@ class AdminScreen extends ConsumerWidget {
                       label: Text('Tables'),
                     ),
                     NavigationRailDestination(
-                      icon: Icon(Icons.payments_rounded),
-                      label: Text('Payments'),
+                      icon: _PaymentBadge(count: pendingCount),
+                      label: Text(
+                        'Pending payments${pendingCount > 0 ? '  $pendingCount' : ''}',
+                      ),
                     ),
                     NavigationRailDestination(
                       icon: Icon(Icons.people_rounded),
@@ -127,6 +165,17 @@ class AdminScreen extends ConsumerWidget {
       ),
     );
   }
+}
+
+class _PaymentBadge extends StatelessWidget {
+  const _PaymentBadge({required this.count});
+  final int count;
+  @override
+  Widget build(BuildContext context) => Badge(
+    isLabelVisible: count > 0,
+    label: Text('$count'),
+    child: const Icon(Icons.payments_rounded),
+  );
 }
 
 class _AdminOverviewTab extends ConsumerWidget {

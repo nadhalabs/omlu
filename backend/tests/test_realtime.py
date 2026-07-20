@@ -373,6 +373,12 @@ def test_public_session_websocket_receives_bill_payment_and_close_events(realtim
     assert bill_event["state"]["bill_number"] == bill_number
     assert issue_event["state"]["status"] == "issued"
     assert pending_event["state"]["status"] == "payment_pending"
+    assert pending_event["state"]["bill_number"] == bill_number
+    assert pending_event["state"]["session_token"] == session["session_token"]
+    assert pending_event["state"]["table_name"] == "Table 7"
+    assert pending_event["state"]["grand_total"] == 80.0
+    assert pending_event["state"]["sent_by_name"] == "Staff User"
+    assert pending_event["state"]["requested_at"]
     assert payment_event["state"]["status"] == "paid"
     assert paid_event["state"]["status"] == "paid"
     assert closed_event["state"]["status"] == "closed"
@@ -486,6 +492,9 @@ def test_staff_websocket_receives_session_bill_and_payment_events(realtime_conte
     assert session_event["state"]["table_id"] == realtime_context["table_id"]
     assert bill_event["state"]["bill_number"] == bill_number
     assert pending_event["state"]["status"] == "payment_pending"
+    assert pending_event["state"]["bill_id"]
+    assert pending_event["state"]["session_id"]
+    assert pending_event["state"]["table_id"] == realtime_context["table_id"]
     assert payment_event["state"] == {"bill_number": bill_number, "status": "paid"}
     assert paid_event["state"]["status"] == "paid"
     assert "payment_method" not in paid_event["state"]
