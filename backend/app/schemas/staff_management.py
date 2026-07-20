@@ -18,6 +18,15 @@ class StaffAccountUpdate(BaseModel):
     reason: Optional[str] = None
 
 
+class StaffLockRequest(BaseModel):
+    reason: Optional[str] = Field(default=None, max_length=1024)
+    confirm_active_operations: bool = False
+
+
+class RestaurantStatusRequest(BaseModel):
+    status: str
+
+
 class StaffPasswordReset(BaseModel):
     temporary_password: str = Field(..., min_length=8, max_length=256)
 
@@ -45,3 +54,22 @@ class StaffAccountResponse(BaseModel):
     added_by_staff_id: Optional[int]
     active_session_count: int
     sessions: List[StaffSessionResponse] = []
+    operations_locked: bool = False
+    operations_locked_at: Optional[datetime] = None
+    operations_locked_by_id: Optional[int] = None
+    operations_locked_by_name: Optional[str] = None
+    operations_lock_reason: Optional[str] = None
+
+
+class StaffOperationsResponse(BaseModel):
+    locked: bool
+    locked_at: Optional[datetime] = None
+    locked_by_id: Optional[int] = None
+    locked_by_name: Optional[str] = None
+    reason: Optional[str] = None
+    operating_status: str
+    active_sessions: int = 0
+    unserved_orders: int = 0
+    pending_requests: int = 0
+    bills_waiting_for_payment: int = 0
+    occupied_tables: int = 0

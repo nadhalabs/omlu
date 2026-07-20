@@ -1,6 +1,6 @@
 # Flutter Operations API Contract
 
-This contract documents the existing backend surface that the native Flutter OMLU operations app should reuse. The backend remains the source of truth for roles, restaurant isolation, dining-session creation/reuse, pricing, idempotency, order status transitions, permissions, bills, and realtime fanout.
+This contract documents the existing backend surface that the native Flutter OMLU app should reuse. The backend remains the source of truth for roles, restaurant isolation, dining-session creation/reuse, pricing, idempotency, order status transitions, permissions, bills, and realtime fanout.
 
 ## Shared Rules
 

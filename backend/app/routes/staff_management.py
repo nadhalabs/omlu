@@ -7,6 +7,11 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.models.bill import Bill
+from app.models.dining_session import DiningSession
+from app.models.order import Order
+from app.models.restaurant_table import RestaurantTable
+from app.models.service_request import ServiceRequest
 from app.models.staff_user import AuditLog, StaffSession, StaffUser
 from app.schemas.staff_management import (
     StaffAccountCreate,
@@ -14,6 +19,13 @@ from app.schemas.staff_management import (
     StaffAccountUpdate,
     StaffPasswordReset,
     StaffSessionResponse,
+    StaffLockRequest,
+    StaffOperationsResponse,
+    RestaurantStatusRequest,
+)
+from app.services.realtime import (
+    EVENT_RESTAURANT_STATUS_CHANGED, EVENT_STAFF_ALL_LOCKED, EVENT_STAFF_ALL_UNLOCKED,
+    EVENT_STAFF_LOCKED, EVENT_STAFF_UNLOCKED, publish_event, restaurant_channel,
 )
 from app.utils.auth import RoleChecker, hash_password
 from app.utils.validation import (
@@ -59,7 +71,7 @@ def _audit(
     )
 
 
-def _serialize_staff(staff: StaffUser, sessions: list[StaffSession] | None = None) -> StaffAccountResponse:
+def _serialize_staff(staff: StaffUser, sessions: list[StaffSession] | None = None, locker_name: str | None = None) -> StaffAccountResponse:
     sessions = sessions or []
     active_sessions = [s for s in sessions if s.status == "active"]
     last_active = staff.last_login_at
@@ -89,6 +101,26 @@ def _serialize_staff(staff: StaffUser, sessions: list[StaffSession] | None = Non
             )
             for s in sessions
         ],
+        operations_locked=staff.operations_locked,
+        operations_locked_at=staff.operations_locked_at,
+        operations_locked_by_id=staff.operations_locked_by_id,
+        operations_locked_by_name=locker_name,
+        operations_lock_reason=staff.operations_lock_reason,
+    )
+
+
+def _operations_state(db: Session, actor: StaffUser) -> StaffOperationsResponse:
+    restaurant = actor.restaurant
+    locker = db.query(StaffUser).filter(StaffUser.id == restaurant.staff_locked_by_id).first() if restaurant.staff_locked_by_id else None
+    return StaffOperationsResponse(
+        locked=restaurant.staff_operations_locked, locked_at=restaurant.staff_locked_at,
+        locked_by_id=restaurant.staff_locked_by_id, locked_by_name=locker.name if locker else None,
+        reason=restaurant.staff_lock_reason, operating_status=restaurant.operating_status,
+        active_sessions=db.query(DiningSession).filter(DiningSession.restaurant_id == actor.restaurant_id, DiningSession.status.in_(["open", "bill_requested", "payment_pending"])).count(),
+        unserved_orders=db.query(Order).filter(Order.restaurant_id == actor.restaurant_id, Order.status.in_(["pending", "accepted", "preparing", "ready"])).count(),
+        pending_requests=db.query(ServiceRequest).filter(ServiceRequest.restaurant_id == actor.restaurant_id, ServiceRequest.status == "pending").count(),
+        bills_waiting_for_payment=db.query(Bill).filter(Bill.restaurant_id == actor.restaurant_id, Bill.status.in_(["issued", "payment_pending"])).count(),
+        occupied_tables=db.query(DiningSession.table_id).filter(DiningSession.restaurant_id == actor.restaurant_id, DiningSession.status.in_(["open", "bill_requested", "payment_pending"])).distinct().count(),
     )
 
 
@@ -132,7 +164,71 @@ def list_staff_accounts(
             StaffSession.staff_user_id.in_(staff_ids),
         ).order_by(StaffSession.last_active_at.desc()).all():
             sessions_by_user.setdefault(session.staff_user_id, []).append(session)
-    return [_serialize_staff(staff, sessions_by_user.get(staff.id, [])) for staff in staff_members]
+    names = {s.id: s.name for s in staff_members}
+    return [_serialize_staff(staff, sessions_by_user.get(staff.id, []), names.get(staff.operations_locked_by_id)) for staff in staff_members]
+
+
+@router.get("/operations", response_model=StaffOperationsResponse)
+def get_staff_operations(current_user: StaffUser = Depends(_owner_admin), db: Session = Depends(get_db)):
+    return _operations_state(db, current_user)
+
+
+@router.post("/operations/lock", response_model=StaffOperationsResponse)
+def lock_all_staff(body: StaffLockRequest, request: Request, current_user: StaffUser = Depends(_owner_admin), db: Session = Depends(get_db)):
+    state = _operations_state(db, current_user)
+    if not body.confirm_active_operations and any([state.active_sessions, state.unserved_orders, state.pending_requests, state.bills_waiting_for_payment, state.occupied_tables]):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={"message": "Active restaurant operations require explicit confirmation.", "operations": state.model_dump(mode="json")})
+    now = datetime.datetime.now(datetime.timezone.utc)
+    restaurant = current_user.restaurant
+    restaurant.staff_operations_locked = True; restaurant.staff_locked_by_id = current_user.id; restaurant.staff_locked_at = now; restaurant.staff_lock_reason = body.reason
+    _audit(db, current_user, request, "all_staff_locked", current_user, new_value={"reason": body.reason})
+    db.commit()
+    publish_event(EVENT_STAFF_ALL_LOCKED, restaurant_id=current_user.restaurant_id, channels=[restaurant_channel(current_user.restaurant_id, "staff"), restaurant_channel(current_user.restaurant_id, "operations")], resource_id=current_user.restaurant_id, state={"locked_by": current_user.name, "locked_at": now.isoformat(), "reason": body.reason})
+    return _operations_state(db, current_user)
+
+
+@router.post("/operations/unlock", response_model=StaffOperationsResponse)
+def unlock_all_staff(request: Request, current_user: StaffUser = Depends(_owner_admin), db: Session = Depends(get_db)):
+    now = datetime.datetime.now(datetime.timezone.utc); restaurant = current_user.restaurant
+    restaurant.staff_operations_locked = False; restaurant.staff_unlocked_by_id = current_user.id; restaurant.staff_unlocked_at = now
+    _audit(db, current_user, request, "all_staff_unlocked", current_user)
+    db.commit()
+    publish_event(EVENT_STAFF_ALL_UNLOCKED, restaurant_id=current_user.restaurant_id, channels=[restaurant_channel(current_user.restaurant_id, "staff"), restaurant_channel(current_user.restaurant_id, "operations")], resource_id=current_user.restaurant_id, state={"unlocked_by": current_user.name, "unlocked_at": now.isoformat()})
+    return _operations_state(db, current_user)
+
+
+@router.post("/operations/status", response_model=StaffOperationsResponse)
+def change_restaurant_status(body: RestaurantStatusRequest, request: Request, current_user: StaffUser = Depends(_owner_admin), db: Session = Depends(get_db)):
+    new_status = body.status.strip().lower()
+    if new_status not in {"open", "closing", "closed"}:
+        raise HTTPException(status_code=400, detail="Status must be open, closing, or closed")
+    previous = current_user.restaurant.operating_status
+    current_user.restaurant.operating_status = new_status
+    action = "restaurant_reopened" if new_status == "open" else f"restaurant_changed_to_{new_status}"
+    _audit(db, current_user, request, action, current_user, previous_value={"status": previous}, new_value={"status": new_status})
+    db.commit()
+    publish_event(EVENT_RESTAURANT_STATUS_CHANGED, restaurant_id=current_user.restaurant_id, channels=[restaurant_channel(current_user.restaurant_id, "staff"), restaurant_channel(current_user.restaurant_id, "operations"), restaurant_channel(current_user.restaurant_id, "kitchen")], resource_id=current_user.restaurant_id, state={"status": new_status, "changed_by": current_user.name})
+    return _operations_state(db, current_user)
+
+
+@router.post("/{staff_id}/lock", response_model=StaffAccountResponse)
+def lock_staff(staff_id: int, body: StaffLockRequest, request: Request, current_user: StaffUser = Depends(_owner_admin), db: Session = Depends(get_db)):
+    target = db.query(StaffUser).filter(StaffUser.id == staff_id, StaffUser.restaurant_id == current_user.restaurant_id, StaffUser.role == "staff").first()
+    if not target: raise HTTPException(status_code=404, detail="Staff account not found")
+    now = datetime.datetime.now(datetime.timezone.utc); target.operations_locked = True; target.operations_locked_at = now; target.operations_locked_by_id = current_user.id; target.operations_lock_reason = body.reason
+    _audit(db, current_user, request, "staff_account_locked", target, new_value={"reason": body.reason}); db.commit(); db.refresh(target)
+    publish_event(EVENT_STAFF_LOCKED, restaurant_id=current_user.restaurant_id, channels=[restaurant_channel(current_user.restaurant_id, "staff")], resource_id=target.id, state={"staff_id": target.id, "locked_by": current_user.name, "locked_at": now.isoformat(), "reason": body.reason})
+    return _serialize_staff(target, locker_name=current_user.name)
+
+
+@router.post("/{staff_id}/unlock", response_model=StaffAccountResponse)
+def unlock_staff(staff_id: int, request: Request, current_user: StaffUser = Depends(_owner_admin), db: Session = Depends(get_db)):
+    target = db.query(StaffUser).filter(StaffUser.id == staff_id, StaffUser.restaurant_id == current_user.restaurant_id, StaffUser.role == "staff").first()
+    if not target: raise HTTPException(status_code=404, detail="Staff account not found")
+    now = datetime.datetime.now(datetime.timezone.utc); target.operations_locked = False; target.operations_unlocked_at = now; target.operations_unlocked_by_id = current_user.id
+    _audit(db, current_user, request, "staff_account_unlocked", target); db.commit(); db.refresh(target)
+    publish_event(EVENT_STAFF_UNLOCKED, restaurant_id=current_user.restaurant_id, channels=[restaurant_channel(current_user.restaurant_id, "staff")], resource_id=target.id, state={"staff_id": target.id, "unlocked_by": current_user.name, "unlocked_at": now.isoformat()})
+    return _serialize_staff(target)
 
 
 @router.post("", response_model=StaffAccountResponse, status_code=status.HTTP_201_CREATED)

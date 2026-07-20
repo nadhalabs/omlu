@@ -13,7 +13,7 @@ from app.services.bills import (
     issue_bill,
     send_bill_to_counter,
 )
-from app.utils.auth import RoleChecker
+from app.utils.auth import OperationalWriteChecker, RoleChecker
 from app.services.realtime import (
     EVENT_BILL_GENERATED,
     EVENT_BILL_PAYMENT_PENDING,
@@ -32,7 +32,7 @@ from app.services.realtime import (
 
 router = APIRouter()
 
-_bill_issue_roles = RoleChecker(["owner", "admin", "staff"])
+_bill_issue_roles = OperationalWriteChecker(["owner", "admin", "staff"])
 _payment_record_roles = RoleChecker(["owner", "admin"])
 
 

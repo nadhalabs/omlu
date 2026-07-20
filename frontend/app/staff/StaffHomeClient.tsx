@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ApiError, getStaffServiceRequests, getStaffSessions } from "@/lib/api";
 import { StaffServiceRequestResponse, StaffSessionListItem } from "@/lib/types";
 import { useRealtime } from "@/lib/realtime";
+import { AndroidDownloadCard } from "@/components/AndroidDownloadCard";
 
 export default function StaffHomeClient() {
   const [sessions, setSessions] = useState<StaffSessionListItem[]>([]);
@@ -65,6 +66,8 @@ export default function StaffHomeClient() {
             <Link href="/staff/requests" className="px-3 py-2 rounded-lg bg-amber-600 text-sm font-bold text-white">Requests</Link>
           </div>
         </div>
+
+        <AndroidDownloadCard variant="compact" dismissible />
 
         {error && <div className="rounded-xl border border-red-800/40 bg-red-950/20 p-4 text-red-300 text-sm">{error}</div>}
         {loading ? (

@@ -10,7 +10,7 @@ from argon2.exceptions import VerifyMismatchError
 
 from app.database import get_db
 from app.config import settings
-from app.models.staff_user import StaffSession, StaffUser
+from app.models.staff_user import AuditLog, StaffSession, StaffUser
 
 security_scheme = HTTPBearer(auto_error=False)
 ph = PasswordHasher()
@@ -185,3 +185,43 @@ class RoleChecker:
                 detail="Operation not permitted for this role"
             )
         return current_user
+
+
+class OperationalWriteChecker(RoleChecker):
+    """Role check plus authoritative restaurant/staff write-lock enforcement."""
+
+    def __call__(
+        self,
+        current_user: StaffUser = Depends(get_current_staff_user),
+        db: Session = Depends(get_db),
+    ):
+        super().__call__(current_user)
+        if current_user.role != "staff":
+            return current_user
+        restaurant = current_user.restaurant
+        locked = bool(
+            current_user.operations_locked
+            or restaurant.staff_operations_locked
+            or restaurant.operating_status == "closed"
+        )
+        if not locked:
+            return current_user
+        reason = (
+            "individual_account_lock" if current_user.operations_locked
+            else "restaurant_closed" if restaurant.operating_status == "closed"
+            else "all_staff_lock"
+        )
+        db.add(AuditLog(
+            restaurant_id=current_user.restaurant_id,
+            actor_user_id=current_user.id,
+            actor_role=current_user.role,
+            target_type="staff_operations",
+            target_id=str(current_user.id),
+            action="staff_locked_action_blocked",
+            new_value=f'{{"reason":"{reason}"}}',
+        ))
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Staff operations are currently locked. Contact the restaurant owner or administrator.",
+        )

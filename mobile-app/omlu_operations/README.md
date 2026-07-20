@@ -1,4 +1,4 @@
-# OMLU Operations Android App
+# OMLU Android App
 
 This Flutter app is a secure Android WebView wrapper for the existing deployed OMLU website. It does not duplicate the website UI. Staff, kitchen, admin, owner, authentication, cookies, local storage, sessions, and role-based redirects remain owned by the web application.
 

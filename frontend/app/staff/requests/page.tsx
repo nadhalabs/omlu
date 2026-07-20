@@ -3,7 +3,7 @@ import { requireStaffRole } from "@/lib/serverAuth";
 import { redirect } from "next/navigation";
 
 export const metadata = {
-  title: "Service Requests — Nadha Serve Staff",
+  title: "Service Requests — OMLU Staff",
 };
 
 export default async function StaffRequestsPage() {

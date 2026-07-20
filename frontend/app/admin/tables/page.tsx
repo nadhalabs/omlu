@@ -21,7 +21,7 @@ export default function AdminTablesPage() {
   const [error, setError] = useState<string | null>(null);
 
   // Restaurant details for headers & printing
-  const [restaurantName, setRestaurantName] = useState<string>("Nadha Serve");
+  const [restaurantName, setRestaurantName] = useState<string>("OMLU");
 
   // Form inputs
   const [tableNumber, setTableNumber] = useState("");
@@ -218,7 +218,7 @@ export default function AdminTablesPage() {
                 Scan to view menu & order
               </p>
               <p className="text-[10px] text-zinc-400 font-bold mt-1 uppercase">
-                Nadha Serve QR Menu
+                OMLU QR Menu
               </p>
             </div>
           </div>

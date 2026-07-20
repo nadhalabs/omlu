@@ -87,7 +87,7 @@ export default async function AdminLayout({
           {/* Brand/Logo */}
           <div className="mb-8">
             <span className="text-amber-500 font-extrabold uppercase tracking-widest text-[10px]">
-              Nadha Serve Admin
+              OMLU Admin
             </span>
             <h2 className="text-lg font-black text-white mt-1">Control Panel</h2>
             <p className="text-zinc-500 text-[10px] font-bold truncate mt-1">

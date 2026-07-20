@@ -6,7 +6,7 @@
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
     <application
-        android:label="OMLU Operations"
+        android:label="OMLU"
         android:name="${applicationName}"
         android:icon="@drawable/ic_launcher_omlu"
         android:usesCleartextTraffic="false">

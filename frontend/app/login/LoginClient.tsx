@@ -9,6 +9,7 @@ import { staffLogin, ApiError } from "@/lib/api";
 import { FieldErrors, firstError, focusField, validateLogin } from "@/lib/formValidation";
 import { roleHomePath } from "@/lib/roleRoutes";
 import { StaffLoginRequest } from "@/lib/types";
+import { AndroidDownloadCard } from "@/components/AndroidDownloadCard";
 
 const fieldOrder: (keyof StaffLoginRequest)[] = ["restaurant_slug", "login", "password"];
 
@@ -88,10 +89,11 @@ export default function LoginClient() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-zinc-50 px-4 py-12 text-zinc-950">
       <FormToast message={toast} onDismiss={() => setToast(null)} />
-      <main className="w-full max-w-md rounded-lg border border-zinc-200 bg-white p-8 shadow-sm">
+      <div className="flex w-full max-w-md flex-col gap-4 lg:max-w-4xl lg:flex-row lg:items-center">
+      <main className="w-full rounded-lg border border-zinc-200 bg-white p-8 shadow-sm lg:flex-1">
         <div className="mb-8">
           <Link href="/" className="text-sm font-black uppercase tracking-widest text-amber-700">
-            Nadha Serve
+            OMLU
           </Link>
           <h1 className="mt-3 text-2xl font-black tracking-tight">Restaurant Login</h1>
         </div>
@@ -168,12 +170,14 @@ export default function LoginClient() {
         </form>
 
         <p className="mt-7 text-center text-sm text-zinc-600">
-          New to Nadha Serve?{" "}
+          New to OMLU?{" "}
           <Link href="/register" className="font-bold text-zinc-950 underline underline-offset-4">
             Create Restaurant
           </Link>
         </p>
       </main>
+      <AndroidDownloadCard variant="login" className="w-full lg:max-w-sm" />
+      </div>
     </div>
   );
 }

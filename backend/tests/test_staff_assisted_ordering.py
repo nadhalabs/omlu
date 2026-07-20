@@ -585,6 +585,6 @@ def test_existing_qr_customer_ordering_remains_qr_sourced(staff_order_context):
 
     db = SessionLocal()
     order = db.query(Order).filter(Order.public_token == body["public_token"]).one()
-    assert order.source == "qr"
+    assert order.source == "customer_qr"
     assert order.created_by_staff_id is None
     db.close()

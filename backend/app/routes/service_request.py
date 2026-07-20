@@ -14,7 +14,7 @@ from app.models.dining_session import DiningSession
 from app.models.bill import Bill
 from app.schemas.service_request import ServiceRequestCreate, PublicServiceRequestResponse, StaffServiceRequestResponse
 from app.services.dining_sessions import find_current_open_session_for_table
-from app.utils.auth import get_current_staff_user, RoleChecker
+from app.utils.auth import get_current_staff_user, OperationalWriteChecker, RoleChecker
 from app.models.staff_user import StaffUser
 from app.services.realtime import (
     EVENT_SERVICE_REQUEST_CREATED,
@@ -201,7 +201,7 @@ def create_public_service_request(
 # --- Staff Service Request Endpoints ---
 
 _staff_view_roles = RoleChecker(["owner", "admin", "staff"])
-_staff_resolve_roles = RoleChecker(["owner", "admin", "staff"])
+_staff_resolve_roles = OperationalWriteChecker(["owner", "admin", "staff"])
 
 
 @router.get(

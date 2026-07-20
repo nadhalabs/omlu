@@ -30,6 +30,11 @@ EVENT_PAYMENT_ASSISTANCE_REQUESTED = "payment.assistance_requested"
 EVENT_TABLE_UPDATED = "table.updated"
 EVENT_TABLE_STATUS_CHANGED = "table.status_changed"
 EVENT_AVAILABILITY_UPDATED = "availability.updated"
+EVENT_STAFF_LOCKED = "staff.locked"
+EVENT_STAFF_UNLOCKED = "staff.unlocked"
+EVENT_STAFF_ALL_LOCKED = "staff.all_locked"
+EVENT_STAFF_ALL_UNLOCKED = "staff.all_unlocked"
+EVENT_RESTAURANT_STATUS_CHANGED = "restaurant.status_changed"
 
 
 @dataclass

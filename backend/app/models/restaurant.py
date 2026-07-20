@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import List, Optional
-from sqlalchemy import DateTime, String, Boolean, func
+from sqlalchemy import DateTime, String, Boolean, Integer, CheckConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
@@ -20,6 +20,13 @@ class Restaurant(Base):
     currency: Mapped[str] = mapped_column(String(10), default="INR", server_default="INR")
     order_prefix: Mapped[str] = mapped_column(String(10), default="NS", server_default="NS")
     service_requests_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    operating_status: Mapped[str] = mapped_column(String(20), default="open", server_default="open", nullable=False)
+    staff_operations_locked: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
+    staff_locked_by_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    staff_locked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    staff_lock_reason: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    staff_unlocked_by_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    staff_unlocked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     plan: Mapped[str] = mapped_column(String(50), default="free_pilot", server_default="free_pilot", nullable=False)
     subscription_status: Mapped[str] = mapped_column(String(50), default="active", server_default="active", nullable=False)
     trial_started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -65,4 +72,8 @@ class Restaurant(Base):
         "ServiceRequest",
         back_populates="restaurant",
         cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        CheckConstraint("operating_status IN ('open', 'closing', 'closed')", name="chk_restaurant_operating_status"),
     )

@@ -34,11 +34,12 @@ from app.services.realtime import (
     session_channel,
     table_channel,
 )
-from app.utils.auth import RoleChecker
+from app.utils.auth import OperationalWriteChecker, RoleChecker
 
 
 router = APIRouter(prefix="/staff/tables")
 _staff_roles = RoleChecker(["owner", "admin", "staff"])
+_staff_write_roles = OperationalWriteChecker(["owner", "admin", "staff"])
 
 
 def _audit(db: Session, actor: StaffUser, action: str, target_type: str, target_id: str, new_value: dict | None = None) -> None:
@@ -320,7 +321,7 @@ def get_staff_table(
 @router.post("/{table_id}/sessions", status_code=status.HTTP_201_CREATED)
 def start_staff_table_session(
     table_id: int,
-    current_user: StaffUser = Depends(_staff_roles),
+    current_user: StaffUser = Depends(_staff_write_roles),
     db: Session = Depends(get_db),
 ):
     table = db.query(RestaurantTable).filter(
@@ -358,7 +359,7 @@ def create_staff_table_order(
     table_id: int,
     order_req: PublicOrderCreateRequest,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
-    current_user: StaffUser = Depends(_staff_roles),
+    current_user: StaffUser = Depends(_staff_write_roles),
     db: Session = Depends(get_db),
 ):
     key_clean = validate_idempotency_key(idempotency_key or f"staff-{current_user.id}-{uuid.uuid4().hex[:24]}")
@@ -386,9 +387,9 @@ def create_staff_table_order(
         order_req,
         key_clean,
         created_by_staff_id=current_user.id,
-        source="staff_assisted",
+        source=f"{current_user.role}_assisted",
     )
-    _audit(db, current_user, "staff_manual_order_created", "order", str(order.id), {"table_id": table.id, "source": "staff_assisted"})
+    _audit(db, current_user, "staff_manual_order_created", "order", str(order.id), {"table_id": table.id, "source": order.source})
     if not existing_session:
         _audit(db, current_user, "staff_session_opened", "dining_session", str(session.id), {"table_id": table.id, "opened_by": "staff_order"})
     db.commit()
@@ -412,7 +413,7 @@ def create_staff_table_order(
             order_channel(order.public_token),
         ],
         resource_id=order.id,
-        state={"order_number": order.order_number, "status": order.status, "table_id": table.id, "source": "staff_assisted"},
+        state={"order_number": order.order_number, "status": order.status, "table_id": table.id, "source": order.source},
     )
     publish_event(
         EVENT_TABLE_UPDATED,
@@ -427,7 +428,7 @@ def create_staff_table_order(
 @router.post("/{table_id}/bill", status_code=status.HTTP_201_CREATED)
 def create_staff_table_bill(
     table_id: int,
-    current_user: StaffUser = Depends(_staff_roles),
+    current_user: StaffUser = Depends(_staff_write_roles),
     db: Session = Depends(get_db),
 ):
     table = db.query(RestaurantTable).filter(
@@ -458,7 +459,7 @@ def create_staff_table_bill(
 def request_staff_table_bill(
     table_id: int,
     response: Response,
-    current_user: StaffUser = Depends(_staff_roles),
+    current_user: StaffUser = Depends(_staff_write_roles),
     db: Session = Depends(get_db),
 ):
     table = db.query(RestaurantTable).filter(

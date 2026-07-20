@@ -95,7 +95,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ),
                 const SizedBox(height: OmluSpacing.md),
                 Text(
-                  'OMLU Operations',
+                  'OMLU',
                   style: OmluTypography.h1.copyWith(
                     color: OmluColors.textPrimary,
                   ),

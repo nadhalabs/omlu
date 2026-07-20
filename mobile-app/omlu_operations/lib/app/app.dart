@@ -16,7 +16,7 @@ class OmluNativeApp extends ConsumerWidget {
     final authState = ref.watch(authProvider);
 
     return MaterialApp(
-      title: 'OMLU Operations',
+      title: 'OMLU',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         scaffoldBackgroundColor: OmluColors.background,

@@ -1,6 +1,6 @@
-# Nadha Serve
+# OMLU
 
-Nadha Serve is a production-ready web application for restaurant QR-code menus, customer ordering, order tracking, service requests, and staff kitchen dashboards.
+OMLU is a production-ready web application for restaurant QR-code menus, customer ordering, order tracking, service requests, and staff kitchen dashboards.
 
 ## Quick Start (Local Setup)
 

@@ -2,7 +2,7 @@ import { requireStaffRole } from "@/lib/serverAuth";
 import StaffAvailabilityClient from "./StaffAvailabilityClient";
 
 export const metadata = {
-  title: "Availability - Nadha Serve",
+  title: "Availability - OMLU Staff",
 };
 
 export default async function StaffAvailabilityPage() {

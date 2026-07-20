@@ -199,7 +199,7 @@ def create_order_in_session(
     order_req: PublicOrderCreateRequest,
     key_clean: str,
     created_by_staff_id: int | None = None,
-    source: str = "qr",
+    source: str = "customer_qr",
 ) -> Order:
     existing_order = db.query(Order).options(
             selectinload(Order.items).selectinload(OrderItem.selected_options),
@@ -349,6 +349,8 @@ def create_public_order(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Restaurant is inactive"
         )
+    if restaurant.operating_status != "open":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Restaurant is not accepting new customer orders.")
 
     # 4. Validate Table
     table = db.query(RestaurantTable).filter(
@@ -481,6 +483,8 @@ def create_public_session_order(
         )
     if not dining_session.restaurant.is_active:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurant is inactive")
+    if dining_session.restaurant.operating_status != "open":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Restaurant is not accepting new customer orders.")
     if not dining_session.table.is_active:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Table is inactive")
 

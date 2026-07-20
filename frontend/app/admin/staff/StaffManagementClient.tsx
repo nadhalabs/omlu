@@ -8,10 +8,14 @@ import {
   ApiError,
   createStaffAccount,
   getStaffAccounts,
+  getStaffOperations,
   removeStaffAccess,
   resetStaffPassword,
   revokeStaffSessions,
   updateStaffAccount,
+  setAllStaffLocked,
+  setStaffLocked,
+  setRestaurantOperatingStatus,
 } from "@/lib/api";
 import {
   backendFieldName,
@@ -21,7 +25,7 @@ import {
   validatePassword,
   validateStaffAccount,
 } from "@/lib/formValidation";
-import { StaffAccountCreateRequest, StaffAccountResponse } from "@/lib/types";
+import { StaffAccountCreateRequest, StaffAccountResponse, StaffOperationsResponse } from "@/lib/types";
 
 const EMPTY_FORM: StaffAccountCreateRequest = {
   name: "",
@@ -38,6 +42,7 @@ function fmt(value: string | null) {
 
 export default function StaffManagementClient() {
   const [staff, setStaff] = useState<StaffAccountResponse[]>([]);
+  const [operations, setOperations] = useState<StaffOperationsResponse | null>(null);
   const [form, setForm] = useState<StaffAccountCreateRequest>(EMPTY_FORM);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -53,7 +58,9 @@ export default function StaffManagementClient() {
   const loadStaff = useCallback(async () => {
     setLoading(true);
     try {
-      setStaff(await getStaffAccounts());
+      const [accounts, operationalState] = await Promise.all([getStaffAccounts(), getStaffOperations()]);
+      setStaff(accounts);
+      setOperations(operationalState);
       setError(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not load staff.");
@@ -166,6 +173,24 @@ export default function StaffManagementClient() {
     setStaff((prev) => prev.filter((item) => item.id !== member.id));
   };
 
+  const toggleAllStaff = async () => {
+    if (!operations) return;
+    const locking = !operations.locked;
+    const warnings = `${operations.occupied_tables} active tables, ${operations.unserved_orders} unserved orders, ${operations.pending_requests} pending requests, and ${operations.bills_waiting_for_payment} bills waiting for payment.`;
+    if (locking && !window.confirm(`${warnings}\n\nLocking Staff now will prevent further Staff actions. Continue?`)) return;
+    const reason = locking ? window.prompt("Optional reason for locking all Staff:") || undefined : undefined;
+    try { setOperations(await setAllStaffLocked(locking, reason, true)); }
+    catch (err) { setToast(err instanceof ApiError ? err.message : "Could not update Staff operations."); }
+  };
+
+  const toggleMemberLock = async (member: StaffAccountResponse) => {
+    const locking = !member.operations_locked;
+    if (!window.confirm(`${locking ? "Lock" : "Unlock"} operations for ${member.name}?`)) return;
+    const reason = locking ? window.prompt("Optional lock reason:") || undefined : undefined;
+    try { replaceStaff(await setStaffLocked(member.id, locking, reason)); }
+    catch (err) { setToast(err instanceof ApiError ? err.message : "Could not update Staff lock."); }
+  };
+
   return (
     <div className="flex flex-col gap-6">
       <FormToast message={toast} onDismiss={() => setToast(null)} dark />
@@ -188,6 +213,29 @@ export default function StaffManagementClient() {
         <div className="rounded-xl border border-red-800/40 bg-red-950/20 px-4 py-3 text-sm font-semibold text-red-300">
           {error}
         </div>
+      )}
+
+      {operations && (
+        <section className="rounded-xl border border-zinc-800 bg-zinc-950 p-5">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h2 className="font-black text-white">Restaurant Staff Access</h2>
+              <p className={`mt-1 text-sm font-bold ${operations.locked ? "text-red-300" : "text-emerald-300"}`}>
+                All Staff: {operations.locked ? "Locked" : "Unlocked"}
+              </p>
+              {operations.locked && <p className="mt-1 text-xs text-zinc-400">Locked by {operations.locked_by_name || "Admin"} · {fmt(operations.locked_at)}{operations.reason ? ` · ${operations.reason}` : ""}</p>}
+            </div>
+            <button onClick={toggleAllStaff} className={`rounded-lg px-4 py-2 text-sm font-black text-white ${operations.locked ? "bg-emerald-700" : "bg-red-700"}`}>
+              {operations.locked ? "Unlock Staff" : "Lock All Staff"}
+            </button>
+            <label className="text-xs font-bold text-zinc-400">Restaurant
+              <select value={operations.operating_status} onChange={async (e) => setOperations(await setRestaurantOperatingStatus(e.target.value as "open" | "closing" | "closed"))} className="ml-2 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-white">
+                <option value="open">Open</option><option value="closing">Closing</option><option value="closed">Closed</option>
+              </select>
+            </label>
+          </div>
+          <p className="mt-3 text-xs text-zinc-500">{operations.occupied_tables} active tables · {operations.unserved_orders} unserved orders · {operations.pending_requests} pending requests · {operations.bills_waiting_for_payment} bills awaiting payment</p>
+        </section>
       )}
 
       <form onSubmit={submitCreate} className="grid grid-cols-1 lg:grid-cols-6 gap-3 bg-zinc-950 border border-zinc-800 rounded-xl p-4">
@@ -238,9 +286,10 @@ export default function StaffManagementClient() {
                     </select>
                   </td>
                   <td className="p-3">
-                    <span className={`px-2 py-1 rounded-md text-xs font-bold ${member.status === "active" ? "bg-emerald-950/40 text-emerald-300" : "bg-zinc-800 text-zinc-300"}`}>
-                      {member.status}
+                    <span className={`px-2 py-1 rounded-md text-xs font-bold ${member.operations_locked ? "bg-red-950/60 text-red-300" : member.status === "active" ? "bg-emerald-950/40 text-emerald-300" : "bg-zinc-800 text-zinc-300"}`}>
+                      {member.operations_locked ? "Locked" : member.status}
                     </span>
+                    {member.operations_locked && <div className="mt-2 text-[10px] text-zinc-500">By {member.operations_locked_by_name || "Admin"}{member.operations_lock_reason ? ` · ${member.operations_lock_reason}` : ""}</div>}
                   </td>
                   <td className="p-3 text-zinc-400">{fmt(member.last_active_at)}</td>
                   <td className="p-3 text-zinc-400">{fmt(member.created_at)}</td>
@@ -254,6 +303,7 @@ export default function StaffManagementClient() {
                       )}
                       <button onClick={() => openResetPassword(member)} className="px-2 py-1 rounded bg-zinc-800 text-zinc-200 text-xs font-bold">Reset Password</button>
                       <button onClick={() => signOutAll(member)} className="px-2 py-1 rounded bg-zinc-800 text-zinc-200 text-xs font-bold">Sign Out</button>
+                      {member.role === "staff" && <button onClick={() => toggleMemberLock(member)} className={`px-2 py-1 rounded text-white text-xs font-bold ${member.operations_locked ? "bg-emerald-700" : "bg-red-800"}`}>{member.operations_locked ? "Unlock Account" : "Lock Account"}</button>}
                       <button disabled={member.role === "owner"} onClick={() => removeAccess(member)} className="px-2 py-1 rounded bg-red-950/70 text-red-200 text-xs font-bold disabled:opacity-40">Remove</button>
                     </div>
                   </td>

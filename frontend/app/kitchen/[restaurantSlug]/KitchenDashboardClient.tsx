@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { AndroidDownloadCard } from "@/components/AndroidDownloadCard";
 import { useRouter } from "next/navigation";
 import { getKitchenOrders, updateKitchenOrderStatus, getStaffMe, staffLogout, ApiError } from "@/lib/api";
 import { KitchenOrderResponse, CurrentStaffResponse } from "@/lib/types";
@@ -366,7 +367,7 @@ export default function KitchenDashboardClient({
       <header className="flex flex-col md:flex-row items-start md:items-center justify-between gap-5 border-b border-zinc-800 pb-5 mb-6">
         <div>
           <span className="text-amber-500 font-extrabold uppercase tracking-wider text-xs">
-            Nadha Serve Kitchen • {staffInfo.restaurant_name}
+            OMLU Kitchen • {staffInfo.restaurant_name}
           </span>
           <h1 className="text-3xl font-black tracking-tight text-white mt-1">
             Active Orders
@@ -418,6 +419,8 @@ export default function KitchenDashboardClient({
           </button>
         </div>
       </header>
+
+      <AndroidDownloadCard variant="compact" dismissible className="mb-6" />
 
       {/* API Connection Indicator */}
       {error && (

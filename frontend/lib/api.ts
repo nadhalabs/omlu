@@ -1159,6 +1159,40 @@ export async function getStaffAccounts(): Promise<StaffAccountResponse[]> {
   }
 }
 
+export async function getStaffOperations() {
+  const res = await fetch("/api/admin/staff/operations");
+  if (!res.ok) throw new ApiError(res.status, "Failed to load staff operations.");
+  return res.json();
+}
+
+export async function setAllStaffLocked(locked: boolean, reason?: string, confirmActiveOperations = false) {
+  const res = await fetch(`/api/admin/staff/operations/${locked ? "lock" : "unlock"}`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: locked ? JSON.stringify({ reason, confirm_active_operations: confirmActiveOperations }) : undefined,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    const detail = body?.detail;
+    throw new ApiError(res.status, typeof detail === "string" ? detail : detail?.message || "Failed to update staff operations.");
+  }
+  return res.json();
+}
+
+export async function setStaffLocked(staffId: number, locked: boolean, reason?: string): Promise<StaffAccountResponse> {
+  const res = await fetch(`/api/admin/staff/${staffId}/${locked ? "lock" : "unlock"}`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: locked ? JSON.stringify({ reason, confirm_active_operations: true }) : undefined,
+  });
+  if (!res.ok) throw new ApiError(res.status, "Failed to update staff lock.");
+  return res.json();
+}
+
+export async function setRestaurantOperatingStatus(status: "open" | "closing" | "closed") {
+  const res = await fetch("/api/admin/staff/operations/status", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) });
+  if (!res.ok) throw new ApiError(res.status, "Failed to update restaurant status.");
+  return res.json();
+}
+
 export async function createStaffAccount(
   data: StaffAccountCreateRequest
 ): Promise<StaffAccountResponse> {

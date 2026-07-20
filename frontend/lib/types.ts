@@ -457,6 +457,25 @@ export interface StaffAccountResponse {
   added_by_staff_id: number | null;
   active_session_count: number;
   sessions: StaffAccountSession[];
+  operations_locked: boolean;
+  operations_locked_at: string | null;
+  operations_locked_by_id: number | null;
+  operations_locked_by_name: string | null;
+  operations_lock_reason: string | null;
+}
+
+export interface StaffOperationsResponse {
+  locked: boolean;
+  locked_at: string | null;
+  locked_by_id: number | null;
+  locked_by_name: string | null;
+  reason: string | null;
+  operating_status: "open" | "closing" | "closed";
+  active_sessions: number;
+  unserved_orders: number;
+  pending_requests: number;
+  bills_waiting_for_payment: number;
+  occupied_tables: number;
 }
 
 export interface StaffAccountCreateRequest {

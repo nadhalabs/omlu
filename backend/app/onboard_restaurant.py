@@ -1,5 +1,5 @@
 """
-Nadha Serve Restaurant Onboarding Script.
+OMLU Restaurant Onboarding Script.
 
 Usage:
     python -m app.onboard_restaurant [options]
@@ -70,7 +70,7 @@ def prompt_if_missing(value, prompt_text: str, validator=None, secret=False):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Onboard a new restaurant into Nadha Serve"
+        description="Onboard a new restaurant into OMLU"
     )
     parser.add_argument("--name", help="Restaurant display name")
     parser.add_argument("--slug", help="Restaurant URL slug (e.g. demo-cafe)")
@@ -80,7 +80,7 @@ def main():
     parser.add_argument("--tables", type=int, default=0, help="Number of tables to create (default: prompted)")
     args = parser.parse_args()
 
-    print("\n=== Nadha Serve Restaurant Onboarding ===\n")
+    print("\n=== OMLU Restaurant Onboarding ===\n")
 
     # Collect all inputs
     name = prompt_if_missing(args.name, "Restaurant name (e.g. Demo Cafe)")

@@ -2,7 +2,7 @@ import ChangePasswordClient from "./ChangePasswordClient";
 import { requireStaffRole } from "@/lib/serverAuth";
 
 export const metadata = {
-  title: "Change Password - Nadha Serve",
+  title: "Change Password - OMLU Staff",
 };
 
 export default async function ChangePasswordPage() {

@@ -12,7 +12,7 @@ const setupItems = [
 ];
 
 export const metadata = {
-  title: "Setup - Nadha Serve Admin",
+  title: "Setup - OMLU Admin",
 };
 
 export default async function AdminSetupPage() {

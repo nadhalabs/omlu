@@ -118,7 +118,7 @@ export default function RegisterPage() {
         <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <Link href="/" className="text-sm font-black uppercase tracking-widest text-amber-700">
-              Nadha Serve
+              OMLU
             </Link>
             <h1 className="mt-3 text-3xl font-black tracking-tight">Create Restaurant</h1>
           </div>

@@ -1,6 +1,6 @@
 # Restaurant Pilot Onboarding & Deployment Checklist
 
-Use this checklist to verify and prepare the Nadha Serve installation for a new restaurant pilot deployment.
+Use this checklist to verify and prepare the OMLU installation for a new restaurant pilot deployment.
 
 ## Phase 1: Pre-Deployment & Collection
 - [ ] Collect restaurant name, physical address, and logo URL.
@@ -18,7 +18,7 @@ Use this checklist to verify and prepare the Nadha Serve installation for a new 
 
 ## Phase 3: Tables & QR Code Map
 - [ ] Generate tables with correct numbers in the admin panel.
-- [ ] Download dynamic QR codes (verify filenames are correctly named like `nadha-[slug]-table-[number]-qr.png`).
+- [ ] Download dynamic QR codes (verify filenames include the restaurant slug and table number).
 - [ ] Test table code regeneration: verify old QR codes return 404/invalid and new codes resolve correctly.
 - [ ] Print QR code placards (ensure high contrast and clear scanning instructions).
 - [ ] Affix placards to physical tables and verify placement match.

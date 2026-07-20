@@ -19,7 +19,7 @@ class OmluOperationsApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'OMLU Operations',
+      title: 'OMLU',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
@@ -276,7 +276,7 @@ class _OmluWebViewShellState extends State<OmluWebViewShell> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Exit OMLU?'),
-        content: const Text('Do you want to close OMLU Operations?'),
+        content: const Text('Do you want to close OMLU?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),

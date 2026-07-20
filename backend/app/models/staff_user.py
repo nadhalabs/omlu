@@ -26,6 +26,12 @@ class StaffUser(Base):
     disabled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     disabled_by_staff_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     disabled_reason: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    operations_locked: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
+    operations_locked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    operations_locked_by_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    operations_lock_reason: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    operations_unlocked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    operations_unlocked_by_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

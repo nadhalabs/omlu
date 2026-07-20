@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import NewStaffOrderClient from "./NewStaffOrderClient";
 
 export const metadata = {
-  title: "New Staff Order - Nadha Serve",
+  title: "New Staff Order - OMLU Staff",
 };
 
 export default async function NewStaffOrderPage({

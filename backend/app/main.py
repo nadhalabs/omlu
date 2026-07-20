@@ -17,7 +17,7 @@ logger = logging.getLogger("nadha_serve")
 
 # Table creation is managed via Alembic migrations
 app = FastAPI(
-    title="Nadha Serve API",
+    title="OMLU API",
     version="0.1.0",
 )
 
@@ -103,6 +103,6 @@ async def shutdown_realtime_broker():
 @app.get("/")
 def root():
     return {
-        "name": "Nadha Serve API",
+        "name": "OMLU API",
         "status": "running",
     }

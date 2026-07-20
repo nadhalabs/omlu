@@ -53,7 +53,7 @@ class Order(Base):
         CheckConstraint("subtotal >= 0", name="chk_order_subtotal_positive")
     )
     customer_note: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
-    source: Mapped[str] = mapped_column(String(50), default="qr", server_default="qr")
+    source: Mapped[str] = mapped_column(String(50), default="customer_qr", server_default="customer_qr")
     created_by_staff_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
     idempotency_key: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(
