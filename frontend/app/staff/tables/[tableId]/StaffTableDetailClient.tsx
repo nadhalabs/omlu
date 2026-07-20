@@ -137,7 +137,7 @@ export default function StaffTableDetailClient({ tableId }: { tableId: number })
                     {pendingBillRequest && (
                       <div className="rounded-lg border border-amber-700/50 bg-amber-950/30 px-4 py-3 text-sm font-bold text-amber-300">
                         Bill requested
-                        <span className="block text-xs font-medium text-amber-200/80">Review and send to counter</span>
+                        <span className="block text-xs font-medium text-amber-200/80">Waiting for owner/admin review</span>
                       </div>
                     )}
                     {bill && bill.status !== "paid" && billUrl && (

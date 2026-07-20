@@ -35,6 +35,7 @@ EVENT_STAFF_UNLOCKED = "staff.unlocked"
 EVENT_STAFF_ALL_LOCKED = "staff.all_locked"
 EVENT_STAFF_ALL_UNLOCKED = "staff.all_unlocked"
 EVENT_RESTAURANT_STATUS_CHANGED = "restaurant.status_changed"
+EVENT_QUICK_SALE_COMPLETED = "quick_sale.completed"
 
 
 @dataclass

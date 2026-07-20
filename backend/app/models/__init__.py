@@ -7,6 +7,7 @@ from app.models.service_request import ServiceRequest
 from app.models.dining_session import DiningSession
 from app.models.bill import Bill, RestaurantBillDailySequence
 from app.models.push_subscription import CustomerPushSubscription
+from app.models.quick_sale import QuickSale, QuickSaleItem
 
 __all__ = [
     "Restaurant",
@@ -29,4 +30,6 @@ __all__ = [
     "Bill",
     "RestaurantBillDailySequence",
     "CustomerPushSubscription",
+    "QuickSale",
+    "QuickSaleItem",
 ]

@@ -609,7 +609,7 @@ function OrderCard({
       <div className="flex items-start justify-between gap-2 border-b border-zinc-850 pb-2">
         <div>
           <h3 className="font-extrabold text-sm text-white">{order.order_number}</h3>
-          <span className="text-zinc-500 font-bold text-[10px]">Table {order.table_number}</span>
+          <span className={`font-bold text-[10px] ${order.table_number === "Takeaway" ? "rounded bg-amber-950/50 px-2 py-1 text-amber-400" : "text-zinc-500"}`}>{order.table_number === "Takeaway" ? "Takeaway" : `Table ${order.table_number}`}</span>
         </div>
         <span className="text-amber-500 font-mono font-bold text-[10px] whitespace-nowrap bg-amber-950/20 px-2 py-0.5 rounded-lg border border-amber-900/30">
           ⏱️ {elapsedTime}

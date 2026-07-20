@@ -18,6 +18,7 @@ from app.models.order import Order, OrderItem, OrderStatusHistory
 from app.models.restaurant_table import RestaurantTable
 from app.models.service_request import ServiceRequest
 from app.models.staff_user import StaffUser
+from app.models.quick_sale import QuickSale, QuickSaleItem
 from app.services.pdf_reports import build_performance_pdf
 from app.utils.auth import RoleChecker
 
@@ -229,7 +230,16 @@ def order_history(
     for order in orders:
         actor_ids.extend(_order_actor_ids(order))
     staff_names = _staff_names(db, actor_ids)
-    return {"items": [_order_row(order, staff_names) for order in orders], "page": safe_page, "page_size": safe_size, "total": total}
+    items = [_order_row(order, staff_names) for order in orders]
+    if not table_id and not staff_id and (not status_filter or status_filter in {"served", "ready", "preparing", "pending", "accepted"}):
+        quick_query = db.query(QuickSale).options(joinedload(QuickSale.items)).filter(QuickSale.restaurant_id == current_user.restaurant_id, QuickSale.created_at >= start_utc, QuickSale.created_at < end_utc)
+        if order_number: quick_query = quick_query.filter(QuickSale.order_number.ilike(f"%{order_number.strip()}%"))
+        quick_sales = quick_query.all()
+        items.extend({"id": f"quick-{sale.id}", "order_number": sale.order_number, "created_at": _iso(sale.created_at), "table_number": None, "session_token": None, "item_count": sum(item.quantity for item in sale.items), "status": "served" if sale.status == "completed" else sale.status, "total": _money(sale.total_amount), "accepted_by": sale.entered_by_name, "served_by": sale.paid_by_name, "source": sale.source} for sale in quick_sales)
+        total += len(quick_sales)
+        items.sort(key=lambda item: item["created_at"], reverse=True)
+        items = items[:safe_size]
+    return {"items": items, "page": safe_page, "page_size": safe_size, "total": total}
 
 
 def _bills_query(
@@ -306,7 +316,16 @@ def bill_history(
         .limit(safe_size)
         .all()
     )
-    return {"items": [_bill_row(bill) for bill in bills], "page": safe_page, "page_size": safe_size, "total": total}
+    items = [_bill_row(bill) for bill in bills]
+    if not table_id and (not status_filter or status_filter == "paid"):
+        quick_query = db.query(QuickSale).filter(QuickSale.restaurant_id == current_user.restaurant_id, QuickSale.status == "completed", QuickSale.completed_at >= start_utc, QuickSale.completed_at < end_utc)
+        if payment_method:
+            mapped = {"counter_cash": "cash", "counter_upi": "upi"}.get(payment_method)
+            quick_query = quick_query.filter(QuickSale.payment_method == mapped) if mapped else quick_query.filter(False)
+        quick_sales = quick_query.all()
+        items.extend({"id": f"quick-{sale.id}", "bill_number": sale.order_number, "date": _iso(sale.completed_at), "table_number": None, "session_token": None, "subtotal": _money(sale.subtotal), "tax_amount": "0.00", "discount_amount": "0.00", "grand_total": _money(sale.total_amount), "payment_status": "paid", "payment_method": f"counter_{sale.payment_method}", "paid_at": _iso(sale.completed_at), "source": sale.source} for sale in quick_sales)
+        total += len(quick_sales); items.sort(key=lambda item: item["date"], reverse=True); items = items[:safe_size]
+    return {"items": items, "page": safe_page, "page_size": safe_size, "total": total}
 
 
 def _sessions_query(
@@ -429,8 +448,10 @@ def performance_summary(
         DiningSession.closed_at.isnot(None),
     ).one()
 
-    total_orders = int(order_metrics[0] or 0)
-    total_revenue = Decimal(str(bill_metrics[3] or 0))
+    paid_quick_sales = db.query(QuickSale).filter(QuickSale.restaurant_id == current_user.restaurant_id, QuickSale.status == "completed", QuickSale.completed_at >= start_utc, QuickSale.completed_at < end_utc).all()
+    total_orders = int(order_metrics[0] or 0) + len(paid_quick_sales)
+    quick_revenue = sum((sale.total_amount for sale in paid_quick_sales), Decimal("0.00"))
+    total_revenue = Decimal(str(bill_metrics[3] or 0)) + quick_revenue
 
     revenue_by_day = [
         {"date": str(row[0]), "revenue": _money(row[1])}
@@ -443,6 +464,12 @@ def performance_summary(
         .order_by("day")
         .all()
     ]
+    revenue_days = {row["date"]: Decimal(row["revenue"]) for row in revenue_by_day}
+    order_days = {}
+    tz = _restaurant_timezone(current_user)
+    for sale in paid_quick_sales:
+        day = str(sale.completed_at.astimezone(tz).date()); revenue_days[day] = revenue_days.get(day, Decimal("0")) + sale.total_amount; order_days[day] = order_days.get(day, 0) + 1
+    revenue_by_day = [{"date": day, "revenue": _money(value)} for day, value in sorted(revenue_days.items())]
     orders_by_day = [
         {"date": str(row[0]), "orders": int(row[1])}
         for row in db.query(
@@ -454,6 +481,9 @@ def performance_summary(
         .order_by("day")
         .all()
     ]
+    existing_order_days = {row["date"]: row["orders"] for row in orders_by_day}
+    for day, count in order_days.items(): existing_order_days[day] = existing_order_days.get(day, 0) + count
+    orders_by_day = [{"date": day, "orders": count} for day, count in sorted(existing_order_days.items())]
     orders_by_hour = [
         {"hour": int(row[0]), "orders": int(row[1])}
         for row in db.query(
@@ -465,6 +495,10 @@ def performance_summary(
         .order_by("hour")
         .all()
     ]
+    hour_map = {row["hour"]: row["orders"] for row in orders_by_hour}
+    for sale in paid_quick_sales:
+        hour = sale.created_at.astimezone(tz).hour; hour_map[hour] = hour_map.get(hour, 0) + 1
+    orders_by_hour = [{"hour": hour, "orders": count} for hour, count in sorted(hour_map.items())]
     item_query = (
         db.query(
             OrderItem.item_name,
@@ -477,6 +511,13 @@ def performance_summary(
     )
     top_items = [{"item_name": row[0], "quantity": int(row[1]), "revenue": _money(row[2])} for row in item_query.order_by(func.sum(OrderItem.quantity).desc()).limit(10).all()]
     low_items = [{"item_name": row[0], "quantity": int(row[1]), "revenue": _money(row[2])} for row in item_query.order_by(func.sum(OrderItem.quantity).asc()).limit(10).all()]
+    quick_items = db.query(QuickSaleItem.item_name, func.sum(QuickSaleItem.quantity), func.sum(QuickSaleItem.total_price)).join(QuickSale).filter(QuickSale.id.in_([sale.id for sale in paid_quick_sales])).group_by(QuickSaleItem.item_name).all() if paid_quick_sales else []
+    item_map = {row["item_name"]: [row["quantity"], Decimal(row["revenue"])] for row in top_items}
+    for name, qty, revenue in quick_items:
+        current = item_map.setdefault(name, [0, Decimal("0")]); current[0] += int(qty); current[1] += Decimal(str(revenue))
+    merged_items = [{"item_name": name, "quantity": values[0], "revenue": _money(values[1])} for name, values in item_map.items()]
+    top_items = sorted(merged_items, key=lambda row: row["quantity"], reverse=True)[:10]
+    low_items = sorted(merged_items, key=lambda row: row["quantity"])[:10]
     category_performance = [
         {"category_name": row[0] or "Uncategorized", "quantity": int(row[1]), "revenue": _money(row[2])}
         for row in db.query(
@@ -532,8 +573,8 @@ def performance_summary(
         "metrics": {
             "total_revenue": _money(total_revenue),
             "total_orders": total_orders,
-            "average_order_value": _money((Decimal(str(order_metrics[1] or 0)) / total_orders) if total_orders else Decimal("0.00")),
-            "total_bills": int(bill_metrics[0] or 0),
+            "average_order_value": _money((total_revenue / total_orders) if total_orders else Decimal("0.00")),
+            "total_bills": int(bill_metrics[0] or 0) + len(paid_quick_sales),
             "paid_bills": int(bill_metrics[1] or 0),
             "unpaid_bills": int(bill_metrics[2] or 0),
             "cancelled_orders": 0,
@@ -649,6 +690,8 @@ def _payment_method_label(method: str | None) -> str:
         "counter_upi": "UPI",
         "counter_card": "Card",
         "online": "Online",
+        "cash": "Cash",
+        "upi": "UPI",
         None: "Other or unknown",
     }.get(method, "Other or unknown")
 
@@ -664,13 +707,17 @@ def _payment_breakdown(db: Session, staff: StaffUser, start_utc: datetime, end_u
         Bill.generated_at >= start_utc,
         Bill.generated_at < end_utc,
     ).group_by(Bill.payment_method).all()
+    quick_rows = db.query(QuickSale.payment_method, func.count(QuickSale.id), func.coalesce(func.sum(QuickSale.total_amount), 0)).filter(QuickSale.restaurant_id == staff.restaurant_id, QuickSale.status == "completed", QuickSale.completed_at >= start_utc, QuickSale.completed_at < end_utc).group_by(QuickSale.payment_method).all()
+    merged: dict[str | None, list] = {}
+    for method, count, amount in [*rows, *quick_rows]:
+        normalized = {"cash": "counter_cash", "upi": "counter_upi"}.get(method, method)
+        entry = merged.setdefault(normalized, [0, Decimal("0")]); entry[0] += int(count or 0); entry[1] += Decimal(str(amount or 0))
     breakdown = []
-    for method, count, amount in rows:
-        value = Decimal(str(amount or 0))
+    for method, (count, value) in merged.items():
         percentage = (value / total_revenue * Decimal("100")) if total_revenue else Decimal("0")
         breakdown.append({
             "method": _payment_method_label(method),
-            "bill_count": int(count or 0),
+            "bill_count": count,
             "amount": _money(value),
             "percentage": f"{percentage.quantize(Decimal('0.01'))}",
         })
@@ -725,6 +772,12 @@ def _detailed_staff_activity(db: Session, staff: StaffUser, start_utc: datetime,
         Bill.paid_at < end_utc,
     ).group_by(StaffUser.id, StaffUser.name).all():
         row_for(staff_id, name)["payments_recorded"] = int(count or 0)
+
+    for staff_id, name, count in db.query(StaffUser.id, StaffUser.name, func.count(QuickSale.id)).join(QuickSale, QuickSale.entered_by_staff_id == StaffUser.id).filter(StaffUser.restaurant_id == staff.restaurant_id, QuickSale.created_at >= start_utc, QuickSale.created_at < end_utc).group_by(StaffUser.id, StaffUser.name).all():
+        row = row_for(staff_id, name); row["orders_created"] += int(count or 0); row["bills_generated"] += int(count or 0)
+
+    for staff_id, name, count in db.query(StaffUser.id, StaffUser.name, func.count(QuickSale.id)).join(QuickSale, QuickSale.paid_by_staff_id == StaffUser.id).filter(StaffUser.restaurant_id == staff.restaurant_id, QuickSale.completed_at >= start_utc, QuickSale.completed_at < end_utc).group_by(StaffUser.id, StaffUser.name).all():
+        row_for(staff_id, name)["payments_recorded"] += int(count or 0)
 
     for staff_id, name, count in db.query(StaffUser.id, StaffUser.name, func.count(DiningSession.id)).join(DiningSession, DiningSession.opened_by_staff_id == StaffUser.id).filter(
         StaffUser.restaurant_id == staff.restaurant_id,

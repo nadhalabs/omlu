@@ -284,6 +284,7 @@ export default function AdminDashboardClient() {
           </h2>
           <div className="grid sm:grid-cols-2 gap-2">
             {[
+              ["🧾 Quick Sale", "/admin/quick-sale"],
               ["Add Staff", "/admin/staff"],
               ["Open New Table Session", "/staff/sessions"],
               ["View All Tables", "/admin/tables"],

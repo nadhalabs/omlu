@@ -101,6 +101,7 @@ export default async function AdminLayout({
             <AdminSidebarLink href="/admin/tables" label="📋 Tables Map" />
             <AdminSidebarLink href="/admin/requests" label="🔔 Service Requests" />
             <PendingPaymentsSidebarLink initialCount={pendingPaymentCount} />
+            <AdminSidebarLink href="/admin/quick-sale" label="🧾 Quick Sale" />
             <AdminSidebarLink href={`/kitchen/${staffInfo.restaurant_slug}`} label="🧑‍🍳 Kitchen Dashboard" />
             <AdminSidebarLink href="/admin/orders/history" label="Order History" />
             <AdminSidebarLink href="/admin/bills/history" label="Bill History" />

@@ -22,6 +22,7 @@ from app.schemas.dashboard import (
 )
 from app.utils.auth import RoleChecker
 from app.models.staff_user import StaffUser
+from app.models.quick_sale import QuickSale, QuickSaleItem
 
 router = APIRouter(prefix="/admin/dashboard")
 
@@ -81,6 +82,7 @@ def get_dashboard_summary(
         Order.created_at >= day_start_utc,
         Order.created_at < day_end_utc
     ).scalar() or 0
+    today_order_count += db.query(func.count(QuickSale.id)).filter(QuickSale.restaurant_id == restaurant_id, QuickSale.created_at >= day_start_utc, QuickSale.created_at < day_end_utc).scalar() or 0
 
     # 2. Revenue: sum subtotals of orders whose 'served' status transition occurred today
     # We join order_status_history to find orders marked 'served' today
@@ -97,9 +99,14 @@ def get_dashboard_summary(
         Order.status == "served"  # Confirm current status is still served
     ).all()
 
+    paid_quick_sales = db.query(QuickSale).filter(
+        QuickSale.restaurant_id == restaurant_id, QuickSale.status == "completed",
+        QuickSale.completed_at >= day_start_utc, QuickSale.completed_at < day_end_utc,
+    ).all()
 
-    today_revenue = sum(o.subtotal for o in served_orders) if served_orders else Decimal("0.00")
-    served_count = len(served_orders)
+
+    today_revenue = (sum((o.subtotal for o in served_orders), Decimal("0.00")) + sum((s.total_amount for s in paid_quick_sales), Decimal("0.00")))
+    served_count = len(served_orders) + len(paid_quick_sales)
     average_order_value = (today_revenue / served_count) if served_count > 0 else Decimal("0.00")
 
     # 3. Pending orders (statuses that mean "in progress")
@@ -107,19 +114,23 @@ def get_dashboard_summary(
         Order.restaurant_id == restaurant_id,
         Order.status.in_(["pending", "accepted", "preparing", "ready"])
     ).scalar() or 0
+    pending_order_count += db.query(func.count(QuickSale.id)).filter(QuickSale.restaurant_id == restaurant_id, QuickSale.sale_type == "takeaway", QuickSale.status.in_(["pending", "accepted", "preparing", "ready"])).scalar() or 0
 
     accepted_order_count = db.query(func.count(Order.id)).filter(
         Order.restaurant_id == restaurant_id,
         Order.status == "accepted"
     ).scalar() or 0
+    accepted_order_count += db.query(func.count(QuickSale.id)).filter(QuickSale.restaurant_id == restaurant_id, QuickSale.status == "accepted").scalar() or 0
     preparing_order_count = db.query(func.count(Order.id)).filter(
         Order.restaurant_id == restaurant_id,
         Order.status == "preparing"
     ).scalar() or 0
+    preparing_order_count += db.query(func.count(QuickSale.id)).filter(QuickSale.restaurant_id == restaurant_id, QuickSale.status == "preparing").scalar() or 0
     ready_order_count = db.query(func.count(Order.id)).filter(
         Order.restaurant_id == restaurant_id,
         Order.status == "ready"
     ).scalar() or 0
+    ready_order_count += db.query(func.count(QuickSale.id)).filter(QuickSale.restaurant_id == restaurant_id, QuickSale.status == "ready").scalar() or 0
 
     # 4. Active service requests
     active_service_request_count = db.query(func.count(ServiceRequest.id)).filter(
@@ -164,6 +175,10 @@ def get_dashboard_summary(
             TopSellingItem(item_name=row.item_name, total_quantity=int(row.total_quantity))
             for row in top_items_raw
         ]
+    quick_item_rows = db.query(QuickSaleItem.item_name, func.sum(QuickSaleItem.quantity)).join(QuickSale).filter(QuickSale.id.in_([sale.id for sale in paid_quick_sales])).group_by(QuickSaleItem.item_name).all() if paid_quick_sales else []
+    combined_items: dict[str, int] = {item.item_name: item.total_quantity for item in top_items_data}
+    for name, qty in quick_item_rows: combined_items[name] = combined_items.get(name, 0) + int(qty)
+    top_items_data = [TopSellingItem(item_name=name, total_quantity=qty) for name, qty in sorted(combined_items.items(), key=lambda pair: pair[1], reverse=True)[:5]]
 
     # 7. Orders by local hour: created today, grouped by local hour
     #    Fetch all today's orders and compute local hour in Python to avoid TZ SQL complexity
@@ -177,6 +192,9 @@ def get_dashboard_summary(
     for order in today_orders:
         local_dt = order.created_at.astimezone(tz)
         h = local_dt.hour
+        hour_counts[h] = hour_counts.get(h, 0) + 1
+    for sale in paid_quick_sales:
+        h = sale.created_at.astimezone(tz).hour
         hour_counts[h] = hour_counts.get(h, 0) + 1
 
     orders_by_hour = [
