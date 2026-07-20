@@ -59,7 +59,7 @@ export default function OrderHistoryClient() {
             <tbody className="divide-y divide-zinc-800">
               {data.items.map((order) => (
                 <tr key={order.id} className="bg-zinc-900/60 hover:bg-zinc-850">
-                  <td className="p-3"><button onClick={() => openDetail(order)} className="font-black text-amber-400 underline-offset-4 hover:underline">{order.order_number}</button></td>
+                  <td className="p-3"><button onClick={() => openDetail(order)} className="font-black text-orange-400 underline-offset-4 hover:underline">{order.order_number}</button></td>
                   <td className="p-3 text-zinc-300">{formatDateTime(order.created_at)}</td>
                   <td className="p-3">{order.table_number || "-"}</td>
                   <td className="p-3 text-xs text-zinc-500">{order.session_token || "-"}</td>
@@ -93,7 +93,7 @@ export default function OrderHistoryClient() {
                     <div key={`${item.item_name}-${index}`} className="py-2 text-sm">
                       <div className="font-bold text-white">{item.quantity} x {item.item_name}</div>
                       <div className="text-zinc-500">₹{item.unit_price} · ₹{item.total_price}</div>
-                      {item.item_note && <div className="text-amber-300">{item.item_note}</div>}
+                      {item.item_note && <div className="text-orange-300">{item.item_note}</div>}
                     </div>
                   ))}
                 </div>

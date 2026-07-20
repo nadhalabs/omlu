@@ -22,7 +22,7 @@ const REQUEST_TYPE_LABELS: Record<string, string> = {
 };
 
 const REQUEST_TYPE_COLORS: Record<string, string> = {
-  waiter: "bg-amber-950/30 border-amber-700/40 text-amber-400",
+  waiter: "bg-orange-950/30 border-orange-700/40 text-orange-400",
   water: "bg-sky-950/30 border-sky-700/40 text-sky-400",
   bill: "bg-emerald-950/30 border-emerald-700/40 text-emerald-400",
 };
@@ -249,7 +249,7 @@ export default function AdminRequestsClient() {
             <h1 className="text-2xl font-black text-white">
               Service Requests
               {pendingCount > 0 && (
-                <span className="ml-3 bg-amber-600 text-white text-xs font-extrabold px-2.5 py-1 rounded-full align-middle animate-pulse">
+                <span className="ml-3 bg-orange-600 text-white text-xs font-extrabold px-2.5 py-1 rounded-full align-middle animate-pulse">
                   {pendingCount}
                 </span>
               )}
@@ -263,7 +263,7 @@ export default function AdminRequestsClient() {
           <div className="flex gap-3 items-center flex-wrap">
             <Link
               href={dashboardHref}
-              className="text-xs text-zinc-400 hover:text-amber-400 font-semibold transition px-3 py-1.5 rounded-lg border border-zinc-800 hover:border-amber-700/50"
+              className="text-xs text-zinc-400 hover:text-orange-400 font-semibold transition px-3 py-1.5 rounded-lg border border-zinc-800 hover:border-orange-700/50"
             >
               Back to dashboard
             </Link>
@@ -286,7 +286,7 @@ export default function AdminRequestsClient() {
             </Link>
             <button
               onClick={() => fetchRequests(false)}
-              className="text-xs text-amber-500 hover:text-amber-400 underline font-semibold transition cursor-pointer"
+              className="text-xs text-orange-500 hover:text-orange-400 underline font-semibold transition cursor-pointer"
             >
               Refresh
             </button>
@@ -309,7 +309,7 @@ export default function AdminRequestsClient() {
         {/* Loading State */}
         {loading && (
           <div className="flex justify-center py-8">
-            <div className="w-10 h-10 border-t-2 border-b-2 border-amber-500 rounded-full animate-spin" />
+            <div className="w-10 h-10 border-t-2 border-b-2 border-orange-500 rounded-full animate-spin" />
           </div>
         )}
 
@@ -440,7 +440,7 @@ export default function AdminRequestsClient() {
                             id={`resolve-btn-${req.id}`}
                             onClick={() => handleResolve(req.id)}
                             disabled={resolvingId === req.id}
-                            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition cursor-pointer"
+                            className="px-4 py-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition cursor-pointer"
                           >
                             {resolvingId === req.id ? "Resolving…" : "Mark Resolved"}
                           </button>

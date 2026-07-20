@@ -56,7 +56,7 @@ export default function BillHistoryClient() {
             <tbody className="divide-y divide-zinc-800">
               {data.items.map((bill) => (
                 <tr key={bill.id} className="bg-zinc-900/60">
-                  <td className="p-3 font-black text-amber-400">{bill.bill_number}</td>
+                  <td className="p-3 font-black text-orange-400">{bill.bill_number}</td>
                   <td className="p-3">{formatDateTime(bill.date)}</td>
                   <td className="p-3">{bill.table_number || "-"}</td>
                   <td className="p-3 text-xs text-zinc-500">{bill.session_token || "-"}</td>

@@ -83,7 +83,7 @@ export default function AdminSettingsClient() {
     return (
       <div className="flex flex-1 items-center justify-center py-20">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-10 h-10 border-t-2 border-b-2 border-amber-500 rounded-full animate-spin" />
+          <div className="w-10 h-10 border-t-2 border-b-2 border-orange-500 rounded-full animate-spin" />
           <p className="text-zinc-400 font-semibold text-sm">Loading settings…</p>
         </div>
       </div>
@@ -125,7 +125,7 @@ export default function AdminSettingsClient() {
           <select
             value={timezone}
             onChange={(e) => setTimezone(e.target.value)}
-            className="bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-white text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500"
+            className="bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-white text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-orange-500"
           >
             {TIMEZONES.map((tz) => (
               <option key={tz} value={tz}>
@@ -162,7 +162,7 @@ export default function AdminSettingsClient() {
           </label>
           <p className="text-zinc-500 text-xs">
             2–6 uppercase letters/numbers. Orders will appear as:{" "}
-            <strong className="text-amber-500">
+            <strong className="text-orange-500">
               {(orderPrefix || "NS").toUpperCase()}-20260712-0001
             </strong>
           </p>
@@ -173,7 +173,7 @@ export default function AdminSettingsClient() {
             onChange={(e) => setOrderPrefix(e.target.value.toUpperCase())}
             maxLength={6}
             placeholder="NS"
-            className="bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-white text-sm font-semibold uppercase focus:outline-none focus:ring-2 focus:ring-amber-500 w-40"
+            className="bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-white text-sm font-semibold uppercase focus:outline-none focus:ring-2 focus:ring-orange-500 w-40"
           />
         </div>
 
@@ -191,8 +191,8 @@ export default function AdminSettingsClient() {
             id="toggle-service-requests"
             type="button"
             onClick={() => setServiceRequestsEnabled(!serviceRequestsEnabled)}
-            className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-amber-500 shrink-0 mt-1 cursor-pointer ${
-              serviceRequestsEnabled ? "bg-amber-600" : "bg-zinc-700"
+            className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-orange-500 shrink-0 mt-1 cursor-pointer ${
+              serviceRequestsEnabled ? "bg-orange-600" : "bg-zinc-700"
             }`}
             aria-label={`Service requests ${serviceRequestsEnabled ? "enabled" : "disabled"}`}
           >
@@ -211,7 +211,7 @@ export default function AdminSettingsClient() {
             type="button"
             onClick={handleSave}
             disabled={saving}
-            className="px-6 py-2.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-bold rounded-xl transition cursor-pointer"
+            className="px-6 py-2.5 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white font-bold rounded-xl transition cursor-pointer"
           >
             {saving ? "Saving…" : "Save Settings"}
           </button>

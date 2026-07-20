@@ -84,7 +84,7 @@ export default function AdminDashboardClient() {
     return (
       <div className="flex flex-1 items-center justify-center py-20">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-t-2 border-b-2 border-amber-500 rounded-full animate-spin" />
+          <div className="w-12 h-12 border-t-2 border-b-2 border-orange-500 rounded-full animate-spin" />
           <p className="text-zinc-400 font-semibold text-sm">Loading dashboard…</p>
         </div>
       </div>
@@ -100,7 +100,7 @@ export default function AdminDashboardClient() {
           <p className="text-zinc-400 text-sm mb-6">{error}</p>
           <button
             onClick={() => fetchDashboard(true)}
-            className="px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-xl transition cursor-pointer"
+            className="px-6 py-2.5 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-xl transition cursor-pointer"
           >
             Retry
           </button>
@@ -127,7 +127,7 @@ export default function AdminDashboardClient() {
         <div>
           <h1 className="text-2xl font-black text-white">Admin Home</h1>
           <p className="text-zinc-500 text-sm mt-1">
-            Timezone: <span className="text-amber-500 font-bold">{data.timezone}</span>
+            Timezone: <span className="text-orange-500 font-bold">{data.timezone}</span>
           </p>
           <p className="mt-1 text-[11px] font-bold uppercase tracking-wide text-zinc-600">
             Real-time: {realtimeStatus}
@@ -141,7 +141,7 @@ export default function AdminDashboardClient() {
           )}
           <button
             onClick={() => fetchDashboard(false)}
-            className="text-xs text-amber-500 hover:text-amber-400 underline font-semibold transition cursor-pointer"
+            className="text-xs text-orange-500 hover:text-orange-400 underline font-semibold transition cursor-pointer"
           >
             Refresh now
           </button>
@@ -192,14 +192,14 @@ export default function AdminDashboardClient() {
           sub="Pending only"
           icon="!"
           href="/admin/requests"
-          accent={data.active_service_request_count > 0 ? "border-amber-600/50" : ""}
+          accent={data.active_service_request_count > 0 ? "border-orange-600/50" : ""}
         />
         <StatCard
           label="Today's Revenue"
           value={`${currency}${data.today_revenue}`}
           sub="From served orders"
           icon="₹"
-          accent="border-amber-700/30"
+          accent="border-orange-700/30"
         />
       </div>
 
@@ -219,13 +219,13 @@ export default function AdminDashboardClient() {
                       <div className="text-white font-black">Table {table.table_number}</div>
                       <div className="text-xs text-zinc-500">{table.order_count} orders · {currency}{table.bill_total}</div>
                     </div>
-                    <span className={`text-[10px] font-black px-2 py-1 rounded-md ${table.status === "Needs Attention" ? "bg-amber-950 text-amber-300" : table.status.includes("Payment") || table.status.includes("Bill") ? "bg-sky-950 text-sky-300" : table.status === "Available" ? "bg-zinc-800 text-zinc-400" : "bg-emerald-950 text-emerald-300"}`}>
+                    <span className={`text-[10px] font-black px-2 py-1 rounded-md ${table.status === "Needs Attention" ? "bg-orange-950 text-orange-300" : table.status.includes("Payment") || table.status.includes("Bill") ? "bg-sky-950 text-sky-300" : table.status === "Available" ? "bg-zinc-800 text-zinc-400" : "bg-emerald-950 text-emerald-300"}`}>
                       {table.status}
                     </span>
                   </div>
                   <div className="text-xs text-zinc-500">
                     Last activity: {table.last_activity_at ? new Date(table.last_activity_at).toLocaleTimeString() : "None"}
-                    {table.pending_request && <span className="block text-amber-400 mt-1">Request: {table.pending_request}</span>}
+                    {table.pending_request && <span className="block text-orange-400 mt-1">Request: {table.pending_request}</span>}
                     {table.payment_status && <span className="block mt-1">Payment: {table.payment_status}</span>}
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -294,7 +294,7 @@ export default function AdminDashboardClient() {
               ["Staff Management", "/admin/staff"],
               ["Restaurant Settings", "/admin/settings"],
             ].map(([label, href]) => (
-              <a key={label} href={href} className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm font-bold text-zinc-200 hover:border-amber-700/50">
+              <a key={label} href={href} className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm font-bold text-zinc-200 hover:border-orange-700/50">
                 {label}
               </a>
             ))}
@@ -316,7 +316,7 @@ export default function AdminDashboardClient() {
                 key={item.item_name}
                 className="flex items-center gap-3 bg-zinc-800/50 rounded-xl px-4 py-3"
               >
-                <span className="text-amber-500 font-extrabold text-sm w-6 shrink-0">
+                <span className="text-orange-500 font-extrabold text-sm w-6 shrink-0">
                   #{idx + 1}
                 </span>
                 <span className="flex-1 text-white font-bold text-sm truncate">
@@ -352,7 +352,7 @@ export default function AdminDashboardClient() {
                     className="w-full rounded-t transition-all duration-300"
                     style={{
                       height: `${Math.max(heightPct, count > 0 ? 8 : 2)}%`,
-                      backgroundColor: count > 0 ? "#d97706" : "#27272a",
+                      backgroundColor: count > 0 ? "#f97316" : "#27272a",
                     }}
                     title={`${h}:00 — ${count} order${count !== 1 ? "s" : ""}`}
                   />

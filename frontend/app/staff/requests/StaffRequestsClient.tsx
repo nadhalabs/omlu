@@ -86,7 +86,7 @@ export default function StaffRequestsClient() {
   };
 
   return (
-    <div className="min-h-screen bg-[#fff6f6] px-4 pb-28 pt-5 text-zinc-950">
+    <div className="min-h-screen bg-[var(--omlu-background)] px-4 pb-28 pt-5 text-zinc-950">
       <audio ref={audioRef} src="/notification.mp3" preload="auto" aria-hidden="true" />
       <div className="mx-auto flex max-w-md flex-col gap-5 sm:max-w-xl">
         <header className="flex items-center justify-between">
@@ -95,18 +95,18 @@ export default function StaffRequestsClient() {
           </button>
           <div className="text-center">
             <p className="text-xs font-bold text-zinc-400">{lastUpdated ? `Updated ${lastUpdated.toLocaleTimeString()}` : "OMLU"}</p>
-            <h1 className="text-2xl font-black text-red-700">Requests</h1>
+            <h1 className="text-2xl font-black text-orange-600">Requests</h1>
           </div>
-          <div className="flex h-12 min-w-12 items-center justify-center rounded-full bg-red-700 px-3 text-sm font-black text-white">
+          <div className="flex h-12 min-w-12 items-center justify-center rounded-full bg-orange-600 px-3 text-sm font-black text-white">
             {activeRequests.length}
           </div>
         </header>
 
-        <div className="grid grid-cols-2 gap-2 rounded-3xl bg-white p-2 shadow-sm shadow-red-100/60">
-          <button type="button" onClick={() => setSection("active")} className={`h-12 rounded-2xl text-sm font-black ${section === "active" ? "bg-red-700 text-white" : "text-zinc-500"}`}>
+        <div className="grid grid-cols-2 gap-2 rounded-3xl bg-white p-2 shadow-sm shadow-orange-100/60">
+          <button type="button" onClick={() => setSection("active")} className={`h-12 rounded-2xl text-sm font-black ${section === "active" ? "bg-orange-600 text-white" : "text-zinc-500"}`}>
             Active
           </button>
-          <button type="button" onClick={() => setSection("completed")} className={`h-12 rounded-2xl text-sm font-black ${section === "completed" ? "bg-red-700 text-white" : "text-zinc-500"}`}>
+          <button type="button" onClick={() => setSection("completed")} className={`h-12 rounded-2xl text-sm font-black ${section === "completed" ? "bg-orange-600 text-white" : "text-zinc-500"}`}>
             Completed
           </button>
         </div>
@@ -114,7 +114,7 @@ export default function StaffRequestsClient() {
         {error && (
           <div className="rounded-3xl border border-red-200 bg-white p-5 text-sm font-bold text-red-700">
             <p>{error}</p>
-            <button type="button" onClick={() => void fetchRequests(true)} className="mt-4 h-12 rounded-full bg-red-700 px-6 font-black text-white">
+            <button type="button" onClick={() => void fetchRequests(true)} className="mt-4 h-12 rounded-full bg-orange-600 px-6 font-black text-white">
               Retry
             </button>
           </div>
@@ -133,19 +133,19 @@ export default function StaffRequestsClient() {
             {visibleRequests.map((request) => {
               const isActive = request.status === "pending";
               return (
-                <article key={request.id} className="rounded-3xl border border-red-100 bg-white p-5 shadow-sm shadow-red-100/60">
+                <article key={request.id} className="rounded-3xl border border-orange-100 bg-white p-5 shadow-sm shadow-orange-100/60">
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <p className="text-sm font-bold text-zinc-500">Table {request.table_number || "unknown"}</p>
                       <h2 className="mt-1 text-2xl font-black text-zinc-950">{requestLabels[request.request_type] || request.request_type}</h2>
                       <p className="mt-2 text-sm font-semibold text-zinc-500">{timeAgo(request.created_at)}</p>
                     </div>
-                    <span className={`rounded-full px-3 py-1 text-xs font-black ${isActive ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>
+                    <span className={`rounded-full px-3 py-1 text-xs font-black ${isActive ? "bg-blue-50 text-blue-700" : "bg-green-50 text-green-700"}`}>
                       {isActive ? "Active" : "Done"}
                     </span>
                   </div>
                   {isActive ? (
-                    <button type="button" disabled={resolvingId === request.id} onClick={() => handleResolve(request.id)} className="mt-5 h-14 w-full rounded-2xl bg-red-700 text-base font-black text-white disabled:bg-zinc-300">
+                    <button type="button" disabled={resolvingId === request.id} onClick={() => handleResolve(request.id)} className="mt-5 h-14 w-full rounded-2xl bg-orange-600 text-base font-black text-white disabled:bg-zinc-300">
                       {resolvingId === request.id ? "Resolving..." : "Resolve"}
                     </button>
                   ) : (

@@ -61,7 +61,7 @@ export default async function AdminLayout({
   const allowedRoles = ["owner", "admin"];
   if (!allowedRoles.includes(staffInfo.role)) {
     return (
-      <div className="flex flex-col flex-1 items-center justify-center min-h-screen bg-zinc-950 p-6 text-center text-zinc-100">
+      <div className="omlu-light-shell flex flex-col flex-1 items-center justify-center min-h-screen p-6 text-center">
         <div className="max-w-md bg-zinc-900 border border-zinc-800 rounded-3xl p-8 shadow-2xl">
           <div className="text-red-500 text-5xl mb-4">⛔</div>
           <h2 className="text-xl font-bold text-white mb-2">Access Denied</h2>
@@ -80,13 +80,13 @@ export default async function AdminLayout({
   }
 
   return (
-    <div className="flex min-h-screen bg-zinc-900 text-zinc-100">
+    <div className="omlu-light-shell flex min-h-screen">
       {/* Sidebar Navigation */}
       <aside className="w-64 border-r border-zinc-850 bg-zinc-950 flex flex-col justify-between p-6 print:hidden">
         <div>
           {/* Brand/Logo */}
           <div className="mb-8">
-            <span className="text-amber-500 font-extrabold uppercase tracking-widest text-[10px]">
+            <span className="text-orange-500 font-extrabold uppercase tracking-widest text-[10px]">
               OMLU Admin
             </span>
             <h2 className="text-lg font-black text-white mt-1">Control Panel</h2>
@@ -117,7 +117,7 @@ export default async function AdminLayout({
         <div className="border-t border-zinc-850 pt-4 mt-6">
           <div className="mb-4">
             <p className="text-xs font-black text-zinc-200 truncate">{staffInfo.name}</p>
-            <p className="text-[9px] text-amber-500 uppercase font-extrabold tracking-wider mt-0.5">
+            <p className="text-[9px] text-orange-500 uppercase font-extrabold tracking-wider mt-0.5">
               Role: {staffInfo.role}
             </p>
           </div>

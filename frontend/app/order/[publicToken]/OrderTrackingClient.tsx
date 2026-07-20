@@ -184,7 +184,7 @@ export default function OrderTrackingClient({
   if (loading && !orderData) {
     return (
       <div className="flex flex-col flex-1 items-center justify-center min-h-screen bg-zinc-50 dark:bg-zinc-950 px-4 py-8">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-amber-600"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-orange-600"></div>
         <p className="mt-4 text-zinc-600 dark:text-zinc-400 font-medium">
           {language === "en" ? "Loading order details..." : "ഓർഡർ വിവരങ്ങൾ ലോഡ് ചെയ്യുന്നു..."}
         </p>
@@ -221,7 +221,7 @@ export default function OrderTrackingClient({
           </p>
           <button
             onClick={() => fetchOrder(true)}
-            className="px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-xl transition cursor-pointer"
+            className="px-6 py-2.5 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-xl transition cursor-pointer"
           >
             {t.retry}
           </button>
@@ -243,7 +243,7 @@ export default function OrderTrackingClient({
         <div className="flex justify-end">
           <button
             onClick={() => setLanguage(language === "en" ? "ml" : "en")}
-            className="text-xs font-bold text-amber-600 dark:text-amber-500 hover:underline px-3 py-1.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 cursor-pointer shadow-2xs"
+            className="text-xs font-bold text-orange-600 dark:text-orange-500 hover:underline px-3 py-1.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 cursor-pointer shadow-2xs"
           >
             🌐 {language === "en" ? "മലയാളം" : "English"}
           </button>
@@ -251,10 +251,10 @@ export default function OrderTrackingClient({
 
         {/* Main Header */}
         <header className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-xs flex flex-col gap-3 relative overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-amber-500 to-amber-600"></div>
+          <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-orange-500 to-orange-600"></div>
           <div className="flex items-start justify-between gap-4 mt-2">
             <div>
-              <span className="text-xs font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-500">
+              <span className="text-xs font-semibold uppercase tracking-wider text-orange-700 dark:text-orange-500">
                 {orderData.restaurant_name}
               </span>
               <h1 className="text-2xl font-black text-zinc-950 dark:text-zinc-50 mt-0.5">
@@ -272,7 +272,7 @@ export default function OrderTrackingClient({
                 className={`text-sm font-bold px-3 py-1 rounded-lg mt-1 ${
                   isRejected
                     ? "bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400"
-                    : "bg-amber-50 dark:bg-amber-950/20 text-amber-600 dark:text-amber-500"
+                    : "bg-orange-50 dark:bg-orange-950/20 text-orange-600 dark:text-orange-500"
                 }`}
               >
                 {t.statusLabels[orderData.status] || orderData.status}
@@ -360,7 +360,7 @@ export default function OrderTrackingClient({
             <div className="relative flex items-center justify-between mt-2">
               <div className="absolute left-6 right-6 top-[15px] h-0.5 bg-zinc-200 dark:bg-zinc-800 -z-0"></div>
               <div
-                className="absolute left-6 top-[15px] h-0.5 bg-amber-600 -z-0 transition-all duration-500"
+                className="absolute left-6 top-[15px] h-0.5 bg-orange-600 -z-0 transition-all duration-500"
                 style={{
                   width: `${
                     currentStatusIndex > 0
@@ -382,9 +382,9 @@ export default function OrderTrackingClient({
                     <div
                       className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs transition duration-300 ${
                         isCompleted
-                          ? "bg-amber-600 text-white"
+                          ? "bg-orange-600 text-white"
                           : isActive
-                          ? "bg-amber-600 text-white ring-4 ring-amber-100 dark:ring-amber-950/30"
+                          ? "bg-orange-600 text-white ring-4 ring-orange-100 dark:ring-orange-950/30"
                           : "bg-zinc-100 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500"
                       }`}
                     >
@@ -393,7 +393,7 @@ export default function OrderTrackingClient({
                     <span
                       className={`text-[9px] sm:text-[10px] font-bold text-center mt-2 ${
                         isActive
-                          ? "text-amber-600 dark:text-amber-500 font-extrabold"
+                          ? "text-orange-600 dark:text-orange-500 font-extrabold"
                           : isCompleted
                           ? "text-zinc-800 dark:text-zinc-200"
                           : "text-zinc-400 dark:text-zinc-500"
@@ -428,7 +428,7 @@ export default function OrderTrackingClient({
                     ₹{Number(item.unit_price).toFixed(2)} × {item.quantity}
                   </span>
                   {item.item_note && (
-                    <p className="text-xs text-amber-600 dark:text-amber-500 mt-1 italic">
+                    <p className="text-xs text-orange-600 dark:text-orange-500 mt-1 italic">
                       Note: {item.item_note}
                     </p>
                   )}
@@ -455,7 +455,7 @@ export default function OrderTrackingClient({
             <span className="text-zinc-500 dark:text-zinc-400 font-bold text-sm">
               {t.totalPrice}
             </span>
-            <span className="text-lg font-black text-amber-600 dark:text-amber-500">
+            <span className="text-lg font-black text-orange-600 dark:text-orange-500">
               ₹{Number(orderData.subtotal).toFixed(2)}
             </span>
           </div>
@@ -522,8 +522,8 @@ export default function OrderTrackingClient({
                           : status === "error"
                           ? "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800/40"
                           : status === "loading"
-                          ? "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-700/40 opacity-70"
-                          : "bg-zinc-50 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-700 hover:bg-amber-50 dark:hover:bg-amber-950/20 hover:border-amber-300 dark:hover:border-amber-600/50"
+                          ? "bg-orange-50 dark:bg-orange-950/20 border-orange-200 dark:border-orange-700/40 opacity-70"
+                          : "bg-zinc-50 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-700 hover:bg-orange-50 dark:hover:bg-orange-950/20 hover:border-orange-300 dark:hover:border-orange-600/50"
                       }`}
                     >
                       <span className="text-xl">

@@ -380,12 +380,12 @@ export default function AdminMenuPage() {
         {/* LEFT COLUMN: Categories list */}
         <div className="lg:col-span-1 bg-zinc-950/40 border border-zinc-850 rounded-3xl p-5 flex flex-col gap-4">
           <div className="flex items-center justify-between border-b border-zinc-850 pb-3">
-            <h2 className="text-sm font-black text-amber-500 uppercase tracking-wider">
+            <h2 className="text-sm font-black text-orange-500 uppercase tracking-wider">
               Categories
             </h2>
             <button
               onClick={() => openCategoryModal("create")}
-              className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-xs font-bold text-white rounded-xl transition cursor-pointer"
+              className="px-3 py-1.5 bg-orange-600 hover:bg-orange-700 active:bg-orange-800 text-xs font-bold text-white rounded-xl transition cursor-pointer"
             >
               + Add
             </button>
@@ -393,7 +393,7 @@ export default function AdminMenuPage() {
 
           {catLoading ? (
             <div className="flex justify-center py-6">
-              <div className="animate-spin rounded-full h-6 w-6 border-2 border-amber-500 border-t-transparent"></div>
+              <div className="animate-spin rounded-full h-6 w-6 border-2 border-orange-500 border-t-transparent"></div>
             </div>
           ) : catError ? (
             <p className="text-xs text-red-400 py-4 font-semibold">{catError}</p>
@@ -455,7 +455,7 @@ export default function AdminMenuPage() {
         <div className="lg:col-span-2 bg-zinc-950/40 border border-zinc-850 rounded-3xl p-5 flex flex-col gap-4">
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-850 pb-3">
-            <h2 className="text-sm font-black text-amber-500 uppercase tracking-wider">
+            <h2 className="text-sm font-black text-orange-500 uppercase tracking-wider">
               Dishes & Menu Items
             </h2>
             <button
@@ -464,7 +464,7 @@ export default function AdminMenuPage() {
               className={`px-4 py-2 text-xs font-bold text-white rounded-xl transition ${
                 categories.length === 0
                   ? "bg-zinc-800 text-zinc-500 cursor-not-allowed border border-zinc-800"
-                  : "bg-amber-600 hover:bg-amber-700 active:bg-amber-800 cursor-pointer"
+                  : "bg-orange-600 hover:bg-orange-700 active:bg-orange-800 cursor-pointer"
               }`}
             >
               + Add Menu Item
@@ -478,7 +478,7 @@ export default function AdminMenuPage() {
               <select
                 value={selectedCategoryId}
                 onChange={(e) => setSelectedCategoryId(e.target.value)}
-                className="w-full px-3 py-2.5 bg-zinc-900 border border-zinc-800 focus:border-amber-600 rounded-xl text-xs outline-none transition text-white"
+                className="w-full px-3 py-2.5 bg-zinc-900 border border-zinc-800 focus:border-orange-600 rounded-xl text-xs outline-none transition text-white"
               >
                 <option value="all">All Categories</option>
                 {categories.map((c) => (
@@ -496,7 +496,7 @@ export default function AdminMenuPage() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search dish by English or Malayalam name..."
-                className="w-full px-4 py-2.5 bg-zinc-900 border border-zinc-800 focus:border-amber-600 rounded-xl text-xs outline-none transition text-white placeholder-zinc-600"
+                className="w-full px-4 py-2.5 bg-zinc-900 border border-zinc-800 focus:border-orange-600 rounded-xl text-xs outline-none transition text-white placeholder-zinc-600"
               />
             </div>
           </div>
@@ -504,7 +504,7 @@ export default function AdminMenuPage() {
           {/* Dishes List */}
           {itemsLoading ? (
             <div className="flex justify-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-2 border-amber-500 border-t-transparent"></div>
+              <div className="animate-spin rounded-full h-8 w-8 border-2 border-orange-500 border-t-transparent"></div>
             </div>
           ) : itemsError ? (
             <p className="text-xs text-red-400 py-6 font-semibold">{itemsError}</p>
@@ -553,7 +553,7 @@ export default function AdminMenuPage() {
                           {item.name_ml}
                         </span>
                       )}
-                      <span className="text-[9px] font-black text-amber-500 uppercase tracking-wider block mt-1.5">
+                      <span className="text-[9px] font-black text-orange-500 uppercase tracking-wider block mt-1.5">
                         {item.category_name}
                       </span>
                     </div>
@@ -634,7 +634,7 @@ export default function AdminMenuPage() {
                   value={catNameEn}
                   onChange={(e) => setCatNameEn(e.target.value)}
                   placeholder="e.g. Starters"
-                  className="w-full px-4 py-2.5 bg-zinc-950 border border-zinc-800 focus:border-amber-600 rounded-xl text-sm outline-none transition text-white placeholder-zinc-700"
+                  className="w-full px-4 py-2.5 bg-zinc-950 border border-zinc-800 focus:border-orange-600 rounded-xl text-sm outline-none transition text-white placeholder-zinc-700"
                 />
               </div>
 
@@ -647,7 +647,7 @@ export default function AdminMenuPage() {
                   value={catNameMl}
                   onChange={(e) => setCatNameMl(e.target.value)}
                   placeholder="e.g. സ്റ്റാർട്ടേഴ്സ്"
-                  className="w-full px-4 py-2.5 bg-zinc-950 border border-zinc-800 focus:border-amber-600 rounded-xl text-sm outline-none transition text-white placeholder-zinc-700"
+                  className="w-full px-4 py-2.5 bg-zinc-950 border border-zinc-800 focus:border-orange-600 rounded-xl text-sm outline-none transition text-white placeholder-zinc-700"
                 />
               </div>
 
@@ -661,7 +661,7 @@ export default function AdminMenuPage() {
                   onChange={(e) => setCatDisplayOrder(Number(e.target.value))}
                   placeholder="0"
                   min="0"
-                  className="w-full px-4 py-2.5 bg-zinc-950 border border-zinc-800 focus:border-amber-600 rounded-xl text-sm outline-none transition text-white placeholder-zinc-700"
+                  className="w-full px-4 py-2.5 bg-zinc-950 border border-zinc-800 focus:border-orange-600 rounded-xl text-sm outline-none transition text-white placeholder-zinc-700"
                 />
               </div>
 
@@ -671,7 +671,7 @@ export default function AdminMenuPage() {
                   id="catIsActive"
                   checked={catIsActive}
                   onChange={(e) => setCatIsActive(e.target.checked)}
-                  className="rounded border-zinc-800 text-amber-600 focus:ring-0 focus:ring-offset-0 bg-zinc-950 w-4 h-4 cursor-pointer"
+                  className="rounded border-zinc-800 text-orange-600 focus:ring-0 focus:ring-offset-0 bg-zinc-950 w-4 h-4 cursor-pointer"
                 />
                 <label htmlFor="catIsActive" className="text-xs font-bold text-zinc-300 cursor-pointer select-none">
                   Category is Active
@@ -689,7 +689,7 @@ export default function AdminMenuPage() {
                 <button
                   type="submit"
                   disabled={catSaving}
-                  className="flex-1 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl cursor-pointer text-xs disabled:opacity-50"
+                  className="flex-1 py-2.5 bg-orange-600 hover:bg-orange-700 text-white font-bold rounded-xl cursor-pointer text-xs disabled:opacity-50"
                 >
                   {catSaving ? "Saving..." : "Save Category"}
                 </button>
@@ -724,7 +724,7 @@ export default function AdminMenuPage() {
                     value={itemNameEn}
                     onChange={(e) => setItemNameEn(e.target.value)}
                     placeholder="e.g. Chicken Biriyani"
-                    className="w-full px-4 py-2.5 bg-zinc-950 border border-zinc-800 focus:border-amber-600 rounded-xl text-xs outline-none transition text-white placeholder-zinc-700"
+                    className="w-full px-4 py-2.5 bg-zinc-950 border border-zinc-800 focus:border-orange-600 rounded-xl text-xs outline-none transition text-white placeholder-zinc-700"
                   />
                 </div>
 
@@ -737,7 +737,7 @@ export default function AdminMenuPage() {
                     value={itemNameMl}
                     onChange={(e) => setItemNameMl(e.target.value)}
                     placeholder="e.g. ചിക്കൻ ബിരിയാണി"
-                    className="w-full px-4 py-2.5 bg-zinc-950 border border-zinc-800 focus:border-amber-600 rounded-xl text-xs outline-none transition text-white placeholder-zinc-700"
+                    className="w-full px-4 py-2.5 bg-zinc-950 border border-zinc-800 focus:border-orange-600 rounded-xl text-xs outline-none transition text-white placeholder-zinc-700"
                   />
                 </div>
               </div>
@@ -750,7 +750,7 @@ export default function AdminMenuPage() {
                   <select
                     value={itemCategoryId}
                     onChange={(e) => setItemCategoryId(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-zinc-950 border border-zinc-800 focus:border-amber-600 rounded-xl text-xs outline-none transition text-white"
+                    className="w-full px-4 py-2.5 bg-zinc-950 border border-zinc-800 focus:border-orange-600 rounded-xl text-xs outline-none transition text-white"
                   >
                     {categories.map((c) => (
                       <option key={c.id} value={c.id}>
@@ -769,7 +769,7 @@ export default function AdminMenuPage() {
                     value={itemPrice}
                     onChange={(e) => setItemPrice(e.target.value)}
                     placeholder="0.00"
-                    className="w-full px-4 py-2.5 bg-zinc-950 border border-zinc-800 focus:border-amber-600 rounded-xl text-xs outline-none transition text-white placeholder-zinc-700"
+                    className="w-full px-4 py-2.5 bg-zinc-950 border border-zinc-800 focus:border-orange-600 rounded-xl text-xs outline-none transition text-white placeholder-zinc-700"
                   />
                 </div>
               </div>
@@ -784,7 +784,7 @@ export default function AdminMenuPage() {
                     onChange={(e) => setItemDescriptionEn(e.target.value)}
                     placeholder="Brief description in English..."
                     rows={2}
-                    className="w-full px-4 py-2.5 bg-zinc-950 border border-zinc-800 focus:border-amber-600 rounded-xl text-xs outline-none transition text-white placeholder-zinc-700 resize-none"
+                    className="w-full px-4 py-2.5 bg-zinc-950 border border-zinc-800 focus:border-orange-600 rounded-xl text-xs outline-none transition text-white placeholder-zinc-700 resize-none"
                   />
                 </div>
 
@@ -797,7 +797,7 @@ export default function AdminMenuPage() {
                     onChange={(e) => setItemDescriptionMl(e.target.value)}
                     placeholder="വിവരണം മലയാളത്തിൽ..."
                     rows={2}
-                    className="w-full px-4 py-2.5 bg-zinc-950 border border-zinc-800 focus:border-amber-600 rounded-xl text-xs outline-none transition text-white placeholder-zinc-700 resize-none"
+                    className="w-full px-4 py-2.5 bg-zinc-950 border border-zinc-800 focus:border-orange-600 rounded-xl text-xs outline-none transition text-white placeholder-zinc-700 resize-none"
                   />
                 </div>
               </div>
@@ -812,7 +812,7 @@ export default function AdminMenuPage() {
                     value={itemImageUrl}
                     onChange={(e) => setItemImageUrl(e.target.value)}
                     placeholder="e.g. http://images.com/dish.jpg"
-                    className="w-full px-4 py-2.5 bg-zinc-950 border border-zinc-800 focus:border-amber-600 rounded-xl text-xs outline-none transition text-white placeholder-zinc-700"
+                    className="w-full px-4 py-2.5 bg-zinc-950 border border-zinc-800 focus:border-orange-600 rounded-xl text-xs outline-none transition text-white placeholder-zinc-700"
                   />
                 </div>
 
@@ -826,7 +826,7 @@ export default function AdminMenuPage() {
                     onChange={(e) => setItemDisplayOrder(Number(e.target.value))}
                     placeholder="0"
                     min="0"
-                    className="w-full px-4 py-2.5 bg-zinc-950 border border-zinc-800 focus:border-amber-600 rounded-xl text-xs outline-none transition text-white placeholder-zinc-700"
+                    className="w-full px-4 py-2.5 bg-zinc-950 border border-zinc-800 focus:border-orange-600 rounded-xl text-xs outline-none transition text-white placeholder-zinc-700"
                   />
                 </div>
               </div>
@@ -837,7 +837,7 @@ export default function AdminMenuPage() {
                   id="itemIsAvailable"
                   checked={itemIsAvailable}
                   onChange={(e) => setItemIsAvailable(e.target.checked)}
-                  className="rounded border-zinc-800 text-amber-600 focus:ring-0 focus:ring-offset-0 bg-zinc-950 w-4 h-4 cursor-pointer"
+                  className="rounded border-zinc-800 text-orange-600 focus:ring-0 focus:ring-offset-0 bg-zinc-950 w-4 h-4 cursor-pointer"
                 />
                 <label htmlFor="itemIsAvailable" className="text-xs font-bold text-zinc-300 cursor-pointer select-none">
                   Item is Available in Stock
@@ -855,7 +855,7 @@ export default function AdminMenuPage() {
                 <button
                   type="submit"
                   disabled={itemSaving}
-                  className="flex-1 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl cursor-pointer text-xs disabled:opacity-50"
+                  className="flex-1 py-2.5 bg-orange-600 hover:bg-orange-700 text-white font-bold rounded-xl cursor-pointer text-xs disabled:opacity-50"
                 >
                   {itemSaving ? "Saving..." : "Save Menu Item"}
                 </button>

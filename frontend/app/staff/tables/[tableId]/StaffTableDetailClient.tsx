@@ -72,14 +72,14 @@ export default function StaffTableDetailClient({ tableId }: { tableId: number })
         <div className="sticky top-0 z-20 -mx-3 border-b border-zinc-900 bg-zinc-950/95 px-3 py-4 backdrop-blur sm:static sm:mx-0 sm:border-b-0 sm:bg-transparent sm:px-0 sm:py-0">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <Link href="/staff/tables" className="text-sm font-bold text-amber-400">Back to tables</Link>
+              <Link href="/staff/tables" className="text-sm font-bold text-orange-400">Back to tables</Link>
               <h1 className="mt-2 text-3xl font-black text-white">Table {detail?.table.table_number || tableId}</h1>
               <p className="mt-1 text-sm text-zinc-500">{detail?.table.state || "Loading"} · {detail?.table.session_status || "No active session"}</p>
               <p className="mt-1 text-[11px] font-bold uppercase tracking-wide text-zinc-600">Real-time: {realtimeStatus}</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <button disabled={Boolean(busy)} onClick={() => void load()} className="rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-3 text-sm font-black text-zinc-100 disabled:opacity-50">Refresh</button>
-              <Link href={`/staff/orders/new?tableId=${tableId}`} className="rounded-lg bg-amber-600 px-4 py-3 text-sm font-black text-white">Add Order</Link>
+              <Link href={`/staff/orders/new?tableId=${tableId}`} className="rounded-lg bg-orange-600 px-4 py-3 text-sm font-black text-white">Add Order</Link>
             </div>
           </div>
         </div>
@@ -90,7 +90,7 @@ export default function StaffTableDetailClient({ tableId }: { tableId: number })
           <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-8 text-center">
             <div className="text-xl font-black text-white">No active order</div>
             <p className="mt-2 text-sm text-zinc-500">Add items to start an order for this table.</p>
-            <Link href={`/staff/orders/new?tableId=${tableId}`} className="mt-5 inline-flex rounded-lg bg-amber-600 px-5 py-3 text-sm font-black text-white">Add Order</Link>
+            <Link href={`/staff/orders/new?tableId=${tableId}`} className="mt-5 inline-flex rounded-lg bg-orange-600 px-5 py-3 text-sm font-black text-white">Add Order</Link>
           </div>
         ) : (
           <>
@@ -132,12 +132,12 @@ export default function StaffTableDetailClient({ tableId }: { tableId: number })
                   <h2 className="font-black text-white">Billing</h2>
                   <div className="mt-4 flex flex-wrap items-center gap-2">
                     {canRequestBill && (
-                      <button disabled={Boolean(busy)} onClick={() => run("bill-request", () => requestStaffTableBill(tableId))} className="rounded-lg bg-amber-600 px-4 py-3 text-sm font-black text-white disabled:opacity-50">Request Bill</button>
+                      <button disabled={Boolean(busy)} onClick={() => run("bill-request", () => requestStaffTableBill(tableId))} className="rounded-lg bg-orange-600 px-4 py-3 text-sm font-black text-white disabled:opacity-50">Request Bill</button>
                     )}
                     {pendingBillRequest && (
-                      <div className="rounded-lg border border-amber-700/50 bg-amber-950/30 px-4 py-3 text-sm font-bold text-amber-300">
+                      <div className="rounded-lg border border-orange-700/50 bg-orange-950/30 px-4 py-3 text-sm font-bold text-orange-300">
                         Bill requested
-                        <span className="block text-xs font-medium text-amber-200/80">Waiting for owner/admin review</span>
+                        <span className="block text-xs font-medium text-orange-200/80">Waiting for owner/admin review</span>
                       </div>
                     )}
                     {bill && bill.status !== "paid" && billUrl && (

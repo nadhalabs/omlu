@@ -74,8 +74,8 @@ export default function PendingPaymentsClient() {
     {error && <div className="rounded-xl border border-red-800 bg-red-950/30 p-3 text-sm text-red-300">{error}</div>}
     {loading ? <div className="h-48 animate-pulse rounded-2xl bg-zinc-800" /> : items.length === 0 ?
       <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-16 text-center"><p className="text-4xl">✓</p><h2 className="mt-3 font-black">No payments waiting</h2></div> :
-      <div className="grid gap-4 xl:grid-cols-2">{items.map((item) => <article id={`bill-${item.bill_number}`} key={item.bill_id} className={`rounded-2xl border bg-zinc-950 p-5 ${selectedBill === item.bill_number ? "border-amber-500 ring-2 ring-amber-500/20" : "border-zinc-800"}`}>
-        <div className="flex justify-between gap-4"><div><h2 className="text-xl font-black">{item.table_name}</h2><p className="text-xs text-zinc-500">Bill #{item.bill_id} · {item.bill_number}</p></div><p className="text-2xl font-black text-amber-400">{money(item.grand_total)}</p></div>
+      <div className="grid gap-4 xl:grid-cols-2">{items.map((item) => <article id={`bill-${item.bill_number}`} key={item.bill_id} className={`rounded-2xl border bg-zinc-950 p-5 ${selectedBill === item.bill_number ? "border-orange-500 ring-2 ring-orange-500/20" : "border-zinc-800"}`}>
+        <div className="flex justify-between gap-4"><div><h2 className="text-xl font-black">{item.table_name}</h2><p className="text-xs text-zinc-500">Bill #{item.bill_id} · {item.bill_number}</p></div><p className="text-2xl font-black text-orange-400">{money(item.grand_total)}</p></div>
         <dl className="mt-5 grid grid-cols-2 gap-3 text-sm">
           <div><dt className="text-zinc-500">Session ID</dt><dd>{item.session_id}</dd></div>
           <div><dt className="text-zinc-500">Current status</dt><dd className="text-sky-400">Payment pending</dd></div>

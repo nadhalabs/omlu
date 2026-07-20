@@ -471,7 +471,7 @@ export default function MenuClient({
   if (loading) {
     return (
       <div className="flex flex-col flex-1 items-center justify-center min-h-screen bg-zinc-50 dark:bg-zinc-950 px-4 py-8">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-amber-600"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-orange-600"></div>
         <p className="mt-4 text-zinc-600 dark:text-zinc-400 font-medium">
           {t.loadingText}
         </p>
@@ -495,7 +495,7 @@ export default function MenuClient({
           </h2>
           <button
             onClick={fetchMenu}
-            className="mt-6 px-6 py-2.5 bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white font-semibold rounded-xl transition shadow-sm cursor-pointer"
+            className="mt-6 px-6 py-2.5 bg-orange-600 hover:bg-orange-700 active:bg-orange-800 text-white font-semibold rounded-xl transition shadow-sm cursor-pointer"
           >
             {t.retry}
           </button>
@@ -628,7 +628,7 @@ export default function MenuClient({
         <div className="max-w-3xl mx-auto flex flex-col gap-3">
           {/* Search box */}
           {sessionLoading && (
-            <div className="text-xs font-semibold text-amber-700 dark:text-amber-500 bg-amber-50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/40 rounded-xl px-3 py-2">
+            <div className="text-xs font-semibold text-orange-700 dark:text-orange-500 bg-orange-50 dark:bg-orange-950/20 border border-orange-100 dark:border-orange-900/40 rounded-xl px-3 py-2">
               {t.checkingSession}
             </div>
           )}
@@ -673,7 +673,7 @@ export default function MenuClient({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={t.searchPlaceholder}
-                className="w-full pl-9 pr-4 py-2 bg-zinc-100 dark:bg-zinc-800 border-0 rounded-xl text-sm focus:ring-2 focus:ring-amber-600 outline-none text-zinc-900 dark:text-zinc-100 placeholder-zinc-400"
+                className="w-full pl-9 pr-4 py-2 bg-zinc-100 dark:bg-zinc-800 border-0 rounded-xl text-sm focus:ring-2 focus:ring-orange-600 outline-none text-zinc-900 dark:text-zinc-100 placeholder-zinc-400"
               />
             </div>
           )}
@@ -687,7 +687,7 @@ export default function MenuClient({
                   onClick={() => scrollToCategory(category.id)}
                   className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap cursor-pointer transition ${
                     activeCategory === category.id
-                      ? "bg-amber-600 text-white shadow-xs"
+                      ? "bg-orange-600 text-white shadow-xs"
                       : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
                   }`}
                 >
@@ -729,7 +729,7 @@ export default function MenuClient({
                 id={`category-${category.id}`}
                 className="scroll-mt-36"
               >
-                <h2 className="text-lg font-bold border-b border-zinc-200 dark:border-zinc-800 pb-2 mb-4 text-amber-700 dark:text-amber-500">
+                <h2 className="text-lg font-bold border-b border-zinc-200 dark:border-zinc-800 pb-2 mb-4 text-orange-700 dark:text-orange-500">
                   {getLocalizedText(category.name_en, category.name_ml)}
                 </h2>
 
@@ -758,7 +758,7 @@ export default function MenuClient({
                             </p>
                           </div>
                           <div className="mt-3 flex items-center justify-between">
-                            <span className="font-bold text-amber-600 dark:text-amber-500 text-sm">
+                            <span className="font-bold text-orange-600 dark:text-orange-500 text-sm">
                               ₹{Number(item.price).toFixed(2)}
                             </span>
                             {orderingDisabled ? null : !item.is_available ? (
@@ -768,15 +768,15 @@ export default function MenuClient({
                             ) : cartQty === 0 || isConfigurable ? (
                               <button
                                 onClick={() => addToCart(item)}
-                                className="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg cursor-pointer transition shadow-2xs"
+                                className="px-4 py-1.5 bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold rounded-lg cursor-pointer transition shadow-2xs"
                               >
                                 + {isConfigurable ? "Choose" : t.add}
                               </button>
                             ) : (
-                              <div className="flex items-center border border-amber-600 rounded-lg overflow-hidden bg-amber-50/50 dark:bg-amber-950/10">
+                              <div className="flex items-center border border-orange-600 rounded-lg overflow-hidden bg-orange-50/50 dark:bg-orange-950/10">
                                 <button
                                   onClick={() => decrementQty(simpleKey)}
-                                  className="px-2.5 py-1 text-amber-600 font-bold hover:bg-amber-600 hover:text-white transition cursor-pointer text-xs"
+                                  className="px-2.5 py-1 text-orange-600 font-bold hover:bg-orange-600 hover:text-white transition cursor-pointer text-xs"
                                 >
                                   −
                                 </button>
@@ -785,7 +785,7 @@ export default function MenuClient({
                                 </span>
                                 <button
                                   onClick={() => incrementQty(simpleKey)}
-                                  className="px-2.5 py-1 text-amber-600 font-bold hover:bg-amber-600 hover:text-white transition cursor-pointer text-xs"
+                                  className="px-2.5 py-1 text-orange-600 font-bold hover:bg-orange-600 hover:text-white transition cursor-pointer text-xs"
                                 >
                                   +
                                 </button>
@@ -820,7 +820,7 @@ export default function MenuClient({
         <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-t border-zinc-200 dark:border-zinc-800 shadow-lg px-4 py-4 sm:px-6">
           <button
             onClick={() => setIsCartOpen(true)}
-            className="max-w-3xl mx-auto flex items-center justify-between w-full bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white rounded-2xl px-5 py-4 shadow-md transition cursor-pointer"
+            className="max-w-3xl mx-auto flex items-center justify-between w-full bg-orange-600 hover:bg-orange-700 active:bg-orange-800 text-white rounded-2xl px-5 py-4 shadow-md transition cursor-pointer"
           >
             <div className="flex flex-col text-left">
               <span className="text-xs font-semibold opacity-90 uppercase tracking-wider">
@@ -831,7 +831,7 @@ export default function MenuClient({
               </span>
             </div>
             <div className="flex items-center gap-4">
-              <span className="text-sm font-bold bg-amber-500 px-3 py-1 rounded-xl">
+              <span className="text-sm font-bold bg-orange-500 px-3 py-1 rounded-xl">
                 {t.viewCart}
               </span>
               <span className="text-base font-extrabold">
@@ -890,12 +890,12 @@ export default function MenuClient({
                             onClick={() => toggleDraftOption(group.id, option.id, multi)}
                             className={`flex items-center justify-between rounded-xl border px-3 py-3 text-left text-sm transition disabled:opacity-40 ${
                               checked
-                                ? "border-amber-600 bg-amber-50 text-zinc-950 dark:bg-amber-950/20 dark:text-zinc-50"
+                                ? "border-orange-600 bg-orange-50 text-zinc-950 dark:bg-orange-950/20 dark:text-zinc-50"
                                 : "border-zinc-200 bg-zinc-50 text-zinc-800 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-200"
                             }`}
                           >
                             <span className="font-bold">{option.name}</span>
-                            <span className="text-xs font-black text-amber-600">₹{Number(option.price_delta).toFixed(2)}</span>
+                            <span className="text-xs font-black text-orange-600">₹{Number(option.price_delta).toFixed(2)}</span>
                           </button>
                         );
                       })}
@@ -907,7 +907,7 @@ export default function MenuClient({
             <div className="border-t border-zinc-200 px-6 py-4 dark:border-zinc-800">
               <div className="mb-3 flex items-center justify-between">
                 <span className="text-sm font-bold text-zinc-500">Item price</span>
-                <span className="text-lg font-black text-amber-600">
+                <span className="text-lg font-black text-orange-600">
                   ₹{optionPrice(customisingItem, draftSelectedOptions).toFixed(2)}
                 </span>
               </div>
@@ -918,7 +918,7 @@ export default function MenuClient({
                   setCustomisingItem(null);
                   setDraftOptions({});
                 }}
-                className="w-full rounded-2xl bg-amber-600 px-5 py-3.5 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-50"
+                className="w-full rounded-2xl bg-orange-600 px-5 py-3.5 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Add to cart
               </button>
@@ -975,7 +975,7 @@ export default function MenuClient({
                             <h4 className="font-bold text-sm text-zinc-900 dark:text-zinc-50">
                               {getLocalizedText(item.name_en, item.name_ml)}
                             </h4>
-                            <span className="text-xs text-amber-600 dark:text-amber-500 font-bold">
+                            <span className="text-xs text-orange-600 dark:text-orange-500 font-bold">
                               ₹{unit.toFixed(2)} × {line.quantity}
                             </span>
                             {labels.length > 0 && (
@@ -1027,7 +1027,7 @@ export default function MenuClient({
                             handleItemNoteChange(line.key, e.target.value)
                           }
                           placeholder={t.itemNotePlaceholder}
-                          className="w-full px-3 py-1.5 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-100 dark:border-zinc-800/30 rounded-lg text-xs outline-none focus:ring-1 focus:ring-amber-600"
+                          className="w-full px-3 py-1.5 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-100 dark:border-zinc-800/30 rounded-lg text-xs outline-none focus:ring-1 focus:ring-orange-600"
                         />
                       </div>
                     );
@@ -1046,7 +1046,7 @@ export default function MenuClient({
                     value={customerNote}
                     onChange={(e) => setCustomerNote(e.target.value)}
                     placeholder={t.customerNote}
-                    className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm outline-none focus:ring-2 focus:ring-amber-600 text-zinc-900 dark:text-zinc-100"
+                    className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm outline-none focus:ring-2 focus:ring-orange-600 text-zinc-900 dark:text-zinc-100"
                   />
                 </div>
               )}
@@ -1059,7 +1059,7 @@ export default function MenuClient({
                   <span className="text-zinc-500 dark:text-zinc-400 font-medium">
                     {t.subtotal}
                   </span>
-                  <span className="text-lg font-black text-amber-600 dark:text-amber-500">
+                  <span className="text-lg font-black text-orange-600 dark:text-orange-500">
                     {formattedSubtotal}
                   </span>
                 </div>
@@ -1069,7 +1069,7 @@ export default function MenuClient({
                   className={`w-full py-3.5 rounded-2xl font-bold text-white text-center shadow-md transition cursor-pointer flex items-center justify-center gap-2 ${
                     isPlacingOrder
                       ? "bg-zinc-400 dark:bg-zinc-700 cursor-not-allowed"
-                      : "bg-amber-600 hover:bg-amber-700 active:bg-amber-800"
+                      : "bg-orange-600 hover:bg-orange-700 active:bg-orange-800"
                   }`}
                 >
                   {isPlacingOrder ? (

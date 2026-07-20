@@ -117,7 +117,7 @@ export default function RegisterPage() {
       <main className="mx-auto w-full max-w-4xl">
         <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <Link href="/" className="text-sm font-black uppercase tracking-widest text-amber-700">
+            <Link href="/" className="text-sm font-black uppercase tracking-widest text-orange-700">
               OMLU
             </Link>
             <h1 className="mt-3 text-3xl font-black tracking-tight">Create Restaurant</h1>
@@ -228,7 +228,7 @@ function TextField({
         inputMode={inputMode}
         autoComplete={autoComplete}
         aria-invalid={Boolean(error)}
-        className={`h-12 rounded-lg border px-4 text-sm font-medium outline-none transition focus:border-amber-600 ${
+        className={`h-12 rounded-lg border px-4 text-sm font-medium outline-none transition focus:border-orange-600 ${
           error ? "border-red-500" : "border-zinc-300"
         } ${disabled ? "cursor-not-allowed opacity-70" : ""}`}
         required

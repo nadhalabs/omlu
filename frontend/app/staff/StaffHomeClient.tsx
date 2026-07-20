@@ -63,7 +63,7 @@ export default function StaffHomeClient() {
             <Link href="/staff/tables" className="px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-sm font-bold">New Order</Link>
             <Link href="/staff/availability" className="px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-sm font-bold">Availability</Link>
             <Link href="/staff/sessions" className="px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-sm font-bold">Active Tables</Link>
-            <Link href="/staff/requests" className="px-3 py-2 rounded-lg bg-amber-600 text-sm font-bold text-white">Requests</Link>
+            <Link href="/staff/requests" className="px-3 py-2 rounded-lg bg-orange-600 text-sm font-bold text-white">Requests</Link>
           </div>
         </div>
 

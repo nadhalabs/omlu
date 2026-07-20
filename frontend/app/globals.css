@@ -1,8 +1,22 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --omlu-background: #f7f7f5;
+  --omlu-primary: #18181b;
+  --omlu-accent: #f97316;
+  --omlu-accent-dark: #ea580c;
+  --omlu-accent-soft: #fff1e6;
+  --omlu-surface: #ffffff;
+  --omlu-surface-muted: #fafaf9;
+  --omlu-border: #e4e4e7;
+  --omlu-border-strong: #d4d4d8;
+  --omlu-text: #18181b;
+  --omlu-text-secondary: #71717a;
+  --omlu-text-muted: #a1a1aa;
+  --omlu-disabled: #f4f4f5;
+  --omlu-backdrop: rgba(24, 24, 27, 0.45);
+  --background: var(--omlu-background);
+  --foreground: var(--omlu-text);
 }
 
 @theme inline {
@@ -12,17 +26,83 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+[role="button"],
+input,
+select,
+textarea {
+  min-height: 48px;
+}
+
+input,
+select,
+textarea {
+  background: var(--omlu-surface) !important;
+  color: var(--omlu-text) !important;
+  border-color: var(--omlu-border-strong);
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--omlu-accent);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.18);
+}
+
+::placeholder {
+  color: var(--omlu-text-muted);
+}
+
+/* Light compatibility skin for the established Admin and Kitchen layouts. */
+.omlu-light-shell {
+  background: var(--omlu-background) !important;
+  color: var(--omlu-text) !important;
+}
+
+.omlu-light-shell :is(div, section, article, main, aside, header, nav)[class~="bg-zinc-950"],
+.omlu-light-shell :is(div, section, article, main, aside, header, nav)[class~="bg-zinc-900"] {
+  background-color: var(--omlu-surface) !important;
+}
+
+.omlu-light-shell :is(div, section, article, main, aside, header, nav)[class~="bg-zinc-800"] {
+  background-color: var(--omlu-surface-muted) !important;
+}
+
+.omlu-light-shell [class~="border-zinc-850"],
+.omlu-light-shell [class~="border-zinc-800"],
+.omlu-light-shell [class~="border-zinc-700"] {
+  border-color: var(--omlu-border) !important;
+}
+
+.omlu-light-shell :is(.text-white, .text-zinc-50, .text-zinc-100, .text-zinc-200) {
+  color: var(--omlu-text) !important;
+}
+
+.omlu-light-shell :is(.text-zinc-300, .text-zinc-400, .text-zinc-500) {
+  color: var(--omlu-text-secondary) !important;
+}
+
+.omlu-light-shell button:is(.text-white, .text-zinc-50, .text-zinc-100),
+.omlu-light-shell a:is(.bg-zinc-950, .bg-zinc-900, .bg-zinc-800).text-white,
+.omlu-light-shell :is(.bg-orange-500, .bg-orange-600, .bg-orange-700, .bg-red-600, .bg-red-700, .bg-green-600, .bg-blue-600, .bg-purple-600).text-white {
+  color: #fff !important;
 }
 
 @media print {

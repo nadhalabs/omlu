@@ -52,8 +52,9 @@ test("staff order UI allows first order to create the table state and blocks dup
   assert.doesNotMatch(staffOrderClient, /Start Session/);
 });
 
-test("staff tables use mobile pink card layout and simple statuses", () => {
-  assert.match(staffTablesClient, /bg-\[#fff6f6\]/);
+test("staff tables use the neutral OMLU card layout and semantic statuses", () => {
+  assert.match(staffTablesClient, /bg-\[var\(--omlu-background\)\]/);
+  assert.doesNotMatch(staffTablesClient, /#fff6f6|bg-red-700/);
   assert.match(staffTablesClient, /type SimpleStatus = "Available" \| "Ordering" \| "Preparing" \| "Ready" \| "Needs Bill"/);
   assert.match(staffTablesClient, /grid grid-cols-2 gap-4/);
   assert.doesNotMatch(staffTablesClient, /Guest/);

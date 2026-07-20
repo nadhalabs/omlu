@@ -53,7 +53,7 @@ export default function SessionHistoryClient() {
             <tbody className="divide-y divide-zinc-800">
               {data.items.map((session) => (
                 <tr key={session.id} className="bg-zinc-900/60">
-                  <td className="p-3 text-xs font-bold text-amber-400">{session.session_token}</td>
+                  <td className="p-3 text-xs font-bold text-orange-400">{session.session_token}</td>
                   <td className="p-3">{session.table_number || "-"}</td>
                   <td className="p-3">{formatDateTime(session.started_at)}</td>
                   <td className="p-3">{formatDateTime(session.closed_at)}</td>

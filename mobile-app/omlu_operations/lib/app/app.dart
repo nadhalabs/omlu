@@ -24,7 +24,51 @@ class OmluNativeApp extends ConsumerWidget {
         colorScheme: ColorScheme.fromSeed(
           seedColor: OmluColors.accent,
           primary: OmluColors.accent,
-          surface: OmluColors.background,
+          secondary: OmluColors.primary,
+          surface: OmluColors.surface,
+          error: const Color(0xFFDC2626),
+          brightness: Brightness.light,
+        ),
+        cardTheme: const CardThemeData(
+          color: OmluColors.surface,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            side: BorderSide(color: OmluColors.border),
+            borderRadius: BorderRadius.all(Radius.circular(16)),
+          ),
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: OmluColors.surface,
+          hintStyle: const TextStyle(color: OmluColors.textMuted),
+          enabledBorder: OutlineInputBorder(
+            borderSide: const BorderSide(color: OmluColors.borderStrong),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderSide: const BorderSide(color: OmluColors.accent, width: 2),
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+        navigationBarTheme: const NavigationBarThemeData(
+          backgroundColor: OmluColors.surface,
+          indicatorColor: OmluColors.accentSoft,
+          height: 72,
+        ),
+        dialogTheme: const DialogThemeData(
+          backgroundColor: OmluColors.surface,
+          surfaceTintColor: Colors.transparent,
+          titleTextStyle: TextStyle(color: OmluColors.textPrimary, fontSize: 20, fontWeight: FontWeight.w700),
+          contentTextStyle: TextStyle(color: OmluColors.textSecondary, fontSize: 15),
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            minimumSize: const Size(48, 48),
+            backgroundColor: OmluColors.accent,
+            foregroundColor: OmluColors.textOnAccent,
+            disabledBackgroundColor: OmluColors.disabledSurface,
+            disabledForegroundColor: OmluColors.disabledText,
+          ),
         ),
         useMaterial3: true,
       ),

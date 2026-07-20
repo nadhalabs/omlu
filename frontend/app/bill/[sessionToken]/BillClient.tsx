@@ -252,7 +252,7 @@ export default function BillClient({ sessionToken }: BillClientProps) {
   if (loading && !bill) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-50 px-4 py-8 dark:bg-zinc-950">
-        <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-t-2 border-amber-600" />
+        <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-t-2 border-orange-600" />
         <p className="mt-4 font-medium text-zinc-600 dark:text-zinc-400">
           {t.loading}
         </p>
@@ -272,7 +272,7 @@ export default function BillClient({ sessionToken }: BillClientProps) {
           </p>
           <button
             onClick={() => fetchBill(true)}
-            className="mt-6 min-h-12 rounded-2xl bg-amber-600 px-6 py-3 font-bold text-white"
+            className="mt-6 min-h-12 rounded-2xl bg-orange-600 px-6 py-3 font-bold text-white"
           >
             {t.retry}
           </button>
@@ -302,7 +302,7 @@ export default function BillClient({ sessionToken }: BillClientProps) {
           )}
           <button
             onClick={() => setLanguage(language === "en" ? "ml" : "en")}
-            className="min-h-11 rounded-2xl border border-zinc-200 bg-white px-4 py-2 text-sm font-bold text-amber-700 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900 dark:text-amber-500"
+            className="min-h-11 rounded-2xl border border-zinc-200 bg-white px-4 py-2 text-sm font-bold text-orange-700 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900 dark:text-orange-500"
           >
             {language === "en" ? "മലയാളം" : "English"}
           </button>
@@ -312,7 +312,7 @@ export default function BillClient({ sessionToken }: BillClientProps) {
           <header className="border-b border-zinc-200 pb-5 dark:border-zinc-800 print:border-black">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-xs font-black uppercase tracking-wide text-amber-700 dark:text-amber-500 print:text-black">
+                <p className="text-xs font-black uppercase tracking-wide text-orange-700 dark:text-orange-500 print:text-black">
                   {bill.restaurant_name}
                 </p>
                 <h1 className="mt-1 text-3xl font-black">{t.title}</h1>
@@ -324,7 +324,7 @@ export default function BillClient({ sessionToken }: BillClientProps) {
                 <p className="text-xs font-bold uppercase text-zinc-400 print:text-black">
                   {t.status}
                 </p>
-                <p className="mt-1 rounded-xl bg-amber-50 px-3 py-1 text-sm font-black text-amber-700 dark:bg-amber-950/20 dark:text-amber-500 print:bg-white print:px-0 print:text-black">
+                <p className="mt-1 rounded-xl bg-orange-50 px-3 py-1 text-sm font-black text-orange-700 dark:bg-orange-950/20 dark:text-orange-500 print:bg-white print:px-0 print:text-black">
                   {t.statusLabels[bill.status] || bill.status}
                 </p>
               </div>
@@ -485,12 +485,12 @@ export default function BillClient({ sessionToken }: BillClientProps) {
 
         <div className="print-hidden rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
           {bill.status === "issued" && (
-            <p className="rounded-2xl bg-amber-50 px-4 py-3 text-sm font-black text-amber-800 dark:bg-amber-950/30 dark:text-amber-400">
+            <p className="rounded-2xl bg-orange-50 px-4 py-3 text-sm font-black text-orange-800 dark:bg-orange-950/30 dark:text-orange-400">
               {t.payAtCounter}. Please wait while Staff sends the bill to Owner or Admin.
             </p>
           )}
           {bill.status === "payment_pending" && (
-            <p className="rounded-2xl bg-amber-50 px-4 py-3 text-sm font-black text-amber-800 dark:bg-amber-950/30 dark:text-amber-400">
+            <p className="rounded-2xl bg-orange-50 px-4 py-3 text-sm font-black text-orange-800 dark:bg-orange-950/30 dark:text-orange-400">
               {t.paymentPending}
             </p>
           )}
@@ -504,7 +504,7 @@ export default function BillClient({ sessionToken }: BillClientProps) {
         <div className="print-hidden grid grid-cols-1 gap-3 sm:grid-cols-2">
           <button
             onClick={() => window.print()}
-            className="min-h-14 rounded-2xl bg-amber-600 px-5 py-4 text-base font-black text-white shadow-md transition hover:bg-amber-700"
+            className="min-h-14 rounded-2xl bg-orange-600 px-5 py-4 text-base font-black text-white shadow-md transition hover:bg-orange-700"
           >
             {t.print}
           </button>

@@ -284,7 +284,7 @@ export default function StaffManagementClient() {
           <PasswordInput name="temporary_password" label="Temporary password" value={form.temporary_password || ""} error={fieldErrors.temporary_password} disabled={saving} autoComplete="new-password" showChecklist dark onChange={(value) => setForm({ ...form, temporary_password: value })} />
           <div />
         </>}
-        <button disabled={saving} className="rounded-lg bg-amber-600 hover:bg-amber-700 disabled:bg-zinc-800 px-4 py-2 text-sm font-black text-white">
+        <button disabled={saving} className="rounded-lg bg-orange-600 hover:bg-orange-700 disabled:bg-zinc-800 px-4 py-2 text-sm font-black text-white">
           {saving ? "Adding..." : "Add Staff"}
         </button>
       </form>
@@ -374,7 +374,7 @@ export default function StaffManagementClient() {
               <button type="button" disabled={resetSaving} onClick={() => setResetTarget(null)} className="rounded-lg bg-zinc-800 px-4 py-2 text-sm font-bold text-zinc-200">
                 Cancel
               </button>
-              <button disabled={resetSaving} className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-black text-white disabled:bg-zinc-800">
+              <button disabled={resetSaving} className="rounded-lg bg-orange-600 px-4 py-2 text-sm font-black text-white disabled:bg-zinc-800">
                 {resetSaving ? "Resetting..." : resetTarget.role === "staff" || resetTarget.role === "kitchen" ? "Reset PIN" : "Reset Password"}
               </button>
             </div>
@@ -411,7 +411,7 @@ function FieldInput({
       <input
         name={name}
         type={type}
-        className={`bg-zinc-900 border rounded-lg px-3 py-2 text-sm outline-none focus:border-amber-600 ${
+        className={`bg-zinc-900 border rounded-lg px-3 py-2 text-sm outline-none focus:border-orange-600 ${
           error ? "border-red-500" : "border-zinc-800"
         }`}
         placeholder={placeholder}

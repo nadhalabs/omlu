@@ -137,7 +137,7 @@ export default function ChangePasswordClient() {
             setFieldError("confirm_password");
           }}
         />
-        <button disabled={loading} className="rounded-lg bg-amber-600 hover:bg-amber-700 disabled:bg-zinc-800 px-4 py-3 text-sm font-black text-white">
+        <button disabled={loading} className="rounded-lg bg-orange-600 hover:bg-orange-700 disabled:bg-zinc-800 px-4 py-3 text-sm font-black text-white">
           {loading ? "Changing..." : "Change Password"}
         </button>
       </form>

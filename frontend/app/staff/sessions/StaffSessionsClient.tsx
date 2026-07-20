@@ -36,14 +36,14 @@ const STATUS_LABEL: Record<string, string> = {
 
 const STATUS_PILL: Record<string, string> = {
   open: "bg-emerald-950/40 border-emerald-700/50 text-emerald-400",
-  payment_requested: "bg-amber-950/40 border-amber-700/50 text-amber-400",
+  payment_requested: "bg-orange-950/40 border-orange-700/50 text-orange-400",
   payment_pending: "bg-sky-950/40 border-sky-700/50 text-sky-400",
 };
 
 const ORDER_STATUS_DOT: Record<string, string> = {
   pending: "bg-zinc-500",
   accepted: "bg-blue-500",
-  preparing: "bg-amber-500",
+  preparing: "bg-orange-500",
   ready: "bg-lime-500",
   served: "bg-emerald-500",
   rejected: "bg-red-500",
@@ -168,32 +168,32 @@ export default function StaffSessionsClient() {
             {/* Nav links */}
             <Link
               href={dashboardHref}
-              className="text-xs text-zinc-400 hover:text-amber-400 font-semibold transition px-3 py-1.5 rounded-lg border border-zinc-800 hover:border-amber-700/50"
+              className="text-xs text-zinc-400 hover:text-orange-400 font-semibold transition px-3 py-1.5 rounded-lg border border-zinc-800 hover:border-orange-700/50"
             >
               Back to dashboard
             </Link>
             <Link
               href="/staff/tables"
-              className="text-xs text-zinc-400 hover:text-amber-400 font-semibold transition px-3 py-1.5 rounded-lg border border-zinc-800 hover:border-amber-700/50"
+              className="text-xs text-zinc-400 hover:text-orange-400 font-semibold transition px-3 py-1.5 rounded-lg border border-zinc-800 hover:border-orange-700/50"
             >
               Staff Tables
             </Link>
             <Link
               href="/staff/tables"
-              className="text-xs text-zinc-400 hover:text-amber-400 font-semibold transition px-3 py-1.5 rounded-lg border border-zinc-800 hover:border-amber-700/50"
+              className="text-xs text-zinc-400 hover:text-orange-400 font-semibold transition px-3 py-1.5 rounded-lg border border-zinc-800 hover:border-orange-700/50"
             >
               New Order
             </Link>
             <Link
               href="/staff/requests"
-              className="text-xs text-zinc-400 hover:text-amber-400 font-semibold transition px-3 py-1.5 rounded-lg border border-zinc-800 hover:border-amber-700/50"
+              className="text-xs text-zinc-400 hover:text-orange-400 font-semibold transition px-3 py-1.5 rounded-lg border border-zinc-800 hover:border-orange-700/50"
             >
               Service Requests
             </Link>
             <button
               id="refresh-sessions-btn"
               onClick={() => fetchSessions(false)}
-              className="text-xs text-amber-500 hover:text-amber-400 underline font-semibold transition cursor-pointer"
+              className="text-xs text-orange-500 hover:text-orange-400 underline font-semibold transition cursor-pointer"
             >
               Refresh
             </button>
@@ -312,7 +312,7 @@ export default function StaffSessionsClient() {
                       <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
                         Subtotal
                       </span>
-                      <span className="text-base font-black text-amber-400">
+                      <span className="text-base font-black text-orange-400">
                         ₹{Number(s.combined_subtotal).toFixed(2)}
                       </span>
                     </div>
@@ -343,7 +343,7 @@ export default function StaffSessionsClient() {
                     <div className="mt-auto flex flex-col gap-2">
                       <Link
                         href={`/admin/payments/pending?bill=${encodeURIComponent(s.bill_number)}`}
-                        className="rounded-xl bg-amber-600 px-4 py-2 text-center text-xs font-black text-white hover:bg-amber-500"
+                        className="rounded-xl bg-orange-600 px-4 py-2 text-center text-xs font-black text-white hover:bg-orange-500"
                       >
                         Review Pending Payment
                       </Link>

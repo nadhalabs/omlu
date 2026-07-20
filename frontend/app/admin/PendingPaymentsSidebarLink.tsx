@@ -45,16 +45,16 @@ export default function PendingPaymentsSidebarLink({ initialCount }: { initialCo
   const state = notice?.state || {};
   const billNumber = String(state.bill_number || "");
   return <>
-    <Link href="/admin/payments/pending" className={`px-4 py-3 rounded-xl text-sm font-bold transition flex items-center justify-between ${active ? "bg-amber-600 text-white" : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"}`}>
+    <Link href="/admin/payments/pending" className={`px-4 py-3 rounded-xl text-sm font-bold transition flex items-center justify-between ${active ? "bg-orange-600 text-white" : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"}`}>
       <span>💳 Pending Payments</span>
       {count > 0 && <span className="rounded-full bg-red-600 px-2 py-0.5 text-[10px] text-white">{count}</span>}
     </Link>
-    {notice && <div className="fixed right-6 top-6 z-50 w-80 rounded-2xl border border-amber-700 bg-zinc-950 p-4 shadow-2xl">
+    {notice && <div className="fixed right-6 top-6 z-50 w-80 rounded-2xl border border-orange-700 bg-zinc-950 p-4 shadow-2xl">
       <button aria-label="Dismiss notification" onClick={() => setNotice(null)} className="float-right text-zinc-500">×</button>
       <p className="font-black text-white">Payment pending</p>
       <p className="mt-1 text-sm text-zinc-300">{String(state.table_name || "Table")} · ₹{Number(state.grand_total || 0).toFixed(2)}</p>
       <p className="text-xs text-zinc-500">Sent by {String(state.sent_by_name || "Staff")}</p>
-      <Link onClick={() => setNotice(null)} href={`/admin/payments/pending${billNumber ? `?bill=${encodeURIComponent(billNumber)}` : ""}`} className="mt-3 inline-block text-xs font-bold text-amber-400">Tap to review →</Link>
+      <Link onClick={() => setNotice(null)} href={`/admin/payments/pending${billNumber ? `?bill=${encodeURIComponent(billNumber)}` : ""}`} className="mt-3 inline-block text-xs font-bold text-orange-400">Tap to review →</Link>
     </div>}
   </>;
 }

@@ -263,7 +263,7 @@ export default function NewStaffOrderClient({ initialTableId }: { initialTableId
   };
 
   return (
-    <div className="min-h-screen bg-[#fff6f6] px-4 pb-44 pt-5 text-zinc-950">
+    <div className="min-h-screen bg-[var(--omlu-background)] px-4 pb-44 pt-5 text-zinc-950">
       <div className="mx-auto flex max-w-md flex-col gap-5 sm:max-w-xl lg:max-w-5xl">
         <header className="flex items-center justify-between">
           <Link href="/staff/tables" className="flex h-12 w-12 items-center justify-center rounded-full text-3xl text-zinc-950" aria-label="Back to tables">
@@ -271,7 +271,7 @@ export default function NewStaffOrderClient({ initialTableId }: { initialTableId
           </Link>
           <div className="text-center">
             <p className="text-xs font-bold text-zinc-400">New Order</p>
-            <h1 className="text-2xl font-black text-red-700">Table {activeTable?.table_number || tableId}</h1>
+            <h1 className="text-2xl font-black text-orange-600">Table {activeTable?.table_number || tableId}</h1>
           </div>
           <Link href="/staff/requests" className="flex h-12 w-12 items-center justify-center rounded-full text-2xl text-zinc-950" aria-label="Requests">
             ⌕
@@ -281,7 +281,7 @@ export default function NewStaffOrderClient({ initialTableId }: { initialTableId
         {error && <div className="rounded-3xl border border-red-200 bg-white p-4 text-sm font-bold text-red-700">{error}</div>}
         {success && <div className="rounded-3xl border border-green-200 bg-white p-4 text-sm font-bold text-green-700">{success}</div>}
 
-        <section className="rounded-3xl bg-white p-4 shadow-sm shadow-red-100/60">
+        <section className="rounded-3xl bg-white p-4 shadow-sm shadow-orange-100/60">
           <label className="text-xs font-black uppercase tracking-wide text-zinc-400">Table</label>
           <select
             value={tableId ?? ""}
@@ -290,7 +290,7 @@ export default function NewStaffOrderClient({ initialTableId }: { initialTableId
               setTableId(nextTableId);
               if (nextTableId) router.replace(`/staff/orders/new?tableId=${nextTableId}`);
             }}
-            className="mt-2 h-12 w-full rounded-2xl border border-zinc-200 bg-[#fffafa] px-4 text-base font-black text-zinc-950 outline-none"
+            className="mt-2 h-12 w-full rounded-2xl border border-zinc-200 bg-white px-4 text-base font-black text-zinc-950 outline-none"
           >
             <option value="">Choose table</option>
             {tables.map((table) => (
@@ -303,7 +303,7 @@ export default function NewStaffOrderClient({ initialTableId }: { initialTableId
           <div className="rounded-3xl bg-white p-8 text-center text-sm font-bold text-zinc-500">Loading menu...</div>
         ) : (
           <>
-            <div className="rounded-2xl border border-zinc-200 bg-white px-4 py-3 shadow-sm shadow-red-100/50">
+            <div className="rounded-2xl border border-zinc-200 bg-white px-4 py-3 shadow-sm shadow-orange-100/50">
               <input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
@@ -313,18 +313,18 @@ export default function NewStaffOrderClient({ initialTableId }: { initialTableId
             </div>
 
             <div className="flex gap-2 overflow-x-auto pb-1">
-              <button type="button" onClick={() => setCategoryId("all")} className={`h-10 whitespace-nowrap rounded-full px-5 text-sm font-bold ${categoryId === "all" ? "bg-red-700 text-white" : "bg-white text-zinc-600"}`}>
+              <button type="button" onClick={() => setCategoryId("all")} className={`h-10 whitespace-nowrap rounded-full px-5 text-sm font-bold ${categoryId === "all" ? "bg-orange-600 text-white" : "bg-white text-zinc-600"}`}>
                 All
               </button>
               {categories.map((category) => (
-                <button key={category.id} type="button" onClick={() => setCategoryId(category.id)} className={`h-10 whitespace-nowrap rounded-full px-5 text-sm font-bold ${categoryId === category.id ? "bg-red-700 text-white" : "bg-white text-zinc-600"}`}>
+                <button key={category.id} type="button" onClick={() => setCategoryId(category.id)} className={`h-10 whitespace-nowrap rounded-full px-5 text-sm font-bold ${categoryId === category.id ? "bg-orange-600 text-white" : "bg-white text-zinc-600"}`}>
                   {category.name_en}
                 </button>
               ))}
             </div>
 
             {detail?.session && detail.session.status !== "open" && (
-              <div className="rounded-3xl border border-amber-200 bg-white p-4 text-sm font-bold text-amber-700">Ordering is paused for this table.</div>
+              <div className="rounded-3xl border border-orange-200 bg-white p-4 text-sm font-bold text-orange-700">Ordering is paused for this table.</div>
             )}
 
             <section className="grid gap-3 lg:grid-cols-2">
@@ -333,23 +333,23 @@ export default function NewStaffOrderClient({ initialTableId }: { initialTableId
               ) : menuItems.map((item) => {
                 const quantity = lineQuantityForItem(item.id);
                 return (
-                  <div key={item.id} className="flex min-h-28 items-center gap-4 rounded-3xl border border-red-100 bg-white p-4 shadow-sm shadow-red-100/60">
-                    <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-red-50 to-amber-50 text-lg font-black text-red-700">
+                  <div key={item.id} className="flex min-h-28 items-center gap-4 rounded-3xl border border-orange-100 bg-white p-4 shadow-sm shadow-orange-100/60">
+                    <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-orange-50 to-orange-50 text-lg font-black text-orange-600">
                       {fallbackImageLabel(item.name_en)}
                     </div>
                     <div className="min-w-0 flex-1">
                       <h2 className="text-lg font-black text-zinc-950">{item.name_en}</h2>
-                      <p className="mt-1 text-lg font-black text-red-700">₹{item.price}</p>
+                      <p className="mt-1 text-lg font-black text-orange-600">₹{item.price}</p>
                       {!item.is_available && <p className="mt-1 text-xs font-bold text-zinc-400">Unavailable</p>}
                     </div>
                     {quantity > 0 ? (
                       <div className="flex items-center gap-3">
-                        <button type="button" onClick={() => decrementFirstItem(item.id)} className="flex h-11 w-11 items-center justify-center rounded-full bg-red-700 text-2xl font-black text-white">-</button>
+                        <button type="button" onClick={() => decrementFirstItem(item.id)} className="flex h-11 w-11 items-center justify-center rounded-full bg-orange-600 text-2xl font-black text-white">-</button>
                         <span className="min-w-5 text-center text-xl font-black">{quantity}</span>
-                        <button type="button" onClick={() => addItem(item)} className="flex h-11 w-11 items-center justify-center rounded-full bg-red-700 text-2xl font-black text-white">+</button>
+                        <button type="button" onClick={() => addItem(item)} className="flex h-11 w-11 items-center justify-center rounded-full bg-orange-600 text-2xl font-black text-white">+</button>
                       </div>
                     ) : (
-                      <button type="button" disabled={!item.is_available || !canOrder} onClick={() => addItem(item)} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-red-700 text-3xl font-light text-white disabled:bg-zinc-200">
+                      <button type="button" disabled={!item.is_available || !canOrder} onClick={() => addItem(item)} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-orange-600 text-3xl font-light text-white disabled:bg-zinc-200">
                         +
                       </button>
                     )}
@@ -360,26 +360,26 @@ export default function NewStaffOrderClient({ initialTableId }: { initialTableId
           </>
         )}
 
-        <section id="cart-panel" className="rounded-3xl bg-white p-4 shadow-sm shadow-red-100/60">
+        <section id="cart-panel" className="rounded-3xl bg-white p-4 shadow-sm shadow-orange-100/60">
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-black">Cart</h2>
-            <span className="text-lg font-black text-red-700">{currency(subtotal)}</span>
+            <span className="text-lg font-black text-orange-600">{currency(subtotal)}</span>
           </div>
           {cart.length === 0 ? (
-            <p className="mt-4 rounded-2xl bg-[#fff6f6] p-5 text-center text-sm font-semibold text-zinc-500">Add items for this table.</p>
+            <p className="mt-4 rounded-2xl bg-[var(--omlu-surface-muted)] p-5 text-center text-sm font-semibold text-zinc-500">Add items for this table.</p>
           ) : (
             <div className="mt-4 grid gap-3">
               {cart.map((line, index) => (
-                <div key={`${line.menu_item_id}-${optionSignature(line.selected_options)}-${index}`} className="rounded-3xl border border-red-100 bg-[#fffafa] p-4">
+                <div key={`${line.menu_item_id}-${optionSignature(line.selected_options)}-${index}`} className="rounded-3xl border border-zinc-200 bg-white p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <h3 className="text-lg font-black">{line.name}</h3>
-                      <p className="text-sm font-bold text-red-700">{currency(Number(line.price) * line.quantity)}</p>
+                      <p className="text-sm font-bold text-orange-600">{currency(Number(line.price) * line.quantity)}</p>
                     </div>
                     <div className="flex items-center gap-3">
-                      <button type="button" onClick={() => setQuantity(index, line.quantity - 1)} className="flex h-11 w-11 items-center justify-center rounded-full bg-red-700 text-2xl font-black text-white">-</button>
+                      <button type="button" onClick={() => setQuantity(index, line.quantity - 1)} className="flex h-11 w-11 items-center justify-center rounded-full bg-orange-600 text-2xl font-black text-white">-</button>
                       <span className="min-w-5 text-center text-xl font-black">{line.quantity}</span>
-                      <button type="button" onClick={() => setQuantity(index, line.quantity + 1)} className="flex h-11 w-11 items-center justify-center rounded-full bg-red-700 text-2xl font-black text-white">+</button>
+                      <button type="button" onClick={() => setQuantity(index, line.quantity + 1)} className="flex h-11 w-11 items-center justify-center rounded-full bg-orange-600 text-2xl font-black text-white">+</button>
                     </div>
                   </div>
                   {optionLabels(line).length > 0 && <div className="mt-2 text-xs font-semibold text-zinc-500">{optionLabels(line).join(", ")}</div>}
@@ -387,7 +387,7 @@ export default function NewStaffOrderClient({ initialTableId }: { initialTableId
                 </div>
               ))}
               <textarea value={orderNote} onChange={(event) => setOrderNote(event.target.value)} placeholder="Order note" className="min-h-20 rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm font-semibold outline-none" />
-              <button type="button" disabled={!canOrder || cart.length === 0 || submitting} onClick={handleSubmit} className="h-14 rounded-2xl bg-red-700 text-base font-black text-white disabled:bg-zinc-300">
+              <button type="button" disabled={!canOrder || cart.length === 0 || submitting} onClick={handleSubmit} className="h-14 rounded-2xl bg-orange-600 text-base font-black text-white disabled:bg-zinc-300">
                 {submitting ? "Sending..." : "Send Order"}
               </button>
             </div>
@@ -397,12 +397,12 @@ export default function NewStaffOrderClient({ initialTableId }: { initialTableId
 
       {cart.length > 0 && (
         <div className="fixed inset-x-0 bottom-24 z-30 mx-auto max-w-md px-4 sm:max-w-xl">
-          <div className="rounded-3xl border border-red-100 bg-white p-4 shadow-lg shadow-red-100">
+          <div className="rounded-3xl border border-orange-100 bg-white p-4 shadow-lg shadow-orange-100">
             <div className="mb-3 flex items-center justify-between text-sm font-bold">
               <span>{itemCount} item{itemCount === 1 ? "" : "s"}</span>
-              <span className="text-xl font-black text-red-700">{currency(subtotal)}</span>
+              <span className="text-xl font-black text-orange-600">{currency(subtotal)}</span>
             </div>
-            <button type="button" disabled={!canOrder || submitting} onClick={handleSubmit} className="h-14 w-full rounded-2xl bg-red-700 text-base font-black text-white disabled:bg-zinc-300">
+            <button type="button" disabled={!canOrder || submitting} onClick={handleSubmit} className="h-14 w-full rounded-2xl bg-orange-600 text-base font-black text-white disabled:bg-zinc-300">
               {submitting ? "Sending..." : "Send Order"}
             </button>
           </div>
@@ -412,7 +412,7 @@ export default function NewStaffOrderClient({ initialTableId }: { initialTableId
       {customisingItem && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
           <div className="max-h-[88vh] w-full max-w-md overflow-hidden rounded-[28px] bg-white">
-            <div className="flex items-start justify-between gap-4 border-b border-red-100 p-5">
+            <div className="flex items-start justify-between gap-4 border-b border-orange-100 p-5">
               <div>
                 <h2 className="text-xl font-black text-zinc-950">{customisingItem.name_en}</h2>
                 <p className="mt-1 text-sm font-semibold text-zinc-500">Choose options</p>
@@ -426,7 +426,7 @@ export default function NewStaffOrderClient({ initialTableId }: { initialTableId
                 const max = group.maximum_selections;
                 const multi = group.type === "addon" && max !== 1;
                 return (
-                  <section key={group.id} className="mb-4 rounded-3xl border border-red-100 bg-[#fffafa] p-4">
+                  <section key={group.id} className="mb-4 rounded-3xl border border-zinc-200 bg-white p-4">
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <div className="font-black text-zinc-950">{group.name}</div>
@@ -439,7 +439,7 @@ export default function NewStaffOrderClient({ initialTableId }: { initialTableId
                         const checked = Boolean(draftOptions[group.id]?.[option.id]);
                         const disabled = !option.available || (!checked && Boolean(max) && selectedCount >= max);
                         return (
-                          <button key={option.id} type="button" disabled={disabled} onClick={() => toggleDraftOption(group.id, option.id, multi)} className={`flex min-h-12 justify-between rounded-2xl border px-4 py-3 text-left text-sm font-bold disabled:opacity-40 ${checked ? "border-red-300 bg-red-50 text-red-800" : "border-zinc-200 bg-white text-zinc-700"}`}>
+                          <button key={option.id} type="button" disabled={disabled} onClick={() => toggleDraftOption(group.id, option.id, multi)} className={`flex min-h-12 justify-between rounded-2xl border px-4 py-3 text-left text-sm font-bold disabled:opacity-40 ${checked ? "border-red-300 bg-orange-50 text-red-800" : "border-zinc-200 bg-white text-zinc-700"}`}>
                             <span>{option.name}</span>
                             <span>₹{Number(option.price_delta).toFixed(2)}</span>
                           </button>
@@ -450,7 +450,7 @@ export default function NewStaffOrderClient({ initialTableId }: { initialTableId
                 );
               })}
             </div>
-            <div className="border-t border-red-100 p-5">
+            <div className="border-t border-orange-100 p-5">
               <button
                 disabled={!hasRequiredSelections(customisingItem, selectedOptionsFromDraft())}
                 onClick={() => {
@@ -458,7 +458,7 @@ export default function NewStaffOrderClient({ initialTableId }: { initialTableId
                   setCustomisingItem(null);
                   setDraftOptions({});
                 }}
-                className="h-14 w-full rounded-2xl bg-red-700 font-black text-white disabled:bg-zinc-300"
+                className="h-14 w-full rounded-2xl bg-orange-600 font-black text-white disabled:bg-zinc-300"
               >
                 Add to cart
               </button>

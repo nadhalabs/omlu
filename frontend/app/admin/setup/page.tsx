@@ -22,7 +22,7 @@ export default async function AdminSetupPage() {
     <div className="min-h-screen bg-zinc-50 px-6 py-8 text-zinc-950">
       <div className="mx-auto w-full max-w-4xl">
         <div className="mb-8">
-          <p className="text-sm font-black uppercase tracking-widest text-amber-700">
+          <p className="text-sm font-black uppercase tracking-widest text-orange-700">
             {staff.restaurant_name}
           </p>
           <h1 className="mt-3 text-3xl font-black tracking-tight">Initial Setup</h1>

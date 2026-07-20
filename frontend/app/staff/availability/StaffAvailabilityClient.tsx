@@ -85,15 +85,15 @@ export default function StaffAvailabilityClient() {
       <div className="mx-auto flex max-w-6xl flex-col gap-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <Link href="/staff" className="text-sm font-bold text-amber-400">Back to staff home</Link>
+            <Link href="/staff" className="text-sm font-bold text-orange-400">Back to staff home</Link>
             <h1 className="mt-2 text-3xl font-black text-white">Availability</h1>
             <p className="mt-1 text-[11px] font-bold uppercase tracking-wide text-zinc-600">Real-time: {realtimeStatus}</p>
           </div>
-          <Link href="/staff/tables" className="rounded-lg bg-amber-600 px-4 py-3 text-sm font-black text-white">New Order</Link>
+          <Link href="/staff/tables" className="rounded-lg bg-orange-600 px-4 py-3 text-sm font-black text-white">New Order</Link>
         </div>
         <section className="grid gap-3 md:grid-cols-[1fr_220px]">
-          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search menu" className="rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-4 text-white outline-none focus:border-amber-500" />
-          <select value={categoryId} onChange={(event) => setCategoryId(event.target.value === "all" ? "all" : Number(event.target.value))} className="rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-4 text-white outline-none focus:border-amber-500">
+          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search menu" className="rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-4 text-white outline-none focus:border-orange-500" />
+          <select value={categoryId} onChange={(event) => setCategoryId(event.target.value === "all" ? "all" : Number(event.target.value))} className="rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-4 text-white outline-none focus:border-orange-500">
             <option value="all">All categories</option>
             {categories.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
           </select>

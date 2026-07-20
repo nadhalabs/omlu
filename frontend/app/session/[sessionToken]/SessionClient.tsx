@@ -399,7 +399,7 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
   if (loading && !session) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-50 px-4 py-8 dark:bg-zinc-950">
-        <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-t-2 border-amber-600" />
+        <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-t-2 border-orange-600" />
         <p className="mt-4 font-medium text-zinc-600 dark:text-zinc-400">
           {t.loading}
         </p>
@@ -417,7 +417,7 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
           </h1>
           <button
             onClick={() => fetchSession(true)}
-            className="mt-6 min-h-12 rounded-2xl bg-amber-600 px-6 py-3 font-bold text-white transition hover:bg-amber-700"
+            className="mt-6 min-h-12 rounded-2xl bg-orange-600 px-6 py-3 font-bold text-white transition hover:bg-orange-700"
           >
             {t.retry}
           </button>
@@ -475,7 +475,7 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
           </button>
           <button
             onClick={() => setLanguage(language === "en" ? "ml" : "en")}
-            className="min-h-10 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-bold text-amber-700 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900 dark:text-amber-500"
+            className="min-h-10 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-bold text-orange-700 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900 dark:text-orange-500"
           >
             {language === "en" ? "മലയാളം" : "English"}
           </button>
@@ -494,7 +494,7 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
         <header className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-xs font-black uppercase tracking-wide text-amber-700 dark:text-amber-500">
+              <p className="text-xs font-black uppercase tracking-wide text-orange-700 dark:text-orange-500">
                 {session.restaurant_name}
               </p>
               <h1 className="mt-1 text-2xl font-black text-zinc-950 dark:text-zinc-50">
@@ -508,7 +508,7 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
               <p className="text-xs font-semibold text-zinc-400">
                 {t.sessionStatus}
               </p>
-              <p className="mt-1 rounded-xl bg-amber-50 px-3 py-1 text-sm font-black text-amber-700 dark:bg-amber-950/20 dark:text-amber-500">
+              <p className="mt-1 rounded-xl bg-orange-50 px-3 py-1 text-sm font-black text-orange-700 dark:bg-orange-950/20 dark:text-orange-500">
                 {t.statusLabels[session.status] || session.status}
               </p>
             </div>
@@ -531,10 +531,10 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
             </div>
           </div>
 
-          <div className="mt-4 rounded-2xl border border-amber-100 bg-amber-50 p-4 dark:border-amber-900/40 dark:bg-amber-950/20">
+          <div className="mt-4 rounded-2xl border border-orange-100 bg-orange-50 p-4 dark:border-orange-900/40 dark:bg-orange-950/20">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-xs font-black uppercase tracking-wide text-amber-700 dark:text-amber-500">
+                <p className="text-xs font-black uppercase tracking-wide text-orange-700 dark:text-orange-500">
                   {t.billState}
                 </p>
                 <p className="mt-1 text-lg font-black text-zinc-950 dark:text-zinc-50">
@@ -547,7 +547,7 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
                 )}
               </div>
               {billTotal && (
-                <p className="text-right text-2xl font-black text-amber-700 dark:text-amber-500">
+                <p className="text-right text-2xl font-black text-orange-700 dark:text-orange-500">
                   {billTotal}
                 </p>
               )}
@@ -558,7 +558,7 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
             {canOrderMore && (
               <button
                 onClick={handleAddMore}
-                className="min-h-14 rounded-2xl bg-amber-600 px-5 py-4 text-center text-base font-black text-white shadow-md transition hover:bg-amber-700 active:bg-amber-800"
+                className="min-h-14 rounded-2xl bg-orange-600 px-5 py-4 text-center text-base font-black text-white shadow-md transition hover:bg-orange-700 active:bg-orange-800"
               >
                 {t.addMore} · {t.addMoreMl}
               </button>
@@ -636,7 +636,7 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
                           ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-700/40 dark:bg-emerald-950/20 dark:text-emerald-400"
                           : status === "error"
                           ? "border-red-200 bg-red-50 text-red-600 dark:border-red-800/40 dark:bg-red-950/20 dark:text-red-400"
-                          : "border-zinc-200 bg-zinc-50 text-zinc-700 hover:border-amber-300 hover:bg-amber-50 dark:border-zinc-800 dark:bg-zinc-800/50 dark:text-zinc-300"
+                          : "border-zinc-200 bg-zinc-50 text-zinc-700 hover:border-orange-300 hover:bg-orange-50 dark:border-zinc-800 dark:bg-zinc-800/50 dark:text-zinc-300"
                       }`}
                     >
                       {status === "loading" ? "..." : status === "success" ? "✓" : label}
@@ -837,7 +837,7 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
                                     state === "completed"
                                       ? "bg-emerald-600 text-xs font-bold"
                                       : state === "current"
-                                      ? "bg-amber-600 ring-4 ring-amber-100 dark:ring-amber-950/40"
+                                      ? "bg-orange-600 ring-4 ring-orange-100 dark:ring-orange-950/40"
                                       : "bg-zinc-200 dark:bg-zinc-800"
                                   } ${isAnimated ? "motion-safe:animate-[bounce_0.6s_ease-in-out_2]" : ""}`}
                                 >
@@ -897,7 +897,7 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
                             ₹{Number(item.unit_price).toFixed(2)} × {item.quantity}
                           </p>
                           {item.item_note && (
-                            <p className="mt-1 text-xs italic text-amber-700 dark:text-amber-500">
+                            <p className="mt-1 text-xs italic text-orange-700 dark:text-orange-500">
                               {t.note}: {item.item_note}
                             </p>
                           )}
@@ -917,7 +917,7 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
 
                   <div className="mt-4 flex items-center justify-between border-t border-zinc-100 pt-3 dark:border-zinc-800">
                     <p className="text-sm font-bold text-zinc-500">{t.subtotal}</p>
-                    <p className="text-lg font-black text-amber-700 dark:text-amber-500">
+                    <p className="text-lg font-black text-orange-700 dark:text-orange-500">
                       ₹{Number(order.subtotal).toFixed(2)}
                     </p>
                   </div>

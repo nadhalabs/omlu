@@ -47,7 +47,7 @@ export function PasswordInput({
           autoComplete={autoComplete}
           aria-invalid={Boolean(error)}
           aria-describedby={error ? errorId : undefined}
-          className={`h-12 w-full rounded-lg border px-4 pr-12 text-sm font-medium outline-none transition focus:border-amber-600 ${
+          className={`h-12 w-full rounded-lg border px-4 pr-12 text-sm font-medium outline-none transition focus:border-orange-600 ${
             dark ? "bg-zinc-950 text-zinc-100" : "bg-white text-zinc-950"
           } ${error ? "border-red-500" : dark ? "border-zinc-800" : "border-zinc-300"} ${
             disabled ? "cursor-not-allowed opacity-70" : ""
@@ -58,7 +58,7 @@ export function PasswordInput({
           aria-label={visible ? "Hide password" : "Show password"}
           onClick={() => setVisible((current) => !current)}
           disabled={disabled}
-          className={`absolute inset-y-0 right-0 flex w-12 items-center justify-center transition focus:outline-none focus:ring-2 focus:ring-amber-600 disabled:cursor-not-allowed ${
+          className={`absolute inset-y-0 right-0 flex w-12 items-center justify-center transition focus:outline-none focus:ring-2 focus:ring-orange-600 disabled:cursor-not-allowed ${
             dark ? "text-zinc-500 hover:text-zinc-100" : "text-zinc-500 hover:text-zinc-900"
           }`}
         >

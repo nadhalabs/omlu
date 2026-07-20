@@ -35,9 +35,9 @@ function simpleStatus(table: StaffTableSummary): SimpleStatus {
 function statusClasses(status: SimpleStatus) {
   if (status === "Available") return "border-green-200 bg-green-50 text-green-700";
   if (status === "Needs Bill") return "border-red-200 bg-red-50 text-red-700";
-  if (status === "Ready") return "border-emerald-200 bg-emerald-50 text-emerald-700";
-  if (status === "Preparing") return "border-orange-200 bg-orange-50 text-orange-700";
-  return "border-amber-200 bg-amber-50 text-amber-700";
+  if (status === "Ready") return "border-purple-200 bg-purple-50 text-purple-700";
+  if (status === "Preparing") return "border-amber-200 bg-amber-50 text-amber-700";
+  return "border-blue-200 bg-blue-50 text-blue-700";
 }
 
 export default function StaffTablesClient() {
@@ -105,7 +105,7 @@ export default function StaffTablesClient() {
   }, [filter, search, tables]);
 
   return (
-    <div className="min-h-screen bg-[#fff6f6] px-4 pb-28 pt-5 text-zinc-950">
+    <div className="min-h-screen bg-[var(--omlu-background)] px-4 pb-28 pt-5 text-zinc-950">
       <div className="mx-auto flex max-w-md flex-col gap-5 sm:max-w-xl">
         <header className="flex items-center justify-between">
           <button type="button" onClick={() => void load(false)} className="flex h-12 w-12 items-center justify-center rounded-full text-2xl text-zinc-900" aria-label="Refresh tables">
@@ -113,14 +113,14 @@ export default function StaffTablesClient() {
           </button>
           <div className="text-center">
             <p className="text-xs font-bold text-zinc-400">{staffInfo?.restaurant_name || "OMLU"}</p>
-            <h1 className="text-2xl font-black text-red-700">Tables</h1>
+            <h1 className="text-2xl font-black text-orange-600">Tables</h1>
           </div>
           <Link href="/staff/requests" className="flex h-12 w-12 items-center justify-center rounded-full text-2xl text-zinc-900" aria-label="Requests">
             ⌾
           </Link>
         </header>
 
-        <div className="rounded-2xl border border-zinc-200 bg-white px-4 py-3 shadow-sm shadow-red-100/50">
+        <div className="rounded-2xl border border-zinc-200 bg-white px-4 py-3 shadow-sm shadow-orange-100/50">
           <input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
@@ -136,7 +136,7 @@ export default function StaffTablesClient() {
               type="button"
               onClick={() => setFilter(value)}
               className={`h-10 whitespace-nowrap rounded-full px-4 text-sm font-bold transition ${
-                filter === value ? "bg-red-700 text-white shadow-sm shadow-red-200" : "bg-white text-zinc-600"
+                filter === value ? "bg-orange-600 text-white shadow-sm shadow-orange-200" : "bg-white text-zinc-600"
               }`}
             >
               {label}
@@ -147,7 +147,7 @@ export default function StaffTablesClient() {
         {error && (
           <div className="rounded-3xl border border-red-200 bg-white p-5 text-sm font-semibold text-red-700">
             <p>{error}</p>
-            <button onClick={() => void load(true)} className="mt-4 h-12 rounded-full bg-red-700 px-6 font-black text-white">
+            <button onClick={() => void load(true)} className="mt-4 h-12 rounded-full bg-orange-600 px-6 font-black text-white">
               Retry
             </button>
           </div>
@@ -169,7 +169,7 @@ export default function StaffTablesClient() {
                 <Link
                   key={table.id}
                   href={`/staff/orders/new?tableId=${table.id}`}
-                  className={`min-h-44 rounded-3xl border p-4 text-center shadow-sm shadow-red-100/60 ${statusClasses(status)}`}
+                  className={`min-h-44 rounded-3xl border p-4 text-center shadow-sm shadow-orange-100/60 ${statusClasses(status)}`}
                 >
                   <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-white/70 text-2xl">●●</div>
                   <div className="text-xl font-black text-zinc-950">Table {table.table_number}</div>

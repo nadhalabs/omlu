@@ -92,7 +92,7 @@ export default function LoginClient() {
       <div className="flex w-full max-w-md flex-col gap-4 lg:max-w-4xl lg:flex-row lg:items-center">
       <main className="w-full rounded-lg border border-zinc-200 bg-white p-8 shadow-sm lg:flex-1">
         <div className="mb-8">
-          <Link href="/" className="text-sm font-black uppercase tracking-widest text-amber-700">
+          <Link href="/" className="text-sm font-black uppercase tracking-widest text-orange-700">
             OMLU
           </Link>
           <h1 className="mt-3 text-2xl font-black tracking-tight">Restaurant Login</h1>
@@ -115,11 +115,11 @@ export default function LoginClient() {
                 setRestaurantSlug(e.target.value);
                 setFieldError("restaurant_slug");
               }}
-              placeholder="nadha-cafe"
+              placeholder="e.g. nadha-cafe"
               disabled={loading}
               autoComplete="organization"
               aria-invalid={Boolean(fieldErrors.restaurant_slug)}
-              className={`h-12 rounded-lg border px-4 text-sm font-medium outline-none transition focus:border-amber-600 ${
+              className={`h-12 rounded-lg border px-4 text-sm font-medium outline-none transition focus:border-orange-600 ${
                 fieldErrors.restaurant_slug ? "border-red-500" : "border-zinc-300"
               }`}
             />
@@ -136,11 +136,11 @@ export default function LoginClient() {
                 setLogin(e.target.value);
                 setFieldError("login");
               }}
-              placeholder="owner or owner@example.com"
+              placeholder="e.g. nadha"
               disabled={loading}
               autoComplete="username"
               aria-invalid={Boolean(fieldErrors.login)}
-              className={`h-12 rounded-lg border px-4 text-sm font-medium outline-none transition focus:border-amber-600 ${
+              className={`h-12 rounded-lg border px-4 text-sm font-medium outline-none transition focus:border-orange-600 ${
                 fieldErrors.login ? "border-red-500" : "border-zinc-300"
               }`}
             />
@@ -163,7 +163,7 @@ export default function LoginClient() {
           <button
             type="submit"
             disabled={loading}
-            className="mt-2 h-12 rounded-lg bg-zinc-950 px-6 text-sm font-bold text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-300"
+            className="mt-2 h-12 rounded-lg bg-orange-500 px-6 text-sm font-bold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-zinc-300"
           >
             {loading ? "Signing in..." : "Login"}
           </button>

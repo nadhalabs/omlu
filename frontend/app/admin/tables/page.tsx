@@ -236,7 +236,7 @@ export default function AdminTablesPage() {
           <button
             onClick={handlePrint}
             disabled={activeTables.length === 0}
-            className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 disabled:bg-zinc-800 disabled:text-zinc-500 text-sm font-bold text-white rounded-xl transition cursor-pointer flex items-center gap-2 select-none"
+            className="px-5 py-2.5 bg-orange-600 hover:bg-orange-700 disabled:bg-zinc-800 disabled:text-zinc-500 text-sm font-bold text-white rounded-xl transition cursor-pointer flex items-center gap-2 select-none"
           >
             🖨️ Print All QRs ({activeTables.length})
           </button>
@@ -246,7 +246,7 @@ export default function AdminTablesPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
           {/* Add Table Column Form */}
           <div className="lg:col-span-1 bg-zinc-950/40 border border-zinc-850 rounded-3xl p-5 flex flex-col gap-4">
-            <h2 className="text-sm font-black text-amber-500 uppercase tracking-wider border-b border-zinc-850 pb-3">
+            <h2 className="text-sm font-black text-orange-500 uppercase tracking-wider border-b border-zinc-850 pb-3">
               Add New Table
             </h2>
 
@@ -266,14 +266,14 @@ export default function AdminTablesPage() {
                   value={tableNumber}
                   onChange={(e) => setTableNumber(e.target.value)}
                   placeholder="e.g. 6 or T6"
-                  className="w-full px-4 py-2.5 bg-zinc-905 border border-zinc-800 focus:border-amber-600 rounded-xl text-sm outline-none transition text-white placeholder-zinc-700"
+                  className="w-full px-4 py-2.5 bg-zinc-905 border border-zinc-800 focus:border-orange-600 rounded-xl text-sm outline-none transition text-white placeholder-zinc-700"
                 />
               </div>
 
               <button
                 type="submit"
                 disabled={saving}
-                className="w-full py-2.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl transition cursor-pointer disabled:opacity-50"
+                className="w-full py-2.5 bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold rounded-xl transition cursor-pointer disabled:opacity-50"
               >
                 {saving ? "Creating..." : "Create Table Mapping"}
               </button>
@@ -282,13 +282,13 @@ export default function AdminTablesPage() {
 
           {/* Tables Mappings List */}
           <div className="lg:col-span-2 bg-zinc-950/40 border border-zinc-850 rounded-3xl p-5 flex flex-col gap-4">
-            <h2 className="text-sm font-black text-amber-500 uppercase tracking-wider border-b border-zinc-850 pb-3">
+            <h2 className="text-sm font-black text-orange-500 uppercase tracking-wider border-b border-zinc-850 pb-3">
               Registered Tables Mapping ({tables.length})
             </h2>
 
             {loading ? (
               <div className="flex justify-center py-12">
-                <div className="animate-spin rounded-full h-8 w-8 border-2 border-amber-500 border-t-transparent"></div>
+                <div className="animate-spin rounded-full h-8 w-8 border-2 border-orange-500 border-t-transparent"></div>
               </div>
             ) : error ? (
               <p className="text-xs text-red-400 py-6 font-semibold">{error}</p>
@@ -360,7 +360,7 @@ export default function AdminTablesPage() {
                         {/* Download link through binary proxy route */}
                         <a
                           href={`/api/admin/tables/${t.id}/qr`}
-                          className="text-[10px] text-amber-500 hover:text-amber-400 font-bold underline select-none"
+                          className="text-[10px] text-orange-500 hover:text-orange-400 font-bold underline select-none"
                         >
                           Download QR PNG
                         </a>
@@ -415,7 +415,7 @@ export default function AdminTablesPage() {
                   type="text"
                   value={editTableNumber}
                   onChange={(e) => setEditTableNumber(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-zinc-950 border border-zinc-800 focus:border-amber-600 rounded-xl text-sm outline-none transition text-white"
+                  className="w-full px-4 py-2.5 bg-zinc-950 border border-zinc-800 focus:border-orange-600 rounded-xl text-sm outline-none transition text-white"
                 />
               </div>
 
@@ -430,7 +430,7 @@ export default function AdminTablesPage() {
                 <button
                   type="submit"
                   disabled={editSaving}
-                  className="flex-1 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl cursor-pointer text-xs disabled:opacity-50"
+                  className="flex-1 py-2.5 bg-orange-600 hover:bg-orange-700 text-white font-bold rounded-xl cursor-pointer text-xs disabled:opacity-50"
                 >
                   {editSaving ? "Saving..." : "Save Changes"}
                 </button>

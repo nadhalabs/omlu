@@ -10,6 +10,7 @@ import 'package:webview_flutter_android/webview_flutter_android.dart';
 
 import 'app_config.dart';
 import 'navigation_policy.dart';
+import '../design_system/colors.dart';
 
 class OmluOperationsApp extends StatelessWidget {
   const OmluOperationsApp({required this.config, super.key});
@@ -22,8 +23,11 @@ class OmluOperationsApp extends StatelessWidget {
       title: 'OMLU',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
+        scaffoldBackgroundColor: OmluColors.background,
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFFD97706),
+          seedColor: OmluColors.accent,
+          primary: OmluColors.accent,
+          surface: OmluColors.surface,
           brightness: Brightness.light,
         ),
         useMaterial3: true,
