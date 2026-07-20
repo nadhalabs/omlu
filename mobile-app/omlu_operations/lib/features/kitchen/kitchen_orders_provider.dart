@@ -54,8 +54,15 @@ class KitchenOrdersNotifier
   }
 
   Future<void> advanceStatus(String publicToken, String currentStatus) async {
+    if (currentStatus == 'pending') {
+      await _api.updateKitchenStatus(
+        restaurantSlug: _restaurantSlug,
+        publicToken: publicToken,
+        status: 'accepted',
+      );
+      currentStatus = 'accepted';
+    }
     final nextStatus = switch (currentStatus) {
-      'pending' => 'accepted',
       'accepted' => 'preparing',
       'preparing' => 'ready',
       'ready' => 'served',

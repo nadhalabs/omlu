@@ -51,7 +51,7 @@ class StaffShell extends ConsumerWidget {
                 ),
                 const BottomNavigationBarItem(
                   icon: Icon(OmluIcons.newOrder),
-                  label: 'New Order',
+                  label: 'Orders',
                 ),
                 BottomNavigationBarItem(
                   icon: Badge(
@@ -98,7 +98,7 @@ class StaffShell extends ConsumerWidget {
                     ),
                     const NavigationRailDestination(
                       icon: Icon(OmluIcons.newOrder),
-                      label: Text('New Order'),
+                      label: Text('Orders'),
                     ),
                     NavigationRailDestination(
                       icon: Badge(

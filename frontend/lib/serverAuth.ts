@@ -28,7 +28,7 @@ export async function requireStaffRole(
     redirect("/login");
   }
 
-  if (staffInfo.must_change_password && !options.allowPasswordChange) {
+  if (["owner", "admin"].includes(staffInfo.role) && staffInfo.must_change_password && !options.allowPasswordChange) {
     redirect("/staff/change-password");
   }
   if (!allowedRoles.includes(staffInfo.role)) {

@@ -132,7 +132,7 @@ class CartScreen extends ConsumerWidget {
                 ),
                 child: SafeArea(
                   child: OmluButton(
-                    text: 'Send Order',
+                    text: 'Send to Kitchen',
                     isLoading:
                         cartState.submissionState == SubmissionState.submitting,
                     onPressed:
@@ -167,8 +167,9 @@ class CartScreen extends ConsumerWidget {
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, st) =>
-            Center(child: Text('Error loading menu details: $err')),
+        error: (err, st) => const Center(
+          child: Text('Could not load the menu. Check the connection and try again.'),
+        ),
       ),
     );
   }

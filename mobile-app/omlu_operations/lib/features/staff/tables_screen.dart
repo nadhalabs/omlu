@@ -11,22 +11,25 @@ import '../../core/models/operations_models.dart';
 import 'tables_provider.dart';
 import 'cart_provider.dart';
 import 'staff_shell.dart';
+import '../auth_provider.dart';
+import '../onboarding/role_guide.dart';
+import '../../core/models/role_session.dart';
 
 class TablesScreen extends ConsumerWidget {
   const TablesScreen({super.key});
 
   String _getTableStatus(StaffTableSummary table) {
-    if (table.billRequested) return 'Needs Bill';
-    if (table.attention.contains('ready_order')) return 'Ready';
-    if (table.activeOrderCount > 0) return 'Preparing';
-    if (table.state == 'occupied' || table.hasOpenSession) return 'Ordering';
+    if (table.billStatus == 'payment_pending') return 'Waiting for Payment';
+    if (table.billRequested) return 'Bill Requested';
+    if (table.attention.contains('ready_order')) return 'Food Ready';
+    if (table.activeOrderCount > 0 || table.state == 'occupied' || table.hasOpenSession) return 'Occupied';
     return 'Available';
   }
 
   Color _getStatusColor(String status) {
     return switch (status) {
-      'Needs Bill' => OmluColors.statusNeedsBill,
-      'Ready' => OmluColors.statusReady,
+      'Bill Requested' || 'Waiting for Payment' => OmluColors.statusNeedsBill,
+      'Food Ready' => OmluColors.statusReady,
       'Preparing' => OmluColors.statusPreparing,
       'Ordering' => OmluColors.statusOrdering,
       _ => OmluColors.statusAvailable,
@@ -92,12 +95,18 @@ class TablesScreen extends ConsumerWidget {
         centerTitle: false,
         actions: [
           const RealtimeStatusChip(),
-          IconButton(
-            icon: const Icon(
-              Icons.refresh_rounded,
-              color: OmluColors.textPrimary,
-            ),
-            onPressed: () => ref.read(tablesProvider.notifier).fetchTables(),
+          PopupMenuButton<String>(
+            tooltip: 'Profile and help',
+            onSelected: (value) {
+              if (value == 'help') showRoleHelp(context, StaffRole.staff);
+              if (value == 'refresh') ref.read(tablesProvider.notifier).fetchTables();
+              if (value == 'logout') ref.read(authProvider.notifier).logout();
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'help', child: Text('Help')),
+              PopupMenuItem(value: 'refresh', child: Text('Refresh')),
+              PopupMenuItem(value: 'logout', child: Text('Logout')),
+            ],
           ),
         ],
       ),
@@ -112,11 +121,25 @@ class TablesScreen extends ConsumerWidget {
             );
           }
 
-          return GridView.builder(
-            padding: const EdgeInsets.all(OmluSpacing.md),
+          final occupied = tables.where((table) => table.hasOpenSession || table.state == 'occupied').length;
+          final ready = tables.where((table) => table.attention.contains('ready_order')).length;
+          final requests = tables.where((table) => table.attention.any((item) => item.contains('request'))).length;
+          return CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                child: Wrap(spacing: 8, runSpacing: 8, children: [
+                  _SummaryChip(label: 'Occupied', count: occupied),
+                  _SummaryChip(label: 'Ready', count: ready),
+                  _SummaryChip(label: 'Requests', count: requests),
+                ]),
+              )),
+              SliverPadding(
+                padding: const EdgeInsets.all(OmluSpacing.md),
+                sliver: SliverGrid.builder(
             gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
               maxCrossAxisExtent: 220,
-              mainAxisExtent: 150,
+              mainAxisExtent: 175,
               crossAxisSpacing: OmluSpacing.md,
               mainAxisSpacing: OmluSpacing.md,
             ),
@@ -182,7 +205,7 @@ class TablesScreen extends ConsumerWidget {
                           const SizedBox(height: OmluSpacing.xs),
                           if (showBill)
                             Text(
-                              'Total: ₹${table.currentBillAmount.toStringAsFixed(2)}',
+                              '${table.activeOrderCount} active order${table.activeOrderCount == 1 ? '' : 's'}${table.currentBillAmount > 0 ? ' · ₹${table.currentBillAmount.toStringAsFixed(2)}' : ''}',
                               style: OmluTypography.bodyMedium.copyWith(
                                 fontWeight: FontWeight.w600,
                               ),
@@ -196,13 +219,16 @@ class TablesScreen extends ConsumerWidget {
                 ),
               );
             },
+                ),
+              ),
+            ],
           );
         },
         loading: () => GridView.builder(
           padding: const EdgeInsets.all(OmluSpacing.md),
           gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
             maxCrossAxisExtent: 220,
-            mainAxisExtent: 150,
+            mainAxisExtent: 175,
             crossAxisSpacing: OmluSpacing.md,
             mainAxisSpacing: OmluSpacing.md,
           ),
@@ -220,7 +246,7 @@ class TablesScreen extends ConsumerWidget {
                 color: Colors.red,
               ),
               const SizedBox(height: 16),
-              Text('Error: $err', style: OmluTypography.bodyMedium),
+              const Text('Could not load tables. Check the connection and try again.', style: OmluTypography.bodyMedium),
               const SizedBox(height: 16),
               ElevatedButton(
                 onPressed: () =>
@@ -233,4 +259,16 @@ class TablesScreen extends ConsumerWidget {
       ),
     );
   }
+}
+
+class _SummaryChip extends StatelessWidget {
+  const _SummaryChip({required this.label, required this.count});
+  final String label;
+  final int count;
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+    decoration: BoxDecoration(color: OmluColors.surface, borderRadius: OmluRadius.borderCircular, border: Border.all(color: OmluColors.border)),
+    child: Text('$label $count', style: OmluTypography.label.copyWith(fontWeight: FontWeight.w700)),
+  );
 }

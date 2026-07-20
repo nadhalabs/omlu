@@ -148,7 +148,7 @@ def _load_current_staff_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    if staff.must_change_password and not allow_password_change:
+    if staff.role in {"owner", "admin"} and staff.must_change_password and not allow_password_change:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Password change required before accessing this resource",

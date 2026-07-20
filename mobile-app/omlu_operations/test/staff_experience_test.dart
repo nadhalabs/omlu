@@ -138,7 +138,7 @@ void main() {
         // Check status strings mapped cleanly
         expect(find.text('Available'), findsOneWidget);
         expect(
-          find.text('Needs Bill'),
+          find.text('Bill Requested'),
           findsOneWidget,
         ); // Table 2 has billRequested: true
 

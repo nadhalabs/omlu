@@ -40,10 +40,12 @@ class _RequestsScreenState extends ConsumerState<RequestsScreen>
       await ref
           .read(serviceRequestsProvider.notifier)
           .resolveRequest(requestId);
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to resolve request: $e')),
+          const SnackBar(
+            content: Text('This action could not be completed. Refresh status and try again.'),
+          ),
         );
       }
     } finally {
@@ -136,7 +138,7 @@ class _RequestsScreenState extends ConsumerState<RequestsScreen>
                 color: Colors.red,
               ),
               const SizedBox(height: 16),
-              Text('Error: $err', style: OmluTypography.bodyMedium),
+              const Text('Could not load requests. Check the connection and try again.', style: OmluTypography.bodyMedium),
               const SizedBox(height: 16),
               ElevatedButton(
                 onPressed: () =>

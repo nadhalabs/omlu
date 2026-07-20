@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRealtime } from "@/lib/realtime";
+import { useOmluUi } from "@/components/OmluUiProvider";
 
 type SaleType = "takeaway" | "late_entry";
 type PaymentMethod = "cash" | "upi";
@@ -16,6 +17,7 @@ async function parseResponse<T>(response: Response): Promise<T> {
 }
 
 export default function QuickSaleClient() {
+  const { confirm: confirmDialog, toast } = useOmluUi();
   const [data, setData] = useState<HomeData | null>(null);
   const [saleType, setSaleType] = useState<SaleType | null>(null);
   const [cart, setCart] = useState<Record<number, number>>({});
@@ -38,22 +40,17 @@ export default function QuickSaleClient() {
 
   const submit = async () => {
     if (!saleType || saving || Object.keys(cart).length === 0) return;
-    const label = saleType === "takeaway" ? "send this Takeaway to Kitchen" : `record this Late Entry as paid by ${payment.toUpperCase()}`;
-    if (!window.confirm(`Confirm and ${label}?`)) return;
-    setSaving(true); setError(null);
-    try {
-      await parseResponse(await fetch("/api/admin/quick-sales", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sale_type: saleType, items: Object.entries(cart).map(([menu_item_id, itemQuantity]) => ({ menu_item_id: Number(menu_item_id), quantity: itemQuantity })), note: note || null, payment_method: saleType === "late_entry" ? payment : null, idempotency_key: crypto.randomUUID() }) }));
-      setCart({}); setNote(""); setSaleType(null); await load();
-    } catch (err) { setError(err instanceof Error ? err.message : "Could not create Quick Sale."); }
-    finally { setSaving(false); }
+    const isLate = saleType === "late_entry";
+    await confirmDialog({ title: isLate ? (payment === "upi" ? "Confirm UPI payment" : "Record late entry") : "Send takeaway to Kitchen?", message: isLate ? (payment === "upi" ? "Confirm that the payment has been received in the restaurant’s UPI account." : "This sale will be recorded as paid and included in today’s revenue.") : "Kitchen will receive this order immediately for preparation.", details: [`Total: ₹${total.toFixed(2)}`, ...(isLate && payment === "cash" ? ["Payment method: Cash"] : [])], confirmLabel: isLate ? (payment === "upi" ? "Payment received" : "Confirm payment") : "Send to Kitchen", onConfirm: async () => {
+      setSaving(true); setError(null);
+      try { await parseResponse(await fetch("/api/admin/quick-sales", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sale_type: saleType, items: Object.entries(cart).map(([menu_item_id, itemQuantity]) => ({ menu_item_id: Number(menu_item_id), quantity: itemQuantity })), note: note || null, payment_method: isLate ? payment : null, idempotency_key: crypto.randomUUID() }) })); setCart({}); setNote(""); setSaleType(null); await load(); toast(isLate ? "Late Entry recorded." : "Takeaway sent to Kitchen.", "success"); }
+      finally { setSaving(false); }
+    }});
   };
 
   const confirmPayment = async (sale: QuickSale, method: PaymentMethod) => {
-    if (saving || !window.confirm(`Confirm ${method.toUpperCase()} received for ${sale.order_number}?`)) return;
-    setSaving(true);
-    try { await parseResponse(await fetch(`/api/admin/quick-sales/${encodeURIComponent(sale.public_token)}/payment`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ method }) })); await load(); }
-    catch (err) { setError(err instanceof Error ? err.message : "Payment confirmation failed."); }
-    finally { setSaving(false); }
+    if (saving) return;
+    await confirmDialog({ title: "Complete takeaway order", message: "Confirm that payment has been received.", details: [`Takeaway ${sale.order_number}`, `Total: ₹${sale.total}`, `Payment method: ${method === "cash" ? "Cash" : "UPI"}`], confirmLabel: "Complete order", onConfirm: async () => { setSaving(true); try { await parseResponse(await fetch(`/api/admin/quick-sales/${encodeURIComponent(sale.public_token)}/payment`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ method }) })); await load(); toast("Takeaway payment confirmed.", "success"); } finally { setSaving(false); } } });
   };
 
   return <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">

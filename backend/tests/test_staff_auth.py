@@ -386,7 +386,7 @@ def test_owner_can_create_staff_account_and_staff_can_login(setup_auth_test_data
             "username": "created_staff",
             "email": "created-staff@test.local",
             "role": "staff",
-            "temporary_password": "Temporary123!",
+            "temporary_password": "123456",
         },
     )
     assert response.status_code == 201
@@ -399,7 +399,7 @@ def test_owner_can_create_staff_account_and_staff_can_login(setup_auth_test_data
         "/auth/staff/login",
         json={
             "login": "created_staff",
-            "password": "Temporary123!",
+            "password": "123456",
             "restaurant_slug": data["restaurant_slug"],
         },
     )
@@ -466,7 +466,7 @@ def test_admin_revoke_sessions_invalidates_current_token(setup_auth_test_data):
             "username": username,
             "email": f"revoked-session-{suffix}@test.local",
             "role": "staff",
-            "temporary_password": "Temporary123!",
+            "temporary_password": "123456",
         },
     )
     assert create_response.status_code == 201
@@ -476,7 +476,7 @@ def test_admin_revoke_sessions_invalidates_current_token(setup_auth_test_data):
         "/auth/staff/login",
         json={
             "login": username,
-            "password": "Temporary123!",
+            "password": "123456",
             "restaurant_slug": data["restaurant_slug"],
         },
     )
@@ -539,7 +539,7 @@ def test_admin_cannot_remove_or_reset_owner(setup_auth_test_data):
     assert reset_response.status_code == 403
 
 
-def test_first_login_password_change_enforced(setup_auth_test_data):
+def test_new_staff_pin_login_has_no_password_change_blocker(setup_auth_test_data):
     data = setup_auth_test_data
     owner_token = create_access_token(
         data={"sub": str(data["owner_id"]), "restaurant_id": data["restaurant_id"], "role": "owner"}
@@ -552,7 +552,7 @@ def test_first_login_password_change_enforced(setup_auth_test_data):
             "username": "first_login_staff",
             "email": "first-login-staff@test.local",
             "role": "staff",
-            "temporary_password": "Temporary123!",
+            "temporary_password": "123456",
         },
     )
     assert create_response.status_code == 201
@@ -560,27 +560,120 @@ def test_first_login_password_change_enforced(setup_auth_test_data):
         "/auth/staff/login",
         json={
             "login": "first_login_staff",
-            "password": "Temporary123!",
+            "password": "123456",
             "restaurant_slug": data["restaurant_slug"],
         },
     )
     assert login_response.status_code == 200
     token = login_response.json()["access_token"]
-    blocked_response = client.get("/staff/sessions", headers={"Authorization": f"Bearer {token}"})
-    assert blocked_response.status_code == 403
-
-    change_response = client.post(
-        "/auth/staff/change-password",
-        headers={"Authorization": f"Bearer {token}"},
-        json={"current_password": "Temporary123!", "new_password": "Permanent123!"},
-    )
-    assert change_response.status_code == 200
-    assert change_response.json()["staff"]["must_change_password"] is False
-    new_token = change_response.json()["access_token"]
-    allowed_response = client.get("/staff/sessions", headers={"Authorization": f"Bearer {new_token}"})
+    assert login_response.json()["staff"]["must_change_password"] is False
+    allowed_response = client.get("/staff/sessions", headers={"Authorization": f"Bearer {token}"})
     assert allowed_response.status_code == 200
-    old_token_response = client.get("/auth/staff/me", headers={"Authorization": f"Bearer {token}"})
-    assert old_token_response.status_code == 401
+
+
+@pytest.mark.parametrize("role", ["staff", "kitchen"])
+def test_operational_account_can_be_created_without_email_and_login_with_username_pin(setup_auth_test_data, role):
+    data = setup_auth_test_data
+    owner_token = create_access_token(
+        data={"sub": str(data["owner_id"]), "restaurant_id": data["restaurant_id"], "role": "owner"}
+    )
+    username = f"no_email_{role}"
+    create_response = client.post(
+        "/admin/staff",
+        headers={"Authorization": f"Bearer {owner_token}"},
+        json={"name": f"No Email {role.title()}", "username": username, "role": role, "temporary_password": "246810"},
+    )
+    assert create_response.status_code == 201
+    assert create_response.json()["email"] is None
+    login_response = client.post(
+        "/auth/staff/login",
+        json={"restaurant_slug": data["restaurant_slug"], "login": username, "password": "246810"},
+    )
+    assert login_response.status_code == 200
+    assert login_response.json()["staff"]["role"] == role
+    assert login_response.json()["staff"]["email"] is None
+
+
+@pytest.mark.parametrize("role", ["staff", "kitchen"])
+def test_operational_account_username_is_required(setup_auth_test_data, role):
+    data = setup_auth_test_data
+    owner_token = create_access_token(
+        data={"sub": str(data["owner_id"]), "restaurant_id": data["restaurant_id"], "role": "owner"}
+    )
+    response = client.post(
+        "/admin/staff",
+        headers={"Authorization": f"Bearer {owner_token}"},
+        json={"name": "Missing Username", "username": "", "role": role, "temporary_password": "246810"},
+    )
+    assert response.status_code == 422
+
+
+def test_admin_creation_still_requires_email(setup_auth_test_data):
+    data = setup_auth_test_data
+    owner_token = create_access_token(
+        data={"sub": str(data["owner_id"]), "restaurant_id": data["restaurant_id"], "role": "owner"}
+    )
+    response = client.post(
+        "/admin/staff",
+        headers={"Authorization": f"Bearer {owner_token}"},
+        json={"name": "No Email Admin", "username": "no_email_admin", "role": "admin", "temporary_password": "PilotSecure984!Z"},
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"]["field"] == "email"
+
+
+def test_operational_username_uniqueness_is_restaurant_scoped(setup_auth_test_data):
+    data = setup_auth_test_data
+    db = SessionLocal()
+    first = StaffUser(
+        restaurant_id=data["restaurant_id"], name="First Shared Name", username="shared_operator",
+        email=None, password_hash=hash_password("135790"), role="staff", status="active", is_active=True,
+    )
+    second = StaffUser(
+        restaurant_id=data["other_restaurant_id"], name="Second Shared Name", username="shared_operator",
+        email=None, password_hash=hash_password("135790"), role="kitchen", status="active", is_active=True,
+    )
+    db.add_all([first, second]); db.commit(); db.close()
+
+    owner_token = create_access_token(
+        data={"sub": str(data["owner_id"]), "restaurant_id": data["restaurant_id"], "role": "owner"}
+    )
+    duplicate = client.post(
+        "/admin/staff",
+        headers={"Authorization": f"Bearer {owner_token}"},
+        json={"name": "Duplicate", "username": "shared_operator", "role": "staff", "temporary_password": "135790"},
+    )
+    assert duplicate.status_code == 409
+    assert duplicate.json()["detail"]["field"] == "username"
+
+
+@pytest.mark.parametrize(("role", "username"), [("staff", "legacy_pin_staff"), ("kitchen", "legacy_pin_kitchen")])
+def test_legacy_operational_account_clears_password_change_flag(setup_auth_test_data, role, username):
+    data = setup_auth_test_data
+    db = SessionLocal()
+    legacy = StaffUser(
+        restaurant_id=data["restaurant_id"], name=f"Legacy {role}", username=username,
+        email=f"{username}@test.local", password_hash=hash_password("654321"), role=role,
+        status="active", is_active=True, must_change_password=True,
+    )
+    db.add(legacy); db.commit(); db.close()
+    response = client.post("/auth/staff/login", json={
+        "login": username, "password": "654321", "restaurant_slug": data["restaurant_slug"],
+    })
+    assert response.status_code == 200
+    assert response.json()["staff"]["must_change_password"] is False
+    assert client.get("/auth/staff/me", headers={"Authorization": f"Bearer {response.json()['access_token']}"}).status_code == 200
+
+
+@pytest.mark.parametrize("pin", ["12345", "1234567", "12a456"])
+def test_staff_pin_must_be_exactly_six_digits(setup_auth_test_data, pin):
+    data = setup_auth_test_data
+    owner_token = create_access_token(data={"sub": str(data["owner_id"]), "restaurant_id": data["restaurant_id"], "role": "owner"})
+    response = client.post("/admin/staff", headers={"Authorization": f"Bearer {owner_token}"}, json={
+        "name": "Bad Pin Staff", "username": f"bad_pin_{len(pin)}_{pin[-1]}",
+        "email": f"bad-{len(pin)}-{pin[-1]}@test.local", "role": "staff", "temporary_password": pin,
+    })
+    assert response.status_code in {400, 422}
 
 
 def test_logout_revokes_current_session(setup_auth_test_data):
@@ -614,7 +707,7 @@ def test_password_reset_revokes_existing_token(setup_auth_test_data):
             "username": "reset_token_staff",
             "email": "reset-token-staff@test.local",
             "role": "staff",
-            "temporary_password": "Temporary123!",
+            "temporary_password": "123456",
         },
     )
     assert create_response.status_code == 201
@@ -623,33 +716,18 @@ def test_password_reset_revokes_existing_token(setup_auth_test_data):
         "/auth/staff/login",
         json={
             "login": "reset_token_staff",
-            "password": "Temporary123!",
+            "password": "123456",
             "restaurant_slug": data["restaurant_slug"],
         },
     )
     assert change_login.status_code == 200
-    change_response = client.post(
-        "/auth/staff/change-password",
-        headers={"Authorization": f"Bearer {change_login.json()['access_token']}"},
-        json={"current_password": "Temporary123!", "new_password": "Permanent123!"},
-    )
-    assert change_response.status_code == 200
-    staff_login = client.post(
-        "/auth/staff/login",
-        json={
-            "login": "reset_token_staff",
-            "password": "Permanent123!",
-            "restaurant_slug": data["restaurant_slug"],
-        },
-    )
-    assert staff_login.status_code == 200
-    staff_token = staff_login.json()["access_token"]
+    staff_token = change_login.json()["access_token"]
     reset_response = client.post(
         f"/admin/staff/{staff_id}/reset-password",
         headers={"Authorization": f"Bearer {owner_token}"},
-        json={"temporary_password": "NewTemporary123!"},
+        json={"temporary_password": "654321"},
     )
     assert reset_response.status_code == 200
-    assert reset_response.json()["must_change_password"] is True
+    assert reset_response.json()["must_change_password"] is False
     me_response = client.get("/auth/staff/me", headers={"Authorization": f"Bearer {staff_token}"})
     assert me_response.status_code == 401

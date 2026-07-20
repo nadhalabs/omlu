@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../app/app.dart';
 import '../../design_system/colors.dart';
 import '../../design_system/spacing.dart';
 import '../../design_system/typography.dart';
@@ -9,6 +8,7 @@ import '../../design_system/widgets/omlu_button.dart';
 import '../../design_system/widgets/omlu_card.dart';
 import '../../design_system/widgets/omlu_text_field.dart';
 import '../auth_provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key, this.errorMessage});
@@ -75,8 +75,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final useWebView = ref.watch(webViewFallbackProvider);
-
     return Scaffold(
       backgroundColor: OmluColors.background,
       body: SafeArea(
@@ -103,7 +101,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ),
                 const SizedBox(height: OmluSpacing.xs),
                 Text(
-                  'Staff and Kitchen Portal',
+                  'Restaurant Login',
                   style: OmluTypography.bodyMedium.copyWith(
                     color: OmluColors.textSecondary,
                   ),
@@ -136,45 +134,50 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           const SizedBox(height: OmluSpacing.md),
                         ],
                         OmluTextField(
-                          label: 'Restaurant Code',
+                          label: 'Restaurant username',
                           controller: _slugController,
-                          hintText: 'e.g. omlu-demo',
+                          hintText: 'nadha-cafe',
                           validator: (val) {
                             if (val == null || val.trim().isEmpty) {
-                              return 'Restaurant code is required';
+                              return 'Restaurant username is required';
                             }
                             return null;
                           },
                         ),
                         const SizedBox(height: OmluSpacing.md),
                         OmluTextField(
-                          label: 'Username',
+                          label: 'Personal username',
                           controller: _loginController,
-                          hintText: 'e.g. alice',
+                          hintText: 'rijo',
                           validator: (val) {
                             if (val == null || val.trim().isEmpty) {
-                              return 'Username is required';
+                              return 'Personal username is required';
                             }
                             return null;
                           },
                         ),
+                        const SizedBox(height: OmluSpacing.xs),
+                        Text(
+                          'Use the username and 6-digit PIN given by your restaurant manager.',
+                          style: OmluTypography.bodySmall.copyWith(color: OmluColors.textSecondary),
+                        ),
                         const SizedBox(height: OmluSpacing.md),
                         OmluTextField(
-                          label: 'Password',
+                          label: '6-digit PIN',
                           controller: _passwordController,
-                          hintText: 'Enter password',
+                          hintText: '••••••',
                           obscureText: true,
                           textInputAction: TextInputAction.done,
                           validator: (val) {
                             if (val == null || val.isEmpty) {
-                              return 'Password is required';
+                              return 'PIN is required';
                             }
                             return null;
                           },
                         ),
                         const SizedBox(height: OmluSpacing.lg),
                         OmluButton(
-                          text: 'Log In',
+                          text: 'Login',
                           isLoading: _submitting,
                           onPressed: _submit,
                         ),
@@ -184,25 +187,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ),
                 const SizedBox(height: OmluSpacing.xl),
 
-                // Fallback developer toggle
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      'Use WebView Fallback (Testing)',
-                      style: OmluTypography.bodyMedium.copyWith(
-                        color: OmluColors.textSecondary,
-                      ),
-                    ),
-                    const SizedBox(width: OmluSpacing.xs),
-                    Switch(
-                      value: useWebView,
-                      activeThumbColor: OmluColors.accent,
-                      onChanged: (val) {
-                        ref.read(webViewFallbackProvider.notifier).state = val;
-                      },
-                    ),
-                  ],
+                TextButton(
+                  onPressed: () => launchUrl(Uri.parse('https://omlu.vercel.app/register')),
+                  child: const Text('New to OMLU? Create Restaurant'),
                 ),
               ],
             ),

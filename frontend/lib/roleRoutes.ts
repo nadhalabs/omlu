@@ -7,7 +7,7 @@ export type StaffRouteInfo = Pick<
 
 export function roleHomePath(staff: StaffRouteInfo | null | undefined): string {
   if (!staff) return "/login";
-  if (staff.must_change_password) return "/staff/change-password";
+  if ((staff.role === "owner" || staff.role === "admin") && staff.must_change_password) return "/staff/change-password";
   if (staff.role === "owner" || staff.role === "admin") return "/admin";
   if (staff.role === "kitchen") return staff.restaurant_slug ? `/kitchen/${staff.restaurant_slug}` : "/kitchen";
   if (staff.role === "staff") return "/staff";

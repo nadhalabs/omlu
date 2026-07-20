@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { getKitchenOrders, updateKitchenOrderStatus, getStaffMe, staffLogout, ApiError } from "@/lib/api";
 import { KitchenOrderResponse, CurrentStaffResponse } from "@/lib/types";
 import { useRealtime } from "@/lib/realtime";
+import { useOmluUi } from "@/components/OmluUiProvider";
 
 interface KitchenDashboardClientProps {
   restaurantSlug: string;
@@ -16,6 +17,7 @@ export default function KitchenDashboardClient({
   restaurantSlug,
 }: KitchenDashboardClientProps) {
   const router = useRouter();
+  const { confirm: confirmDialog, toast } = useOmluUi();
 
   // Authentication states
   const [staffInfo, setStaffInfo] = useState<CurrentStaffResponse | null>(null);
@@ -33,13 +35,6 @@ export default function KitchenDashboardClient({
 
   // Action status mapping to disable buttons (token -> boolean)
   const [updatingTokens, setUpdatingTokens] = useState<Record<string, boolean>>({});
-
-  // Confirmation modal states
-  const [confirmModal, setConfirmModal] = useState<{
-    open: boolean;
-    token: string;
-    action: "reject" | "served";
-  } | null>(null);
 
   // Track known order tokens locally to prevent double play or alerts for initial orders
   const knownTokensRef = useRef<Set<string>>(new Set());
@@ -251,7 +246,7 @@ export default function KitchenDashboardClient({
       await staffLogout();
       router.replace("/login");
     } catch {
-      alert("Failed to sign out. Please try again.");
+      toast("Failed to sign out. Please try again.", "error");
     }
   };
 
@@ -279,10 +274,10 @@ export default function KitchenDashboardClient({
         if (err.status === 401) {
           router.replace("/login");
         } else {
-          alert(`Failed to update status: ${err.message}`);
+          toast(`Failed to update status: ${err.message}`, "error");
         }
       } else {
-        alert("Failed to update status: Connection error.");
+        toast("Failed to update status: Connection error.", "error");
       }
     } finally {
       setUpdatingTokens((prev) => ({ ...prev, [publicToken]: false }));
@@ -290,17 +285,10 @@ export default function KitchenDashboardClient({
   };
 
   // Confirmation flow wrapper
-  const triggerConfirm = (token: string, action: "reject" | "served") => {
-    setConfirmModal({ open: true, token, action });
-  };
-
-  const handleConfirmAction = () => {
-    if (!confirmModal) return;
-    const { token, action } = confirmModal;
-    setConfirmModal(null);
-    
-    const targetStatus = action === "reject" ? "rejected" : "served";
-    handleUpdateStatus(token, targetStatus);
+  const triggerConfirm = async (token: string, action: "reject" | "served") => {
+    const rejecting = action === "reject";
+    if (!await confirmDialog({ title: rejecting ? "Reject order?" : "Mark order as served?", message: rejecting ? "This will cancel the order and update the customer’s screen. It cannot be undone." : "Confirm the order was served. It will be removed from the active Kitchen view.", confirmLabel: rejecting ? "Reject order" : "Mark as served", cancelLabel: rejecting ? "Keep order" : "Cancel", tone: rejecting ? "destructive" : "default" })) return;
+    await handleUpdateStatus(token, rejecting ? "rejected" : "served");
   };
 
   // Render elapsed duration
@@ -544,39 +532,6 @@ export default function KitchenDashboardClient({
         </div>
       )}
 
-      {/* Confirmation Modal */}
-      {confirmModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4">
-          <div className="bg-zinc-900 border border-zinc-850 p-6 rounded-3xl max-w-sm w-full flex flex-col gap-4 shadow-2xl">
-            <h3 className="text-lg font-bold text-white">
-              {confirmModal.action === "reject" ? "Reject Order?" : "Mark as Served?"}
-            </h3>
-            <p className="text-sm text-zinc-400">
-              {confirmModal.action === "reject"
-                ? "Are you sure you want to reject this order? This will cancel the order and update the customer's screen."
-                : "Are you sure this order has been served to the table? It will be removed from the active kitchen view."}
-            </p>
-            <div className="flex items-center gap-3 mt-2">
-              <button
-                onClick={() => setConfirmModal(null)}
-                className="flex-1 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-xl cursor-pointer text-sm"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmAction}
-                className={`flex-1 py-2.5 text-white font-bold rounded-xl cursor-pointer text-sm transition ${
-                  confirmModal.action === "reject"
-                    ? "bg-red-600 hover:bg-red-700"
-                    : "bg-green-600 hover:bg-green-700"
-                }`}
-              >
-                {confirmModal.action === "reject" ? "Yes, Reject" : "Yes, Served"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

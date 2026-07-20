@@ -10,12 +10,14 @@ import {
   getStaffMe,
 } from "@/lib/api";
 import { AdminTableResponse } from "@/lib/types";
+import { useOmluUi } from "@/components/OmluUiProvider";
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
 
 export default function AdminTablesPage() {
+  const { confirm: confirmDialog, toast } = useOmluUi();
   const [tables, setTables] = useState<AdminTableResponse[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -125,11 +127,7 @@ export default function AdminTablesPage() {
   const handleToggleActive = async (table: AdminTableResponse) => {
     if (updatingIds[table.id]) return;
 
-    const actionText = table.is_active ? "deactivate" : "activate";
-    const confirm = window.confirm(
-      `Are you sure you want to ${actionText} Table ${table.table_number}? Inactive tables cannot be used by customers to retrieve the menu or place new orders.`
-    );
-    if (!confirm) return;
+    if (!await confirmDialog({ title: `${table.is_active ? "Deactivate" : "Activate"} Table ${table.table_number}?`, message: table.is_active ? "Customers will no longer be able to open the menu or place new orders from this table." : "Customer menu and ordering access will be restored for this table.", confirmLabel: table.is_active ? "Deactivate table" : "Activate table", tone: table.is_active ? "destructive" : "default" })) return;
 
     setUpdatingIds((prev) => ({ ...prev, [table.id]: true }));
 
@@ -139,7 +137,7 @@ export default function AdminTablesPage() {
       const data = await getAdminTables();
       setTables(data);
     } catch (err) {
-      alert(`Status update rejected: ${getErrorMessage(err, "Update failed.")}`);
+      toast(`Status update rejected: ${getErrorMessage(err, "Update failed.")}`, "error");
     } finally {
       setUpdatingIds((prev) => ({ ...prev, [table.id]: false }));
     }
@@ -149,10 +147,7 @@ export default function AdminTablesPage() {
   const handleRegenerateCode = async (table: AdminTableResponse) => {
     if (updatingIds[table.id]) return;
 
-    const confirm = window.confirm(
-      `⚠️ WARNING: Regenerating the table code for Table ${table.table_number} will instantly invalidate the current QR code link. Customers scanning the old QR code will receive a "Table not found" error. Are you sure you want to proceed?`
-    );
-    if (!confirm) return;
+    if (!await confirmDialog({ title: `Regenerate Table ${table.table_number} QR code?`, message: "The current QR link will stop working immediately. Customers scanning the old code will not be able to open this table.", confirmLabel: "Regenerate code", tone: "destructive" })) return;
 
     setUpdatingIds((prev) => ({ ...prev, [table.id]: true }));
 
@@ -161,9 +156,9 @@ export default function AdminTablesPage() {
       // Reload tables
       const data = await getAdminTables();
       setTables(data);
-      alert(`Success! Table ${table.table_number} code has been regenerated.`);
+      toast(`Table ${table.table_number} code regenerated.`, "success");
     } catch (err) {
-      alert(`Regeneration failed: ${getErrorMessage(err, "Regeneration failed.")}`);
+      toast(`Regeneration failed: ${getErrorMessage(err, "Regeneration failed.")}`, "error");
     } finally {
       setUpdatingIds((prev) => ({ ...prev, [table.id]: false }));
     }

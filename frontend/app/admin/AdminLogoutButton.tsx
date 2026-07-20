@@ -2,16 +2,18 @@
 
 import { useRouter } from "next/navigation";
 import { staffLogout } from "@/lib/api";
+import { useOmluUi } from "@/components/OmluUiProvider";
 
 export default function AdminLogoutButton() {
   const router = useRouter();
+  const { toast } = useOmluUi();
 
   const handleLogout = async () => {
     try {
       await staffLogout();
       router.replace("/login");
     } catch {
-      alert("Failed to sign out. Please try again.");
+      toast("Failed to sign out. Please try again.", "error");
     }
   };
 

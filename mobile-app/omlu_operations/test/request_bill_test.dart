@@ -343,7 +343,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Send Order
-      await tester.tap(find.text('Send Order'));
+      await tester.tap(find.text('Send to Kitchen'));
       await tester.pumpAndSettle();
 
       // CartScreen pops, returning to NewOrderScreen for table 12 (remains selected)

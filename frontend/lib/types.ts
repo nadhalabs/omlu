@@ -284,7 +284,7 @@ export interface RestaurantRegistrationResponse {
 export interface StaffSummaryResponse {
   name: string;
   username: string | null;
-  email: string;
+  email: string | null;
   role: string;
   status: string;
   must_change_password: boolean;
@@ -295,7 +295,7 @@ export interface StaffSummaryResponse {
 export interface CurrentStaffResponse {
   name: string;
   username: string | null;
-  email: string;
+  email: string | null;
   role: string;
   status: string;
   must_change_password: boolean;
@@ -447,7 +447,7 @@ export interface StaffAccountResponse {
   id: number;
   name: string;
   username: string | null;
-  email: string;
+  email: string | null;
   role: "owner" | "admin" | "staff" | "kitchen";
   status: "invited" | "pending" | "active" | "suspended" | "removed";
   is_active: boolean;
@@ -481,9 +481,10 @@ export interface StaffOperationsResponse {
 export interface StaffAccountCreateRequest {
   name: string;
   username: string;
-  email: string;
+  email?: string;
   role: "admin" | "staff" | "kitchen";
   temporary_password: string;
+  pin_confirmation: string;
 }
 
 

@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/api/api_exceptions.dart';
 import '../../core/models/operations_models.dart';
 import '../auth_provider.dart';
 
@@ -183,7 +184,9 @@ class CartNotifier extends StateNotifier<CartState> {
     } catch (e) {
       state = state.copyWith(
         submissionState: SubmissionState.error,
-        errorMessage: e.toString(),
+        errorMessage: e is PermissionDeniedException
+            ? 'This action was not completed because Staff operations were locked.'
+            : 'Could not send the order. Check the connection and try again.',
       );
       rethrow;
     }

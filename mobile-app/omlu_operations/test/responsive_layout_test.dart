@@ -116,8 +116,8 @@ void main() {
     await tester.pumpWidget(buildKitchen(size: const Size(1024, 768)));
     await tester.pumpAndSettle();
 
-    // Verify 3 columns: Received, Preparing, Ready
-    expect(find.text('Received'), findsOneWidget);
+    // Verify 3 columns: New, Preparing, Ready
+    expect(find.text('New'), findsOneWidget);
     expect(find.text('Preparing'), findsOneWidget);
     expect(find.text('Ready'), findsOneWidget);
 
@@ -127,7 +127,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // In mobile stacked list, column titles are not displayed, it's just a simple list.
-    expect(find.text('Received'), findsNothing);
+    expect(find.text('New'), findsNothing);
     expect(find.text('Preparing'), findsNothing);
 
     // Clean up physical size overrides

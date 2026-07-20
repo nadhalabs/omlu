@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { useOmluUi } from "@/components/OmluUiProvider";
 import Image from "next/image";
 import {
   getAdminCategories,
@@ -20,6 +21,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 }
 
 export default function AdminMenuPage() {
+  const { confirm: confirmDialog, toast } = useOmluUi();
   // Categories States
   const [categories, setCategories] = useState<AdminCategoryResponse[]>([]);
   const [catLoading, setCatLoading] = useState<boolean>(true);
@@ -197,10 +199,7 @@ export default function AdminMenuPage() {
 
   // Delete Category
   const handleDeleteCategory = async (categoryId: number) => {
-    const confirm = window.confirm(
-      "Are you sure you want to permanently delete this category? This operation is irreversible."
-    );
-    if (!confirm) return;
+    if (!await confirmDialog({ title: "Delete category?", message: "This category will be permanently deleted. This action cannot be undone.", confirmLabel: "Delete category", cancelLabel: "Keep category", tone: "destructive" })) return;
 
     try {
       await deleteAdminCategory(categoryId);
@@ -208,7 +207,7 @@ export default function AdminMenuPage() {
       const catsData = await getAdminCategories();
       setCategories(catsData);
     } catch (err) {
-      alert(`Delete rejected: ${getErrorMessage(err, "Delete failed.")}`);
+      toast(`Delete rejected: ${getErrorMessage(err, "Delete failed.")}`, "error");
     }
   };
 
@@ -342,7 +341,7 @@ export default function AdminMenuPage() {
         prev.map((i) => (i.id === item.id ? { ...i, is_available: nextAvail } : i))
       );
     } catch (err) {
-      alert(`Failed to update availability: ${getErrorMessage(err, "Update failed.")}`);
+      toast(`Failed to update availability: ${getErrorMessage(err, "Update failed.")}`, "error");
     } finally {
       setUpdatingAvail((prev) => ({ ...prev, [item.id]: false }));
     }
@@ -350,10 +349,7 @@ export default function AdminMenuPage() {
 
   // Delete MenuItem
   const handleDeleteItem = async (itemId: number) => {
-    const confirm = window.confirm(
-      "Are you sure you want to permanently delete this menu item?"
-    );
-    if (!confirm) return;
+    if (!await confirmDialog({ title: "Delete menu item?", message: "This menu item will be permanently deleted and cannot be restored.", confirmLabel: "Delete menu item", cancelLabel: "Keep item", tone: "destructive" })) return;
 
     try {
       await deleteAdminMenuItem(itemId);
@@ -363,7 +359,7 @@ export default function AdminMenuPage() {
       const catsData = await getAdminCategories();
       setCategories(catsData);
     } catch (err) {
-      alert(`Delete rejected: ${getErrorMessage(err, "Delete failed.")}`);
+      toast(`Delete rejected: ${getErrorMessage(err, "Delete failed.")}`, "error");
     }
   };
 

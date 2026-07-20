@@ -10,6 +10,8 @@ import '../features/staff/staff_shell.dart';
 import '../features/kitchen/kitchen_screen.dart';
 import '../features/owner/owner_screen.dart';
 import '../features/admin/admin_screen.dart';
+import '../features/onboarding/role_guide.dart';
+import '../features/staff/staff_lock_screen.dart';
 
 class RoleRouter extends ConsumerWidget {
   const RoleRouter({required this.session, super.key});
@@ -26,8 +28,10 @@ class RoleRouter extends ConsumerWidget {
     }
 
     return switch (session.role) {
-      StaffRole.staff => const StaffShell(),
-      StaffRole.kitchen => const KitchenScreen(),
+      StaffRole.staff => StaffAccessGate(
+        child: RoleGuideGate(session: session, child: const StaffShell()),
+      ),
+      StaffRole.kitchen => RoleGuideGate(session: session, child: const KitchenScreen()),
       StaffRole.owner => const OwnerScreen(),
       StaffRole.admin => const AdminScreen(),
     };

@@ -35,7 +35,13 @@ def _serialize(sale: QuickSale, *, financial: bool = True) -> dict:
 
 
 def _audit(db: Session, actor: StaffUser, sale: QuickSale, action: str, details: dict) -> None:
-    db.add(AuditLog(restaurant_id=actor.restaurant_id, actor_user_id=actor.id, actor_role=actor.role, target_type="quick_sale", target_id=str(sale.id), action=action, new_value=json.dumps(details)))
+    attribution = {
+        "actor_id": actor.id,
+        "actor_name": actor.name,
+        "actor_username": actor.username,
+        "actor_role": actor.role,
+    }
+    db.add(AuditLog(restaurant_id=actor.restaurant_id, actor_user_id=actor.id, actor_role=actor.role, target_type="quick_sale", target_id=str(sale.id), action=action, new_value=json.dumps({**attribution, **details})))
 
 
 @router.get("")

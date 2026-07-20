@@ -122,19 +122,24 @@ export function validateStaffAccount(form: StaffAccountCreateRequest) {
   const errors: FieldErrors<keyof StaffAccountCreateRequest> = {};
   const name = normalizeSpaces(form.name);
   const username = form.username.trim().toLowerCase();
-  const email = form.email.trim().toLowerCase();
+  const email = (form.email || "").trim().toLowerCase();
   if (name.length < 2 || name.length > 100 || !ownerNameRe.test(name) || !/[A-Za-z]/.test(name)) {
     errors.name = "Enter the staff member's full name.";
   }
   if (!personalUsernameRe.test(username)) {
     errors.username = "Use 3-30 lowercase letters, numbers, periods, underscores, or hyphens.";
   }
-  if (email.length > 254 || !emailRe.test(email)) {
+  if (form.role === "admin" && (email.length > 254 || !emailRe.test(email))) {
     errors.email = "Enter a valid email address.";
   }
-  const passwordError = validatePassword(form.temporary_password, { personalUsername: username });
-  if (passwordError) errors.temporary_password = passwordError;
-  return { errors, normalized: { ...form, name, username, email } };
+  if (form.role === "staff" || form.role === "kitchen") {
+    if (!/^\d{6}$/.test(form.temporary_password)) errors.temporary_password = "PIN must be exactly 6 digits.";
+    if (form.pin_confirmation !== form.temporary_password) errors.pin_confirmation = "PINs do not match.";
+  } else {
+    const passwordError = validatePassword(form.temporary_password, { personalUsername: username });
+    if (passwordError) errors.temporary_password = passwordError;
+  }
+  return { errors, normalized: { ...form, name, username, ...(form.role === "admin" ? { email } : { email: undefined }) } };
 }
 
 export function firstError<T extends string>(errors: FieldErrors<T>, order: T[]) {

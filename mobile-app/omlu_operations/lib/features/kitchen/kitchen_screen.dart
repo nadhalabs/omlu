@@ -10,6 +10,8 @@ import '../../design_system/widgets/realtime_status_chip.dart';
 import '../../core/models/operations_models.dart';
 import '../auth_provider.dart';
 import 'kitchen_orders_provider.dart';
+import '../onboarding/role_guide.dart';
+import '../../core/models/role_session.dart';
 
 class KitchenScreen extends ConsumerStatefulWidget {
   const KitchenScreen({super.key});
@@ -31,7 +33,7 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Failed to update status: $e')));
+        ).showSnackBar(const SnackBar(content: Text('Could not update the order. Check the connection and try again.')));
       }
     } finally {
       if (mounted) {
@@ -43,12 +45,54 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
   @override
   Widget build(BuildContext context) {
     final ordersState = ref.watch(kitchenOrdersProvider);
-
-    return Scaffold(
-      body: Row(
-        children: [
-          // Left Nav Rail
-          NavigationRail(
+    final board = Scaffold(
+      appBar: AppBar(
+        title: const Text('OMLU Kitchen', style: OmluTypography.h1),
+        centerTitle: false,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        actions: [
+          const RealtimeStatusChip(),
+          PopupMenuButton<String>(
+            tooltip: 'Profile and help',
+            onSelected: (value) {
+              if (value == 'help') showRoleHelp(context, StaffRole.kitchen);
+              if (value == 'refresh') ref.read(kitchenOrdersProvider.notifier).fetchOrders();
+              if (value == 'logout') ref.read(authProvider.notifier).logout();
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'help', child: Text('Help')),
+              PopupMenuItem(value: 'refresh', child: Text('Refresh')),
+              PopupMenuItem(value: 'logout', child: Text('Logout')),
+            ],
+          ),
+        ],
+      ),
+      body: ordersState.when(
+        data: (orders) => LayoutBuilder(
+          builder: (context, constraints) => constraints.maxWidth >= 600
+              ? _TabletBoardView(orders: orders, processingTokens: _processingTokens, onAction: _changeStatus)
+              : _MobileListView(orders: orders, processingTokens: _processingTokens, onAction: _changeStatus),
+        ),
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (err, st) => Center(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.cloud_off_rounded, size: 48, color: OmluColors.textSecondary),
+              const SizedBox(height: 16),
+              const Text('Could not load orders. Check the connection and try again.', textAlign: TextAlign.center, style: OmluTypography.bodyMedium),
+              const SizedBox(height: 16),
+              FilledButton(onPressed: () => ref.read(kitchenOrdersProvider.notifier).fetchOrders(), child: const Text('Retry')),
+            ]),
+          ),
+        ),
+      ),
+    );
+    return LayoutBuilder(builder: (context, constraints) {
+      if (constraints.maxWidth < 600) return board;
+      return Scaffold(body: Row(children: [
+        NavigationRail(
             selectedIndex: 0,
             labelType: NavigationRailLabelType.all,
             selectedIconTheme: const IconThemeData(color: OmluColors.accent),
@@ -83,79 +127,9 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
             color: OmluColors.border,
           ),
 
-          // Main Board Content
-          Expanded(
-            child: Scaffold(
-              appBar: AppBar(
-                title: const Text(
-                  'OMLU Kitchen · Orders',
-                  style: OmluTypography.h1,
-                ),
-                centerTitle: false,
-                backgroundColor: Colors.transparent,
-                elevation: 0,
-                actions: [
-                  const RealtimeStatusChip(),
-                  IconButton(
-                    icon: const Icon(
-                      Icons.refresh_rounded,
-                      color: OmluColors.textPrimary,
-                    ),
-                    onPressed: () =>
-                        ref.read(kitchenOrdersProvider.notifier).fetchOrders(),
-                  ),
-                ],
-              ),
-              body: ordersState.when(
-                data: (orders) {
-                  return LayoutBuilder(
-                    builder: (context, constraints) {
-                      final isTablet = constraints.maxWidth >= 600;
-
-                      if (isTablet) {
-                        return _TabletBoardView(
-                          orders: orders,
-                          processingTokens: _processingTokens,
-                          onAction: _changeStatus,
-                        );
-                      } else {
-                        return _MobileListView(
-                          orders: orders,
-                          processingTokens: _processingTokens,
-                          onAction: _changeStatus,
-                        );
-                      }
-                    },
-                  );
-                },
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (err, st) => Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(
-                        Icons.error_outline_rounded,
-                        size: 48,
-                        color: Colors.red,
-                      ),
-                      const SizedBox(height: 16),
-                      Text('Error: $err', style: OmluTypography.bodyMedium),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                        onPressed: () => ref
-                            .read(kitchenOrdersProvider.notifier)
-                            .fetchOrders(),
-                        child: const Text('Retry'),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
+        Expanded(child: board),
+      ]));
+    });
   }
 }
 
@@ -183,7 +157,7 @@ class _TabletBoardView extends StatelessWidget {
       children: [
         Expanded(
           child: _KitchenColumn(
-            title: 'Received',
+            title: 'New',
             color: OmluColors.statusAvailable,
             orders: received,
             processingTokens: processingTokens,
@@ -338,11 +312,9 @@ class _KitchenOrderCard extends StatelessWidget {
 
   String _getActionButtonLabel(String status) {
     return switch (status) {
-      'pending' => 'Accept',
-      'accepted' => 'Start Cooking',
+      'pending' || 'accepted' => 'Start Preparing',
       'preparing' => 'Mark Ready',
-      'ready' => 'Mark Served',
-      _ => 'Complete',
+      _ => '',
     };
   }
 
@@ -444,11 +416,12 @@ class _KitchenOrderCard extends StatelessWidget {
           const SizedBox(height: OmluSpacing.md),
 
           // Action button
-          OmluButton(
-            text: _getActionButtonLabel(order.status),
-            isLoading: isProcessing,
-            onPressed: () => onAction(order.publicToken, order.status),
-          ),
+          if (order.status != 'ready')
+            OmluButton(
+              text: _getActionButtonLabel(order.status),
+              isLoading: isProcessing,
+              onPressed: isProcessing ? null : () => onAction(order.publicToken, order.status),
+            ),
         ],
       ),
     );

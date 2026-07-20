@@ -61,9 +61,9 @@ class TablesNotifier
     }
     try {
       final tables = await _api.fetchStaffTables();
-      state = AsyncValue.data(tables);
+      if (mounted) state = AsyncValue.data(tables);
     } catch (e, st) {
-      if (!silent) {
+      if (mounted && !silent) {
         state = AsyncValue.error(e, st);
       }
     }

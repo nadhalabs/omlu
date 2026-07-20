@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omlu_operations/app/app.dart';
 import 'package:omlu_operations/features/auth_provider.dart';
 import 'package:omlu_operations/features/login/login_screen.dart';
-import 'package:omlu_operations/features/staff/staff_shell.dart';
+import 'package:omlu_operations/features/staff/staff_lock_screen.dart';
 import 'package:omlu_operations/features/kitchen/kitchen_screen.dart';
 import 'package:omlu_operations/features/owner/owner_screen.dart';
 import 'package:omlu_operations/features/admin/admin_screen.dart';
@@ -53,7 +53,7 @@ void main() {
         ],
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 200));
     expect(find.byType(LoginScreen), findsOneWidget);
   });
 
@@ -80,8 +80,8 @@ void main() {
         ],
       ),
     );
-    await tester.pumpAndSettle();
-    expect(find.byType(StaffShell), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byType(StaffAccessGate), findsOneWidget);
   });
 
   testWidgets('Router shows KitchenScreen for kitchen role', (tester) async {

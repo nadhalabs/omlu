@@ -18,6 +18,16 @@ test("Quick Sale page exposes both workflows and operational lists", () => {
   assert.match(client, /Could not load Quick Sale|Quick Sale request failed/);
 });
 
+test("Late Entry and Takeaway payments invoke the shared OMLU confirmation modal", () => {
+  const client = read("app/admin/quick-sale/QuickSaleClient.tsx");
+  assert.match(client, /useOmluUi\(\)/);
+  assert.match(client, /confirmDialog\(\{ title: isLate/);
+  for (const copy of ["Record late entry", "Confirm UPI payment", "Payment received", "Complete takeaway order", "Complete order"]) {
+    assert.ok(client.includes(copy), copy);
+  }
+  assert.doesNotMatch(client, /(?:window|globalThis|self)\.(?:confirm|alert|prompt)/);
+});
+
 test("Kitchen renders a dedicated Takeaway label", () => {
   const kitchen = read("app/kitchen/[restaurantSlug]/KitchenDashboardClient.tsx");
   assert.match(kitchen, /order\.table_number === "Takeaway"/);

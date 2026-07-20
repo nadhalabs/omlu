@@ -7,9 +7,9 @@ from pydantic import BaseModel, Field
 class StaffAccountCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     username: str = Field(..., min_length=3, max_length=255)
-    email: str = Field(..., min_length=3, max_length=255)
+    email: Optional[str] = Field(default=None, max_length=255)
     role: str
-    temporary_password: str = Field(..., min_length=8, max_length=256)
+    temporary_password: str = Field(..., min_length=6, max_length=256)
 
 
 class StaffAccountUpdate(BaseModel):
@@ -28,7 +28,7 @@ class RestaurantStatusRequest(BaseModel):
 
 
 class StaffPasswordReset(BaseModel):
-    temporary_password: str = Field(..., min_length=8, max_length=256)
+    temporary_password: str = Field(..., min_length=6, max_length=256)
 
 
 class StaffSessionResponse(BaseModel):
@@ -44,7 +44,7 @@ class StaffAccountResponse(BaseModel):
     id: int
     name: str
     username: Optional[str]
-    email: str
+    email: Optional[str]
     role: str
     status: str
     is_active: bool

@@ -8,7 +8,7 @@ class StaffLoginRequest(BaseModel):
 class StaffSummaryResponse(BaseModel):
     name: str
     username: str | None = None
-    email: str
+    email: str | None = None
     role: str
     status: str
     must_change_password: bool = False
@@ -33,7 +33,7 @@ class StaffPasswordChangeResponse(StaffLoginResponse):
 class CurrentStaffResponse(BaseModel):
     name: str
     username: str | None = None
-    email: str
+    email: str | None = None
     role: str
     status: str
     must_change_password: bool = False

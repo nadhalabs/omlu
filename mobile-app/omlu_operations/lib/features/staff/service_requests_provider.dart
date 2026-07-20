@@ -39,9 +39,9 @@ class ServiceRequestsNotifier extends StateNotifier<AsyncValue<List<dynamic>>> {
     }
     try {
       final list = await _api.fetchServiceRequests(statusFilter: 'all');
-      state = AsyncValue.data(list);
+      if (mounted) state = AsyncValue.data(list);
     } catch (e, st) {
-      if (!silent) {
+      if (mounted && !silent) {
         state = AsyncValue.error(e, st);
       }
     }

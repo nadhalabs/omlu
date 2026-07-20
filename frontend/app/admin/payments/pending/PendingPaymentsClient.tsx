@@ -6,8 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ApiError, confirmPendingPayment, getPendingPayments } from "@/lib/api";
 import { PendingPaymentItem } from "@/lib/types";
 import { useRealtime } from "@/lib/realtime";
-
-type Confirmation = { payment: PendingPaymentItem; method: "counter_cash" | "counter_upi" };
+import { useOmluUi } from "@/components/OmluUiProvider";
 
 function money(value: string) { return `₹${Number(value).toFixed(2)}`; }
 function dateTime(value: string) { return new Date(value).toLocaleString(); }
@@ -20,12 +19,11 @@ function waiting(value: string) {
 }
 
 export default function PendingPaymentsClient() {
+  const { confirm: confirmDialog, toast } = useOmluUi();
   const selectedBill = useSearchParams().get("bill");
   const [items, setItems] = useState<PendingPaymentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
-  const [submitting, setSubmitting] = useState(false);
 
   const refresh = useCallback(async (showLoading = false) => {
     if (showLoading) setLoading(true);
@@ -63,18 +61,8 @@ export default function PendingPaymentsClient() {
     onReconnect: refresh,
   });
 
-  async function confirm() {
-    if (!confirmation || submitting) return;
-    setSubmitting(true);
-    try {
-      await confirmPendingPayment(confirmation.payment.bill_number, confirmation.method);
-      setConfirmation(null);
-      await refresh();
-      window.dispatchEvent(new Event("pending-payments-changed"));
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Payment confirmation failed.");
-      await refresh();
-    } finally { setSubmitting(false); }
+  async function openPaymentDialog(payment: PendingPaymentItem, method: "counter_cash" | "counter_upi") {
+    await confirmDialog({ title: "Confirm payment", message: "Confirm that the restaurant received this payment. Success will be shown only after backend confirmation.", details: [`Table: ${payment.table_name}`, `Bill: ${payment.bill_number}`, `Amount: ${money(payment.grand_total)}`, `Method: ${method === "counter_cash" ? "Cash" : "UPI"}`], confirmLabel: "Confirm payment", onConfirm: async () => { try { await confirmPendingPayment(payment.bill_number, method); await refresh(); window.dispatchEvent(new Event("pending-payments-changed")); toast("Payment confirmed.", "success"); } catch (err) { await refresh(); throw new Error(err instanceof ApiError ? err.message : "Payment confirmation failed."); } } });
   }
 
   return <div className="flex flex-col gap-6">
@@ -100,13 +88,9 @@ export default function PendingPaymentsClient() {
         </dl>
         <div className="mt-5 flex flex-wrap gap-2">
           <Link href={`/bill/${encodeURIComponent(item.session_token)}`} className="rounded-xl border border-zinc-700 px-4 py-2 text-sm font-bold">View full bill</Link>
-          <button onClick={() => setConfirmation({ payment: item, method: "counter_cash" })} className="rounded-xl bg-emerald-700 px-4 py-2 text-sm font-black">Confirm Cash received</button>
-          <button onClick={() => setConfirmation({ payment: item, method: "counter_upi" })} className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-black">Confirm UPI received</button>
+          <button onClick={() => void openPaymentDialog(item, "counter_cash")} className="rounded-xl bg-emerald-700 px-4 py-2 text-sm font-black">Confirm Cash received</button>
+          <button onClick={() => void openPaymentDialog(item, "counter_upi")} className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-black">Confirm UPI received</button>
         </div>
       </article>)}</div>}
-    {confirmation && <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4"><div role="dialog" aria-modal="true" className="w-full max-w-md rounded-2xl border border-zinc-700 bg-zinc-900 p-6">
-      <h2 className="text-lg font-black">Confirm payment?</h2><p className="mt-3 text-zinc-300">Confirm {money(confirmation.payment.grand_total)} received by {confirmation.method === "counter_cash" ? "Cash" : "UPI"} for {confirmation.payment.table_name}?</p>
-      <div className="mt-6 flex justify-end gap-2"><button disabled={submitting} onClick={() => setConfirmation(null)} className="rounded-xl border border-zinc-700 px-4 py-2">Cancel</button><button disabled={submitting} onClick={confirm} className="rounded-xl bg-amber-600 px-4 py-2 font-black">{submitting ? "Confirming…" : "Confirm received"}</button></div>
-    </div></div>}
   </div>;
 }

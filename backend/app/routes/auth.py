@@ -187,6 +187,11 @@ def staff_login(
             detail="Invalid restaurant credentials, email or password"
         )
 
+    # Staff and Kitchen use an owner-managed PIN and must never be blocked by
+    # legacy first-login password-change flags.
+    if staff.role in {"staff", "kitchen"} and staff.must_change_password:
+        staff.must_change_password = False
+
     access_token, expires_in_seconds = _issue_session_token(staff, request, db)
     db.commit()
 

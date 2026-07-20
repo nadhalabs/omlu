@@ -43,6 +43,16 @@ _owner_admin = RoleChecker(["owner", "admin"])
 VALID_ROLES = {"owner", "admin", "staff", "kitchen"}
 MANAGEABLE_ROLES = {"admin", "staff", "kitchen"}
 VALID_STATUSES = {"invited", "pending", "active", "suspended", "removed"}
+
+
+def _validate_managed_credential(value: str, role: str, *, field: str = "temporary_password", **password_context) -> None:
+    if role in {"staff", "kitchen"}:
+        if len(value) != 6 or not value.isascii() or not value.isdigit():
+            field_error(field, "PIN must be exactly 6 digits", status.HTTP_400_BAD_REQUEST)
+        return
+    validate_password(value, field=field, **password_context)
+
+
 def _client_ip(request: Request) -> str | None:
     return request.client.host if request.client else None
 
@@ -246,9 +256,14 @@ def create_staff_account(
 
     name = validate_owner_name(body.name)
     username = validate_personal_username(body.username, field="username")
-    email = validate_email(body.email, "email", "Enter a valid email address.")
-    validate_password(
+    email = None
+    if role == "admin":
+        if not body.email:
+            field_error("email", "Email is required for Admin accounts")
+        email = validate_email(body.email, "email", "Enter a valid email address.")
+    _validate_managed_credential(
         body.temporary_password,
+        role,
         field="temporary_password",
         restaurant_username=current_user.restaurant.slug if current_user.restaurant else None,
         personal_username=username,
@@ -256,10 +271,10 @@ def create_staff_account(
 
     existing = db.query(StaffUser).filter(
         StaffUser.restaurant_id == current_user.restaurant_id,
-        or_(StaffUser.username == username, StaffUser.email == email),
+        or_(StaffUser.username == username, *([StaffUser.email == email] if email else [])),
     ).first()
     if existing:
-        field = "email" if existing.email == email else "username"
+        field = "email" if email and existing.email == email else "username"
         field_error(field, "A staff account with that username or email already exists", status.HTTP_409_CONFLICT)
 
     staff = StaffUser(
@@ -271,7 +286,7 @@ def create_staff_account(
         role=role,
         status="active",
         is_active=True,
-        must_change_password=True,
+        must_change_password=role == "admin",
         added_by_staff_id=current_user.id,
     )
     db.add(staff)
@@ -366,17 +381,18 @@ def reset_staff_password(
     _assert_can_manage(current_user, target)
     if target.role == "owner":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Owner password cannot be reset from staff management")
-    validate_password(
+    _validate_managed_credential(
         body.temporary_password,
+        target.role,
         field="temporary_password",
         restaurant_username=current_user.restaurant.slug if current_user.restaurant else None,
         personal_username=target.username,
     )
     target.password_hash = hash_password(body.temporary_password)
-    target.must_change_password = True
+    target.must_change_password = target.role == "admin"
     target.security_version = (target.security_version or 0) + 1
     _revoke_sessions(db, target, current_user)
-    _audit(db, current_user, request, "password_reset_initiated", target)
+    _audit(db, current_user, request, "pin_reset" if target.role in {"staff", "kitchen"} else "password_reset_initiated", target)
     db.commit()
     db.refresh(target)
     return _serialize_staff(target, [])
