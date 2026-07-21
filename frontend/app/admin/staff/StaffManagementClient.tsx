@@ -183,7 +183,7 @@ export default function StaffManagementClient() {
   };
 
   const signOutAll = async (member: StaffAccountResponse) => {
-    if (!await confirmDialog({ title: `Sign out ${member.name}?`, message: "All active sessions for this account will be revoked immediately.", confirmLabel: "Sign out sessions" })) return;
+    if (!await confirmDialog({ title: `Sign out ${member.name}?`, message: "All active sessions for this account will be revoked immediately.", confirmLabel: "Sign out sessions", tone: "destructive" })) return;
     replaceStaff(await revokeStaffSessions(member.id));
   };
 
@@ -338,7 +338,7 @@ export default function StaffManagementClient() {
                         <button disabled={member.role === "owner"} onClick={() => changeStatus(member, "suspended")} className="px-2 py-1 rounded bg-zinc-800 text-zinc-200 text-xs font-bold disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-600">Suspend</button>
                       )}
                       <button onClick={() => openResetPassword(member)} className="px-2 py-1 rounded bg-zinc-800 text-zinc-200 text-xs font-bold">{member.role === "staff" || member.role === "kitchen" ? "Reset PIN" : "Reset Password"}</button>
-                      <button onClick={() => signOutAll(member)} className="px-2 py-1 rounded bg-zinc-800 text-zinc-200 text-xs font-bold">Sign Out</button>
+                      <button onClick={() => signOutAll(member)} className="px-2 py-1 rounded border border-red-900/40 bg-red-950/30 text-red-300 text-xs font-bold">Sign Out</button>
                       {member.role === "staff" && <button onClick={() => toggleMemberLock(member)} className={`px-2 py-1 rounded text-white text-xs font-bold ${member.operations_locked ? "bg-emerald-700" : "bg-red-800"}`}>{member.operations_locked ? "Unlock Account" : "Lock Account"}</button>}
                       <button disabled={member.role === "owner"} onClick={() => removeAccess(member)} className="px-2 py-1 rounded bg-red-950/70 text-red-200 text-xs font-bold disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-600">Remove</button>
                     </div>

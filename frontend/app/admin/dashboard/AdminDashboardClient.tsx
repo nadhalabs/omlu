@@ -205,7 +205,7 @@ export default function AdminDashboardClient() {
 
       <section className="grid grid-cols-1 xl:grid-cols-[1.6fr_1fr] gap-4">
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
-          <h2 className="text-sm font-black text-zinc-400 uppercase tracking-wider mb-4">
+          <h2 className="text-sm font-black text-zinc-900 uppercase tracking-wider mb-4">
             Live Restaurant
           </h2>
           {data.tables.length === 0 ? (
@@ -216,22 +216,22 @@ export default function AdminDashboardClient() {
                 <div key={table.table_id} className="bg-zinc-950 border border-zinc-800 rounded-xl p-4 flex flex-col gap-3">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <div className="text-white font-black">Table {table.table_number}</div>
-                      <div className="text-xs text-zinc-500">{table.order_count} orders · {currency}{table.bill_total}</div>
+                      <div className="text-zinc-950 font-black">Table {table.table_number}</div>
+                      <div className="text-xs"><span className="text-zinc-600">{table.order_count} orders · </span><span className="font-bold text-zinc-950">{currency}{table.bill_total}</span></div>
                     </div>
-                    <span className={`text-[10px] font-black px-2 py-1 rounded-md ${table.status === "Needs Attention" ? "bg-orange-950 text-orange-300" : table.status.includes("Payment") || table.status.includes("Bill") ? "bg-sky-950 text-sky-300" : table.status === "Available" ? "bg-zinc-800 text-zinc-400" : "bg-emerald-950 text-emerald-300"}`}>
+                    <span className={`text-[10px] font-black px-2 py-1 rounded-md ${table.status === "Needs Attention" ? "bg-orange-950 text-orange-300" : table.status.includes("Payment") || table.status.includes("Bill") ? "bg-sky-950 text-sky-300" : table.status === "Available" ? "bg-zinc-800 text-white" : "bg-emerald-950 text-emerald-300"}`}>
                       {table.status}
                     </span>
                   </div>
-                  <div className="text-xs text-zinc-500">
+                  <div className="text-xs text-zinc-600">
                     Last activity: {table.last_activity_at ? new Date(table.last_activity_at).toLocaleTimeString() : "None"}
                     {table.pending_request && <span className="block text-orange-400 mt-1">Request: {table.pending_request}</span>}
                     {table.payment_status && <span className="block mt-1">Payment: {table.payment_status}</span>}
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <a href="/staff/sessions" className="text-[11px] px-2 py-1 rounded bg-zinc-800 text-zinc-200 font-bold">Open Session</a>
-                    <a href={`/kitchen/${data.restaurant_slug}`} className="text-[11px] px-2 py-1 rounded bg-zinc-800 text-zinc-200 font-bold">View Orders</a>
-                    <a href="/admin/requests" className="text-[11px] px-2 py-1 rounded bg-zinc-800 text-zinc-200 font-bold">View Bill</a>
+                    <a href="/staff/sessions" className="text-[11px] px-2 py-1 rounded bg-zinc-800 text-white font-bold">Open Session</a>
+                    <a href={`/kitchen/${data.restaurant_slug}`} className="text-[11px] px-2 py-1 rounded bg-zinc-800 text-white font-bold">View Orders</a>
+                    <a href="/admin/requests" className="text-[11px] px-2 py-1 rounded bg-zinc-800 text-white font-bold">View Bill</a>
                   </div>
                 </div>
               ))}

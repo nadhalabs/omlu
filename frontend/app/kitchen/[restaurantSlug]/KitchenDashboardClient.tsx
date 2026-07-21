@@ -4,10 +4,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { AndroidDownloadCard } from "@/components/AndroidDownloadCard";
 import { useRouter } from "next/navigation";
-import { getKitchenOrders, updateKitchenOrderStatus, getStaffMe, staffLogout, ApiError } from "@/lib/api";
+import { getKitchenOrders, updateKitchenOrderStatus, getStaffMe, ApiError } from "@/lib/api";
 import { KitchenOrderResponse, CurrentStaffResponse } from "@/lib/types";
 import { useRealtime } from "@/lib/realtime";
 import { useOmluUi } from "@/components/OmluUiProvider";
+import { useConfirmedSignOut } from "@/components/useConfirmedSignOut";
 
 interface KitchenDashboardClientProps {
   restaurantSlug: string;
@@ -18,6 +19,7 @@ export default function KitchenDashboardClient({
 }: KitchenDashboardClientProps) {
   const router = useRouter();
   const { confirm: confirmDialog, toast } = useOmluUi();
+  const { requestSignOut, signOutPending } = useConfirmedSignOut();
 
   // Authentication states
   const [staffInfo, setStaffInfo] = useState<CurrentStaffResponse | null>(null);
@@ -240,16 +242,6 @@ export default function KitchenDashboardClient({
     onReconnect: () => void fetchOrders(false),
   });
 
-  // Handle Logout action
-  const handleLogout = async () => {
-    try {
-      await staffLogout();
-      router.replace("/login");
-    } catch {
-      toast("Failed to sign out. Please try again.", "error");
-    }
-  };
-
   // Handle status update endpoint
   const handleUpdateStatus = async (publicToken: string, nextStatus: string) => {
     if (updatingTokens[publicToken]) return;
@@ -325,8 +317,9 @@ export default function KitchenDashboardClient({
           <h2 className="text-xl font-bold text-white mb-2">Access Denied</h2>
           <p className="text-sm text-zinc-500 mb-6">{authError}</p>
           <button
-            onClick={handleLogout}
-            className="px-6 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-semibold rounded-xl transition cursor-pointer"
+            onClick={requestSignOut}
+            disabled={signOutPending}
+            className="px-6 py-2.5 bg-red-700 text-white font-semibold rounded-xl transition cursor-pointer disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-600"
           >
             Return to Login
           </button>
@@ -400,7 +393,8 @@ export default function KitchenDashboardClient({
 
           {/* Logout Button */}
           <button
-            onClick={handleLogout}
+            onClick={requestSignOut}
+            disabled={signOutPending}
             className="px-4 py-2.5 bg-red-650/20 hover:bg-red-650/30 border border-red-900/40 text-red-400 text-sm font-bold rounded-xl cursor-pointer transition"
           >
             Sign Out

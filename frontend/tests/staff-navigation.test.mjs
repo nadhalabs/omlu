@@ -5,6 +5,7 @@ import { test } from "node:test";
 const loginPage = readFileSync(new URL("../app/login/page.tsx", import.meta.url), "utf8");
 const loginClient = readFileSync(new URL("../app/login/LoginClient.tsx", import.meta.url), "utf8");
 const logoutButton = readFileSync(new URL("../app/admin/AdminLogoutButton.tsx", import.meta.url), "utf8");
+const confirmedSignOut = readFileSync(new URL("../components/useConfirmedSignOut.ts", import.meta.url), "utf8");
 const roleRoutes = readFileSync(new URL("../lib/roleRoutes.ts", import.meta.url), "utf8");
 const staffOrderPage = readFileSync(new URL("../app/staff/orders/new/page.tsx", import.meta.url), "utf8");
 const staffOrderClient = readFileSync(new URL("../app/staff/orders/new/NewStaffOrderClient.tsx", import.meta.url), "utf8");
@@ -27,7 +28,10 @@ test("authenticated users are redirected away from /login before the client form
 test("login and logout replace auth history entries", () => {
   assert.match(loginClient, /router\.replace\(destination\)/);
   assert.doesNotMatch(loginClient, /router\.push\(/);
-  assert.match(logoutButton, /router\.replace\("\/login"\)/);
+  assert.match(confirmedSignOut, /router\.replace\("\/login"\)/);
+  assert.match(confirmedSignOut, /title: "Sign out\?"/);
+  assert.match(confirmedSignOut, /tone: "destructive"/);
+  assert.match(logoutButton, /useConfirmedSignOut/);
 });
 
 test("role home helper maps staff roles to stable workspace roots", () => {
