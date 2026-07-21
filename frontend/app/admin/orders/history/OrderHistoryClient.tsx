@@ -53,16 +53,16 @@ export default function OrderHistoryClient() {
       ) : (
         <div className="overflow-x-auto border border-zinc-800">
           <table className="w-full text-sm">
-            <thead className="bg-zinc-950 text-left text-[10px] uppercase tracking-wider text-zinc-500">
+            <thead className="contrast-dark-header bg-zinc-950 text-left text-[10px] uppercase tracking-wider text-white">
               <tr>{["Order number", "Date and time", "Table", "Session", "Item count", "Status", "Total", "Accepted by", "Served by"].map((heading) => <th key={heading} className="p-3">{heading}</th>)}</tr>
             </thead>
             <tbody className="divide-y divide-zinc-800">
               {data.items.map((order) => (
-                <tr key={order.id} className="bg-zinc-900/60 hover:bg-zinc-850">
+                <tr key={order.id} className="bg-zinc-900/60 text-zinc-900 hover:bg-zinc-850">
                   <td className="p-3"><button onClick={() => openDetail(order)} className="font-black text-orange-400 underline-offset-4 hover:underline">{order.order_number}</button></td>
-                  <td className="p-3 text-zinc-300">{formatDateTime(order.created_at)}</td>
+                  <td className="p-3 text-zinc-800">{formatDateTime(order.created_at)}</td>
                   <td className="p-3">{order.table_number || "-"}</td>
-                  <td className="p-3 text-xs text-zinc-500">{order.session_token || "-"}</td>
+                  <td className="p-3 text-xs text-zinc-600">{order.session_token || "-"}</td>
                   <td className="p-3">{order.item_count}</td>
                   <td className="p-3">{order.status}</td>
                   <td className="p-3">₹{order.total}</td>

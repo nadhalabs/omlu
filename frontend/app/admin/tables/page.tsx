@@ -236,7 +236,7 @@ export default function AdminTablesPage() {
           <button
             onClick={handlePrint}
             disabled={activeTables.length === 0}
-            className="px-5 py-2.5 bg-orange-600 hover:bg-orange-700 disabled:bg-zinc-800 disabled:text-zinc-500 text-sm font-bold text-white rounded-xl transition cursor-pointer flex items-center gap-2 select-none"
+            className="px-5 py-2.5 bg-orange-600 hover:bg-orange-700 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-600 text-sm font-bold text-white rounded-xl transition cursor-pointer flex items-center gap-2 select-none"
           >
             🖨️ Print All QRs ({activeTables.length})
           </button>
@@ -246,7 +246,7 @@ export default function AdminTablesPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
           {/* Add Table Column Form */}
           <div className="lg:col-span-1 bg-zinc-950/40 border border-zinc-850 rounded-3xl p-5 flex flex-col gap-4">
-            <h2 className="text-sm font-black text-orange-500 uppercase tracking-wider border-b border-zinc-850 pb-3">
+            <h2 className="text-sm font-black text-zinc-900 uppercase tracking-wider border-b border-zinc-850 pb-3">
               Add New Table
             </h2>
 
@@ -273,7 +273,7 @@ export default function AdminTablesPage() {
               <button
                 type="submit"
                 disabled={saving}
-                className="w-full py-2.5 bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold rounded-xl transition cursor-pointer disabled:opacity-50"
+                className="w-full py-2.5 bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold rounded-xl transition cursor-pointer disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-600"
               >
                 {saving ? "Creating..." : "Create Table Mapping"}
               </button>
@@ -282,7 +282,7 @@ export default function AdminTablesPage() {
 
           {/* Tables Mappings List */}
           <div className="lg:col-span-2 bg-zinc-950/40 border border-zinc-850 rounded-3xl p-5 flex flex-col gap-4">
-            <h2 className="text-sm font-black text-orange-500 uppercase tracking-wider border-b border-zinc-850 pb-3">
+            <h2 className="text-sm font-black text-zinc-900 uppercase tracking-wider border-b border-zinc-850 pb-3">
               Registered Tables Mapping ({tables.length})
             </h2>
 
@@ -380,7 +380,7 @@ export default function AdminTablesPage() {
                         <button
                           onClick={() => handleRegenerateCode(t)}
                           disabled={updatingIds[t.id]}
-                          className="py-1.5 px-3 bg-red-650/20 hover:bg-red-650/30 border border-red-900/40 text-red-400 font-bold rounded-xl text-[10px] transition cursor-pointer disabled:opacity-50 select-none"
+                          className="py-1.5 px-3 bg-red-650/20 hover:bg-red-650/30 border border-red-900/40 text-red-400 font-bold rounded-xl text-[10px] transition cursor-pointer disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-600 select-none"
                         >
                           🔄 Regenerate Code
                         </button>
@@ -430,7 +430,7 @@ export default function AdminTablesPage() {
                 <button
                   type="submit"
                   disabled={editSaving}
-                  className="flex-1 py-2.5 bg-orange-600 hover:bg-orange-700 text-white font-bold rounded-xl cursor-pointer text-xs disabled:opacity-50"
+                  className="flex-1 py-2.5 bg-orange-600 hover:bg-orange-700 text-white font-bold rounded-xl cursor-pointer text-xs disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-600"
                 >
                   {editSaving ? "Saving..." : "Save Changes"}
                 </button>

@@ -284,7 +284,7 @@ export default function StaffManagementClient() {
           <PasswordInput name="temporary_password" label="Temporary password" value={form.temporary_password || ""} error={fieldErrors.temporary_password} disabled={saving} autoComplete="new-password" showChecklist dark onChange={(value) => setForm({ ...form, temporary_password: value })} />
           <div />
         </>}
-        <button disabled={saving} className="rounded-lg bg-orange-600 hover:bg-orange-700 disabled:bg-zinc-800 px-4 py-2 text-sm font-black text-white">
+        <button disabled={saving} className="rounded-lg bg-orange-600 hover:bg-orange-700 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-600 px-4 py-2 text-sm font-black text-white">
           {saving ? "Adding..." : "Add Staff"}
         </button>
       </form>
@@ -294,7 +294,7 @@ export default function StaffManagementClient() {
       ) : (
         <div className="overflow-x-auto border border-zinc-800 rounded-xl">
           <table className="w-full text-sm">
-            <thead className="bg-zinc-950 text-zinc-400 uppercase text-[10px] tracking-wider">
+            <thead className="contrast-dark-header bg-zinc-950 text-white uppercase text-[10px] tracking-wider">
               <tr>
                 <th className="text-left p-3">Staff</th>
                 <th className="text-left p-3">Role</th>
@@ -307,7 +307,7 @@ export default function StaffManagementClient() {
             </thead>
             <tbody className="divide-y divide-zinc-800">
               {staff.map((member) => (
-                <tr key={member.id} className="bg-zinc-900/70">
+                <tr key={member.id} className="contrast-dark-row bg-zinc-900/70">
                   <td className="p-3">
                     <div className="font-bold text-white">{member.name}</div>
                     <div className="text-xs text-zinc-500">{member.username || "-"}{member.email ? ` · ${member.email}` : ""}</div>
@@ -335,12 +335,12 @@ export default function StaffManagementClient() {
                       {member.status !== "active" ? (
                         <button onClick={() => changeStatus(member, "active")} className="px-2 py-1 rounded bg-emerald-700 text-white text-xs font-bold">Reactivate</button>
                       ) : (
-                        <button disabled={member.role === "owner"} onClick={() => changeStatus(member, "suspended")} className="px-2 py-1 rounded bg-zinc-800 text-zinc-200 text-xs font-bold disabled:opacity-40">Suspend</button>
+                        <button disabled={member.role === "owner"} onClick={() => changeStatus(member, "suspended")} className="px-2 py-1 rounded bg-zinc-800 text-zinc-200 text-xs font-bold disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-600">Suspend</button>
                       )}
                       <button onClick={() => openResetPassword(member)} className="px-2 py-1 rounded bg-zinc-800 text-zinc-200 text-xs font-bold">{member.role === "staff" || member.role === "kitchen" ? "Reset PIN" : "Reset Password"}</button>
                       <button onClick={() => signOutAll(member)} className="px-2 py-1 rounded bg-zinc-800 text-zinc-200 text-xs font-bold">Sign Out</button>
                       {member.role === "staff" && <button onClick={() => toggleMemberLock(member)} className={`px-2 py-1 rounded text-white text-xs font-bold ${member.operations_locked ? "bg-emerald-700" : "bg-red-800"}`}>{member.operations_locked ? "Unlock Account" : "Lock Account"}</button>}
-                      <button disabled={member.role === "owner"} onClick={() => removeAccess(member)} className="px-2 py-1 rounded bg-red-950/70 text-red-200 text-xs font-bold disabled:opacity-40">Remove</button>
+                      <button disabled={member.role === "owner"} onClick={() => removeAccess(member)} className="px-2 py-1 rounded bg-red-950/70 text-red-200 text-xs font-bold disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-600">Remove</button>
                     </div>
                   </td>
                 </tr>
@@ -374,7 +374,7 @@ export default function StaffManagementClient() {
               <button type="button" disabled={resetSaving} onClick={() => setResetTarget(null)} className="rounded-lg bg-zinc-800 px-4 py-2 text-sm font-bold text-zinc-200">
                 Cancel
               </button>
-              <button disabled={resetSaving} className="rounded-lg bg-orange-600 px-4 py-2 text-sm font-black text-white disabled:bg-zinc-800">
+              <button disabled={resetSaving} className="rounded-lg bg-orange-600 px-4 py-2 text-sm font-black text-white disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-600">
                 {resetSaving ? "Resetting..." : resetTarget.role === "staff" || resetTarget.role === "kitchen" ? "Reset PIN" : "Reset Password"}
               </button>
             </div>

@@ -105,6 +105,18 @@ a:focus-visible {
   color: #fff !important;
 }
 
+.omlu-light-shell .contrast-dark-card .text-white,
+.omlu-light-shell .contrast-dark-header,
+.omlu-light-shell .contrast-dark-row,
+.omlu-light-shell .contrast-dark-row .text-white {
+  color: #fff !important;
+}
+
+.omlu-light-shell .contrast-dark-card .text-zinc-400,
+.omlu-light-shell .contrast-dark-row :is(.text-zinc-400, .text-zinc-500, .text-zinc-600) {
+  color: #a1a1aa !important;
+}
+
 @media print {
   .print-hidden {
     display: none !important;

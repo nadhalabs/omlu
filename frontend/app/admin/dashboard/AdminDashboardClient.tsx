@@ -294,7 +294,7 @@ export default function AdminDashboardClient() {
               ["Staff Management", "/admin/staff"],
               ["Restaurant Settings", "/admin/settings"],
             ].map(([label, href]) => (
-              <a key={label} href={href} className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm font-bold text-zinc-200 hover:border-orange-700/50">
+              <a key={label} href={href} className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm font-bold text-white hover:border-orange-700/50">
                 {label}
               </a>
             ))}
