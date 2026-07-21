@@ -219,7 +219,7 @@ export default function AdminDashboardClient() {
                       <div className="text-zinc-950 font-black">Table {table.table_number}</div>
                       <div className="text-xs"><span className="text-zinc-600">{table.order_count} orders · </span><span className="font-bold text-zinc-950">{currency}{table.bill_total}</span></div>
                     </div>
-                    <span className={`text-[10px] font-black px-2 py-1 rounded-md ${table.status === "Needs Attention" ? "bg-orange-950 text-orange-300" : table.status.includes("Payment") || table.status.includes("Bill") ? "bg-sky-950 text-sky-300" : table.status === "Available" ? "bg-zinc-800 text-white" : "bg-emerald-950 text-emerald-300"}`}>
+                    <span className={`text-[10px] font-black px-2 py-1 rounded-md ${table.status === "Needs Attention" ? "bg-orange-950 text-orange-300" : table.status.includes("Payment") || table.status.includes("Bill") ? "bg-sky-950 text-sky-300" : table.status === "Available" ? "border border-green-300 bg-green-100 text-green-700" : "bg-emerald-950 text-emerald-300"}`}>
                       {table.status}
                     </span>
                   </div>

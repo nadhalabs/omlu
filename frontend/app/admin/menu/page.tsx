@@ -543,7 +543,7 @@ export default function AdminMenuPage() {
                           {item.name_en}
                         </span>
                         {!item.is_available && (
-                          <span className="text-[8px] bg-red-950/40 border border-red-900/50 text-red-400 font-black px-1.5 py-0.5 rounded uppercase">
+                          <span className="text-[8px] border border-red-300 bg-red-100 text-red-700 font-black px-1.5 py-0.5 rounded uppercase">
                             Unavailable
                           </span>
                         )}
@@ -577,8 +577,8 @@ export default function AdminMenuPage() {
                         disabled={updatingAvail[item.id]}
                         className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition cursor-pointer select-none ${
                           item.is_available
-                            ? "bg-green-950/40 border border-green-900/50 text-green-400 hover:bg-green-900/30"
-                            : "bg-zinc-800 hover:bg-zinc-700 text-zinc-400"
+                            ? "border border-green-300 bg-green-100 text-green-700"
+                            : "border border-red-300 bg-red-100 text-red-700"
                         }`}
                       >
                         {item.is_available ? "Available" : "Unavailable"}

@@ -10,6 +10,8 @@ const dashboard = fs.readFileSync(path.join(root, "app/admin/dashboard/AdminDash
 const quickSale = fs.readFileSync(path.join(root, "app/admin/quick-sale/QuickSaleClient.tsx"), "utf8");
 const staff = fs.readFileSync(path.join(root, "app/admin/staff/StaffManagementClient.tsx"), "utf8");
 const tables = fs.readFileSync(path.join(root, "app/admin/tables/page.tsx"), "utf8");
+const staffAvailability = fs.readFileSync(path.join(root, "app/staff/availability/StaffAvailabilityClient.tsx"), "utf8");
+const staffTables = fs.readFileSync(path.join(root, "app/staff/tables/StaffTablesClient.tsx"), "utf8");
 const flutterColors = fs.readFileSync(
   path.join(workspace, "mobile-app/omlu_operations/lib/design_system/colors.dart"),
   "utf8",
@@ -43,4 +45,14 @@ test("active admin surfaces preserve readable dark and disabled controls", () =>
   assert.match(staff, /contrast-dark-row/);
   assert.doesNotMatch(`${quickSale}\n${staff}\n${tables}`, /disabled:opacity-/);
   assert.match(tables, /text-zinc-900 uppercase tracking-wider/);
+});
+
+test("availability states use green and red semantic badges", () => {
+  const available = "border-green-300 bg-green-100 text-green-700";
+  const unavailable = "border-red-300 bg-red-100 text-red-700";
+  assert.match(dashboard, new RegExp(available));
+  assert.match(staffTables, new RegExp(available));
+  assert.match(staffAvailability, new RegExp(available));
+  assert.match(staffAvailability, new RegExp(unavailable));
+  assert.doesNotMatch(staffAvailability, />On<|>Off<|Not available/i);
 });

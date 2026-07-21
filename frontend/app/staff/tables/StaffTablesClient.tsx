@@ -33,7 +33,7 @@ function simpleStatus(table: StaffTableSummary): SimpleStatus {
 }
 
 function statusClasses(status: SimpleStatus) {
-  if (status === "Available") return "border-green-200 bg-green-50 text-green-700";
+  if (status === "Available") return "border-green-300 bg-green-100 text-green-700";
   if (status === "Needs Bill") return "border-red-200 bg-red-50 text-red-700";
   if (status === "Ready") return "border-purple-200 bg-purple-50 text-purple-700";
   if (status === "Preparing") return "border-amber-200 bg-amber-50 text-amber-700";

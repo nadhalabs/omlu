@@ -110,7 +110,7 @@ export default function StaffAvailabilityClient() {
                     <div className="font-black text-white">{item.name_en}</div>
                     <div className="text-xs font-bold uppercase tracking-wider text-zinc-500">{item.category_name}</div>
                   </div>
-                  <button disabled={busy === `item-${item.id}`} onClick={() => patch(`item-${item.id}`, `items/${item.id}`, { is_available: !item.is_available })} className={`rounded-lg px-4 py-3 text-sm font-black ${item.is_available ? "bg-emerald-700 text-white" : "bg-zinc-800 text-zinc-300"}`}>
+                  <button disabled={busy === `item-${item.id}`} onClick={() => patch(`item-${item.id}`, `items/${item.id}`, { is_available: !item.is_available })} className={`rounded-lg border px-4 py-3 text-sm font-black ${item.is_available ? "border-green-300 bg-green-100 text-green-700" : "border-red-300 bg-red-100 text-red-700"}`}>
                     {item.is_available ? "Available" : "Unavailable"}
                   </button>
                 </div>
@@ -121,9 +121,9 @@ export default function StaffAvailabilityClient() {
                         <div className="text-sm font-black text-zinc-300">{group.name}</div>
                         <div className="mt-2 grid gap-2">
                           {group.options.map((option) => (
-                            <button key={option.id} disabled={busy === `option-${option.id}`} onClick={() => patch(`option-${option.id}`, `options/${option.id}`, { available: !option.available })} className={`flex justify-between rounded-lg px-3 py-2 text-sm font-bold ${option.available ? "bg-emerald-950/50 text-emerald-200" : "bg-zinc-900 text-zinc-500"}`}>
+                            <button key={option.id} disabled={busy === `option-${option.id}`} onClick={() => patch(`option-${option.id}`, `options/${option.id}`, { available: !option.available })} className={`flex justify-between rounded-lg border px-3 py-2 text-sm font-bold ${option.available ? "border-green-300 bg-green-100 text-green-700" : "border-red-300 bg-red-100 text-red-700"}`}>
                               <span>{option.name}</span>
-                              <span>{option.available ? "On" : "Off"}</span>
+                              <span>{option.available ? "Available" : "Unavailable"}</span>
                             </button>
                           ))}
                         </div>

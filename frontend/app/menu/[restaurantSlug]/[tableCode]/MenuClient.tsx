@@ -762,7 +762,7 @@ export default function MenuClient({
                               ₹{Number(item.price).toFixed(2)}
                             </span>
                             {orderingDisabled ? null : !item.is_available ? (
-                              <span className="text-xs font-semibold text-red-500 bg-red-50 dark:bg-red-950/20 px-2.5 py-1 rounded-md">
+                              <span className="rounded-md border border-red-300 bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-700">
                                 Unavailable
                               </span>
                             ) : cartQty === 0 || isConfigurable ? (

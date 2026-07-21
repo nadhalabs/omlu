@@ -340,7 +340,7 @@ export default function NewStaffOrderClient({ initialTableId }: { initialTableId
                     <div className="min-w-0 flex-1">
                       <h2 className="text-lg font-black text-zinc-950">{item.name_en}</h2>
                       <p className="mt-1 text-lg font-black text-orange-600">₹{item.price}</p>
-                      {!item.is_available && <p className="mt-1 text-xs font-bold text-zinc-400">Unavailable</p>}
+                      {!item.is_available && <p className="mt-1 inline-flex rounded-md border border-red-300 bg-red-100 px-2 py-1 text-xs font-bold text-red-700">Unavailable</p>}
                     </div>
                     {quantity > 0 ? (
                       <div className="flex items-center gap-3">
