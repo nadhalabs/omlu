@@ -104,8 +104,8 @@ def create_quick_sale(body: QuickSaleCreate, current_user: StaffUser = Depends(_
 def confirm_quick_sale_payment(public_token: str, body: QuickSalePayment, current_user: StaffUser = Depends(_owner_admin), db: Session = Depends(get_db)):
     sale = db.query(QuickSale).options(selectinload(QuickSale.items)).filter(QuickSale.restaurant_id == current_user.restaurant_id, QuickSale.public_token == public_token).with_for_update().first()
     if not sale: raise HTTPException(status_code=404, detail="Quick Sale not found")
-    if sale.sale_type != "takeaway" or sale.status != "ready":
-        raise HTTPException(status_code=409, detail="Only a ready unpaid Takeaway can be completed")
+    if sale.sale_type != "takeaway" or sale.status not in {"ready", "served"}:
+        raise HTTPException(status_code=409, detail="Only a ready or served unpaid Takeaway can be completed")
     now = datetime.datetime.now(datetime.timezone.utc)
     sale.status = "completed"; sale.payment_method = body.method; sale.paid_by_staff_id = current_user.id; sale.paid_by_name = current_user.name; sale.paid_by_role = current_user.role; sale.completed_at = now
     _audit(db, current_user, sale, "quick_sale_payment_confirmed", {"payment_method": body.method}); db.commit(); db.refresh(sale)

@@ -44,6 +44,14 @@ def payload(ctx, sale_type="takeaway", key=None):
     return {"sale_type": sale_type, "items": [{"menu_item_id": ctx["item_id"], "quantity": 2}], "note": "No onions", "payment_method": "cash" if sale_type == "late_entry" else None, "idempotency_key": key or uuid.uuid4().hex}
 
 
+def update_kitchen_status(ctx, public_token, status, role="kitchen"):
+    return client.patch(
+        f"/kitchen/restaurants/{ctx['slug']}/orders/{public_token}/status",
+        headers=auth(ctx, role),
+        json={"status": status},
+    )
+
+
 @pytest.mark.parametrize("role", ["owner", "admin"])
 def test_owner_admin_create_takeaway_without_session(quick_sale_context, role):
     response = client.post("/admin/quick-sales", headers=auth(quick_sale_context, role), json=payload(quick_sale_context))
@@ -67,6 +75,85 @@ def test_takeaway_reaches_kitchen_and_owner_confirms_ready_payment(quick_sale_co
     paid = client.post(f"/admin/quick-sales/{sale['public_token']}/payment", headers=auth(quick_sale_context, "admin"), json={"method": "upi"})
     assert paid.status_code == 200; assert paid.json()["status"] == "completed"; assert paid.json()["payment_method"] == "upi"
     assert client.post(f"/admin/quick-sales/{sale['public_token']}/payment", headers=auth(quick_sale_context, "owner"), json={"method": "cash"}).status_code == 409
+
+
+def test_takeaway_ready_to_served_then_payment_completion(quick_sale_context):
+    sale = client.post(
+        "/admin/quick-sales",
+        headers=auth(quick_sale_context, "owner"),
+        json=payload(quick_sale_context),
+    ).json()
+    for status in ("accepted", "preparing", "ready"):
+        assert update_kitchen_status(
+            quick_sale_context, sale["public_token"], status
+        ).status_code == 200
+
+    served = update_kitchen_status(
+        quick_sale_context, sale["public_token"], "served"
+    )
+    assert served.status_code == 200
+    assert served.json()["status"] == "served"
+
+    db = SessionLocal()
+    persisted = db.query(QuickSale).filter(
+        QuickSale.public_token == sale["public_token"]
+    ).one()
+    assert persisted.status == "served"
+    assert persisted.payment_method is None
+    assert persisted.paid_by_staff_id is None
+    assert persisted.paid_by_name is None
+    assert persisted.paid_by_role is None
+    assert persisted.completed_at is None
+    db.close()
+
+    repeated = update_kitchen_status(
+        quick_sale_context, sale["public_token"], "served"
+    )
+    assert repeated.status_code == 409
+
+    paid = client.post(
+        f"/admin/quick-sales/{sale['public_token']}/payment",
+        headers=auth(quick_sale_context, "admin"),
+        json={"method": "upi"},
+    )
+    assert paid.status_code == 200
+    assert paid.json()["status"] == "completed"
+    assert paid.json()["payment_method"] == "upi"
+
+
+@pytest.mark.parametrize("starting_status", ["pending", "accepted", "preparing"])
+def test_takeaway_cannot_skip_to_served(quick_sale_context, starting_status):
+    sale = client.post(
+        "/admin/quick-sales",
+        headers=auth(quick_sale_context, "owner"),
+        json=payload(quick_sale_context),
+    ).json()
+    transitions = {
+        "pending": (),
+        "accepted": ("accepted",),
+        "preparing": ("accepted", "preparing"),
+    }
+    for status in transitions[starting_status]:
+        assert update_kitchen_status(
+            quick_sale_context, sale["public_token"], status
+        ).status_code == 200
+
+    response = update_kitchen_status(
+        quick_sale_context, sale["public_token"], "served"
+    )
+    assert response.status_code == 409
+
+
+def test_cross_restaurant_cannot_serve_takeaway(quick_sale_context):
+    sale = client.post(
+        "/admin/quick-sales",
+        headers=auth(quick_sale_context, "owner"),
+        json=payload(quick_sale_context),
+    ).json()
+    response = update_kitchen_status(
+        quick_sale_context, sale["public_token"], "served", role="other"
+    )
+    assert response.status_code == 403
 
 
 @pytest.mark.parametrize("role", ["owner", "admin"])

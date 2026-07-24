@@ -159,7 +159,12 @@ def update_kitchen_order_status(
     if public_token.startswith("qs_"):
         sale = db.query(QuickSale).options(selectinload(QuickSale.items)).filter(QuickSale.restaurant_id == restaurant.id, QuickSale.public_token == public_token, QuickSale.sale_type == "takeaway").with_for_update().first()
         if not sale: raise HTTPException(status_code=fastapi_status.HTTP_404_NOT_FOUND, detail="Takeaway not found")
-        transitions = {"pending": {"accepted"}, "accepted": {"preparing"}, "preparing": {"ready"}}
+        transitions = {
+            "pending": {"accepted"},
+            "accepted": {"preparing"},
+            "preparing": {"ready"},
+            "ready": {"served"},
+        }
         if update_req.status not in transitions.get(sale.status, set()):
             raise HTTPException(status_code=fastapi_status.HTTP_409_CONFLICT, detail=f"Invalid transition from '{sale.status}' to '{update_req.status}'.")
         sale.status = update_req.status; db.commit(); db.refresh(sale)
