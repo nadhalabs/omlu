@@ -28,6 +28,14 @@ test("Late Entry and Takeaway payments invoke the shared OMLU confirmation modal
   assert.doesNotMatch(client, /(?:window|globalThis|self)\.(?:confirm|alert|prompt)/);
 });
 
+test("Ready and served Takeaways expose Cash and UPI payment actions", () => {
+  const client = read("app/admin/quick-sale/QuickSaleClient.tsx");
+  assert.match(client, /sale\.status === "ready" \|\| sale\.status === "served"/);
+  assert.ok(client.includes("Confirm Cash Payment"));
+  assert.ok(client.includes("Confirm UPI Payment"));
+  assert.match(client, /\/api\/admin\/quick-sales\/\$\{encodeURIComponent\(sale\.public_token\)\}\/payment/);
+});
+
 test("Kitchen renders a dedicated Takeaway label", () => {
   const kitchen = read("app/kitchen/[restaurantSlug]/KitchenDashboardClient.tsx");
   assert.match(kitchen, /order\.table_number === "Takeaway"/);

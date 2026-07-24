@@ -72,12 +72,18 @@ def test_takeaway_reaches_kitchen_and_owner_confirms_ready_payment(quick_sale_co
     for state in ("accepted", "preparing", "ready"):
         assert client.patch(f"/kitchen/restaurants/{quick_sale_context['slug']}/orders/{sale['public_token']}/status", headers=auth(quick_sale_context, "kitchen"), json={"status": state}).status_code == 200
     assert client.post(f"/admin/quick-sales/{sale['public_token']}/payment", headers=auth(quick_sale_context, "staff"), json={"method": "cash"}).status_code == 403
-    paid = client.post(f"/admin/quick-sales/{sale['public_token']}/payment", headers=auth(quick_sale_context, "admin"), json={"method": "upi"})
-    assert paid.status_code == 200; assert paid.json()["status"] == "completed"; assert paid.json()["payment_method"] == "upi"
+    paid = client.post(f"/admin/quick-sales/{sale['public_token']}/payment", headers=auth(quick_sale_context, "owner"), json={"method": "cash"})
+    assert paid.status_code == 200; assert paid.json()["status"] == "completed"; assert paid.json()["payment_method"] == "cash"; assert paid.json()["completed_at"] is not None
     assert client.post(f"/admin/quick-sales/{sale['public_token']}/payment", headers=auth(quick_sale_context, "owner"), json={"method": "cash"}).status_code == 409
 
 
-def test_takeaway_ready_to_served_then_payment_completion(quick_sale_context):
+@pytest.mark.parametrize(
+    ("role", "method"),
+    [("owner", "cash"), ("admin", "upi")],
+)
+def test_takeaway_ready_to_served_then_payment_completion(
+    quick_sale_context, role, method
+):
     sale = client.post(
         "/admin/quick-sales",
         headers=auth(quick_sale_context, "owner"),
@@ -106,6 +112,25 @@ def test_takeaway_ready_to_served_then_payment_completion(quick_sale_context):
     assert persisted.completed_at is None
     db.close()
 
+    home_before_payment = client.get(
+        "/admin/quick-sales", headers=auth(quick_sale_context, role)
+    ).json()
+    assert any(
+        item["public_token"] == sale["public_token"]
+        for item in home_before_payment["active_takeaways"]
+    )
+    assert all(
+        item["public_token"] != sale["public_token"]
+        for item in home_before_payment["completed_today"]
+    )
+
+    cross_restaurant_payment = client.post(
+        f"/admin/quick-sales/{sale['public_token']}/payment",
+        headers=auth(quick_sale_context, "other"),
+        json={"method": method},
+    )
+    assert cross_restaurant_payment.status_code == 404
+
     repeated = update_kitchen_status(
         quick_sale_context, sale["public_token"], "served"
     )
@@ -113,12 +138,39 @@ def test_takeaway_ready_to_served_then_payment_completion(quick_sale_context):
 
     paid = client.post(
         f"/admin/quick-sales/{sale['public_token']}/payment",
-        headers=auth(quick_sale_context, "admin"),
-        json={"method": "upi"},
+        headers=auth(quick_sale_context, role),
+        json={"method": method},
     )
     assert paid.status_code == 200
     assert paid.json()["status"] == "completed"
-    assert paid.json()["payment_method"] == "upi"
+    assert paid.json()["payment_method"] == method
+    assert paid.json()["completed_at"] is not None
+
+    db = SessionLocal()
+    completed = db.query(QuickSale).filter(
+        QuickSale.public_token == sale["public_token"]
+    ).one()
+    assert completed.status == "completed"
+    assert completed.payment_method == method
+    assert completed.paid_by_staff_id is not None
+    assert completed.paid_by_name is not None
+    assert completed.paid_by_role == role
+    assert completed.completed_at is not None
+    db.close()
+
+    home_after_payment = client.get(
+        "/admin/quick-sales", headers=auth(quick_sale_context, role)
+    ).json()
+    assert all(
+        item["public_token"] != sale["public_token"]
+        for item in home_after_payment["active_takeaways"]
+    )
+    assert any(
+        item["public_token"] == sale["public_token"]
+        and item["payment_method"] == method
+        and item["completed_at"] is not None
+        for item in home_after_payment["completed_today"]
+    )
 
 
 @pytest.mark.parametrize("starting_status", ["pending", "accepted", "preparing"])
