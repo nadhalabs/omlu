@@ -15,6 +15,7 @@ from app.models.menu import MenuCategory, MenuItem
 from app.models.order import Order, OrderItem, OrderStatusHistory
 from app.models.restaurant import Restaurant
 from app.models.restaurant_table import RestaurantTable
+from app.models.service_request import ServiceRequest
 from app.models.staff_user import StaffUser
 from app.utils.auth import create_access_token, hash_password
 
@@ -509,6 +510,64 @@ def test_owner_and_admin_can_confirm_counter_payment(bill_context, token_key, st
     assert body["payment_method"] == method
     assert body["paid_at"] is not None
     assert body["paid_by_staff_id"] == bill_context[staff_id_key]
+
+
+@pytest.mark.parametrize(
+    ("token_key", "staff_id_key", "method"),
+    [
+        ("owner_token", "owner_id", "counter_cash"),
+        ("owner_token", "owner_id", "counter_upi"),
+        ("admin_token", "admin_id", "counter_cash"),
+        ("admin_token", "admin_id", "counter_upi"),
+    ],
+)
+def test_owner_and_admin_can_confirm_issued_bill_without_counter_handoff(
+    bill_context, token_key, staff_id_key, method
+):
+    add_order(bill_context)
+    issued = issue_bill_for(bill_context)
+    db = SessionLocal()
+    bill_request = ServiceRequest(
+        restaurant_id=bill_context["restaurant_id"],
+        table_id=bill_context["table_id"],
+        dining_session_id=bill_context["session_id"],
+        request_type="bill",
+        status="pending",
+    )
+    db.add(bill_request)
+    db.commit()
+    bill_request_id = bill_request.id
+    db.close()
+
+    response = confirm_counter_payment(
+        bill_context,
+        issued["bill_number"],
+        token_key=token_key,
+        method=method,
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "paid"
+    assert body["payment_method"] == method
+    assert body["paid_at"] is not None
+    assert body["paid_by_staff_id"] == bill_context[staff_id_key]
+
+    db = SessionLocal()
+    session = db.query(DiningSession).filter(
+        DiningSession.id == bill_context["session_id"]
+    ).one()
+    resolved_request = db.query(ServiceRequest).filter(
+        ServiceRequest.id == bill_request_id
+    ).one()
+    db.close()
+    assert session.status == "closed"
+    assert session.paid_at is not None
+    assert session.closed_at is not None
+    assert session.closed_by_staff_id == bill_context[staff_id_key]
+    assert resolved_request.status == "resolved"
+    assert resolved_request.resolved_at is not None
+    assert resolved_request.resolved_by_staff_id == bill_context[staff_id_key]
 
 
 def test_payment_confirmation_updates_queue_table_and_histories(bill_context):

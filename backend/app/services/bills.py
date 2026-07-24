@@ -9,6 +9,7 @@ from app.models.bill import Bill, RestaurantBillDailySequence
 from app.models.dining_session import DiningSession
 from app.models.order import Order, OrderItem
 from app.models.restaurant import Restaurant
+from app.models.service_request import ServiceRequest
 from app.models.staff_user import StaffUser
 
 
@@ -243,11 +244,27 @@ def confirm_counter_payment(
     locked_session = _lock_session(db, bill.dining_session_id)
     locked_bill = _lock_bill_after_session(db, bill.id, locked_session.id)
 
+    if (
+        locked_bill.restaurant_id != staff_user.restaurant_id
+        or locked_session.restaurant_id != staff_user.restaurant_id
+        or locked_bill.dining_session_id != locked_session.id
+    ):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
+
     if locked_bill.status == "paid":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Bill has already been paid.",
         )
+
+    if (
+        staff_user.role in {"owner", "admin"}
+        and locked_bill.status == "issued"
+        and locked_session.status == "payment_requested"
+    ):
+        locked_bill.status = "payment_pending"
+        locked_bill.payment_method = None
+        locked_session.status = "payment_pending"
 
     if locked_bill.status != "payment_pending":
         raise HTTPException(
@@ -270,6 +287,16 @@ def confirm_counter_payment(
     locked_session.paid_at = now
     locked_session.closed_at = now
     locked_session.closed_by_staff_id = staff_user.id
+    pending_bill_requests = db.query(ServiceRequest).filter(
+        ServiceRequest.restaurant_id == staff_user.restaurant_id,
+        ServiceRequest.dining_session_id == locked_session.id,
+        ServiceRequest.request_type == "bill",
+        ServiceRequest.status == "pending",
+    ).with_for_update().all()
+    for service_request in pending_bill_requests:
+        service_request.status = "resolved"
+        service_request.resolved_at = now
+        service_request.resolved_by_staff_id = staff_user.id
     db.flush()
     return locked_bill
 
