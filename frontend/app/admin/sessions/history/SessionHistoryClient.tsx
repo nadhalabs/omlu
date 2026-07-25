@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { DateFilters, EmptyState, Pager, formatDateTime, formatMinutes } from "../../historyControls";
+import { DateFilters, EmptyState, HistorySkeleton, Pager, formatDateTime, formatMinutes } from "../../historyControls";
 import { fetchHistory, HistoryFilters, PaginatedResponse, SessionHistoryRow } from "@/lib/adminHistory";
 
 export default function SessionHistoryClient() {
   const [filters, setFilters] = useState<HistoryFilters>({ preset: "today", page: 1, page_size: 25 });
   const [data, setData] = useState<PaginatedResponse<SessionHistoryRow> | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
@@ -18,7 +19,8 @@ export default function SessionHistoryClient() {
           setError(null);
         }
       })
-      .catch((err) => active && setError(err instanceof Error ? err.message : "Could not load sessions."));
+      .catch((err) => active && setError(err instanceof Error ? err.message : "Could not load sessions."))
+      .finally(() => active && setLoading(false));
     return () => {
       active = false;
     };
@@ -34,26 +36,26 @@ export default function SessionHistoryClient() {
         <DateFilters filters={filters} setFilters={setFilters} exportPath="sessions" />
       </div>
       <div className="flex flex-wrap gap-3">
-        <select value={filters.status_filter || ""} onChange={(event) => setFilters({ ...filters, status_filter: event.target.value, page: 1 })} className="h-10 rounded border border-zinc-800 bg-zinc-950 px-3 text-sm">
+        <label className="text-xs font-bold text-zinc-600">Session status<select value={filters.status_filter || ""} onChange={(event) => setFilters({ ...filters, status_filter: event.target.value, page: 1 })} className="mt-1 block rounded-xl border border-zinc-300 bg-white px-3 text-sm">
           <option value="">All statuses</option>
           {["open", "payment_requested", "payment_pending", "paid", "closed", "cancelled"].map((status) => <option key={status} value={status}>{status}</option>)}
-        </select>
-        <input placeholder="Table ID" value={filters.table_id || ""} onChange={(event) => setFilters({ ...filters, table_id: event.target.value, page: 1 })} className="h-10 rounded border border-zinc-800 bg-zinc-950 px-3 text-sm" />
-        <input placeholder="Closed by staff ID" value={filters.closed_by || ""} onChange={(event) => setFilters({ ...filters, closed_by: event.target.value, page: 1 })} className="h-10 rounded border border-zinc-800 bg-zinc-950 px-3 text-sm" />
+        </select></label>
+        <label className="text-xs font-bold text-zinc-600">Table ID<input inputMode="numeric" placeholder="Table ID" value={filters.table_id || ""} onChange={(event) => setFilters({ ...filters, table_id: event.target.value, page: 1 })} className="mt-1 block rounded-xl border border-zinc-300 bg-white px-3 text-sm" /></label>
+        <label className="text-xs font-bold text-zinc-600">Closed by staff ID<input inputMode="numeric" placeholder="Staff ID" value={filters.closed_by || ""} onChange={(event) => setFilters({ ...filters, closed_by: event.target.value, page: 1 })} className="mt-1 block rounded-xl border border-zinc-300 bg-white px-3 text-sm" /></label>
       </div>
       {error && <div className="border border-red-900 bg-red-950/30 p-3 text-sm text-red-200">{error}</div>}
-      {!data || data.items.length === 0 ? (
+      {loading && !data ? <HistorySkeleton /> : !data || data.items.length === 0 ? (
         <EmptyState message="No sessions found for this period" />
       ) : (
-        <div className="overflow-x-auto border border-zinc-800">
-          <table className="w-full text-sm">
-            <thead className="bg-zinc-950 text-left text-[10px] uppercase tracking-wider text-zinc-500">
+        <div className="overflow-x-auto rounded-xl border border-zinc-200">
+          <table className="w-full min-w-[1050px] text-sm">
+            <thead className="contrast-dark-header bg-zinc-950 text-left text-[10px] uppercase tracking-wider text-white">
               <tr>{["Session ID/reference", "Table", "Started at", "Closed at", "Duration", "Order count", "Combined subtotal", "Final bill total", "Payment status", "Closed by"].map((heading) => <th key={heading} className="p-3">{heading}</th>)}</tr>
             </thead>
             <tbody className="divide-y divide-zinc-800">
               {data.items.map((session) => (
-                <tr key={session.id} className="bg-zinc-900/60">
-                  <td className="p-3 text-xs font-bold text-orange-400">{session.session_token}</td>
+                <tr key={session.id} className="bg-white hover:bg-zinc-50">
+                  <td className="max-w-56 break-all p-3 text-xs font-bold text-orange-700">{session.session_token}</td>
                   <td className="p-3">{session.table_number || "-"}</td>
                   <td className="p-3">{formatDateTime(session.started_at)}</td>
                   <td className="p-3">{formatDateTime(session.closed_at)}</td>

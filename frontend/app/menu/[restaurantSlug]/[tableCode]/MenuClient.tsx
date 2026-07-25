@@ -71,15 +71,17 @@ export default function MenuClient({
   const [expiredSessionNotice, setExpiredSessionNotice] = useState<string | null>(null);
 
   // Fetch menu data
-  const fetchMenu = useCallback(async () => {
-    setLoading(true);
+  const fetchMenu = useCallback(async (showInitialLoader = false) => {
+    if (showInitialLoader) setLoading(true);
     setError(null);
     try {
       const data = await getPublicMenu(restaurantSlug, tableCode);
       setMenuData(data);
-      if (data.categories.length > 0) {
-        setActiveCategory(data.categories[0].id);
-      }
+      setActiveCategory((current) =>
+        current && data.categories.some((category) => category.id === current)
+          ? current
+          : data.categories[0]?.id ?? null
+      );
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message);
@@ -87,13 +89,13 @@ export default function MenuClient({
         setError("Could not connect to the backend server.");
       }
     } finally {
-      setLoading(false);
+      if (showInitialLoader) setLoading(false);
     }
   }, [restaurantSlug, tableCode]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
-      fetchMenu();
+      void fetchMenu(true);
       setIdempotencyKey(crypto.randomUUID());
     }, 0);
     return () => window.clearTimeout(timeout);
@@ -101,9 +103,29 @@ export default function MenuClient({
 
   useRealtime({
     target: { kind: "menu", restaurantSlug, tableCode },
-    onEvent: () => void fetchMenu(),
-    onReconnect: () => void fetchMenu(),
+    onEvent: () => void fetchMenu(false),
+    onReconnect: () => void fetchMenu(false),
   });
+
+  useEffect(() => {
+    if (!isCartOpen && !customisingItem) return;
+    const previousOverflow = document.body.style.overflow;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || isPlacingOrder) return;
+      if (customisingItem) {
+        setCustomisingItem(null);
+        setDraftOptions({});
+      } else {
+        setIsCartOpen(false);
+      }
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [customisingItem, isCartOpen, isPlacingOrder]);
 
   const clearOrderingState = useCallback(() => {
     setCurrentSession(null);
@@ -468,19 +490,24 @@ export default function MenuClient({
   };
 
   // Render Loading State
-  if (loading) {
+  if (loading && !menuData) {
     return (
-      <div className="flex flex-col flex-1 items-center justify-center min-h-screen bg-zinc-50 dark:bg-zinc-950 px-4 py-8">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-orange-600"></div>
-        <p className="mt-4 text-zinc-600 dark:text-zinc-400 font-medium">
-          {t.loadingText}
-        </p>
+      <div className="min-h-screen bg-zinc-50 px-4 py-5 dark:bg-zinc-950" aria-busy="true" aria-label={t.loadingText}>
+        <div className="mx-auto max-w-3xl animate-pulse">
+          <div className="h-16 rounded-2xl bg-white dark:bg-zinc-900" />
+          <div className="mt-4 h-12 rounded-2xl bg-zinc-200 dark:bg-zinc-800" />
+          <div className="mt-6 grid gap-4 md:grid-cols-2">
+            {[1, 2, 3, 4, 5, 6].map((item) => (
+              <div key={item} className="h-32 rounded-2xl bg-white dark:bg-zinc-900" />
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
 
   // Render Error State
-  if (error) {
+  if (error && !menuData) {
     return (
       <div className="flex flex-col flex-1 items-center justify-center min-h-screen bg-zinc-50 dark:bg-zinc-950 p-6 text-center">
         <div className="max-w-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-8 shadow-sm">
@@ -494,7 +521,7 @@ export default function MenuClient({
               : t.connectionError}
           </h2>
           <button
-            onClick={fetchMenu}
+            onClick={() => void fetchMenu(true)}
             className="mt-6 px-6 py-2.5 bg-orange-600 hover:bg-orange-700 active:bg-orange-800 text-white font-semibold rounded-xl transition shadow-sm cursor-pointer"
           >
             {t.retry}
@@ -605,8 +632,8 @@ export default function MenuClient({
       {/* Sticky Top Header */}
       <header className="sticky top-0 z-40 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800 shadow-xs px-4 py-3 sm:px-6">
         <div className="max-w-3xl mx-auto flex items-center justify-between gap-4">
-          <div>
-            <h1 className="text-xl font-bold text-zinc-950 dark:text-zinc-50">
+          <div className="min-w-0">
+            <h1 className="break-words text-xl font-bold text-zinc-950 dark:text-zinc-50">
               {restaurant.name}
             </h1>
             <p className="text-xs text-zinc-500 dark:text-zinc-400 font-medium">
@@ -701,6 +728,14 @@ export default function MenuClient({
 
       {/* Main Content Area */}
       <main className="max-w-3xl mx-auto px-4 mt-6 sm:px-6 w-full flex-1">
+        {error && (
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-800 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200" role="alert">
+            <span>Menu refresh failed. Your last loaded menu is still shown.</span>
+            <button type="button" onClick={() => void fetchMenu(false)} className="rounded-xl bg-white px-4 py-2 font-black text-red-800 shadow-sm dark:bg-zinc-900 dark:text-red-200">
+              {t.retry}
+            </button>
+          </div>
+        )}
         {sessionCompleteNotice || expiredSessionNotice ? (
           <div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-6 text-center shadow-sm dark:border-emerald-900/50 dark:bg-emerald-950/30">
             <h2 className="text-xl font-black text-emerald-950 dark:text-emerald-50">
@@ -843,11 +878,11 @@ export default function MenuClient({
       )}
 
       {customisingItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
-          <div className="max-h-[85vh] w-full max-w-lg overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="fixed inset-0 z-50 flex items-center justify-center overscroll-contain bg-black/60 p-4 backdrop-blur-xs">
+          <div className="max-h-[85vh] w-full max-w-lg overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900" role="dialog" aria-modal="true" aria-labelledby="menu-options-title">
             <div className="flex items-start justify-between gap-4 border-b border-zinc-200 px-6 py-4 dark:border-zinc-800">
               <div>
-                <h2 className="text-lg font-black text-zinc-950 dark:text-zinc-50">
+                <h2 id="menu-options-title" className="break-words text-lg font-black text-zinc-950 dark:text-zinc-50">
                   {getLocalizedText(customisingItem.name_en, customisingItem.name_ml)}
                 </h2>
                 <p className="mt-1 text-xs font-semibold text-zinc-500">
@@ -929,11 +964,11 @@ export default function MenuClient({
 
       {/* Slide-over Cart Modal View */}
       {isCartOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl max-w-lg w-full flex flex-col max-h-[85vh] shadow-2xl overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center overscroll-contain bg-black/60 p-4 backdrop-blur-xs">
+          <div className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900" role="dialog" aria-modal="true" aria-labelledby="menu-cart-title">
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 px-6 py-4">
-              <h2 className="text-lg font-bold text-zinc-950 dark:text-zinc-50">
+              <h2 id="menu-cart-title" className="break-words text-lg font-bold text-zinc-950 dark:text-zinc-50">
                 {t.yourCart} ({totalQty})
               </h2>
               <button

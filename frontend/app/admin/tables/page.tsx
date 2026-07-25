@@ -11,6 +11,7 @@ import {
 } from "@/lib/api";
 import { AdminTableResponse } from "@/lib/types";
 import { useOmluUi } from "@/components/OmluUiProvider";
+import { useModalScrollLock } from "@/components/useModalScrollLock";
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
@@ -38,6 +39,10 @@ export default function AdminTablesPage() {
 
   // Simple loading flags for actions (ID -> bool)
   const [updatingIds, setUpdatingIds] = useState<Record<number, boolean>>({});
+
+  useModalScrollLock(Boolean(editingTable), () => {
+    if (!editSaving) setEditingTable(null);
+  });
 
   // Initial load
   const loadData = async () => {
@@ -396,9 +401,9 @@ export default function AdminTablesPage() {
 
       {/* EDIT TABLE MODAL */}
       {editingTable && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4">
-          <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl max-w-sm w-full flex flex-col gap-4 shadow-2xl relative">
-            <h3 className="text-lg font-black text-white">Rename Table</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center overscroll-contain bg-black/75 p-4 backdrop-blur-xs">
+          <div className="relative flex max-h-[calc(100dvh-2rem)] w-full max-w-sm flex-col gap-4 overflow-y-auto rounded-3xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="rename-table-title">
+            <h3 id="rename-table-title" className="text-lg font-black text-white">Rename Table</h3>
 
             {editFormError && (
               <div className="bg-red-950/40 border border-red-900/50 text-red-400 text-xs font-semibold p-3 rounded-xl">

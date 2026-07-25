@@ -60,7 +60,7 @@ test("staff tables use the neutral OMLU card layout and semantic statuses", () =
   assert.match(staffTablesClient, /bg-\[var\(--omlu-background\)\]/);
   assert.doesNotMatch(staffTablesClient, /#fff6f6|bg-red-700/);
   assert.match(staffTablesClient, /type SimpleStatus = "Available" \| "Ordering" \| "Preparing" \| "Ready" \| "Needs Bill"/);
-  assert.match(staffTablesClient, /grid grid-cols-2 gap-4/);
+  assert.match(staffTablesClient, /grid grid-cols-1 gap-4 min-\[360px\]:grid-cols-2/);
   assert.doesNotMatch(staffTablesClient, /Guest/);
   assert.doesNotMatch(staffTablesClient, /Start Session/);
 });

@@ -47,10 +47,11 @@ export function PasswordInput({
           autoComplete={autoComplete}
           aria-invalid={Boolean(error)}
           aria-describedby={error ? errorId : undefined}
+          data-surface={dark ? "dark" : "light"}
           className={`h-12 w-full rounded-lg border px-4 pr-12 text-sm font-medium outline-none transition focus:border-orange-600 ${
             dark ? "bg-zinc-950 text-zinc-100" : "bg-white text-zinc-950"
           } ${error ? "border-red-500" : dark ? "border-zinc-800" : "border-zinc-300"} ${
-            disabled ? "cursor-not-allowed opacity-70" : ""
+            disabled ? "cursor-not-allowed opacity-100" : ""
           }`}
         />
         <button

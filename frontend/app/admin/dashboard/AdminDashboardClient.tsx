@@ -26,13 +26,13 @@ function StatCard({
 }) {
   const content = (
     <div
-      className={`bg-zinc-900 border border-zinc-800 rounded-2xl p-5 flex flex-col gap-2 shadow-sm ${accent || ""}`}
+      className={`flex min-w-0 flex-col gap-2 rounded-2xl border border-zinc-800 bg-zinc-900 p-4 shadow-sm sm:p-5 ${accent || ""}`}
     >
       <div className="flex items-center gap-2 text-zinc-400 text-xs font-bold uppercase tracking-wider">
         <span className="text-lg">{icon}</span>
         {label}
       </div>
-      <div className="text-3xl font-black text-white mt-1">{value}</div>
+      <div className="min-w-0 break-words text-2xl font-black text-white sm:text-3xl">{value}</div>
       {sub && (
         <div className="text-xs text-zinc-500 font-semibold">{sub}</div>
       )}
@@ -83,11 +83,12 @@ export default function AdminDashboardClient() {
 
   if (loading && !data) {
     return (
-      <div className="flex flex-1 items-center justify-center py-20">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-t-2 border-b-2 border-orange-500 rounded-full animate-spin" />
-          <p className="text-zinc-400 font-semibold text-sm">Loading dashboard…</p>
+      <div className="flex flex-col gap-6" aria-label="Loading dashboard">
+        <div className="space-y-3"><div className="omlu-skeleton h-7 w-48 rounded" /><div className="omlu-skeleton h-4 w-72 max-w-full rounded" /></div>
+        <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 lg:grid-cols-4">
+          {Array.from({ length: 8 }).map((_, index) => <div key={index} className="rounded-2xl border border-zinc-200 bg-white p-5"><div className="omlu-skeleton h-3 w-24 rounded" /><div className="omlu-skeleton mt-4 h-8 w-20 rounded" /></div>)}
         </div>
+        <div className="grid gap-4 xl:grid-cols-2"><div className="omlu-skeleton h-72 rounded-2xl" /><div className="omlu-skeleton h-72 rounded-2xl" /></div>
       </div>
     );
   }
@@ -151,7 +152,7 @@ export default function AdminDashboardClient() {
       </div>
 
       {/* Stat Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="Active Tables"
           value={data.active_table_count}

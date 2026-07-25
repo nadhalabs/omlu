@@ -32,6 +32,7 @@ export function StaffBottomNav({ active, requestCount }: StaffBottomNavProps) {
   }, [refreshRequests]);
 
   useRealtime({
+    enabled: typeof requestCount !== "number",
     target: { kind: "staff", channel: "staff" },
     onEvent: () => void refreshRequests(),
     onReconnect: () => void refreshRequests(),
@@ -43,9 +44,9 @@ export function StaffBottomNav({ active, requestCount }: StaffBottomNavProps) {
     }`;
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 mx-auto max-w-md px-4 pb-4 sm:max-w-xl" aria-label="Staff navigation">
+    <nav className="fixed inset-x-0 bottom-0 z-40 mx-auto max-w-md px-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:max-w-xl" aria-label="Staff navigation">
       <div className="grid h-20 grid-cols-[1fr_88px_1fr] items-center rounded-[28px] border border-orange-100 bg-white/95 px-3 shadow-lg shadow-orange-100/70 backdrop-blur">
-        <Link href="/staff/tables" className={itemClass("tables")}>
+        <Link href="/staff/tables" className={itemClass("tables")} aria-current={active === "tables" ? "page" : undefined}>
           <span className="text-lg leading-none">▦</span>
           <span>Tables</span>
         </Link>
@@ -53,10 +54,11 @@ export function StaffBottomNav({ active, requestCount }: StaffBottomNavProps) {
           href="/staff/tables"
           className="mx-auto -mt-8 flex h-16 w-16 items-center justify-center rounded-full bg-orange-600 text-4xl font-light leading-none text-white shadow-lg shadow-orange-200"
           aria-label="New order"
+          aria-current={active === "order" ? "page" : undefined}
         >
           +
         </Link>
-        <Link href="/staff/requests" className={`${itemClass("requests")} relative`}>
+        <Link href="/staff/requests" className={`${itemClass("requests")} relative`} aria-current={active === "requests" ? "page" : undefined}>
           <span className="text-lg leading-none">◎</span>
           <span>Requests</span>
           {pendingRequests > 0 && (

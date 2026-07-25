@@ -95,6 +95,22 @@ export default function NewStaffOrderClient({ initialTableId }: { initialTableId
   });
 
   useEffect(() => {
+    if (!customisingItem) return;
+    const previousOverflow = document.body.style.overflow;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setCustomisingItem(null);
+      setDraftOptions({});
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [customisingItem]);
+
+  useEffect(() => {
     const timeout = window.setTimeout(() => {
       const saved = window.localStorage.getItem(cartKey(tableId));
       if (!saved) {
@@ -410,11 +426,11 @@ export default function NewStaffOrderClient({ initialTableId }: { initialTableId
       )}
 
       {customisingItem && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
-          <div className="max-h-[88vh] w-full max-w-md overflow-hidden rounded-[28px] bg-white">
+        <div className="fixed inset-0 z-50 flex items-end justify-center overscroll-contain bg-black/40 p-4 sm:items-center">
+          <div className="max-h-[88vh] w-full max-w-md overflow-hidden rounded-[28px] bg-white" role="dialog" aria-modal="true" aria-labelledby="staff-options-title">
             <div className="flex items-start justify-between gap-4 border-b border-orange-100 p-5">
               <div>
-                <h2 className="text-xl font-black text-zinc-950">{customisingItem.name_en}</h2>
+                <h2 id="staff-options-title" className="break-words text-xl font-black text-zinc-950">{customisingItem.name_en}</h2>
                 <p className="mt-1 text-sm font-semibold text-zinc-500">Choose options</p>
               </div>
               <button onClick={() => setCustomisingItem(null)} className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-100 text-xl font-black">×</button>

@@ -20,3 +20,14 @@ test("shared OMLU dialogs provide modal accessibility and focus protections", ()
   const source = fs.readFileSync(path.join(root, "components/OmluUiProvider.tsx"), "utf8");
   for (const contract of ["OmluConfirmDialog", 'role="dialog"', 'aria-modal="true"', "event.key === \"Escape\"", "document.body.style.overflow", "previous.current?.focus()", "disabled={busy}", 'role="alert"', 'aria-live="polite"']) assert.ok(source.includes(contract), contract);
 });
+
+test("ordering dialogs lock page scroll and expose accessible modal semantics", () => {
+  const publicMenu = fs.readFileSync(path.join(root, "app/menu/[restaurantSlug]/[tableCode]/MenuClient.tsx"), "utf8");
+  const staffOrder = fs.readFileSync(path.join(root, "app/staff/orders/new/NewStaffOrderClient.tsx"), "utf8");
+  for (const source of [publicMenu, staffOrder]) {
+    assert.match(source, /document\.body\.style\.overflow = "hidden"/);
+    assert.match(source, /event\.key !== "Escape"/);
+    assert.match(source, /role="dialog"/);
+    assert.match(source, /aria-modal="true"/);
+  }
+});

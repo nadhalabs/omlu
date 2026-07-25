@@ -160,7 +160,7 @@ export function HourBarChart({
               onBlur={() => setActive(null)}
               onPointerEnter={() => setActive(row.hour)}
               onPointerLeave={() => setActive(null)}
-              className={`w-full rounded-t-md ${row.hour === peak.hour ? "bg-orange-600" : "bg-orange-200 hover:bg-orange-400"} motion-safe:transition-[height,background-color]`}
+              className={`min-h-0 w-full rounded-t-md focus-visible:z-10 ${row.hour === peak.hour ? "bg-orange-600" : "bg-orange-200 hover:bg-orange-400"} motion-safe:transition-[height,background-color]`}
               style={{ height: `${Math.max(3, (row.orders / max) * 100)}%`, minHeight: "3px" }}
             />
             {active === row.hour && (

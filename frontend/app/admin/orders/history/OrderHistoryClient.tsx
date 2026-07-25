@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { DateFilters, EmptyState, Pager, formatDateTime } from "../../historyControls";
+import { DateFilters, EmptyState, HistorySkeleton, Pager, formatDateTime } from "../../historyControls";
 import { fetchHistory, HistoryFilters, OrderHistoryDetail, OrderHistoryRow, PaginatedResponse } from "@/lib/adminHistory";
 
 export default function OrderHistoryClient() {
@@ -9,6 +9,7 @@ export default function OrderHistoryClient() {
   const [data, setData] = useState<PaginatedResponse<OrderHistoryRow> | null>(null);
   const [detail, setDetail] = useState<OrderHistoryDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
@@ -19,11 +20,26 @@ export default function OrderHistoryClient() {
           setError(null);
         }
       })
-      .catch((err) => active && setError(err instanceof Error ? err.message : "Could not load orders."));
+      .catch((err) => active && setError(err instanceof Error ? err.message : "Could not load orders."))
+      .finally(() => active && setLoading(false));
     return () => {
       active = false;
     };
   }, [filters]);
+
+  useEffect(() => {
+    if (!detail) return;
+    const previousOverflow = document.body.style.overflow;
+    const close = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setDetail(null);
+    };
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", close);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", close);
+    };
+  }, [detail]);
 
   const openDetail = async (order: OrderHistoryRow) => {
     setDetail(await fetchHistory<OrderHistoryDetail>(`orders/${order.id}`));
@@ -39,30 +55,30 @@ export default function OrderHistoryClient() {
         <DateFilters filters={filters} setFilters={setFilters} exportPath="orders" />
       </div>
       <div className="flex flex-wrap gap-3">
-        <input placeholder="Order number" value={filters.order_number || ""} onChange={(event) => setFilters({ ...filters, order_number: event.target.value, page: 1 })} className="h-10 rounded border border-zinc-800 bg-zinc-950 px-3 text-sm" />
-        <input placeholder="Table ID" value={filters.table_id || ""} onChange={(event) => setFilters({ ...filters, table_id: event.target.value, page: 1 })} className="h-10 rounded border border-zinc-800 bg-zinc-950 px-3 text-sm" />
-        <input placeholder="Staff ID" value={filters.staff_id || ""} onChange={(event) => setFilters({ ...filters, staff_id: event.target.value, page: 1 })} className="h-10 rounded border border-zinc-800 bg-zinc-950 px-3 text-sm" />
-        <select value={filters.status_filter || ""} onChange={(event) => setFilters({ ...filters, status_filter: event.target.value, page: 1 })} className="h-10 rounded border border-zinc-800 bg-zinc-950 px-3 text-sm">
+        <label className="text-xs font-bold text-zinc-600">Order number<input placeholder="e.g. ORD-100" value={filters.order_number || ""} onChange={(event) => setFilters({ ...filters, order_number: event.target.value, page: 1 })} className="mt-1 block rounded-xl border border-zinc-300 bg-white px-3 text-sm" /></label>
+        <label className="text-xs font-bold text-zinc-600">Table ID<input inputMode="numeric" placeholder="Table ID" value={filters.table_id || ""} onChange={(event) => setFilters({ ...filters, table_id: event.target.value, page: 1 })} className="mt-1 block rounded-xl border border-zinc-300 bg-white px-3 text-sm" /></label>
+        <label className="text-xs font-bold text-zinc-600">Staff ID<input inputMode="numeric" placeholder="Staff ID" value={filters.staff_id || ""} onChange={(event) => setFilters({ ...filters, staff_id: event.target.value, page: 1 })} className="mt-1 block rounded-xl border border-zinc-300 bg-white px-3 text-sm" /></label>
+        <label className="text-xs font-bold text-zinc-600">Order status<select value={filters.status_filter || ""} onChange={(event) => setFilters({ ...filters, status_filter: event.target.value, page: 1 })} className="mt-1 block rounded-xl border border-zinc-300 bg-white px-3 text-sm">
           <option value="">Completed only</option>
           {["pending", "accepted", "preparing", "ready", "served", "rejected"].map((status) => <option key={status} value={status}>{status}</option>)}
-        </select>
+        </select></label>
       </div>
       {error && <div className="border border-red-900 bg-red-950/30 p-3 text-sm text-red-200">{error}</div>}
-      {!data || data.items.length === 0 ? (
+      {loading && !data ? <HistorySkeleton /> : !data || data.items.length === 0 ? (
         <EmptyState message="No orders found for this period" />
       ) : (
-        <div className="overflow-x-auto border border-zinc-800">
-          <table className="w-full text-sm">
+        <div className="overflow-x-auto rounded-xl border border-zinc-200">
+          <table className="w-full min-w-[980px] text-sm">
             <thead className="contrast-dark-header bg-zinc-950 text-left text-[10px] uppercase tracking-wider text-white">
               <tr>{["Order number", "Date and time", "Table", "Session", "Item count", "Status", "Total", "Accepted by", "Served by"].map((heading) => <th key={heading} className="p-3">{heading}</th>)}</tr>
             </thead>
             <tbody className="divide-y divide-zinc-800">
               {data.items.map((order) => (
-                <tr key={order.id} className="bg-zinc-900/60 text-zinc-900 hover:bg-zinc-850">
+                <tr key={order.id} className="bg-white text-zinc-900 hover:bg-zinc-50">
                   <td className="p-3"><button onClick={() => openDetail(order)} className="font-black text-orange-400 underline-offset-4 hover:underline">{order.order_number}</button></td>
                   <td className="p-3 text-zinc-800">{formatDateTime(order.created_at)}</td>
                   <td className="p-3">{order.table_number || "-"}</td>
-                  <td className="p-3 text-xs text-zinc-600">{order.session_token || "-"}</td>
+                  <td className="max-w-48 break-all p-3 text-xs text-zinc-600">{order.session_token || "-"}</td>
                   <td className="p-3">{order.item_count}</td>
                   <td className="p-3">{order.status}</td>
                   <td className="p-3">₹{order.total}</td>
@@ -76,11 +92,11 @@ export default function OrderHistoryClient() {
         </div>
       )}
       {detail && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded border border-zinc-800 bg-zinc-950 p-5">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-black/70 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setDetail(null); }}>
+          <div role="dialog" aria-modal="true" aria-labelledby="order-detail-title" className="my-auto max-h-[calc(100dvh-2rem)] w-full max-w-3xl overflow-y-auto rounded-2xl border border-zinc-700 bg-zinc-950 p-5 text-zinc-100 shadow-2xl">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h2 className="text-xl font-black text-white">{detail.order_number}</h2>
+                <h2 id="order-detail-title" className="break-words text-xl font-black text-white">{detail.order_number}</h2>
                 <p className="text-sm text-zinc-500">{formatDateTime(detail.created_at)} · {detail.status}</p>
               </div>
               <button onClick={() => setDetail(null)} className="rounded bg-zinc-800 px-3 py-1 text-sm font-bold">Close</button>

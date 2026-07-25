@@ -28,6 +28,8 @@ test("web exposes the neutral and orange OMLU theme tokens", () => {
     "--omlu-border: #e4e4e7",
   ]) assert.match(globals, new RegExp(token.replaceAll("-", "\\-")));
   assert.doesNotMatch(globals, /prefers-color-scheme:\s*dark/);
+  assert.match(globals, /@media \(prefers-reduced-motion: reduce\)/);
+  assert.match(globals, /input\[data-surface="dark"\]:-webkit-autofill/);
 });
 
 test("Flutter uses the same neutral and orange identity", () => {

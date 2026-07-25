@@ -16,6 +16,7 @@ import {
 } from "@/lib/api";
 import { AdminCategoryResponse, AdminMenuItemResponse } from "@/lib/types";
 import { invalidateQueries } from "@/lib/queryCache";
+import { useModalScrollLock } from "@/components/useModalScrollLock";
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
@@ -73,6 +74,12 @@ export default function AdminMenuPage() {
 
   // Action status loading for simple buttons
   const [updatingAvail, setUpdatingAvail] = useState<Record<number, boolean>>({});
+
+  useModalScrollLock(categoryModal.open || itemModal.open, () => {
+    if (catSaving || itemSaving) return;
+    setCategoryModal({ open: false, mode: "create" });
+    setItemModal({ open: false, mode: "create" });
+  });
 
   // Initial load
   const loadData = async () => {
@@ -618,9 +625,9 @@ export default function AdminMenuPage() {
 
       {/* CATEGORY FORM MODAL */}
       {categoryModal.open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4">
-          <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl max-w-md w-full flex flex-col gap-4 shadow-2xl relative">
-            <h3 className="text-lg font-black text-white">
+        <div className="fixed inset-0 z-50 flex items-center justify-center overscroll-contain bg-black/75 p-4 backdrop-blur-xs">
+          <div className="relative flex max-h-[calc(100dvh-2rem)] w-full max-w-md flex-col gap-4 overflow-y-auto rounded-3xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="category-modal-title">
+            <h3 id="category-modal-title" className="text-lg font-black text-white">
               {categoryModal.mode === "create" ? "Add Category" : "Edit Category"}
             </h3>
 
@@ -707,9 +714,9 @@ export default function AdminMenuPage() {
 
       {/* DISH FORM MODAL */}
       {itemModal.open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4">
-          <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl max-w-lg w-full flex flex-col gap-4 shadow-2xl relative max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-black text-white">
+        <div className="fixed inset-0 z-50 flex items-center justify-center overscroll-contain bg-black/75 p-4 backdrop-blur-xs">
+          <div className="relative flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col gap-4 overflow-y-auto rounded-3xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="item-modal-title">
+            <h3 id="item-modal-title" className="text-lg font-black text-white">
               {itemModal.mode === "create" ? "Add Menu Item" : "Edit Menu Item"}
             </h3>
 

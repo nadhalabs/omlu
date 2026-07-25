@@ -16,7 +16,8 @@ export default function AdminSidebarLink({
   return (
     <Link
       href={href}
-      className={`px-4 py-3 rounded-xl text-sm font-bold transition flex items-center ${
+      aria-current={isActive ? "page" : undefined}
+      className={`flex min-h-11 shrink-0 items-center whitespace-nowrap rounded-xl px-4 py-3 text-sm font-bold transition lg:w-full ${
         isActive
           ? "bg-orange-600 text-white"
           : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"

@@ -138,13 +138,13 @@ export default function StaffTablesClient() {
         )}
 
         {loading ? (
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 min-[360px]:grid-cols-2">
             {[1, 2, 3, 4].map((item) => <div key={item} className="h-44 animate-pulse rounded-3xl bg-white" />)}
           </div>
         ) : visibleTables.length === 0 ? (
           <div className="rounded-3xl bg-white p-8 text-center text-sm font-semibold text-zinc-500">No tables found.</div>
         ) : (
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 min-[360px]:grid-cols-2">
             {visibleTables.map((table) => {
               const status = simpleStatus(table);
               const openFor = elapsed(table.opened_minutes_ago);
@@ -153,10 +153,10 @@ export default function StaffTablesClient() {
                 <Link
                   key={table.id}
                   href={`/staff/orders/new?tableId=${table.id}`}
-                  className={`min-h-44 rounded-3xl border p-4 text-center shadow-sm shadow-orange-100/60 ${statusClasses(status)}`}
+                  className={`min-w-0 min-h-44 rounded-3xl border p-4 text-center shadow-sm shadow-orange-100/60 ${statusClasses(status)}`}
                 >
                   <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-white/70 text-2xl">●●</div>
-                  <div className="text-xl font-black text-zinc-950">Table {table.table_number}</div>
+                  <div className="break-words text-xl font-black text-zinc-950">Table {table.table_number}</div>
                   {amount > 0 && <div className="mt-1 text-sm font-bold text-zinc-600">₹{table.current_bill_amount}</div>}
                   {openFor && <div className="mt-1 text-xs font-semibold text-zinc-500">{openFor}</div>}
                   <div className="mt-4 inline-flex min-h-9 items-center rounded-full bg-white/75 px-4 text-sm font-black">{status}</div>

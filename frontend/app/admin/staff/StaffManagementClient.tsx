@@ -27,6 +27,7 @@ import {
 } from "@/lib/formValidation";
 import { StaffAccountCreateRequest, StaffAccountResponse, StaffOperationsResponse } from "@/lib/types";
 import { useOmluUi } from "@/components/OmluUiProvider";
+import { useModalScrollLock } from "@/components/useModalScrollLock";
 
 const EMPTY_FORM: StaffAccountCreateRequest = {
   name: "",
@@ -58,6 +59,10 @@ export default function StaffManagementClient() {
   const [resetPasswordError, setResetPasswordError] = useState<string | undefined>();
   const [resetSaving, setResetSaving] = useState(false);
   const createFieldOrder: (keyof StaffAccountCreateRequest)[] = ["name", "username", "role", "email", "temporary_password", "pin", "confirm_pin"];
+
+  useModalScrollLock(Boolean(resetTarget), () => {
+    if (!resetSaving) setResetTarget(null);
+  });
 
   const loadStaff = useCallback(async () => {
     setLoading(true);
@@ -350,9 +355,9 @@ export default function StaffManagementClient() {
         </div>
       )}
       {resetTarget && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4">
-          <form onSubmit={submitResetPassword} className="w-full max-w-md rounded-xl border border-zinc-800 bg-zinc-900 p-5 shadow-xl">
-            <h2 className="text-lg font-black text-white">{resetTarget.role === "staff" || resetTarget.role === "kitchen" ? "Reset PIN" : "Reset Password"}</h2>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto overscroll-contain bg-black/60 p-4">
+          <form onSubmit={submitResetPassword} className="my-auto max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-900 p-5 shadow-xl" role="dialog" aria-modal="true" aria-labelledby="reset-password-title">
+            <h2 id="reset-password-title" className="break-words text-lg font-black text-white">{resetTarget.role === "staff" || resetTarget.role === "kitchen" ? "Reset PIN" : "Reset Password"}</h2>
             <p className="mt-1 text-sm text-zinc-500">{resetTarget.name}</p>
             <div className="mt-4">
               <PasswordInput
