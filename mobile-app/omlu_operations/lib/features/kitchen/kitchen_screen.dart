@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import '../../design_system/colors.dart';
 import '../../design_system/spacing.dart';
 import '../../design_system/typography.dart';
@@ -24,6 +25,8 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
   final Set<String> _processingTokens = {};
 
   Future<void> _changeStatus(String token, String currentStatus) async {
+    if (_processingTokens.contains(token)) return;
+    await HapticFeedback.mediumImpact();
     setState(() => _processingTokens.add(token));
     try {
       await ref

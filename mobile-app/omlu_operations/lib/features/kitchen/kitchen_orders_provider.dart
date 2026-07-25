@@ -35,9 +35,10 @@ class KitchenOrdersNotifier
 
   final OperationsApi _api;
   final String _restaurantSlug;
+  final Set<String> _updatingTokens = {};
 
   Future<void> fetchOrders({bool silent = false}) async {
-    if (!silent) {
+    if (!silent && !state.hasValue) {
       state = const AsyncValue.loading();
     }
     try {
@@ -47,22 +48,16 @@ class KitchenOrdersNotifier
       );
       state = AsyncValue.data(orders);
     } catch (e, st) {
-      if (!silent) {
+      if (!state.hasValue) {
         state = AsyncValue.error(e, st);
       }
     }
   }
 
   Future<void> advanceStatus(String publicToken, String currentStatus) async {
-    if (currentStatus == 'pending') {
-      await _api.updateKitchenStatus(
-        restaurantSlug: _restaurantSlug,
-        publicToken: publicToken,
-        status: 'accepted',
-      );
-      currentStatus = 'accepted';
-    }
+    if (_updatingTokens.contains(publicToken)) return;
     final nextStatus = switch (currentStatus) {
+      'pending' => 'accepted',
       'accepted' => 'preparing',
       'preparing' => 'ready',
       'ready' => 'served',
@@ -70,6 +65,22 @@ class KitchenOrdersNotifier
     };
 
     if (nextStatus == null) return;
+    final previous = state.valueOrNull;
+    if (previous == null) return;
+    _updatingTokens.add(publicToken);
+    state = AsyncValue.data(
+      nextStatus == 'served'
+          ? previous
+                .where((order) => order.publicToken != publicToken)
+                .toList(growable: false)
+          : [
+              for (final order in previous)
+                if (order.publicToken == publicToken)
+                  order.copyWith(status: nextStatus)
+                else
+                  order,
+            ],
+    );
 
     try {
       await _api.updateKitchenStatus(
@@ -79,7 +90,10 @@ class KitchenOrdersNotifier
       );
       await fetchOrders(silent: true);
     } catch (e) {
+      state = AsyncValue.data(previous);
       rethrow;
+    } finally {
+      _updatingTokens.remove(publicToken);
     }
   }
 }

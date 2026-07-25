@@ -1,19 +1,36 @@
 import 'api_client.dart';
 import '../models/operations_models.dart';
+import '../storage/operations_data_cache.dart';
 
 class OperationsApi {
-  const OperationsApi(this._client);
+  OperationsApi(this._client, {OperationsDataCache? cache}) : _cache = cache;
 
   final ApiClient _client;
+  final OperationsDataCache? _cache;
 
   Future<List<StaffTableSummary>> fetchStaffTables({
     String filter = 'all',
+    bool forceRefresh = false,
   }) async {
+    final cacheKey = 'tables_$filter';
+    if (!forceRefresh) {
+      final cached = await _cache?.read(
+        cacheKey,
+        maxAge: const Duration(minutes: 2),
+      );
+      if (cached is List) {
+        return [
+          for (final item in cached)
+            StaffTableSummary.fromJson(Map<String, Object?>.from(item as Map)),
+        ];
+      }
+    }
     final json = await _client.getJson(
       '/staff/tables',
       query: {'filter': filter},
     );
     final items = json['items'] as List? ?? const [];
+    await _cache?.write(cacheKey, items);
     return [
       for (final item in items)
         StaffTableSummary.fromJson(Map<String, Object?>.from(item as Map)),
@@ -21,6 +38,8 @@ class OperationsApi {
   }
 
   Future<Map<String, Object?>> fetchStaffTableDetail(int tableId) {
+    // This response also contains live session/bill state, so it is never
+    // persisted. Riverpod retains it in memory while the screen is active.
     return _client.getJson('/staff/tables/$tableId');
   }
 
@@ -34,6 +53,7 @@ class OperationsApi {
       body: draft.toJson(),
       idempotencyKey: idempotencyKey,
     );
+    await _cache?.invalidate('tables_all');
     return OrderSummary.fromJson(json);
   }
 

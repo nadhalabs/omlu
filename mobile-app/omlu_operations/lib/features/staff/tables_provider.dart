@@ -12,6 +12,7 @@ class TablesNotifier
     extends StateNotifier<AsyncValue<List<StaffTableSummary>>> {
   TablesNotifier(this._api, Ref ref) : super(const AsyncValue.loading()) {
     fetchTables();
+    Future<void>.microtask(() => fetchTables(silent: true));
 
     // Listen to realtime events to trigger re-fetch
     ref.listen(realtimeEventStreamProvider, (prev, next) {
@@ -56,14 +57,14 @@ class TablesNotifier
   final OperationsApi _api;
 
   Future<void> fetchTables({bool silent = false}) async {
-    if (!silent) {
+    if (!silent && !state.hasValue) {
       state = const AsyncValue.loading();
     }
     try {
-      final tables = await _api.fetchStaffTables();
+      final tables = await _api.fetchStaffTables(forceRefresh: silent);
       if (mounted) state = AsyncValue.data(tables);
     } catch (e, st) {
-      if (mounted && !silent) {
+      if (mounted && !state.hasValue) {
         state = AsyncValue.error(e, st);
       }
     }

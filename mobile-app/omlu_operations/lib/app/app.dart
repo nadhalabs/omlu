@@ -70,6 +70,13 @@ class OmluNativeApp extends ConsumerWidget {
             disabledForegroundColor: OmluColors.disabledText,
           ),
         ),
+        pageTransitionsTheme: const PageTransitionsTheme(
+          builders: {
+            TargetPlatform.android: FadeForwardsPageTransitionsBuilder(
+              backgroundColor: OmluColors.background,
+            ),
+          },
+        ),
         useMaterial3: true,
       ),
       home: authState.when(

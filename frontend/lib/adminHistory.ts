@@ -96,9 +96,16 @@ function paramsFrom(filters: HistoryFilters) {
   return params.toString();
 }
 
-export async function fetchHistory<T>(path: string, filters: HistoryFilters = {}): Promise<T> {
+export async function fetchHistory<T>(
+  path: string,
+  filters: HistoryFilters = {},
+  signal?: AbortSignal,
+): Promise<T> {
   const query = paramsFrom(filters);
-  const res = await fetch(`/api/admin/history/${path}${query ? `?${query}` : ""}`, { cache: "no-store" });
+  const res = await fetch(`/api/admin/history/${path}${query ? `?${query}` : ""}`, {
+    cache: "no-store",
+    signal,
+  });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     const detail = typeof data.detail === "string" ? data.detail : "Request failed.";

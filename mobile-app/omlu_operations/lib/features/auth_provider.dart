@@ -5,6 +5,7 @@ import '../core/auth/auth_repository.dart';
 import '../core/models/role_session.dart';
 import '../core/storage/token_storage.dart';
 import '../core/storage/secure_token_storage.dart';
+import '../core/storage/operations_data_cache.dart';
 import '../src/app_config.dart';
 
 final appConfigProvider = Provider<AppConfig>((ref) {
@@ -22,7 +23,11 @@ final apiClientProvider = Provider<ApiClient>((ref) {
 
 final operationsApiProvider = Provider<OperationsApi>((ref) {
   final client = ref.watch(apiClientProvider);
-  return OperationsApi(client);
+  return OperationsApi(client, cache: ref.watch(operationsDataCacheProvider));
+});
+
+final operationsDataCacheProvider = Provider<OperationsDataCache>((ref) {
+  return OperationsDataCache();
 });
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {

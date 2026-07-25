@@ -356,4 +356,17 @@ class KitchenOrder {
   final DateTime createdAt;
   final List<KitchenOrderItem> items;
   final String? customerNote;
+
+  KitchenOrder copyWith({String? status}) {
+    return KitchenOrder(
+      orderNumber: orderNumber,
+      publicToken: publicToken,
+      tableNumber: tableNumber,
+      status: status ?? this.status,
+      subtotal: subtotal,
+      createdAt: createdAt,
+      items: items,
+      customerNote: customerNote,
+    );
+  }
 }

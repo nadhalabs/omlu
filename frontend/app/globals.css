@@ -70,6 +70,50 @@ a:focus-visible {
   color: var(--omlu-text-muted);
 }
 
+@media (prefers-reduced-motion: no-preference) {
+  button,
+  a[role="button"],
+  a[class*="rounded"] {
+    transition:
+      transform 120ms ease,
+      opacity 120ms ease,
+      background-color 160ms ease,
+      border-color 160ms ease,
+      box-shadow 160ms ease;
+  }
+
+  button:active:not(:disabled),
+  a[role="button"]:active,
+  a[class*="rounded"]:active {
+    transform: scale(0.98);
+  }
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+.omlu-skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--omlu-surface-muted);
+}
+
+.omlu-skeleton::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.65), transparent);
+  animation: omlu-shimmer 1.4s infinite;
+}
+
+@keyframes omlu-shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
 /* Light compatibility skin for the established Admin and Kitchen layouts. */
 .omlu-light-shell {
   background: var(--omlu-background) !important;

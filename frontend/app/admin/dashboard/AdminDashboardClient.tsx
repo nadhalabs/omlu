@@ -7,6 +7,7 @@ import {
 } from "@/lib/api";
 import { DashboardSummaryResponse } from "@/lib/types";
 import { useRealtime } from "@/lib/realtime";
+import { queryKeys, useCachedQuery } from "@/lib/queryCache";
 
 function StatCard({
   label,
@@ -41,43 +42,43 @@ function StatCard({
 }
 
 export default function AdminDashboardClient() {
-  const [data, setData] = useState<DashboardSummaryResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
-  const fetchDashboard = useCallback(async (showLoading = true) => {
-    if (showLoading) setLoading(true);
-    try {
-      const summary = await getAdminDashboardSummary();
-      setData(summary);
-      setError(null);
-      setLastUpdated(new Date());
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setError(err.message);
-      } else {
-        setError("Could not load dashboard data.");
-      }
-    } finally {
-      if (showLoading) setLoading(false);
-    }
+  const queryFn = useCallback(async () => {
+    const summary = await getAdminDashboardSummary();
+    setLastUpdated(new Date());
+    return summary;
   }, []);
+  const {
+    data,
+    error: queryError,
+    isLoading: loading,
+    isRefreshing,
+    refetch,
+  } = useCachedQuery<DashboardSummaryResponse>(queryKeys.dashboard, queryFn, {
+    staleTime: 30_000,
+  });
+  const error = queryError
+    ? queryError instanceof ApiError
+      ? queryError.message
+      : "Could not load dashboard data."
+    : null;
+  const fetchDashboard = useCallback(async () => {
+    await refetch().catch(() => undefined);
+  }, [refetch]);
 
   useEffect(() => {
-    const timeout = window.setTimeout(() => fetchDashboard(true), 0);
     // Refresh every 30 seconds automatically
-    const interval = setInterval(() => fetchDashboard(false), 30_000);
+    const interval = setInterval(() => void fetchDashboard(), 30_000);
     return () => {
-      window.clearTimeout(timeout);
       clearInterval(interval);
     };
   }, [fetchDashboard]);
 
   const realtimeStatus = useRealtime({
     target: { kind: "staff", channel: "admin" },
-    onEvent: () => void fetchDashboard(false),
-    onReconnect: () => void fetchDashboard(false),
+    onEvent: () => void fetchDashboard(),
+    onReconnect: () => void fetchDashboard(),
   });
 
   if (loading && !data) {
@@ -99,7 +100,7 @@ export default function AdminDashboardClient() {
           <h2 className="text-white font-bold text-lg mb-2">Dashboard unavailable</h2>
           <p className="text-zinc-400 text-sm mb-6">{error}</p>
           <button
-            onClick={() => fetchDashboard(true)}
+            onClick={() => void fetchDashboard()}
             className="px-6 py-2.5 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-xl transition cursor-pointer"
           >
             Retry
@@ -140,10 +141,11 @@ export default function AdminDashboardClient() {
             </span>
           )}
           <button
-            onClick={() => fetchDashboard(false)}
+            onClick={() => void fetchDashboard()}
+            disabled={isRefreshing}
             className="text-xs text-orange-500 hover:text-orange-400 underline font-semibold transition cursor-pointer"
           >
-            Refresh now
+            {isRefreshing ? "Refreshing…" : "Refresh now"}
           </button>
         </div>
       </div>

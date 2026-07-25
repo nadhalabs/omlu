@@ -15,6 +15,7 @@ import {
   updateAdminMenuItemAvailability,
 } from "@/lib/api";
 import { AdminCategoryResponse, AdminMenuItemResponse } from "@/lib/types";
+import { invalidateQueries } from "@/lib/queryCache";
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
@@ -332,16 +333,21 @@ export default function AdminMenuPage() {
     setUpdatingAvail((prev) => ({ ...prev, [item.id]: true }));
 
     const nextAvail = !item.is_available;
+    const previousItems = items;
+    setItems((current) =>
+      current.map((currentItem) =>
+        currentItem.id === item.id
+          ? { ...currentItem, is_available: nextAvail }
+          : currentItem,
+      ),
+    );
 
     try {
       await updateAdminMenuItemAvailability(item.id, nextAvail);
-      // Update local state directly for speed, but reloading is also safe.
-      // We do local state update to prevent flashing, which is operationally great.
-      setItems((prev) =>
-        prev.map((i) => (i.id === item.id ? { ...i, is_available: nextAvail } : i))
-      );
+      invalidateQueries("menu");
     } catch (err) {
-      toast(`Failed to update availability: ${getErrorMessage(err, "Update failed.")}`, "error");
+      setItems(previousItems);
+      toast(`Availability restored. ${getErrorMessage(err, "Update failed.")} Tap to retry.`, "error");
     } finally {
       setUpdatingAvail((prev) => ({ ...prev, [item.id]: false }));
     }

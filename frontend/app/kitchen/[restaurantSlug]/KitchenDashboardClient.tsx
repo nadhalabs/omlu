@@ -246,6 +246,16 @@ export default function KitchenDashboardClient({
   const handleUpdateStatus = async (publicToken: string, nextStatus: string) => {
     if (updatingTokens[publicToken]) return;
     setUpdatingTokens((prev) => ({ ...prev, [publicToken]: true }));
+    const previousOrders = orders;
+    setOrders((current) =>
+      nextStatus === "served" || nextStatus === "rejected"
+        ? current.filter((order) => order.public_token !== publicToken)
+        : current.map((order) =>
+            order.public_token === publicToken
+              ? { ...order, status: nextStatus }
+              : order,
+          ),
+    );
 
     try {
       const updated = await updateKitchenOrderStatus(
@@ -262,14 +272,15 @@ export default function KitchenDashboardClient({
       });
       setError(null);
     } catch (err) {
+      setOrders(previousOrders);
       if (err instanceof ApiError) {
         if (err.status === 401) {
           router.replace("/login");
         } else {
-          toast(`Failed to update status: ${err.message}`, "error");
+          toast(`Order restored. ${err.message} Tap the action to retry.`, "error");
         }
       } else {
-        toast("Failed to update status: Connection error.", "error");
+        toast("Order restored after a connection error. Tap the action to retry.", "error");
       }
     } finally {
       setUpdatingTokens((prev) => ({ ...prev, [publicToken]: false }));

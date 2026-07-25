@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { StaffBottomNav } from "@/components/staff/StaffBottomNav";
 import { getStaffMe } from "@/lib/api";
 import { getStaffTables, StaffTableSummary } from "@/lib/staffTables";
 import { useRealtime } from "@/lib/realtime";
 import { CurrentStaffResponse } from "@/lib/types";
+import { queryKeys, useCachedQuery } from "@/lib/queryCache";
 
 const filters = [
   ["all", "All"],
@@ -43,50 +44,33 @@ function statusClasses(status: SimpleStatus) {
 export default function StaffTablesClient() {
   const [filter, setFilter] = useState<(typeof filters)[number][0]>("all");
   const [search, setSearch] = useState("");
-  const [tables, setTables] = useState<StaffTableSummary[]>([]);
-  const [staffInfo, setStaffInfo] = useState<CurrentStaffResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(async (showLoading = true) => {
-    if (showLoading) setLoading(true);
-    else setRefreshing(true);
-    try {
-      const data = await getStaffTables("all");
-      setTables(data.items);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load tables.");
-    } finally {
-      if (showLoading) setLoading(false);
-      else setRefreshing(false);
-    }
+  const tablesQuery = useCallback(async () => {
+    const data = await getStaffTables("all");
+    return data.items;
   }, []);
-
-  useEffect(() => {
-    const timeout = window.setTimeout(() => void load(true), 0);
-    return () => window.clearTimeout(timeout);
-  }, [load]);
-
-  useEffect(() => {
-    let cancelled = false;
-    getStaffMe()
-      .then((staff) => {
-        if (!cancelled) setStaffInfo(staff);
-      })
-      .catch(() => {
-        if (!cancelled) setStaffInfo(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const staffQuery = useCallback(() => getStaffMe(), []);
+  const {
+    data: tables = [],
+    error: tablesError,
+    isLoading: loading,
+    isRefreshing: refreshing,
+    refetch: load,
+  } = useCachedQuery<StaffTableSummary[]>(queryKeys.tables, tablesQuery, {
+    staleTime: 15_000,
+  });
+  const { data: staffInfo } = useCachedQuery<CurrentStaffResponse>(
+    queryKeys.staffMe,
+    staffQuery,
+    { staleTime: 5 * 60_000 },
+  );
+  const error = tablesError
+    ? tablesError.message || "Could not load tables."
+    : null;
 
   useRealtime({
     target: { kind: "staff", channel: "staff" },
-    onEvent: () => void load(false),
-    onReconnect: () => void load(false),
+    onEvent: () => void load().catch(() => undefined),
+    onReconnect: () => void load().catch(() => undefined),
   });
 
   const visibleTables = useMemo(() => {
@@ -108,7 +92,7 @@ export default function StaffTablesClient() {
     <div className="min-h-screen bg-[var(--omlu-background)] px-4 pb-28 pt-5 text-zinc-950">
       <div className="mx-auto flex max-w-md flex-col gap-5 sm:max-w-xl">
         <header className="flex items-center justify-between">
-          <button type="button" onClick={() => void load(false)} className="flex h-12 w-12 items-center justify-center rounded-full text-2xl text-zinc-900" aria-label="Refresh tables">
+          <button type="button" disabled={refreshing} onClick={() => void load().catch(() => undefined)} className="flex h-12 w-12 items-center justify-center rounded-full text-2xl text-zinc-900 transition active:scale-95 disabled:opacity-50" aria-label="Refresh tables">
             ≡
           </button>
           <div className="text-center">
@@ -147,7 +131,7 @@ export default function StaffTablesClient() {
         {error && (
           <div className="rounded-3xl border border-red-200 bg-white p-5 text-sm font-semibold text-red-700">
             <p>{error}</p>
-            <button onClick={() => void load(true)} className="mt-4 h-12 rounded-full bg-orange-600 px-6 font-black text-white">
+            <button onClick={() => void load().catch(() => undefined)} className="mt-4 h-12 rounded-full bg-orange-600 px-6 font-black text-white transition active:scale-95">
               Retry
             </button>
           </div>
