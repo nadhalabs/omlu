@@ -25,3 +25,10 @@ test("dashboard refetches in realtime and payment events reach its admin channel
   assert.match(billsRoute, /restaurant_channel\(current_user\.restaurant_id, "admin"\)/);
   assert.match(quickSalesRoute, /restaurant_channel\(current_user\.restaurant_id, "admin"\)/);
 });
+
+test("dashboard recent activity uses stable grouped entries and links to full history", () => {
+  assert.match(dashboard, /key=\{item\.id\}/);
+  assert.match(dashboard, /View all activity/);
+  assert.match(dashboard, /\/admin\/orders\/history/);
+  assert.doesNotMatch(dashboard, /key=\{`\$\{item\.timestamp\}-\$\{idx\}`\}/);
+});

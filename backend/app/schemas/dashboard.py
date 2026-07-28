@@ -34,9 +34,12 @@ class DashboardAttentionItem(BaseModel):
 
 
 class DashboardActivityItem(BaseModel):
+    id: str
     actor: str
     table_number: Optional[str] = None
     action: str
+    status: str
+    count: int = 1
     timestamp: str
 
 

@@ -265,15 +265,20 @@ export default function AdminDashboardClient() {
 
       <section className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
-          <h2 className="text-sm font-black text-zinc-400 uppercase tracking-wider mb-4">
-            Recent Activity
-          </h2>
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h2 className="text-sm font-black text-zinc-400 uppercase tracking-wider">
+              Recent Activity
+            </h2>
+            <a href="/admin/orders/history" className="text-xs font-bold text-orange-400 hover:text-orange-300">
+              View all activity
+            </a>
+          </div>
           {data.recent_activity.length === 0 ? (
             <p className="text-zinc-500 text-sm">No activity recorded yet.</p>
           ) : (
             <div className="flex flex-col gap-2">
-              {data.recent_activity.map((item, idx) => (
-                <div key={`${item.timestamp}-${idx}`} className="flex justify-between gap-3 text-sm border-b border-zinc-800 pb-2 last:border-0">
+              {data.recent_activity.map((item) => (
+                <div key={item.id} className="flex justify-between gap-3 text-sm border-b border-zinc-800 pb-2 last:border-0">
                   <span className="text-zinc-200">{item.action} {item.table_number ? `· Table ${item.table_number}` : ""}</span>
                   <span className="text-zinc-500 shrink-0">{new Date(item.timestamp).toLocaleTimeString()}</span>
                 </div>

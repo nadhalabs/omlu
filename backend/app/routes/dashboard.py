@@ -4,7 +4,7 @@ from typing import List
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, text
 
 from app.database import get_db
@@ -23,11 +23,183 @@ from app.schemas.dashboard import (
 from app.utils.auth import RoleChecker
 from app.models.staff_user import StaffUser
 from app.models.quick_sale import QuickSale, QuickSaleItem
+from app.models.bill import Bill
 from app.services.revenue import collected_revenue
 
 router = APIRouter(prefix="/admin/dashboard")
 
 _owner_admin = RoleChecker(["owner", "admin"])
+DASHBOARD_ACTIVITY_LIMIT = 8
+DASHBOARD_ACTIVITY_GROUP_WINDOW = datetime.timedelta(seconds=60)
+DASHBOARD_ACTIVITY_QUERY_LIMIT = 200
+
+
+def _activity_label(status: str, count: int) -> str:
+    labels = {
+        "ready": "order ready",
+        "served": "order served",
+        "payment_requested": "payment requested",
+        "payment_completed": "payment completed",
+        "service_request_created": "service request created",
+        "service_request_resolved": "service request resolved",
+    }
+    singular = labels[status]
+    if count == 1:
+        return singular.capitalize()
+    if status in {"ready", "served"}:
+        return f"{count} orders {status}"
+    return f"{count} {singular} events"
+
+
+def _group_dashboard_activity(
+    events: list[dict],
+    *,
+    window: datetime.timedelta = DASHBOARD_ACTIVITY_GROUP_WINDOW,
+    limit: int = DASHBOARD_ACTIVITY_LIMIT,
+) -> list[DashboardActivityItem]:
+    """Presentation-only aggregation; source audit rows are never mutated."""
+    groups: list[dict] = []
+    for event in sorted(events, key=lambda item: item["timestamp"], reverse=True):
+        matching = next((
+            group for group in groups
+            if group["restaurant_id"] == event["restaurant_id"]
+            and group["table_number"] == event["table_number"]
+            and (
+                group["table_number"] is not None
+                or group["source"] == event["source"]
+            )
+            and group["status"] == event["status"]
+            and group["timestamp"] - event["timestamp"] <= window
+        ), None)
+        if matching:
+            matching["event_ids"].append(event["id"])
+            matching["count"] += 1
+            continue
+        groups.append({**event, "event_ids": [event["id"]], "count": 1})
+
+    return [
+        DashboardActivityItem(
+            id="|".join(sorted(group["event_ids"])),
+            actor=group["actor"],
+            table_number=group["table_number"],
+            action=_activity_label(group["status"], group["count"]),
+            status=group["status"],
+            count=group["count"],
+            timestamp=group["timestamp"].isoformat(),
+        )
+        for group in groups[:limit]
+    ]
+
+
+def _latest_meaningful_order_histories(histories) -> list[OrderStatusHistory]:
+    latest = []
+    seen_order_ids: set[int] = set()
+    for history in histories:
+        if history.order_id in seen_order_ids:
+            continue
+        seen_order_ids.add(history.order_id)
+        latest.append(history)
+    return latest
+
+
+def _recent_dashboard_activity(db: Session, restaurant_id: int) -> list[DashboardActivityItem]:
+    events: list[dict] = []
+
+    # Descending order plus seen IDs keeps only the latest meaningful state per order.
+    histories = (
+        db.query(OrderStatusHistory)
+        .options(joinedload(OrderStatusHistory.order).joinedload(Order.table))
+        .join(Order, OrderStatusHistory.order_id == Order.id)
+        .filter(
+            Order.restaurant_id == restaurant_id,
+            OrderStatusHistory.new_status.in_(["ready", "served"]),
+        )
+        .order_by(OrderStatusHistory.changed_at.desc(), OrderStatusHistory.id.desc())
+        .limit(DASHBOARD_ACTIVITY_QUERY_LIMIT)
+        .all()
+    )
+    for history in _latest_meaningful_order_histories(histories):
+        events.append({
+            "id": f"order-status:{history.id}",
+            "restaurant_id": restaurant_id,
+            "table_number": history.order.table.table_number if history.order and history.order.table else None,
+            "source": history.order.source if history.order else None,
+            "status": history.new_status,
+            "actor": f"Staff #{history.changed_by_staff_id}" if history.changed_by_staff_id else "System",
+            "timestamp": history.changed_at,
+        })
+
+    sessions = (
+        db.query(DiningSession)
+        .options(joinedload(DiningSession.table))
+        .filter(
+            DiningSession.restaurant_id == restaurant_id,
+            DiningSession.payment_requested_at.is_not(None),
+        )
+        .order_by(DiningSession.payment_requested_at.desc())
+        .limit(DASHBOARD_ACTIVITY_QUERY_LIMIT)
+        .all()
+    )
+    for session in sessions:
+        events.append({
+            "id": f"payment-requested:{session.id}",
+            "restaurant_id": restaurant_id,
+            "table_number": session.table.table_number if session.table else None,
+            "source": "table",
+            "status": "payment_requested",
+            "actor": "System",
+            "timestamp": session.payment_requested_at,
+        })
+
+    bills = (
+        db.query(Bill)
+        .options(joinedload(Bill.dining_session).joinedload(DiningSession.table))
+        .filter(Bill.restaurant_id == restaurant_id, Bill.paid_at.is_not(None))
+        .order_by(Bill.paid_at.desc())
+        .limit(DASHBOARD_ACTIVITY_QUERY_LIMIT)
+        .all()
+    )
+    for bill in bills:
+        events.append({
+            "id": f"payment-completed:{bill.id}",
+            "restaurant_id": restaurant_id,
+            "table_number": bill.dining_session.table.table_number,
+            "source": "table",
+            "status": "payment_completed",
+            "actor": f"Staff #{bill.paid_by_staff_id}" if bill.paid_by_staff_id else "System",
+            "timestamp": bill.paid_at,
+        })
+
+    requests = (
+        db.query(ServiceRequest)
+        .options(joinedload(ServiceRequest.table))
+        .filter(ServiceRequest.restaurant_id == restaurant_id, ServiceRequest.request_type != "bill")
+        .order_by(ServiceRequest.created_at.desc())
+        .limit(DASHBOARD_ACTIVITY_QUERY_LIMIT)
+        .all()
+    )
+    for request in requests:
+        events.append({
+            "id": f"service-created:{request.id}",
+            "restaurant_id": restaurant_id,
+            "table_number": request.table.table_number if request.table else None,
+            "source": "table",
+            "status": "service_request_created",
+            "actor": "System",
+            "timestamp": request.created_at,
+        })
+        if request.resolved_at:
+            events.append({
+                "id": f"service-resolved:{request.id}",
+                "restaurant_id": restaurant_id,
+                "table_number": request.table.table_number if request.table else None,
+                "source": "table",
+                "status": "service_request_resolved",
+                "actor": f"Staff #{request.resolved_by_staff_id}" if request.resolved_by_staff_id else "System",
+                "timestamp": request.resolved_at,
+            })
+
+    return _group_dashboard_activity(events)
 
 
 def _get_local_day_bounds_utc(timezone_str: str):
@@ -296,16 +468,7 @@ def get_dashboard_summary(
         ))
     attention_items = sorted(attention_items, key=lambda item: item.timestamp or "")[:12]
 
-    recent_activity = []
-    for hist in db.query(OrderStatusHistory).join(Order, OrderStatusHistory.order_id == Order.id).filter(
-        Order.restaurant_id == restaurant_id,
-    ).order_by(OrderStatusHistory.changed_at.desc()).limit(12).all():
-        recent_activity.append(DashboardActivityItem(
-            actor=f"Staff #{hist.changed_by_staff_id}" if hist.changed_by_staff_id else "System",
-            table_number=hist.order.table.table_number if hist.order and hist.order.table else None,
-            action=f"Order {hist.new_status}",
-            timestamp=hist.changed_at.isoformat(),
-        ))
+    recent_activity = _recent_dashboard_activity(db, restaurant_id)
 
     return DashboardSummaryResponse(
         restaurant_name=current_user.restaurant.name,

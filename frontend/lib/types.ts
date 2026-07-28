@@ -472,9 +472,12 @@ export interface DashboardAttentionItem {
 }
 
 export interface DashboardActivityItem {
+  id: string;
   actor: string;
   table_number: string | null;
   action: string;
+  status: string;
+  count: number;
   timestamp: string;
 }
 
