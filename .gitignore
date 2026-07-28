@@ -1,15 +1,51 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+backend/.venv/
+backend/venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Node and Next.js
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/coverage/
+frontend/tsconfig.tsbuildinfo
+*.tsbuildinfo
+
+# Flutter and Dart
+mobile-app/omlu_operations/.dart_tool/
+mobile-app/omlu_operations/build/
+mobile-app/omlu_operations/.flutter-plugins
+mobile-app/omlu_operations/.flutter-plugins-dependencies
+mobile-app/omlu_operations/.packages
+mobile-app/omlu_operations/*.iml
+mobile-app/omlu_operations/android/*.iml
+mobile-app/omlu_operations/android/local.properties
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
 backend/.env
 frontend/.env.local
-backend/venv/
-frontend/.next/
-__pycache__/
-*.pyc
+mobile-app/omlu_operations/android/key.properties
+
+# IDE
+.idea/
+.vscode/
+
+# Local databases and signing material
 *.db
 *.sqlite3
 *.pem
 *.key
 *.jks
-.DS_Store
-
-backend/.venv/
-backend/venv/
