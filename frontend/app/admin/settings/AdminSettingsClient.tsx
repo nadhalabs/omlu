@@ -212,7 +212,7 @@ export default function AdminSettingsClient() {
               Customer Service Requests
             </label>
             <p className="text-zinc-500 text-xs mt-1">
-              When enabled, customers can send waiter / water / bill requests from the tracking page.
+              When enabled, customers can send waiter, water, and assistance requests from the tracking page. Billing uses Pending Payments.
             </p>
           </div>
           <button

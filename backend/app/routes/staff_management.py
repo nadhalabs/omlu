@@ -128,7 +128,7 @@ def _operations_state(db: Session, actor: StaffUser) -> StaffOperationsResponse:
         reason=restaurant.staff_lock_reason, operating_status=restaurant.operating_status,
         active_sessions=db.query(DiningSession).filter(DiningSession.restaurant_id == actor.restaurant_id, DiningSession.status.in_(["open", "bill_requested", "payment_pending"])).count(),
         unserved_orders=db.query(Order).filter(Order.restaurant_id == actor.restaurant_id, Order.status.in_(["pending", "accepted", "preparing", "ready"])).count(),
-        pending_requests=db.query(ServiceRequest).filter(ServiceRequest.restaurant_id == actor.restaurant_id, ServiceRequest.status == "pending").count(),
+        pending_requests=db.query(ServiceRequest).filter(ServiceRequest.restaurant_id == actor.restaurant_id, ServiceRequest.status == "pending", ServiceRequest.request_type != "bill").count(),
         bills_waiting_for_payment=db.query(Bill).filter(Bill.restaurant_id == actor.restaurant_id, Bill.status.in_(["issued", "payment_pending"])).count(),
         occupied_tables=db.query(DiningSession.table_id).filter(DiningSession.restaurant_id == actor.restaurant_id, DiningSession.status.in_(["open", "bill_requested", "payment_pending"])).distinct().count(),
     )

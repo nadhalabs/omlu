@@ -144,6 +144,7 @@ def build_session_response(db: Session, dining_session: DiningSession):
         ServiceRequest.restaurant_id == dining_session.restaurant_id,
         ServiceRequest.table_id == dining_session.table_id,
         ServiceRequest.dining_session_id == dining_session.id,
+        ServiceRequest.request_type != "bill",
     ).order_by(ServiceRequest.created_at.asc(), ServiceRequest.id.asc()).all()
     return {
         "public_token": dining_session.public_token,

@@ -18,13 +18,11 @@ import { useRealtime } from "@/lib/realtime";
 const REQUEST_TYPE_LABELS: Record<string, string> = {
   waiter: "🙋 Waiter",
   water: "💧 Water",
-  bill: "🧾 Bill",
 };
 
 const REQUEST_TYPE_COLORS: Record<string, string> = {
   waiter: "bg-orange-950/30 border-orange-700/40 text-orange-400",
   water: "bg-sky-950/30 border-sky-700/40 text-sky-400",
-  bill: "bg-emerald-950/30 border-emerald-700/40 text-emerald-400",
 };
 
 function timeAgo(dateStr: string): string {

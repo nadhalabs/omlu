@@ -88,6 +88,7 @@ def _table_summary(db: Session, table: RestaurantTable, session: DiningSession |
             ServiceRequest.restaurant_id == table.restaurant_id,
             ServiceRequest.table_id == table.id,
             ServiceRequest.status == "pending",
+            ServiceRequest.request_type != "bill",
         )
         .all()
     )
@@ -206,6 +207,7 @@ def get_staff_table(
         ServiceRequest.restaurant_id == current_user.restaurant_id,
         ServiceRequest.table_id == table.id,
         ServiceRequest.status == "pending",
+        ServiceRequest.request_type != "bill",
     ).order_by(ServiceRequest.created_at.asc()).all()
     categories = db.query(MenuCategory).options(
         selectinload(MenuCategory.items)
@@ -455,7 +457,7 @@ def create_staff_table_bill(
     return build_bill_response(db, bill)
 
 
-@router.post("/{table_id}/bill-request", response_model=StaffServiceRequestResponse)
+@router.post("/{table_id}/bill-request")
 def request_staff_table_bill(
     table_id: int,
     response: Response,
@@ -481,21 +483,8 @@ def request_staff_table_bill(
     if not session:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Active session not found")
 
-    existing_request = (
-        db.query(ServiceRequest)
-        .filter(
-            ServiceRequest.restaurant_id == current_user.restaurant_id,
-            ServiceRequest.table_id == table.id,
-            ServiceRequest.dining_session_id == session.id,
-            ServiceRequest.request_type == "bill",
-            ServiceRequest.status == "pending",
-        )
-        .with_for_update()
-        .first()
-    )
-    if existing_request:
-        return _staff_request_response(db, existing_request)
-
+    if session.status == "payment_requested" and session.bill:
+        return build_bill_response(db, session.bill)
     if session.status != "open":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Bill request is not available for this session.")
 
@@ -516,18 +505,10 @@ def request_staff_table_bill(
     bill = create_or_refresh_bill_for_session(db, session, generated_by_staff_id=current_user.id)
     if not bill.generated_by_staff_id:
         bill.generated_by_staff_id = current_user.id
-    bill_request = ServiceRequest(
-        restaurant_id=current_user.restaurant_id,
-        table_id=table.id,
-        dining_session_id=session.id,
-        request_type="bill",
-        status="pending",
-    )
-    db.add(bill_request)
-    db.flush()
-    _audit(db, current_user, "staff_bill_requested", "service_request", str(bill_request.id), {"table_id": table.id, "session_token": session.public_token})
+    session.status = "payment_requested"
+    session.payment_requested_at = datetime.datetime.now(datetime.timezone.utc)
+    _audit(db, current_user, "staff_bill_requested", "bill", str(bill.id), {"table_id": table.id, "session_token": session.public_token})
     db.commit()
-    db.refresh(bill_request)
 
     publish_event(
         EVENT_BILL_GENERATED,
@@ -542,18 +523,6 @@ def request_staff_table_bill(
         state={"bill_number": bill.bill_number, "session_token": session.public_token, "status": bill.status},
     )
     publish_event(
-        EVENT_SERVICE_REQUEST_CREATED,
-        restaurant_id=current_user.restaurant_id,
-        channels=[
-            restaurant_channel(current_user.restaurant_id, "operations"),
-            restaurant_channel(current_user.restaurant_id, "staff"),
-            table_channel(current_user.restaurant_id, table.id),
-            session_channel(session.public_token),
-        ],
-        resource_id=bill_request.id,
-        state={"request_type": "bill", "status": bill_request.status, "table_id": table.id},
-    )
-    publish_event(
         EVENT_TABLE_UPDATED,
         restaurant_id=current_user.restaurant_id,
         channels=[
@@ -564,4 +533,4 @@ def request_staff_table_bill(
         state={"table_id": table.id},
     )
     response.status_code = status.HTTP_201_CREATED
-    return _staff_request_response(db, bill_request)
+    return build_bill_response(db, bill)

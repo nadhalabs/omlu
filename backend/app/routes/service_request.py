@@ -47,7 +47,7 @@ def reset_service_request_rate_limit() -> None:
 
 
 
-VALID_REQUEST_TYPES = {"waiter", "water", "bill"}
+VALID_REQUEST_TYPES = {"waiter", "water"}
 
 
 @router.post(
@@ -215,7 +215,8 @@ def list_staff_service_requests(
 ):
     """Staff view: list service requests for this restaurant. Pending shown first, oldest first."""
     query = db.query(ServiceRequest).filter(
-        ServiceRequest.restaurant_id == current_user.restaurant_id
+        ServiceRequest.restaurant_id == current_user.restaurant_id,
+        ServiceRequest.request_type != "bill",
     )
 
     if status_filter and status_filter != "all":

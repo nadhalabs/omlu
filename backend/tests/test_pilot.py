@@ -301,7 +301,7 @@ class TestPublicServiceRequests:
             f"/public/restaurants/{restaurant.slug}/tables/{table.table_code}/service-requests",
             json={"request_type": "bill"},
         )
-        assert r.status_code == 201
+        assert r.status_code == 422
 
     def test_invalid_request_type_rejected(self, restaurant, table):
         r = client.post(

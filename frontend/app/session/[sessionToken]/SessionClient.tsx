@@ -6,6 +6,7 @@ import {
   ApiError,
   createOrRefreshPublicBill,
   createPublicServiceRequest,
+  requestPublicSessionBill,
   getPublicDiningSession,
 } from "@/lib/api";
 import { PublicDiningSessionResponse } from "@/lib/types";
@@ -297,7 +298,6 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
   const serviceTypes = [
     { type: "waiter", label: t.callWaiter },
     { type: "water", label: t.water },
-    { type: "bill", label: t.requestBill },
   ] as const;
 
   const handleAddMore = () => {
@@ -333,10 +333,7 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
     setBillActionLoading("request");
     setBillActionError(null);
     try {
-      await createOrRefreshPublicBill(session.public_token);
-      await createPublicServiceRequest(session.restaurant_slug, session.table_code, {
-        request_type: "bill",
-      });
+      await requestPublicSessionBill(session.public_token);
       setBillActionError(null);
       setServiceMessage((prev) => ({ ...prev, bill: t.billRequestSent }));
       router.push(`/bill/${session.public_token}`);
@@ -347,7 +344,7 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
     }
   };
 
-  const handleServiceRequest = async (type: "waiter" | "water" | "bill") => {
+  const handleServiceRequest = async (type: "waiter" | "water") => {
     if (!session) return;
     setServiceStatus((prev) => ({ ...prev, [type]: "loading" }));
     setServiceMessage((prev) => ({ ...prev, [type]: "" }));

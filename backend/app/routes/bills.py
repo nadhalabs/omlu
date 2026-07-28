@@ -1,3 +1,5 @@
+import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, joinedload
 
@@ -34,6 +36,42 @@ router = APIRouter()
 
 _bill_issue_roles = OperationalWriteChecker(["owner", "admin", "staff"])
 _payment_record_roles = RoleChecker(["owner", "admin"])
+
+
+@router.post(
+    "/public/sessions/{session_token}/bill-request",
+    response_model=BillResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def request_public_session_bill(
+    session_token: str,
+    db: Session = Depends(get_db),
+):
+    session = db.query(DiningSession).filter(
+        DiningSession.public_token == session_token
+    ).with_for_update().first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Dining session not found")
+    if session.status not in {"open", "payment_requested"}:
+        raise HTTPException(status_code=409, detail="Bill cannot be requested for this session")
+    bill = create_or_refresh_bill_for_session(db, session)
+    if session.status == "open":
+        session.status = "payment_requested"
+        session.payment_requested_at = datetime.datetime.now(datetime.timezone.utc)
+    db.commit()
+    publish_event(
+        EVENT_BILL_GENERATED,
+        restaurant_id=session.restaurant_id,
+        channels=[
+            restaurant_channel(session.restaurant_id, "operations"),
+            restaurant_channel(session.restaurant_id, "staff"),
+            session_channel(session.public_token),
+            table_channel(session.restaurant_id, session.table_id),
+        ],
+        resource_id=bill.id,
+        state={"bill_number": bill.bill_number, "status": "bill_requested", "session_token": session.public_token},
+    )
+    return build_bill_response(db, bill)
 
 
 @router.post(
@@ -120,7 +158,7 @@ def list_pending_counter_payments(
         )
         .filter(
             Bill.restaurant_id == current_user.restaurant_id,
-            Bill.status == "payment_pending",
+            Bill.status.in_(["draft", "issued", "payment_pending"]),
         )
         .order_by(Bill.updated_at.desc(), Bill.id.desc())
         .all()
@@ -159,6 +197,12 @@ def list_pending_counter_payments(
             "sent_by_staff_id": sender.id if sender else None,
             "sent_by_staff_name": sender.name if sender else None,
             "status": bill.status,
+            "stage": (
+                "bill_requested" if bill.status == "draft"
+                else "bill_issued" if bill.status == "issued" and not sent_audit
+                else "ready_for_payment" if bill.status == "payment_pending" and bill.payment_method is None
+                else "payment_pending"
+            ),
         })
     return {"items": items}
 

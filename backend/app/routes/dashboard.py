@@ -145,7 +145,8 @@ def get_dashboard_summary(
     # 4. Active service requests
     active_service_request_count = db.query(func.count(ServiceRequest.id)).filter(
         ServiceRequest.restaurant_id == restaurant_id,
-        ServiceRequest.status == "pending"
+        ServiceRequest.status == "pending",
+        ServiceRequest.request_type != "bill",
     ).scalar() or 0
 
     open_session_count = db.query(func.count(DiningSession.id)).filter(
@@ -221,6 +222,7 @@ def get_dashboard_summary(
     pending_requests = db.query(ServiceRequest).filter(
         ServiceRequest.restaurant_id == restaurant_id,
         ServiceRequest.status == "pending",
+        ServiceRequest.request_type != "bill",
     ).order_by(ServiceRequest.created_at.asc()).all()
     request_by_table_id = {}
     for req in pending_requests:

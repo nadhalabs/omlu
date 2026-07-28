@@ -380,7 +380,7 @@ export interface AdminTableResponse {
 // ---- Phase 9: Service Requests ----
 
 export interface ServiceRequestCreate {
-  request_type: "waiter" | "water" | "bill";
+  request_type: "waiter" | "water";
   public_order_token?: string | null;
 }
 
@@ -598,7 +598,8 @@ export interface PendingPaymentItem {
   sent_by_staff_id: number | null;
   sent_by_staff_name: string | null;
   session_opened_at: string;
-  status: "payment_pending";
+  status: "draft" | "issued" | "payment_pending";
+  stage: "bill_requested" | "bill_issued" | "ready_for_payment" | "payment_pending";
 }
 
 export interface StaffSessionDetail extends StaffSessionListItem {

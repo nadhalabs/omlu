@@ -317,9 +317,8 @@ def test_staff_bill_request_after_assisted_order_is_idempotent_and_visible(staff
 
     assert first.status_code == 201
     assert second.status_code == 200
-    assert first.json()["id"] == second.json()["id"]
-    assert first.json()["request_type"] == "bill"
-    assert first.json()["bill_number"] is not None
+    assert first.json()["bill_number"] == second.json()["bill_number"]
+    assert first.json()["status"] == "draft"
 
     db = SessionLocal()
     requests = db.query(ServiceRequest).filter(
@@ -329,9 +328,8 @@ def test_staff_bill_request_after_assisted_order_is_idempotent_and_visible(staff
         ServiceRequest.status == "pending",
     ).all()
     bills = db.query(Bill).filter(Bill.restaurant_id == staff_order_context["restaurant_id"]).all()
-    assert len(requests) == 1
+    assert len(requests) == 0
     assert len(bills) == 1
-    assert requests[0].dining_session_id == bills[0].dining_session_id
     db.close()
 
     detail_after = client.get(
@@ -342,10 +340,10 @@ def test_staff_bill_request_after_assisted_order_is_idempotent_and_visible(staff
     body = detail_after.json()
     assert body["table"]["bill_requested"] is True
     assert body["session"]["bill"]["bill_number"] == first.json()["bill_number"]
-    assert any(request["request_type"] == "bill" for request in body["requests"])
+    assert all(request["request_type"] != "bill" for request in body["requests"])
 
 
-def test_owner_admin_service_requests_include_staff_bill_request(staff_order_context):
+def test_owner_admin_service_requests_exclude_staff_bill_request(staff_order_context):
     create_manual_order(staff_order_context)
     requested = request_staff_table_bill(staff_order_context)
     assert requested.status_code == 201
@@ -362,10 +360,7 @@ def test_owner_admin_service_requests_include_staff_bill_request(staff_order_con
     assert owner_requests.status_code == 200
     assert admin_requests.status_code == 200
     for response in (owner_requests, admin_requests):
-        bill_requests = [item for item in response.json() if item["request_type"] == "bill"]
-        assert len(bill_requests) == 1
-        assert bill_requests[0]["id"] == requested.json()["id"]
-        assert bill_requests[0]["bill_number"] == requested.json()["bill_number"]
+        assert all(item["request_type"] != "bill" for item in response.json())
 
 
 def test_staff_bill_request_reuses_customer_created_session(staff_order_context):
@@ -381,9 +376,39 @@ def test_staff_bill_request_reuses_customer_created_session(staff_order_context)
     assert response.status_code == 201
     db = SessionLocal()
     order = db.query(Order).filter(Order.public_token == public_order.json()["public_token"]).one()
-    request = db.query(ServiceRequest).filter(ServiceRequest.id == response.json()["id"]).one()
-    assert request.dining_session_id == order.dining_session_id
+    bill = db.query(Bill).filter(Bill.bill_number == response.json()["bill_number"]).one()
+    assert bill.dining_session_id == order.dining_session_id
+    assert db.query(ServiceRequest).filter(
+        ServiceRequest.dining_session_id == order.dining_session_id,
+        ServiceRequest.request_type == "bill",
+    ).count() == 0
     db.close()
+
+
+def test_customer_bill_request_enters_pending_payments_without_service_request(staff_order_context):
+    order = client.post(
+        f"/public/restaurants/{staff_order_context['restaurant_slug']}/tables/{staff_order_context['second_table_code']}/orders",
+        headers={"Idempotency-Key": f"customer-bill-{uuid.uuid4().hex}"},
+        json=order_payload(staff_order_context),
+    ).json()
+    requested = client.post(
+        f"/public/sessions/{order['dining_session_token']}/bill-request"
+    )
+    assert requested.status_code == 201
+    assert requested.json()["status"] == "draft"
+
+    queue = client.get(
+        "/staff/bills/pending-payments",
+        headers=auth(staff_order_context, "owner_token"),
+    ).json()["items"]
+    entry = next(item for item in queue if item["bill_number"] == requested.json()["bill_number"])
+    assert entry["stage"] == "bill_requested"
+
+    services = client.get(
+        "/staff/service-requests",
+        headers=auth(staff_order_context, "owner_token"),
+    ).json()
+    assert all(item["request_type"] != "bill" for item in services)
 
 
 def test_staff_bill_request_hidden_after_payment_closes_session(staff_order_context):

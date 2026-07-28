@@ -1066,6 +1066,16 @@ export async function createPublicServiceRequest(
   }
 }
 
+export async function requestPublicSessionBill(sessionToken: string): Promise<BillResponse> {
+  const response = await fetch(
+    `${publicBackendBaseUrl()}/public/sessions/${encodeURIComponent(sessionToken)}/bill-request`,
+    { method: "POST", headers: { "Content-Type": "application/json" } },
+  );
+  const body = await response.json().catch(() => null);
+  if (!response.ok) throw new ApiError(response.status, body?.detail || "Failed to request bill.");
+  return body;
+}
+
 
 // ---- Phase 9: Staff Service Requests (via server-side proxy) ----
 

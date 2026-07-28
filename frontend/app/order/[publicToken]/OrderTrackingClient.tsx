@@ -112,7 +112,6 @@ export default function OrderTrackingClient({
   const SR_TYPES = [
     { type: "waiter", label: `🙋 ${t.callWaiter}` },
     { type: "water", label: `💧 ${t.water}` },
-    { type: "bill", label: `🧾 ${t.requestBill}` },
   ] as const;
 
   // Fetch Order function
@@ -487,13 +486,10 @@ export default function OrderTrackingClient({
                         setSrStatus((prev) => ({ ...prev, [type]: "loading" }));
                         setSrMessage((prev) => ({ ...prev, [type]: "" }));
                         try {
-                          if (type === "bill" && orderData.dining_session_token) {
-                            await createOrRefreshPublicBill(orderData.dining_session_token);
-                          }
                           await createPublicServiceRequest(
                             orderData.restaurant_slug!,
                             orderData.table_code!,
-                            { request_type: type as "waiter" | "water" | "bill", public_order_token: publicToken }
+                            { request_type: type as "waiter" | "water", public_order_token: publicToken }
                           );
                           setSrStatus((prev) => ({ ...prev, [type]: "success" }));
                           setSrMessage((prev) => ({ ...prev, [type]: t.requestSent }));
