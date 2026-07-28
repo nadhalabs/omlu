@@ -425,7 +425,7 @@ export interface TopSellingItem {
 
 export interface OrdersByHour {
   hour: number;
-  count: number;
+  orders: number;
 }
 
 export interface DashboardSummaryResponse {

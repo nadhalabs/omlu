@@ -10,7 +10,7 @@ class TopSellingItem(BaseModel):
 
 class OrdersByHour(BaseModel):
     hour: int
-    count: int
+    orders: int
 
 
 class DashboardTableOverview(BaseModel):

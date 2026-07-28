@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
+import { buildHourlyChart } from "../lib/dashboardHourly.js";
 
 const dashboard = fs.readFileSync(
   new URL("../app/admin/dashboard/AdminDashboardClient.tsx", import.meta.url),
@@ -31,4 +32,17 @@ test("dashboard recent activity uses stable grouped entries and links to full hi
   assert.match(dashboard, /View all activity/);
   assert.match(dashboard, /\/admin\/orders\/history/);
   assert.doesNotMatch(dashboard, /key=\{`\$\{item\.timestamp\}-\$\{idx\}`\}/);
+});
+
+test("dashboard maps the 24-bucket hourly API contract to visible fixed-height bars", () => {
+  const chart = buildHourlyChart([{ hour: 2, orders: 1 }]);
+  assert.equal(chart.buckets.length, 24);
+  assert.equal(chart.buckets[2].orders, 1);
+  assert.equal(chart.total, 1);
+  assert.equal(chart.max, 1);
+  assert.match(dashboard, /buildHourlyChart\(data\.orders_by_hour\)/);
+  assert.match(dashboard, /hourlyChart\.total === 0/);
+  assert.match(dashboard, /grid-rows-\[1fr_14px\]/);
+  assert.match(dashboard, /height: `\$\{Math\.max\(heightPct, count > 0 \? 8 : 0\)\}%`/);
+  assert.match(dashboard, /No orders placed yet today/);
 });

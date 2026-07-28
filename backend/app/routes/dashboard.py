@@ -202,7 +202,11 @@ def _recent_dashboard_activity(db: Session, restaurant_id: int) -> list[Dashboar
     return _group_dashboard_activity(events)
 
 
-def _get_local_day_bounds_utc(timezone_str: str):
+def _get_local_day_bounds_utc(
+    timezone_str: str,
+    *,
+    now: datetime.datetime | None = None,
+):
     """
     Compute UTC-aware start and end datetimes for today's local day.
     Uses the restaurant's configured timezone (default: Asia/Kolkata).
@@ -214,7 +218,7 @@ def _get_local_day_bounds_utc(timezone_str: str):
         tz = ZoneInfo("Asia/Kolkata")
 
     # Current local time in restaurant's timezone
-    now_local = datetime.datetime.now(tz)
+    now_local = (now or datetime.datetime.now(datetime.timezone.utc)).astimezone(tz)
     # Start of today in that timezone (midnight)
     day_start_local = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
     # End of today (just before midnight of next day)
@@ -225,6 +229,16 @@ def _get_local_day_bounds_utc(timezone_str: str):
     day_end_utc = day_end_local.astimezone(datetime.timezone.utc)
 
     return day_start_utc, day_end_utc, tz
+
+
+def _orders_by_local_hour(orders, quick_sales, tz: ZoneInfo) -> list[OrdersByHour]:
+    hour_counts = [0] * 24
+    for record in (*orders, *quick_sales):
+        hour_counts[record.created_at.astimezone(tz).hour] += 1
+    return [
+        OrdersByHour(hour=hour, orders=count)
+        for hour, count in enumerate(hour_counts)
+    ]
 
 
 @router.get("/summary", response_model=DashboardSummaryResponse)
@@ -371,19 +385,12 @@ def get_dashboard_summary(
         Order.created_at < day_end_utc
     ).all()
 
-    hour_counts: dict[int, int] = {}
-    for order in today_orders:
-        local_dt = order.created_at.astimezone(tz)
-        h = local_dt.hour
-        hour_counts[h] = hour_counts.get(h, 0) + 1
-    for sale in paid_quick_sales:
-        h = sale.created_at.astimezone(tz).hour
-        hour_counts[h] = hour_counts.get(h, 0) + 1
-
-    orders_by_hour = [
-        OrdersByHour(hour=h, count=c)
-        for h, c in sorted(hour_counts.items())
-    ]
+    today_quick_sales = db.query(QuickSale).filter(
+        QuickSale.restaurant_id == restaurant_id,
+        QuickSale.created_at >= day_start_utc,
+        QuickSale.created_at < day_end_utc,
+    ).all()
+    orders_by_hour = _orders_by_local_hour(today_orders, today_quick_sales, tz)
 
     active_sessions = db.query(DiningSession).filter(
         DiningSession.restaurant_id == restaurant_id,

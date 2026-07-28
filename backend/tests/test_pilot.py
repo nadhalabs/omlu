@@ -484,6 +484,9 @@ class TestDashboardSummary:
         assert "rejected_order_count" in data
         assert "top_selling_items" in data
         assert "orders_by_hour" in data
+        assert len(data["orders_by_hour"]) == 24
+        assert data["orders_by_hour"][0].keys() == {"hour", "orders"}
+        assert [bucket["hour"] for bucket in data["orders_by_hour"]] == list(range(24))
         assert "timezone" in data
         assert data["timezone"] == "Asia/Kolkata"
 

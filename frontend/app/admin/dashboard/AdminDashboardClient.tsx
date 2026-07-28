@@ -8,6 +8,7 @@ import {
 import { DashboardSummaryResponse } from "@/lib/types";
 import { useRealtime } from "@/lib/realtime";
 import { queryKeys, useCachedQuery } from "@/lib/queryCache";
+import { buildHourlyChart } from "@/lib/dashboardHourly";
 
 function StatCard({
   label,
@@ -114,11 +115,7 @@ export default function AdminDashboardClient() {
   if (!data) return null;
 
   // Build hours array for the bar chart (0–23)
-  const hourMap: Record<number, number> = {};
-  for (const row of data.orders_by_hour) {
-    hourMap[row.hour] = row.count;
-  }
-  const maxCount = Math.max(1, ...Object.values(hourMap));
+  const hourlyChart = buildHourlyChart(data.orders_by_hour);
 
   const currency = data.timezone?.includes("Kolkata") ? "₹" : "¤";
 
@@ -344,32 +341,33 @@ export default function AdminDashboardClient() {
         <h2 className="text-sm font-black text-zinc-400 uppercase tracking-wider mb-6">
           🕐 Orders by Hour (Today)
         </h2>
-        {data.orders_by_hour.length === 0 ? (
+        {hourlyChart.total === 0 ? (
           <p className="text-zinc-500 text-sm">No orders placed yet today.</p>
         ) : (
-          <div className="flex items-end gap-1 h-32 overflow-x-auto pb-2">
-            {Array.from({ length: 24 }, (_, h) => {
-              const count = hourMap[h] ?? 0;
-              const heightPct = maxCount > 0 ? (count / maxCount) * 100 : 0;
-              return (
-                <div
-                  key={h}
-                  className="flex flex-col items-center gap-1 flex-1 min-w-[20px]"
-                >
+          <div className="overflow-x-auto">
+            <div className="grid h-36 min-w-[520px] grid-cols-[repeat(24,minmax(20px,1fr))] gap-1 pb-2" role="img" aria-label={`${hourlyChart.total} orders today by local restaurant hour`}>
+              {hourlyChart.buckets.map(({ hour: h, orders: count }) => {
+                const heightPct = (count / hourlyChart.max) * 100;
+                return (
                   <div
-                    className="w-full rounded-t transition-all duration-300"
-                    style={{
-                      height: `${Math.max(heightPct, count > 0 ? 8 : 2)}%`,
-                      backgroundColor: count > 0 ? "#f97316" : "#27272a",
-                    }}
-                    title={`${h}:00 — ${count} order${count !== 1 ? "s" : ""}`}
-                  />
-                  {h % 3 === 0 && (
-                    <span className="text-[8px] text-zinc-600 font-semibold">{h}</span>
-                  )}
-                </div>
-              );
-            })}
+                    key={h}
+                    className="grid min-w-[20px] grid-rows-[1fr_14px] gap-1"
+                  >
+                    <div className="flex min-h-0 items-end">
+                      <div
+                        className="w-full rounded-t bg-orange-500 transition-all duration-300"
+                        style={{ height: `${Math.max(heightPct, count > 0 ? 8 : 0)}%` }}
+                        title={`${h}:00 — ${count} order${count !== 1 ? "s" : ""}`}
+                        aria-label={`${h}:00, ${count} order${count !== 1 ? "s" : ""}`}
+                      />
+                    </div>
+                    {h % 3 === 0 && (
+                      <span className="text-center text-[8px] font-semibold text-zinc-600">{h}</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
       </section>
