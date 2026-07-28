@@ -7,17 +7,24 @@ import '../auth_provider.dart';
 enum SubmissionState { idle, submitting, success, error }
 
 class CartItem {
-  const CartItem({required this.menuItemId, required this.quantity, this.note});
+  const CartItem({
+    required this.menuItemId,
+    required this.quantity,
+    this.note,
+    this.selectedOptions = const [],
+  });
 
   final int menuItemId;
   final int quantity;
   final String? note;
+  final List<MenuOptionSelection> selectedOptions;
 
   CartItem copyWith({int? quantity, String? note, bool clearNote = false}) {
     return CartItem(
       menuItemId: menuItemId,
       quantity: quantity ?? this.quantity,
       note: clearNote ? null : (note ?? this.note),
+      selectedOptions: selectedOptions,
     );
   }
 }
@@ -34,7 +41,7 @@ class CartState {
 
   final int? tableId;
   final String? restaurantSlug;
-  final Map<int, CartItem> items;
+  final Map<String, CartItem> items;
   final String idempotencyKey;
   final SubmissionState submissionState;
   final String? errorMessage;
@@ -44,7 +51,7 @@ class CartState {
   CartState copyWith({
     int? tableId,
     String? restaurantSlug,
-    Map<int, CartItem>? items,
+    Map<String, CartItem>? items,
     String? idempotencyKey,
     SubmissionState? submissionState,
     String? errorMessage,
@@ -96,17 +103,39 @@ class CartNotifier extends StateNotifier<CartState> {
     state = CartState(idempotencyKey: _generateIdempotencyKey());
   }
 
-  void addItem(int menuItemId, {String? note}) {
-    final current = state.items[menuItemId];
-    final updated = Map<int, CartItem>.from(state.items);
+  static String lineKey(
+    int menuItemId,
+    List<MenuOptionSelection> selectedOptions,
+  ) {
+    final options = [...selectedOptions]
+      ..sort((a, b) {
+        final group = a.groupId.compareTo(b.groupId);
+        return group != 0 ? group : a.optionId.compareTo(b.optionId);
+      });
+    return '$menuItemId:${options.map((value) => '${value.groupId}-${value.optionId}-${value.quantity}').join(',')}';
+  }
+
+  int quantityForMenuItem(int menuItemId) => state.items.values
+      .where((item) => item.menuItemId == menuItemId)
+      .fold(0, (total, item) => total + item.quantity);
+
+  void addItem(
+    int menuItemId, {
+    String? note,
+    List<MenuOptionSelection> selectedOptions = const [],
+  }) {
+    final key = lineKey(menuItemId, selectedOptions);
+    final current = state.items[key];
+    final updated = Map<String, CartItem>.from(state.items);
     if (current == null) {
-      updated[menuItemId] = CartItem(
+      updated[key] = CartItem(
         menuItemId: menuItemId,
         quantity: 1,
         note: note,
+        selectedOptions: List.unmodifiable(selectedOptions),
       );
     } else {
-      updated[menuItemId] = current.copyWith(
+      updated[key] = current.copyWith(
         quantity: current.quantity + 1,
         note: note,
       );
@@ -114,38 +143,39 @@ class CartNotifier extends StateNotifier<CartState> {
     state = state.copyWith(items: updated);
   }
 
-  void removeItem(int menuItemId) {
-    final current = state.items[menuItemId];
+  void removeItem(int menuItemId, {List<MenuOptionSelection> selectedOptions = const []}) {
+    final key = lineKey(menuItemId, selectedOptions);
+    final current = state.items[key];
     if (current == null) return;
 
-    final updated = Map<int, CartItem>.from(state.items);
+    final updated = Map<String, CartItem>.from(state.items);
     if (current.quantity <= 1) {
-      updated.remove(menuItemId);
+      updated.remove(key);
     } else {
-      updated[menuItemId] = current.copyWith(quantity: current.quantity - 1);
+      updated[key] = current.copyWith(quantity: current.quantity - 1);
     }
     state = state.copyWith(items: updated);
   }
 
-  void updateQuantity(int menuItemId, int quantity) {
+  void updateQuantity(String lineKey, int quantity) {
     if (quantity <= 0) {
-      final updated = Map<int, CartItem>.from(state.items)..remove(menuItemId);
+      final updated = Map<String, CartItem>.from(state.items)..remove(lineKey);
       state = state.copyWith(items: updated);
       return;
     }
-    final current = state.items[menuItemId];
+    final current = state.items[lineKey];
     if (current == null) return;
 
-    final updated = Map<int, CartItem>.from(state.items);
-    updated[menuItemId] = current.copyWith(quantity: quantity);
+    final updated = Map<String, CartItem>.from(state.items);
+    updated[lineKey] = current.copyWith(quantity: quantity);
     state = state.copyWith(items: updated);
   }
 
-  void updateItemNote(int menuItemId, String? note) {
-    final current = state.items[menuItemId];
+  void updateItemNote(String lineKey, String? note) {
+    final current = state.items[lineKey];
     if (current == null) return;
-    final updated = Map<int, CartItem>.from(state.items);
-    updated[menuItemId] = current.copyWith(
+    final updated = Map<String, CartItem>.from(state.items);
+    updated[lineKey] = current.copyWith(
       note: note,
       clearNote: note == null || note.trim().isEmpty,
     );
@@ -166,6 +196,7 @@ class CartNotifier extends StateNotifier<CartState> {
           menuItemId: cartItem.menuItemId,
           quantity: cartItem.quantity,
           itemNote: cartItem.note,
+          selectedOptions: cartItem.selectedOptions,
         );
       }).toList();
 

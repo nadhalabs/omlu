@@ -18,6 +18,13 @@ test("Quick Sale page exposes both workflows and operational lists", () => {
   assert.match(client, /Could not load Quick Sale|Quick Sale request failed/);
 });
 
+test("Quick Sale visibly blocks configurable items instead of using base price", () => {
+  const client = read("app/admin/quick-sale/QuickSaleClient.tsx");
+  assert.match(client, /has_options/);
+  assert.match(client, /Use assisted ordering to choose specifications/);
+  assert.match(client, /disabled=\{item\.has_options\}/);
+});
+
 test("Late Entry and Takeaway payments invoke the shared OMLU confirmation modal", () => {
   const client = read("app/admin/quick-sale/QuickSaleClient.tsx");
   assert.match(client, /useOmluUi\(\)/);

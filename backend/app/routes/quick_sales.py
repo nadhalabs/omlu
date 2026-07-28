@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
-from app.models.menu import MenuItem
+from app.models.menu import MenuItem, MenuItemOptionGroup
 from app.models.quick_sale import QuickSale, QuickSaleItem
 from app.models.staff_user import AuditLog, StaffUser
 from app.schemas.quick_sale import QuickSaleCreate, QuickSalePayment
@@ -50,10 +50,21 @@ def quick_sale_home(current_user: StaffUser = Depends(_owner_admin), db: Session
     now = datetime.datetime.now(tz)
     start = now.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(datetime.timezone.utc)
     end = (now.replace(hour=0, minute=0, second=0, microsecond=0) + datetime.timedelta(days=1)).astimezone(datetime.timezone.utc)
-    menu = db.query(MenuItem).filter(MenuItem.restaurant_id == current_user.restaurant_id, MenuItem.is_available == True).order_by(MenuItem.name_en).all()
+    menu = db.query(MenuItem).options(
+        selectinload(MenuItem.option_group_links)
+        .selectinload(MenuItemOptionGroup.group)
+    ).filter(MenuItem.restaurant_id == current_user.restaurant_id, MenuItem.is_available == True).order_by(MenuItem.name_en).all()
     sales = db.query(QuickSale).options(selectinload(QuickSale.items)).filter(QuickSale.restaurant_id == current_user.restaurant_id).order_by(QuickSale.created_at.desc()).limit(100).all()
     return {
-        "menu_items": [{"id": item.id, "name": item.name_en, "price": f"{item.price:.2f}"} for item in menu],
+        "menu_items": [{
+            "id": item.id,
+            "name": item.name_en,
+            "price": f"{item.price:.2f}",
+            "has_options": any(
+                link.active and link.group and link.group.active
+                for link in item.option_group_links
+            ),
+        } for item in menu],
         "active_takeaways": [_serialize(s) for s in sales if s.sale_type == "takeaway" and s.status != "completed"],
         "completed_today": [_serialize(s) for s in sales if s.status == "completed" and s.completed_at and start <= s.completed_at < end],
     }
@@ -69,9 +80,21 @@ def create_quick_sale(body: QuickSaleCreate, current_user: StaffUser = Depends(_
     if body.sale_type == "takeaway" and body.payment_method:
         raise HTTPException(status_code=422, detail="Takeaway payment is confirmed only after the order is ready")
     requested = {item.menu_item_id: item.quantity for item in body.items}
-    menu_items = db.query(MenuItem).filter(MenuItem.restaurant_id == current_user.restaurant_id, MenuItem.id.in_(requested), MenuItem.is_available == True).all()
+    menu_items = db.query(MenuItem).options(
+        selectinload(MenuItem.option_group_links)
+        .selectinload(MenuItemOptionGroup.group)
+    ).filter(MenuItem.restaurant_id == current_user.restaurant_id, MenuItem.id.in_(requested), MenuItem.is_available == True).all()
     if len(menu_items) != len(requested):
         raise HTTPException(status_code=422, detail="One or more menu items are unavailable")
+    if any(
+        link.active and link.group and link.group.active
+        for item in menu_items
+        for link in item.option_group_links
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="Items with specifications are not available in Quick Sale yet. Use assisted ordering.",
+        )
     subtotal = sum((item.price * requested[item.id] for item in menu_items), Decimal("0.00"))
     now = datetime.datetime.now(datetime.timezone.utc)
     sale = QuickSale(

@@ -395,9 +395,25 @@ class _OrderBillCard extends StatelessWidget {
                     ),
                   ),
                   Expanded(
-                    child: Text(
-                      _text(item['item_name']),
-                      style: OmluTypography.bodyMedium,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _text(item['item_name']),
+                          style: OmluTypography.bodyMedium,
+                        ),
+                        if (_listOfMaps(item['selected_options']).isNotEmpty)
+                          Text(
+                            _listOfMaps(
+                              item['selected_options'],
+                            ).map((option) => _text(option['option_name'])).join(
+                              ' · ',
+                            ),
+                            style: OmluTypography.bodySmall.copyWith(
+                              color: OmluColors.accentDark,
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                   Text(

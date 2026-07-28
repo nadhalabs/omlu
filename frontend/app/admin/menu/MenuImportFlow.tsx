@@ -119,7 +119,17 @@ export default function MenuImportFlow({ categories, onClose, onImported }: Prop
                     return <tr key={item.id} className={`border-t border-zinc-800 ${item.price === null ? "bg-red-950/20" : low ? "bg-yellow-950/20" : ""}`}>
                       <td className="p-3"><input type="checkbox" checked={item.selected} onChange={(e) => update(item.id, { selected: e.target.checked })} /></td>
                       <td className="p-2"><input list="menu-import-categories" value={item.category_name || ""} onChange={(e) => update(item.id, { category_name: e.target.value })} placeholder="Select category" className="w-40 rounded-lg border border-zinc-700 bg-zinc-900 p-2 text-white" /></td>
-                      <td className="p-2"><input value={item.item_name} onChange={(e) => update(item.id, { item_name: e.target.value })} className="w-44 rounded-lg border border-zinc-700 bg-zinc-900 p-2 text-white" /></td>
+                      <td className="p-2">
+                        <input value={item.item_name} onChange={(e) => update(item.id, { item_name: e.target.value })} className="w-44 rounded-lg border border-zinc-700 bg-zinc-900 p-2 text-white" />
+                        {item.variants.length > 0 && <div className="mt-2 space-y-1 rounded-lg border border-amber-800/60 bg-amber-950/20 p-2">
+                          <div className="font-black text-amber-300">Confirm final option prices</div>
+                          {item.variants.map((variant, index) => <div key={`${item.id}-${index}`} className="flex gap-1">
+                            <input aria-label={`Variant ${index + 1} name`} value={variant.name} onChange={(event) => update(item.id, { variants: item.variants.map((entry, position) => position === index ? { ...entry, name: event.target.value } : entry) })} className="w-24 rounded border border-zinc-700 bg-zinc-900 p-1 text-white" />
+                            <label className="flex items-center gap-1 text-zinc-400">Final ₹<input aria-label={`${variant.name} final price`} type="number" min="0" step="0.01" value={variant.price} onChange={(event) => update(item.id, { variants: item.variants.map((entry, position) => position === index ? { ...entry, price: Number(event.target.value) } : entry) })} className="w-20 rounded border border-zinc-700 bg-zinc-900 p-1 text-white" /></label>
+                          </div>)}
+                          <p className="text-[10px] text-amber-200">These are final customer prices, not amounts added to the base price.</p>
+                        </div>}
+                      </td>
                       <td className="p-2"><input type="number" min="0" step="0.01" value={item.price ?? ""} onChange={(e) => update(item.id, { price: e.target.value === "" ? null : Number(e.target.value) })} className="w-24 rounded-lg border border-zinc-700 bg-zinc-900 p-2 text-white" /></td>
                       <td className="p-2"><select value={item.food_type} onChange={(e) => update(item.id, { food_type: e.target.value as MenuImportDraftItem["food_type"] })} className="rounded-lg border border-zinc-700 bg-zinc-900 p-2 text-white"><option value="veg">Veg</option><option value="non_veg">Non-veg</option><option value="egg">Egg</option><option value="unknown">Unknown</option></select></td>
                       <td className={`p-3 font-semibold ${item.price === null ? "text-red-400" : warning ? "text-yellow-300" : "text-zinc-600"}`}>

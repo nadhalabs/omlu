@@ -222,13 +222,14 @@ def confirm_menu_import(
                     display_order=0,
                     active=True,
                 ))
-                base_price = Decimal(str(submitted.price))
                 for order, variant in enumerate(submitted.variants):
                     db.add(MenuOption(
                         restaurant_id=current_user.restaurant_id,
                         group_id=option_group.id,
                         name=variant.name,
-                        price_delta=max(Decimal("0"), Decimal(str(variant.price)) - base_price),
+                        # Variant price_delta is the canonical final variant
+                        # price (addons use additive deltas).
+                        price_delta=Decimal(str(variant.price)),
                         available=True,
                         display_order=order,
                     ))

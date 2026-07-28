@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
 from app.models.menu import MenuCategory, MenuItem, MenuItemOptionGroup, MenuOption, MenuOptionGroup
+from app.models.menu_import import MenuImportDraftItem, MenuImportJob
 from app.models.order import OrderItemSelectedOption
 from app.models.staff_user import StaffUser
 from app.schemas.admin import MenuItemAvailabilityUpdate
@@ -53,6 +54,70 @@ def _validate_group_shape(group: MenuOptionGroup) -> None:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="maximum_selections must be greater than or equal to minimum_selections")
     if group.type == "variant" and group.maximum_selections > 1:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Variant groups can allow only one selection")
+
+
+@router.get("/admin/menu/options/audit")
+def audit_menu_options(
+    current_user: StaffUser = Depends(admin_roles),
+    db: Session = Depends(get_db),
+):
+    """Read-only restaurant-scoped report; this endpoint never changes menu data."""
+    links = (
+        db.query(MenuItemOptionGroup)
+        .options(
+            selectinload(MenuItemOptionGroup.menu_item),
+            selectinload(MenuItemOptionGroup.group).selectinload(MenuOptionGroup.options),
+        )
+        .filter(MenuItemOptionGroup.restaurant_id == current_user.restaurant_id)
+        .all()
+    )
+    findings = []
+    seen_groups = set()
+    for link in links:
+        group = link.group
+        item = link.menu_item
+        if not group or not item:
+            continue
+        available = [option for option in group.options if option.available]
+        if group.id not in seen_groups:
+            seen_groups.add(group.id)
+            if group.required and not available:
+                findings.append({"code": "required_without_available_options", "group_id": group.id, "group_name": group.name})
+            if group.minimum_selections > group.maximum_selections:
+                findings.append({"code": "minimum_exceeds_maximum", "group_id": group.id, "group_name": group.name})
+            if group.type == "variant" and group.maximum_selections > 1:
+                findings.append({"code": "single_select_maximum_exceeds_one", "group_id": group.id, "group_name": group.name})
+            if group.options and all(option.price_delta == 0 for option in group.options):
+                findings.append({"code": "all_option_prices_zero", "group_id": group.id, "group_name": group.name})
+        for option in group.options:
+            threshold = item.price * 3
+            if item.price > 0 and option.price_delta > threshold:
+                findings.append({
+                    "code": "large_option_price_relative_to_base",
+                    "item_id": item.id,
+                    "item_name": item.name_en,
+                    "base_price": f"{item.price:.2f}",
+                    "group_id": group.id,
+                    "option_id": option.id,
+                    "option_name": option.name,
+                    "option_amount": f"{option.price_delta:.2f}",
+                })
+    low_confidence = (
+        db.query(MenuImportDraftItem)
+        .join(MenuImportJob)
+        .filter(
+            MenuImportJob.restaurant_id == current_user.restaurant_id,
+            MenuImportDraftItem.item_confidence < 0.75,
+        )
+        .all()
+    )
+    findings.extend({
+        "code": "low_confidence_import",
+        "draft_item_id": str(row.id),
+        "item_name": row.item_name,
+        "confidence": str(row.item_confidence),
+    } for row in low_confidence)
+    return {"restaurant_id": current_user.restaurant_id, "findings": findings}
 
 
 @router.get("/admin/menu/option-groups", response_model=list[MenuOptionGroupResponse])

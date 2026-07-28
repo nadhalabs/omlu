@@ -365,8 +365,10 @@ class _OrderMenuView extends ConsumerWidget {
                       const SizedBox(height: OmluSpacing.md),
                   itemBuilder: (context, index) {
                     final item = filteredItems[index];
-                    final cartItem = cartState.items[item.id];
-                    final quantity = cartItem?.quantity ?? 0;
+                    final quantity = cartState.items.values
+                        .where((line) => line.menuItemId == item.id)
+                        .fold<int>(0, (total, line) => total + line.quantity);
+                    final configurable = item.optionGroups.isNotEmpty;
 
                     return OmluCard(
                       child: Row(
@@ -401,7 +403,7 @@ class _OrderMenuView extends ConsumerWidget {
                           const SizedBox(width: OmluSpacing.md),
 
                           // Quantity Controls
-                          if (quantity > 0)
+                          if (quantity > 0 && !configurable)
                             Row(
                               children: [
                                 _QuantityButton(
@@ -431,9 +433,32 @@ class _OrderMenuView extends ConsumerWidget {
                           else
                             ElevatedButton(
                               onPressed: item.isAvailable
-                                  ? () => ref
-                                        .read(cartProvider.notifier)
-                                        .addItem(item.id)
+                                  ? () async {
+                                      if (!configurable) {
+                                        ref
+                                            .read(cartProvider.notifier)
+                                            .addItem(item.id);
+                                        return;
+                                      }
+                                      final selections =
+                                          await showModalBottomSheet<
+                                            List<MenuOptionSelection>
+                                          >(
+                                            context: context,
+                                            isScrollControlled: true,
+                                            builder: (_) =>
+                                                _MenuOptionSelector(item: item),
+                                          );
+                                      if (selections != null &&
+                                          context.mounted) {
+                                        ref
+                                            .read(cartProvider.notifier)
+                                            .addItem(
+                                              item.id,
+                                              selectedOptions: selections,
+                                            );
+                                      }
+                                    }
                                   : null,
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: OmluColors.accent,
@@ -445,7 +470,13 @@ class _OrderMenuView extends ConsumerWidget {
                                 ),
                                 minimumSize: const Size(60, 44),
                               ),
-                              child: Text(item.isAvailable ? 'Add' : 'Out'),
+                              child: Text(
+                                item.isAvailable
+                                    ? configurable
+                                          ? 'Choose'
+                                          : 'Add'
+                                    : 'Out',
+                              ),
                             ),
                         ],
                       ),
@@ -540,6 +571,136 @@ class _OrderMenuView extends ConsumerWidget {
                 ),
               ),
             ),
+    );
+  }
+}
+
+class _MenuOptionSelector extends StatefulWidget {
+  const _MenuOptionSelector({required this.item});
+  final MenuItem item;
+
+  @override
+  State<_MenuOptionSelector> createState() => _MenuOptionSelectorState();
+}
+
+class _MenuOptionSelectorState extends State<_MenuOptionSelector> {
+  final Map<int, MenuOptionSelection> _selected = {};
+  bool _showErrors = false;
+
+  List<MenuOptionSelection> get _values => _selected.values.toList();
+
+  int _count(MenuOptionGroup group) => _values
+      .where((selection) => selection.groupId == group.id)
+      .fold(0, (total, selection) => total + selection.quantity);
+
+  bool _valid(MenuOptionGroup group) {
+    final count = _count(group);
+    return count >= group.effectiveMinimum &&
+        (group.maximumSelections == 0 || count <= group.maximumSelections);
+  }
+
+  void _toggle(MenuOptionGroup group, MenuOptionValue option) {
+    setState(() {
+      if (_selected.containsKey(option.id)) {
+        _selected.remove(option.id);
+        return;
+      }
+      if (group.isSingleSelect) {
+        _selected.removeWhere((_, value) => value.groupId == group.id);
+      } else if (group.maximumSelections > 0 &&
+          _count(group) >= group.maximumSelections) {
+        return;
+      }
+      _selected[option.id] = MenuOptionSelection(
+        groupId: group.id,
+        optionId: option.id,
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final groups = [...widget.item.optionGroups]
+      ..sort((a, b) => a.displayOrder.compareTo(b.displayOrder));
+    final valid = groups.every(_valid);
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          OmluSpacing.md,
+          OmluSpacing.md,
+          OmluSpacing.md,
+          MediaQuery.viewInsetsOf(context).bottom + OmluSpacing.md,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(widget.item.name, style: OmluTypography.h2),
+              Text(
+                'Base price: ₹${widget.item.price.toStringAsFixed(2)}',
+                style: OmluTypography.bodyMedium,
+              ),
+              const SizedBox(height: OmluSpacing.md),
+              for (final group in groups) ...[
+                Text(group.name, style: OmluTypography.h3),
+                Text(
+                  '${group.required ? 'Required' : 'Optional'} · ${group.maximumSelections == 1 ? 'Choose ${group.effectiveMinimum == 0 ? 'up to ' : ''}1' : 'Choose ${group.effectiveMinimum}–${group.maximumSelections == 0 ? 'any' : group.maximumSelections}'}',
+                  style: OmluTypography.bodySmall.copyWith(
+                    color: _showErrors && !_valid(group)
+                        ? Colors.red
+                        : OmluColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: OmluSpacing.xs),
+                for (final option in [...group.options]
+                  ..sort(
+                    (a, b) => a.displayOrder.compareTo(b.displayOrder),
+                  ))
+                  if (option.available)
+                    CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: _selected.containsKey(option.id),
+                      controlAffinity: ListTileControlAffinity.leading,
+                      title: Text(option.name),
+                      subtitle: Text(
+                        group.type == 'variant'
+                            ? 'Final price ₹${option.priceEffect.toStringAsFixed(2)}'
+                            : option.priceEffect == 0
+                            ? 'No extra charge'
+                            : 'Adds ₹${option.priceEffect.toStringAsFixed(2)}',
+                      ),
+                      onChanged: (_) => _toggle(group, option),
+                    ),
+                const SizedBox(height: OmluSpacing.sm),
+              ],
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Total', style: OmluTypography.h3),
+                  Text(
+                    '₹${widget.item.previewUnitPrice(_values).toStringAsFixed(2)}',
+                    style: OmluTypography.h2.copyWith(
+                      color: OmluColors.accent,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: OmluSpacing.md),
+              OmluButton(
+                text: 'Add to order',
+                onPressed: () {
+                  if (!valid) {
+                    setState(() => _showErrors = true);
+                    return;
+                  }
+                  Navigator.pop(context, _values);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

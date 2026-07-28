@@ -18,6 +18,7 @@ import { AdminCategoryResponse, AdminMenuItemResponse } from "@/lib/types";
 import { invalidateQueries } from "@/lib/queryCache";
 import { useModalScrollLock } from "@/components/useModalScrollLock";
 import MenuImportFlow from "./MenuImportFlow";
+import MenuOptionEditor from "./MenuOptionEditor";
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
@@ -904,6 +905,12 @@ export default function AdminMenuPage() {
                 </button>
               </div>
             </form>
+            {itemModal.mode === "edit" && itemModal.item && (
+              <MenuOptionEditor
+                itemId={itemModal.item.id}
+                itemName={itemModal.item.name_en}
+              />
+            )}
           </div>
         </div>
       )}

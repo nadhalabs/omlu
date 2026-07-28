@@ -379,6 +379,14 @@ class _KitchenOrderCard extends StatelessWidget {
                             fontWeight: FontWeight.w600,
                           ),
                         ),
+                        if (item.selectedOptions.isNotEmpty)
+                          Text(
+                            item.selectedOptions.join(' · '),
+                            style: OmluTypography.bodySmall.copyWith(
+                              color: OmluColors.accentDark,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                         if (item.note != null && item.note!.trim().isNotEmpty)
                           Padding(
                             padding: const EdgeInsets.only(top: 2.0),

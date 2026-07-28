@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from app.database import SessionLocal
 from app.main import app
 from app.models.dining_session import DiningSession
-from app.models.menu import MenuCategory, MenuItem
+from app.models.menu import MenuCategory, MenuItem, MenuItemOptionGroup, MenuOptionGroup
 from app.models.quick_sale import QuickSale
 from app.models.restaurant import Restaurant
 from app.models.staff_user import StaffUser
@@ -222,3 +222,37 @@ def test_duplicate_creation_and_restaurant_isolation(quick_sale_context):
     second = client.post("/admin/quick-sales", headers=auth(quick_sale_context, "owner"), json=body)
     assert first.json()["id"] == second.json()["id"]
     assert client.post(f"/admin/quick-sales/{first.json()['public_token']}/payment", headers=auth(quick_sale_context, "other"), json={"method": "cash"}).status_code == 404
+
+
+def test_quick_sale_explicitly_blocks_items_with_options(quick_sale_context):
+    db = SessionLocal()
+    group = MenuOptionGroup(
+        restaurant_id=quick_sale_context["restaurant_id"],
+        name="Size",
+        type="variant",
+        required=True,
+        minimum_selections=1,
+        maximum_selections=1,
+    )
+    db.add(group)
+    db.flush()
+    db.add(MenuItemOptionGroup(
+        restaurant_id=quick_sale_context["restaurant_id"],
+        menu_item_id=quick_sale_context["item_id"],
+        option_group_id=group.id,
+    ))
+    db.commit()
+    db.close()
+
+    home = client.get(
+        "/admin/quick-sales",
+        headers=auth(quick_sale_context, "owner"),
+    ).json()
+    assert home["menu_items"][0]["has_options"] is True
+    response = client.post(
+        "/admin/quick-sales",
+        headers=auth(quick_sale_context, "owner"),
+        json=payload(quick_sale_context),
+    )
+    assert response.status_code == 422
+    assert "specifications" in response.json()["detail"]

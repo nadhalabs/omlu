@@ -48,11 +48,11 @@ class CartScreen extends ConsumerWidget {
           double totalAmount = 0;
           final List<Widget> itemRows = [];
 
-          cartState.items.forEach((itemId, cartItem) {
-            final menuItem = allMenuItems[itemId];
+          cartState.items.forEach((lineKey, cartItem) {
+            final menuItem = allMenuItems[cartItem.menuItemId];
             if (menuItem == null) return;
 
-            final price = menuItem.price;
+            final price = menuItem.previewUnitPrice(cartItem.selectedOptions);
             final subtotal = price * cartItem.quantity;
             totalAmount += subtotal;
 
@@ -60,6 +60,7 @@ class CartScreen extends ConsumerWidget {
               _CartItemRow(
                 menuItem: menuItem,
                 cartItem: cartItem,
+                lineKey: lineKey,
                 subtotal: subtotal,
               ),
             );
@@ -179,11 +180,13 @@ class _CartItemRow extends ConsumerWidget {
   const _CartItemRow({
     required this.menuItem,
     required this.cartItem,
+    required this.lineKey,
     required this.subtotal,
   });
 
   final MenuItem menuItem;
   final CartItem cartItem;
+  final String lineKey;
   final double subtotal;
 
   @override
@@ -203,9 +206,16 @@ class _CartItemRow extends ConsumerWidget {
                       Text(menuItem.name, style: OmluTypography.h3),
                       const SizedBox(height: OmluSpacing.xxs),
                       Text(
-                        '₹${menuItem.price} each',
+                        '₹${menuItem.previewUnitPrice(cartItem.selectedOptions).toStringAsFixed(2)} each',
                         style: OmluTypography.bodySmall,
                       ),
+                      if (cartItem.selectedOptions.isNotEmpty)
+                        Text(
+                          _selectedOptionLabels(menuItem, cartItem),
+                          style: OmluTypography.bodySmall.copyWith(
+                            color: OmluColors.accentDark,
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -248,7 +258,7 @@ class _CartItemRow extends ConsumerWidget {
                     onChanged: (val) {
                       ref
                           .read(cartProvider.notifier)
-                          .updateItemNote(menuItem.id, val);
+                          .updateItemNote(lineKey, val);
                     },
                   ),
                 ),
@@ -261,7 +271,7 @@ class _CartItemRow extends ConsumerWidget {
                       icon: Icons.remove_rounded,
                       onPressed: () => ref
                           .read(cartProvider.notifier)
-                          .removeItem(menuItem.id),
+                          .updateQuantity(lineKey, cartItem.quantity - 1),
                     ),
                     SizedBox(
                       width: 32,
@@ -275,8 +285,9 @@ class _CartItemRow extends ConsumerWidget {
                     ),
                     _CartQtyBtn(
                       icon: Icons.add_rounded,
-                      onPressed: () =>
-                          ref.read(cartProvider.notifier).addItem(menuItem.id),
+                      onPressed: () => ref
+                          .read(cartProvider.notifier)
+                          .updateQuantity(lineKey, cartItem.quantity + 1),
                     ),
                   ],
                 ),
@@ -287,6 +298,25 @@ class _CartItemRow extends ConsumerWidget {
       ),
     );
   }
+}
+
+String _selectedOptionLabels(MenuItem item, CartItem cartItem) {
+  final labels = <String>[];
+  for (final selection in cartItem.selectedOptions) {
+    for (final group in item.optionGroups) {
+      if (group.id != selection.groupId) continue;
+      for (final option in group.options) {
+        if (option.id == selection.optionId) {
+          labels.add(
+            selection.quantity > 1
+                ? '${group.name}: ${option.name} ×${selection.quantity}'
+                : '${group.name}: ${option.name}',
+          );
+        }
+      }
+    }
+  }
+  return labels.join(' · ');
 }
 
 class _CartQtyBtn extends StatelessWidget {

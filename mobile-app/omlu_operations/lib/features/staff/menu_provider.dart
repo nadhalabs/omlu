@@ -29,7 +29,11 @@ class MenuItem {
       imageUrl: (json['image_url'] ?? json['image']) == null
           ? null
           : readString(json['image_url'] ?? json['image']),
-      optionGroups: json['option_groups'] as List? ?? const [],
+      optionGroups: [
+        for (final raw in json['option_groups'] as List? ?? const [])
+          if (raw is Map)
+            MenuOptionGroup.fromJson(Map<String, Object?>.from(raw)),
+      ],
     );
   }
 
@@ -39,7 +43,96 @@ class MenuItem {
   final bool isAvailable;
   final String? description;
   final String? imageUrl;
-  final List<dynamic> optionGroups;
+  final List<MenuOptionGroup> optionGroups;
+
+  double previewUnitPrice(List<MenuOptionSelection> selections) {
+    double? variantPrice;
+    var addons = 0.0;
+    for (final selection in selections) {
+      for (final group in optionGroups) {
+        if (group.id != selection.groupId) continue;
+        for (final option in group.options) {
+          if (option.id != selection.optionId) continue;
+          if (group.type == 'variant') {
+            variantPrice = option.priceEffect;
+          } else {
+            addons += option.priceEffect * selection.quantity;
+          }
+        }
+      }
+    }
+    return (variantPrice ?? price) + addons;
+  }
+}
+
+class MenuOptionValue {
+  const MenuOptionValue({
+    required this.id,
+    required this.groupId,
+    required this.name,
+    required this.priceEffect,
+    required this.available,
+    required this.displayOrder,
+  });
+
+  factory MenuOptionValue.fromJson(Map<String, Object?> json) =>
+      MenuOptionValue(
+        id: readRequiredId(json['id'], 'option_id'),
+        groupId: readRequiredId(json['group_id'], 'option_group_id'),
+        name: readString(json['name']),
+        priceEffect: readDouble(json['price_delta']),
+        available: json['available'] as bool? ?? true,
+        displayOrder: readInt(json['display_order']),
+      );
+
+  final int id;
+  final int groupId;
+  final String name;
+  final double priceEffect;
+  final bool available;
+  final int displayOrder;
+}
+
+class MenuOptionGroup {
+  const MenuOptionGroup({
+    required this.id,
+    required this.name,
+    required this.type,
+    required this.required,
+    required this.minimumSelections,
+    required this.maximumSelections,
+    required this.displayOrder,
+    required this.options,
+  });
+
+  factory MenuOptionGroup.fromJson(Map<String, Object?> json) =>
+      MenuOptionGroup(
+        id: readRequiredId(json['id'], 'option_group_id'),
+        name: readString(json['name']),
+        type: readString(json['type'], fallback: 'addon'),
+        required: json['required'] as bool? ?? false,
+        minimumSelections: readInt(json['minimum_selections']),
+        maximumSelections: readInt(json['maximum_selections'], fallback: 1),
+        displayOrder: readInt(json['display_order']),
+        options: [
+          for (final raw in json['options'] as List? ?? const [])
+            if (raw is Map)
+              MenuOptionValue.fromJson(Map<String, Object?>.from(raw)),
+        ],
+      );
+
+  int get effectiveMinimum =>
+      required && minimumSelections < 1 ? 1 : minimumSelections;
+  bool get isSingleSelect => type == 'variant' || maximumSelections == 1;
+
+  final int id;
+  final String name;
+  final String type;
+  final bool required;
+  final int minimumSelections;
+  final int maximumSelections;
+  final int displayOrder;
+  final List<MenuOptionValue> options;
 }
 
 class MenuCategory {

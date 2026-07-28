@@ -140,6 +140,53 @@ void main() {
       },
     );
 
+    test('menu item parses canonical option groups and authoritative fields', () {
+      final item = MenuItem.fromJson({
+        'id': 10,
+        'name_en': 'Chicken Mandi',
+        'price': '170.00',
+        'option_groups': [
+          {
+            'id': 7,
+            'name': 'Chicken Mandi size',
+            'type': 'variant',
+            'required': true,
+            'minimum_selections': 1,
+            'maximum_selections': 1,
+            'display_order': 0,
+            'options': [
+              {
+                'id': 70,
+                'group_id': 7,
+                'name': 'Quarter (1 Person)',
+                'price_delta': '170.00',
+                'available': true,
+                'display_order': 0,
+              },
+              {
+                'id': 71,
+                'group_id': 7,
+                'name': 'Half (2 Person)',
+                'price_delta': '330.00',
+                'available': true,
+                'display_order': 1,
+              },
+            ],
+          },
+        ],
+      });
+
+      expect(item.optionGroups.single.required, isTrue);
+      expect(item.optionGroups.single.effectiveMinimum, 1);
+      expect(item.optionGroups.single.options.last.name, 'Half (2 Person)');
+      expect(
+        item.previewUnitPrice(const [
+          MenuOptionSelection(groupId: 7, optionId: 71),
+        ]),
+        330,
+      );
+    });
+
     test('malformed categories and items do not hide valid menu records', () {
       final categories = parseMenuCategories([
         {

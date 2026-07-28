@@ -18,7 +18,8 @@ Category rules:
 Item rules:
 - Extract only text visibly present.
 - Do not invent names, descriptions, prices or variants.
-- If multiple prices correspond to sizes, create variants.
+- If multiple prices correspond to sizes, create variants. Each variant price
+  must be the final customer price for that size, never a price adjustment.
 - If the relationship between prices and sizes is unclear, add a warning.
 - If an item is unreadable, do not guess.
 - Return a confidence score for every item and category assignment.

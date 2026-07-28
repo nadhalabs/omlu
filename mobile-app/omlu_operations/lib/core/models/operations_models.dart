@@ -302,19 +302,31 @@ class KitchenOrderItem {
     required this.name,
     required this.quantity,
     this.note,
+    this.selectedOptions = const [],
   });
 
   factory KitchenOrderItem.fromJson(Map<String, Object?> json) {
     return KitchenOrderItem(
-      name: readString(json['name'] ?? json['menu_item_name']),
+      name: readString(
+        json['name'] ?? json['menu_item_name'] ?? json['item_name'],
+      ),
       quantity: readInt(json['quantity'], fallback: 1),
       note: json['note'] == null ? null : readString(json['note']),
+      selectedOptions: [
+        for (final raw in json['selected_options'] as List? ?? const [])
+          if (raw is Map)
+            readString(
+              raw['option_name'],
+              fallback: readString(raw['name']),
+            ),
+      ],
     );
   }
 
   final String name;
   final int quantity;
   final String? note;
+  final List<String> selectedOptions;
 }
 
 class KitchenOrder {

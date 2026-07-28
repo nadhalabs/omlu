@@ -233,7 +233,9 @@ void main() {
             (ref) => CartNotifier(ref)
               ..state = CartState(
                 tableId: 2,
-                items: {201: const CartItem(menuItemId: 201, quantity: 2)},
+                items: {
+                  '201:': const CartItem(menuItemId: 201, quantity: 2),
+                },
                 idempotencyKey: 'key-123',
                 submissionState: SubmissionState.submitting,
               ),
