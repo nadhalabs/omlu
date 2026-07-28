@@ -47,6 +47,11 @@ export default function BillClient({ sessionToken }: BillClientProps) {
       whatsapp: "Share on WhatsApp",
       payAtCounter: "Payment is handled at the counter",
       paymentPending: "Payment pending at counter",
+      billBeingPrepared: "Your bill is being prepared. Please wait while staff sends it to the counter.",
+      billReady: "Your bill is ready. Please proceed to the counter for payment.",
+      billSentToCounter: "Your bill has been sent to the counter. Please proceed to the counter for payment.",
+      paymentAwaitingConfirmation: "Payment is awaiting confirmation at the counter.",
+      paymentComplete: "Payment received. Thank you!",
       paymentMethod: "Payment method",
       paidAt: "Paid at",
       back: "Back to table bill",
@@ -87,6 +92,11 @@ export default function BillClient({ sessionToken }: BillClientProps) {
       whatsapp: "WhatsApp-ൽ പങ്കിടുക",
       payAtCounter: "പേയ്മെന്റ് കൗണ്ടറിൽ കൈകാര്യം ചെയ്യും",
       paymentPending: "കൗണ്ടറിൽ പേയ്മെന്റ് കാത്തിരിക്കുന്നു",
+      billBeingPrepared: "നിങ്ങളുടെ ബിൽ തയ്യാറാക്കുകയാണ്. സ്റ്റാഫ് അത് കൗണ്ടറിലേക്ക് അയയ്ക്കുന്നതുവരെ കാത്തിരിക്കുക.",
+      billReady: "നിങ്ങളുടെ ബിൽ തയ്യാറാണ്. പണമടയ്ക്കാൻ കൗണ്ടറിലേക്ക് പോകുക.",
+      billSentToCounter: "നിങ്ങളുടെ ബിൽ കൗണ്ടറിലേക്ക് അയച്ചു. പണമടയ്ക്കാൻ കൗണ്ടറിലേക്ക് പോകുക.",
+      paymentAwaitingConfirmation: "കൗണ്ടറിൽ പേയ്മെന്റ് സ്ഥിരീകരണത്തിനായി കാത്തിരിക്കുന്നു.",
+      paymentComplete: "പേയ്മെന്റ് ലഭിച്ചു. നന്ദി!",
       paymentMethod: "പേയ്മെന്റ് രീതി",
       paidAt: "പണം നൽകിയ സമയം",
       back: "ടേബിൾ ബില്ലിലേക്ക് മടങ്ങുക",
@@ -287,6 +297,19 @@ export default function BillClient({ sessionToken }: BillClientProps) {
   const paidMethodLabel = bill.payment_method
     ? t.paymentLabels[bill.payment_method] || bill.payment_method
     : t.statusLabels.paid;
+  const billWorkflowMessage =
+    bill.status === "paid"
+      ? t.paymentComplete
+      : bill.status === "payment_pending"
+        ? bill.sent_to_counter_by_role === "staff" && !bill.payment_method
+          ? t.billSentToCounter
+          : t.paymentAwaitingConfirmation
+        : bill.status === "issued" &&
+            (bill.generated_by_role === "owner" || bill.generated_by_role === "admin")
+          ? t.billReady
+          : bill.status === "draft" || bill.status === "issued"
+            ? t.billBeingPrepared
+            : null;
 
   return (
     <div className="min-h-screen bg-zinc-100 px-4 py-6 text-zinc-950 dark:bg-zinc-950 dark:text-zinc-100 sm:px-6 print:bg-white print:px-0 print:py-0 print:text-black">
@@ -319,6 +342,13 @@ export default function BillClient({ sessionToken }: BillClientProps) {
                 <p className="mt-1 text-sm font-bold text-zinc-500 dark:text-zinc-400 print:text-black">
                   {t.table} {bill.table_number}
                 </p>
+                {bill.gst_enabled && (
+                  <div className="mt-3 text-xs text-zinc-600 dark:text-zinc-300 print:text-black">
+                    <p className="font-black">{bill.legal_business_name}</p>
+                    <p>{bill.registered_billing_address}</p>
+                    <p>GSTIN: {bill.gstin}</p>
+                  </div>
+                )}
               </div>
               <div className="text-right">
                 <p className="text-xs font-bold uppercase text-zinc-400 print:text-black">
@@ -332,12 +362,12 @@ export default function BillClient({ sessionToken }: BillClientProps) {
 
             <div className="mt-5 grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
               <p>
-                <span className="font-bold">{t.billNumber}:</span>{" "}
-                {bill.bill_number}
+                <span className="font-bold">{bill.gst_enabled ? "Invoice number" : t.billNumber}:</span>{" "}
+                {bill.invoice_number || bill.bill_number}
               </p>
               <p className="sm:text-right">
-                <span className="font-bold">{t.generated}:</span>{" "}
-                {new Date(bill.generated_at).toLocaleString()}
+                <span className="font-bold">{bill.gst_enabled ? "Invoice date" : t.generated}:</span>{" "}
+                {new Date(bill.invoice_date || bill.generated_at).toLocaleString()}
               </p>
             </div>
             {bill.payment_method && (
@@ -407,15 +437,9 @@ export default function BillClient({ sessionToken }: BillClientProps) {
           <footer className="border-t border-zinc-200 pt-5 dark:border-zinc-800 print:border-black">
             <div className="ml-auto flex max-w-sm flex-col gap-2 text-sm">
               <div className="flex justify-between">
-                <span>{t.subtotal}</span>
+                <span>{bill.gst_enabled ? "Menu subtotal" : t.subtotal}</span>
                 <span className="font-bold">
                   {bill.currency} {Number(bill.subtotal).toFixed(2)}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span>{t.tax}</span>
-                <span className="font-bold">
-                  {bill.currency} {Number(bill.tax_amount).toFixed(2)}
                 </span>
               </div>
               <div className="flex justify-between">
@@ -424,6 +448,19 @@ export default function BillClient({ sessionToken }: BillClientProps) {
                   {bill.currency} {Number(bill.discount_amount).toFixed(2)}
                 </span>
               </div>
+              {bill.gst_enabled ? (
+                <>
+                  <div className="flex justify-between"><span>Taxable subtotal</span><span className="font-bold">{bill.currency} {Number(bill.taxable_amount).toFixed(2)}</span></div>
+                  <div className="flex justify-between"><span>CGST ({Number(bill.gst_rate) / 2}%)</span><span className="font-bold">{bill.currency} {Number(bill.cgst_amount).toFixed(2)}</span></div>
+                  <div className="flex justify-between"><span>SGST ({Number(bill.gst_rate) / 2}%)</span><span className="font-bold">{bill.currency} {Number(bill.sgst_amount).toFixed(2)}</span></div>
+                  {Number(bill.igst_amount) > 0 && <div className="flex justify-between"><span>IGST ({bill.gst_rate}%)</span><span className="font-bold">{bill.currency} {Number(bill.igst_amount).toFixed(2)}</span></div>}
+                </>
+              ) : (
+                <div className="flex justify-between">
+                  <span>{t.tax}</span>
+                  <span className="font-bold">{bill.currency} {Number(bill.tax_amount).toFixed(2)}</span>
+                </div>
+              )}
               <div className="mt-2 flex justify-between border-t border-zinc-200 pt-3 text-xl font-black dark:border-zinc-800 print:border-black">
                 <span>{t.total}</span>
                 <span>
@@ -484,19 +521,14 @@ export default function BillClient({ sessionToken }: BillClientProps) {
         )}
 
         <div className="print-hidden rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-          {bill.status === "issued" && (
+          {billWorkflowMessage && bill.status !== "paid" && (
             <p className="rounded-2xl bg-orange-50 px-4 py-3 text-sm font-black text-orange-800 dark:bg-orange-950/30 dark:text-orange-400">
-              {t.payAtCounter}. Please wait while Staff sends the bill to Owner or Admin.
-            </p>
-          )}
-          {bill.status === "payment_pending" && (
-            <p className="rounded-2xl bg-orange-50 px-4 py-3 text-sm font-black text-orange-800 dark:bg-orange-950/30 dark:text-orange-400">
-              {t.paymentPending}
+              {billWorkflowMessage}
             </p>
           )}
           {bill.status === "paid" && (
             <p className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm font-black text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400">
-              {t.statusLabels.paid}
+              {billWorkflowMessage}
             </p>
           )}
         </div>

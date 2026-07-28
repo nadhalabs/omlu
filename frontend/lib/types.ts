@@ -211,6 +211,22 @@ export interface BillResponse {
   payment_method: "counter_cash" | "counter_upi" | "counter_card" | "online" | null;
   payment_reference: string | null;
   paid_by_staff_id: number | null;
+  generated_by_role: "owner" | "admin" | "staff" | "kitchen" | null;
+  sent_to_counter_by_role: "owner" | "admin" | "staff" | "kitchen" | null;
+  gst_enabled: boolean;
+  invoice_number: string | null;
+  invoice_date: string | null;
+  taxable_amount: string | null;
+  gst_rate: string | null;
+  cgst_amount: string | null;
+  sgst_amount: string | null;
+  igst_amount: string | null;
+  tax_mode: "inclusive" | "exclusive" | null;
+  gstin: string | null;
+  legal_business_name: string | null;
+  registered_billing_address: string | null;
+  state_name: string | null;
+  state_code: string | null;
 }
 
 export interface PublicDiningSessionBillSummary {
@@ -521,6 +537,15 @@ export interface RestaurantSettingsResponse {
   currency: string;
   order_prefix: string;
   service_requests_enabled: boolean;
+  gst_enabled: boolean;
+  gstin: string | null;
+  legal_business_name: string | null;
+  registered_billing_address: string | null;
+  gst_state_name: string | null;
+  gst_state_code: string | null;
+  default_gst_rate: string;
+  tax_mode: "inclusive" | "exclusive";
+  invoice_prefix: string;
 }
 
 export interface RestaurantSettingsUpdate {
@@ -528,6 +553,15 @@ export interface RestaurantSettingsUpdate {
   currency?: string;
   order_prefix?: string;
   service_requests_enabled?: boolean;
+  gst_enabled?: boolean;
+  gstin?: string | null;
+  legal_business_name?: string | null;
+  registered_billing_address?: string | null;
+  gst_state_name?: string | null;
+  gst_state_code?: string | null;
+  default_gst_rate?: string;
+  tax_mode?: "inclusive" | "exclusive";
+  invoice_prefix?: string;
 }
 
 

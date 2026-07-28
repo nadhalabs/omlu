@@ -58,12 +58,18 @@ export default function BillHistoryClient() {
             <tbody className="divide-y divide-zinc-800">
               {data.items.map((bill) => (
                 <tr key={bill.id} className="bg-white hover:bg-zinc-50">
-                  <td className="p-3 font-black text-orange-400">{bill.bill_number}</td>
+                  <td className="p-3 font-black text-orange-400">
+                    {bill.invoice_number || bill.bill_number}
+                    {bill.gst_enabled && <span className="block text-[10px] font-semibold text-zinc-500">GSTIN {bill.gstin}</span>}
+                  </td>
                   <td className="p-3">{formatDateTime(bill.date)}</td>
                   <td className="p-3">{bill.table_number || "-"}</td>
                   <td className="max-w-48 break-all p-3 text-xs text-zinc-600">{bill.session_token || "-"}</td>
                   <td className="p-3">₹{bill.subtotal}</td>
-                  <td className="p-3">₹{bill.tax_amount}</td>
+                  <td className="p-3">
+                    ₹{bill.tax_amount}
+                    {bill.gst_enabled && <span className="block text-[10px] text-zinc-500">CGST ₹{bill.cgst_amount} · SGST ₹{bill.sgst_amount}</span>}
+                  </td>
                   <td className="p-3">₹{bill.discount_amount}</td>
                   <td className="p-3 font-bold">₹{bill.grand_total}</td>
                   <td className="p-3">{bill.payment_status}</td>

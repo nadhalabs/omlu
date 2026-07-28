@@ -90,7 +90,8 @@ def history_data():
         tax_amount=Decimal("0.00"),
         discount_amount=Decimal("0.00"),
         total_amount=Decimal("300.00"),
-        generated_at=today,
+        # Revenue belongs to the payment day, not the earlier bill issue day.
+        generated_at=yesterday,
         paid_at=today,
         payment_method="counter_cash",
     )

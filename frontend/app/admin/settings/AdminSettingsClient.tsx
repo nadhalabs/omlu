@@ -26,15 +26,37 @@ export default function AdminSettingsClient() {
   const [timezone, setTimezone] = useState("");
   const [orderPrefix, setOrderPrefix] = useState("");
   const [serviceRequestsEnabled, setServiceRequestsEnabled] = useState(true);
+  const [gstEnabled, setGstEnabled] = useState(false);
+  const [gstin, setGstin] = useState("");
+  const [legalBusinessName, setLegalBusinessName] = useState("");
+  const [billingAddress, setBillingAddress] = useState("");
+  const [gstStateName, setGstStateName] = useState("");
+  const [gstStateCode, setGstStateCode] = useState("");
+  const [gstRate, setGstRate] = useState("0.00");
+  const [taxMode, setTaxMode] = useState<"inclusive" | "exclusive">("exclusive");
+  const [invoicePrefix, setInvoicePrefix] = useState("INV");
+
+  const applySettings = (data: RestaurantSettingsResponse) => {
+    setSettings(data);
+    setTimezone(data.timezone);
+    setOrderPrefix(data.order_prefix);
+    setServiceRequestsEnabled(data.service_requests_enabled);
+    setGstEnabled(data.gst_enabled);
+    setGstin(data.gstin || "");
+    setLegalBusinessName(data.legal_business_name || "");
+    setBillingAddress(data.registered_billing_address || "");
+    setGstStateName(data.gst_state_name || "");
+    setGstStateCode(data.gst_state_code || "");
+    setGstRate(data.default_gst_rate);
+    setTaxMode(data.tax_mode);
+    setInvoicePrefix(data.invoice_prefix);
+  };
 
   const loadSettings = useCallback(async () => {
     setLoading(true);
     try {
       const data = await getRestaurantSettings();
-      setSettings(data);
-      setTimezone(data.timezone);
-      setOrderPrefix(data.order_prefix);
-      setServiceRequestsEnabled(data.service_requests_enabled);
+      applySettings(data);
       setError(null);
     } catch (err) {
       if (err instanceof ApiError) {
@@ -61,12 +83,18 @@ export default function AdminSettingsClient() {
         timezone: timezone || undefined,
         order_prefix: orderPrefix.toUpperCase() || undefined,
         service_requests_enabled: serviceRequestsEnabled,
+        gst_enabled: gstEnabled,
+        gstin: gstin || null,
+        legal_business_name: legalBusinessName || null,
+        registered_billing_address: billingAddress || null,
+        gst_state_name: gstStateName || null,
+        gst_state_code: gstStateCode || null,
+        default_gst_rate: gstRate,
+        tax_mode: taxMode,
+        invoice_prefix: invoicePrefix.toUpperCase(),
       };
       const updated = await updateRestaurantSettings(updateData);
-      setSettings(updated);
-      setTimezone(updated.timezone);
-      setOrderPrefix(updated.order_prefix);
-      setServiceRequestsEnabled(updated.service_requests_enabled);
+      applySettings(updated);
       setSuccess("Settings saved successfully.");
     } catch (err) {
       if (err instanceof ApiError) {
@@ -204,6 +232,36 @@ export default function AdminSettingsClient() {
           </button>
         </div>
 
+        <section className="flex flex-col gap-5 border-t border-zinc-800 pt-6">
+          <div>
+            <h2 className="text-lg font-black text-white">Billing &amp; GST</h2>
+            <p className="mt-1 text-xs text-zinc-500">GST is calculated only by the backend when a bill is generated.</p>
+          </div>
+          <label className="flex items-center justify-between gap-4">
+            <span className="text-sm font-bold text-zinc-300">GST enabled</span>
+            <input type="checkbox" checked={gstEnabled} onChange={(event) => setGstEnabled(event.target.checked)} className="h-5 w-5 accent-orange-600" />
+          </label>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <SettingsInput label="GSTIN" value={gstin} onChange={(value) => setGstin(value.toUpperCase())} maxLength={15} required={gstEnabled} />
+            <SettingsInput label="Legal business name" value={legalBusinessName} onChange={setLegalBusinessName} required={gstEnabled} />
+            <SettingsInput label="State name" value={gstStateName} onChange={setGstStateName} required={gstEnabled} />
+            <SettingsInput label="State code" value={gstStateCode} onChange={setGstStateCode} maxLength={2} required={gstEnabled} />
+            <SettingsInput label="Default GST rate (%)" value={gstRate} onChange={setGstRate} inputMode="decimal" required={gstEnabled} />
+            <SettingsInput label="Invoice prefix" value={invoicePrefix} onChange={(value) => setInvoicePrefix(value.toUpperCase())} maxLength={10} required />
+          </div>
+          <label className="flex flex-col gap-2 text-xs font-bold uppercase tracking-wider text-zinc-400">
+            Tax mode
+            <select value={taxMode} onChange={(event) => setTaxMode(event.target.value as "inclusive" | "exclusive")} className="rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-sm font-semibold normal-case text-white">
+              <option value="exclusive">Exclusive — GST added to menu prices</option>
+              <option value="inclusive">Inclusive — GST included in menu prices</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-2 text-xs font-bold uppercase tracking-wider text-zinc-400">
+            Registered billing address
+            <textarea value={billingAddress} onChange={(event) => setBillingAddress(event.target.value)} required={gstEnabled} rows={3} className="rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-sm font-semibold normal-case text-white" />
+          </label>
+        </section>
+
         {/* Save Button */}
         <div className="flex items-center gap-4 pt-2 border-t border-zinc-800">
           <button
@@ -222,6 +280,7 @@ export default function AdminSettingsClient() {
                 setTimezone(settings.timezone);
                 setOrderPrefix(settings.order_prefix);
                 setServiceRequestsEnabled(settings.service_requests_enabled);
+                applySettings(settings);
                 setError(null);
                 setSuccess(null);
               }
@@ -233,5 +292,14 @@ export default function AdminSettingsClient() {
         </div>
       </div>
     </div>
+  );
+}
+
+function SettingsInput({ label, value, onChange, maxLength, required, inputMode }: { label: string; value: string; onChange: (value: string) => void; maxLength?: number; required?: boolean; inputMode?: "text" | "decimal" }) {
+  return (
+    <label className="flex flex-col gap-2 text-xs font-bold uppercase tracking-wider text-zinc-400">
+      {label}
+      <input value={value} onChange={(event) => onChange(event.target.value)} maxLength={maxLength} required={required} inputMode={inputMode} className="rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-sm font-semibold normal-case text-white" />
+    </label>
   );
 }

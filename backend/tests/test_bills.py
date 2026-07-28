@@ -17,6 +17,7 @@ from app.models.restaurant import Restaurant
 from app.models.restaurant_table import RestaurantTable
 from app.models.service_request import ServiceRequest
 from app.models.staff_user import StaffUser
+from app.services.bills import calculate_gst_totals, generate_invoice_number, indian_financial_year
 from app.utils.auth import create_access_token, hash_password
 
 
@@ -451,6 +452,44 @@ def test_staff_sends_issued_bill_to_counter_without_payment_method(bill_context)
     assert item["amount_paid"] == "0.00"
     assert item["remaining_amount"] == item["grand_total"]
     assert item["session_opened_at"]
+
+
+def test_public_bill_identifies_staff_preparation_and_counter_handoff(bill_context):
+    add_order(bill_context)
+    issued = issue_bill_for(bill_context, token_key="staff_token")
+
+    assert issued["status"] == "issued"
+    assert issued["generated_by_role"] == "staff"
+    assert issued["sent_to_counter_by_role"] is None
+
+    sent = send_to_counter(bill_context, issued["bill_number"], token_key="staff_token")
+    assert sent.status_code == 200
+    assert sent.json()["status"] == "payment_pending"
+    assert sent.json()["sent_to_counter_by_role"] == "staff"
+
+    customer = client.get(f"/public/sessions/{bill_context['session_token']}/bill")
+    assert customer.status_code == 200
+    assert customer.json()["generated_by_role"] == "staff"
+    assert customer.json()["sent_to_counter_by_role"] == "staff"
+
+
+@pytest.mark.parametrize(
+    ("token_key", "expected_role"),
+    [("owner_token", "owner"), ("admin_token", "admin")],
+)
+def test_public_bill_identifies_owner_or_admin_direct_issue(
+    bill_context, token_key, expected_role
+):
+    add_order(bill_context)
+    issued = issue_bill_for(bill_context, token_key=token_key)
+
+    assert issued["status"] == "issued"
+    assert issued["generated_by_role"] == expected_role
+    assert issued["sent_to_counter_by_role"] is None
+
+    customer = client.get(f"/public/sessions/{bill_context['session_token']}/bill")
+    assert customer.status_code == 200
+    assert customer.json()["generated_by_role"] == expected_role
 
 
 def test_old_pending_bill_is_recovered_by_authoritative_queue(bill_context):
@@ -1119,3 +1158,177 @@ def test_concurrent_generation_creates_one_bill(bill_context):
     bill_count = db.query(Bill).filter(Bill.dining_session_id == bill_context["session_id"]).count()
     db.close()
     assert bill_count == 1
+
+
+def _enable_gst(bill_context, *, rate="5.00", mode="exclusive", prefix="MM"):
+    db = SessionLocal()
+    restaurant = db.query(Restaurant).filter(Restaurant.id == bill_context["restaurant_id"]).one()
+    restaurant.gst_enabled = True
+    restaurant.gstin = "32ABCDE1234F1Z5"
+    restaurant.legal_business_name = "Malabar Meals Private Limited"
+    restaurant.registered_billing_address = "MG Road, Kochi, Kerala"
+    restaurant.gst_state_name = "Kerala"
+    restaurant.gst_state_code = "32"
+    restaurant.default_gst_rate = Decimal(rate)
+    restaurant.tax_mode = mode
+    restaurant.invoice_prefix = prefix
+    db.commit()
+    db.close()
+
+
+def test_gst_disabled_preserves_existing_bill_totals(bill_context):
+    add_order(bill_context)
+    bill = create_bill(bill_context).json()
+    assert bill["gst_enabled"] is False
+    assert bill["subtotal"] == "100.00"
+    assert bill["tax_amount"] == "0.00"
+    assert bill["total_amount"] == "100.00"
+    assert bill["invoice_number"] is None
+
+
+def test_five_percent_exclusive_gst_and_cgst_sgst_split(bill_context):
+    _enable_gst(bill_context, mode="exclusive")
+    add_order(bill_context)
+    bill = create_bill(bill_context).json()
+    assert bill["gst_enabled"] is True
+    assert bill["taxable_amount"] == "100.00"
+    assert bill["gst_rate"] == "5.00"
+    assert bill["cgst_amount"] == "2.50"
+    assert bill["sgst_amount"] == "2.50"
+    assert bill["igst_amount"] == "0.00"
+    assert bill["tax_amount"] == "5.00"
+    assert bill["total_amount"] == "105.00"
+    assert bill["invoice_number"].endswith("/000001")
+
+
+def test_five_percent_inclusive_gst(bill_context):
+    _enable_gst(bill_context, mode="inclusive")
+    add_order(bill_context)
+    bill = create_bill(bill_context).json()
+    assert bill["subtotal"] == "100.00"
+    assert bill["taxable_amount"] == "95.24"
+    assert bill["cgst_amount"] == "2.38"
+    assert bill["sgst_amount"] == "2.38"
+    assert bill["tax_amount"] == "4.76"
+    assert bill["total_amount"] == "100.00"
+
+
+def test_discount_is_applied_before_gst_and_decimal_rounding():
+    totals = calculate_gst_totals(
+        subtotal=Decimal("99.99"),
+        discount_amount=Decimal("9.99"),
+        gst_rate=Decimal("5.00"),
+        tax_mode="exclusive",
+    )
+    assert totals.taxable_amount == Decimal("90.00")
+    assert totals.cgst_amount == Decimal("2.25")
+    assert totals.sgst_amount == Decimal("2.25")
+    assert totals.total_amount == Decimal("94.50")
+
+    rounded = calculate_gst_totals(
+        subtotal=Decimal("99.99"),
+        discount_amount=Decimal("0.00"),
+        gst_rate=Decimal("5.00"),
+        tax_mode="exclusive",
+    )
+    assert rounded.cgst_amount == Decimal("2.50")
+    assert rounded.sgst_amount == Decimal("2.50")
+    assert rounded.total_amount == Decimal("104.99")
+
+
+def test_gst_bill_snapshots_are_immutable_after_settings_change(bill_context):
+    _enable_gst(bill_context, rate="5.00", prefix="MM")
+    add_order(bill_context)
+    generated = create_bill(bill_context).json()
+
+    db = SessionLocal()
+    restaurant = db.query(Restaurant).filter(Restaurant.id == bill_context["restaurant_id"]).one()
+    restaurant.gstin = "29ABCDE1234F1Z7"
+    restaurant.legal_business_name = "Changed Legal Name"
+    restaurant.default_gst_rate = Decimal("18.00")
+    restaurant.invoice_prefix = "NEW"
+    db.commit()
+    db.close()
+
+    issued = client.post(
+        f"/staff/bills/{generated['bill_number']}/issue",
+        headers={"Authorization": f"Bearer {bill_context['owner_token']}"},
+    ).json()
+    assert issued["gst_rate"] == "5.00"
+    assert issued["gstin"] == "32ABCDE1234F1Z5"
+    assert issued["legal_business_name"] == "Malabar Meals Private Limited"
+    assert issued["invoice_number"] == generated["invoice_number"]
+    assert issued["total_amount"] == generated["total_amount"]
+
+
+def test_historic_non_gst_bill_remains_unchanged_after_gst_is_enabled(bill_context):
+    add_order(bill_context)
+    historic = create_bill(bill_context).json()
+    _enable_gst(bill_context, rate="18.00")
+    issued = client.post(
+        f"/staff/bills/{historic['bill_number']}/issue",
+        headers={"Authorization": f"Bearer {bill_context['owner_token']}"},
+    ).json()
+    assert issued["gst_enabled"] is False
+    assert issued["invoice_number"] is None
+    assert issued["tax_amount"] == "0.00"
+    assert issued["total_amount"] == "100.00"
+
+
+def test_indian_financial_year_resets_on_april_first():
+    assert indian_financial_year(datetime.date(2027, 3, 31)) == "2026-27"
+    assert indian_financial_year(datetime.date(2027, 4, 1)) == "2027-28"
+
+
+def test_invoice_sequence_resets_by_financial_year_and_is_restaurant_scoped(bill_context):
+    _enable_gst(bill_context, prefix="MM")
+    db = SessionLocal()
+    restaurant = db.query(Restaurant).filter(Restaurant.id == bill_context["restaurant_id"]).one()
+    first, _ = generate_invoice_number(
+        db, restaurant, now=datetime.datetime(2027, 3, 31, 12, tzinfo=datetime.timezone.utc)
+    )
+    second, _ = generate_invoice_number(
+        db, restaurant, now=datetime.datetime(2027, 4, 1, 12, tzinfo=datetime.timezone.utc)
+    )
+    other = db.query(Restaurant).filter(Restaurant.id == bill_context["other_restaurant_id"]).one()
+    other.invoice_prefix = "OT"
+    other_first, _ = generate_invoice_number(
+        db, other, now=datetime.datetime(2027, 3, 31, 12, tzinfo=datetime.timezone.utc)
+    )
+    db.commit()
+    db.close()
+    assert first == "MM/2026-27/000001"
+    assert second == "MM/2027-28/000001"
+    assert other_first == "OT/2026-27/000001"
+
+
+def test_cancelled_invoice_number_is_never_reused(bill_context):
+    _enable_gst(bill_context, prefix="MM")
+    add_order(bill_context)
+    generated = create_bill(bill_context).json()
+    db = SessionLocal()
+    bill = db.query(Bill).filter(Bill.bill_number == generated["bill_number"]).one()
+    bill.status = "cancelled"
+    restaurant = db.query(Restaurant).filter(Restaurant.id == bill_context["restaurant_id"]).one()
+    next_number, _ = generate_invoice_number(db, restaurant)
+    db.commit()
+    db.close()
+    assert generated["invoice_number"].endswith("/000001")
+    assert next_number.endswith("/000002")
+
+
+def test_concurrent_invoice_generation_is_unique(bill_context):
+    _enable_gst(bill_context, prefix="MM")
+
+    def allocate(_):
+        db = SessionLocal()
+        restaurant = db.query(Restaurant).filter(Restaurant.id == bill_context["restaurant_id"]).one()
+        number, _ = generate_invoice_number(db, restaurant)
+        db.commit()
+        db.close()
+        return number
+
+    with ThreadPoolExecutor(max_workers=6) as executor:
+        numbers = list(executor.map(allocate, range(12)))
+    assert len(set(numbers)) == 12
+    assert sorted(int(number.rsplit("/", 1)[1]) for number in numbers) == list(range(1, 13))

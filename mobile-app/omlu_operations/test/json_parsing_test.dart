@@ -112,6 +112,61 @@ void main() {
     });
 
     test(
+      'menu categories and items prefer name_en with legacy name fallback',
+      () {
+        final categories = parseMenuCategories([
+          {
+            'id': 1,
+            'name_en': 'Beverages',
+            'items': [
+              {'id': 10, 'name_en': 'Tea', 'price': 20, 'is_available': null},
+            ],
+          },
+          {
+            'id': 2,
+            'name': 'Legacy',
+            'items': [
+              {'id': 20, 'name': 'Legacy item', 'price': '30.50'},
+            ],
+          },
+        ]);
+
+        expect(categories[0].name, 'Beverages');
+        expect(categories[0].items.single.name, 'Tea');
+        expect(categories[0].items.single.isAvailable, true);
+        expect(categories[1].name, 'Legacy');
+        expect(categories[1].items.single.name, 'Legacy item');
+        expect(categories[1].items.single.price, 30.5);
+      },
+    );
+
+    test('malformed categories and items do not hide valid menu records', () {
+      final categories = parseMenuCategories([
+        {
+          'id': 1,
+          'name_en': 'Food',
+          'items': [
+            {'id': 10, 'name_en': 'Dosa', 'price': '80.00'},
+            {'id': null, 'name_en': 'Broken', 'price': 'bad'},
+          ],
+        },
+        {'id': null, 'name_en': 'Broken category'},
+        {
+          'id': 2,
+          'name_en': 'Empty category',
+          'items': [null],
+        },
+      ]);
+
+      expect(categories.map((category) => category.name), [
+        'Food',
+        'Empty category',
+      ]);
+      expect(categories.first.items.map((item) => item.name), ['Dosa']);
+      expect(categories.last.items, isEmpty);
+    });
+
+    test(
       'OperationsApi.createStaffOrder decodes backend-style response cleanly',
       () async {
         final mockResponse = {

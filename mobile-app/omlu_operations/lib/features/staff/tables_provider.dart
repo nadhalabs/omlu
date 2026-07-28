@@ -38,6 +38,9 @@ class TablesNotifier
           final selectedId = ref.read(selectedTableIdProvider);
           if (selectedId != null) {
             ref.invalidate(tableDetailProvider(selectedId));
+            ref
+                .read(menuViewProvider(selectedId).notifier)
+                .refreshInBackground();
           }
         }
       });

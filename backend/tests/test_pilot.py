@@ -31,6 +31,9 @@ from app.models.restaurant_table import RestaurantTable
 from app.models.menu import MenuCategory, MenuItem
 from app.models.staff_user import StaffUser
 from app.models.order import Order, OrderItem, OrderStatusHistory, RestaurantDailySequence
+from app.models.bill import Bill
+from app.models.dining_session import DiningSession
+from app.models.quick_sale import QuickSale
 from app.models.service_request import ServiceRequest
 from app.utils.auth import hash_password, create_access_token
 
@@ -491,6 +494,180 @@ class TestDashboardSummary:
         data = r.json()
         assert data["pending_order_count"] >= 1  # The placed_order is pending
 
+    def test_today_revenue_counts_only_collected_payments_in_local_day(
+        self, db, restaurant, table, menu_item, owner_user, owner_token
+    ):
+        from app.routes.dashboard import _get_local_day_bounds_utc
+
+        start_utc, end_utc, _ = _get_local_day_bounds_utc("Asia/Kolkata")
+        paid_session = DiningSession(
+            restaurant_id=restaurant.id,
+            table_id=table.id,
+            public_token=uuid.uuid4().hex,
+            status="paid",
+            opened_at=start_utc,
+            closed_at=start_utc,
+            paid_at=start_utc,
+        )
+        db.add(paid_session)
+        db.flush()
+
+        # These order values are already represented by the bill and must not
+        # be added separately, even though one is served.
+        served_order = Order(
+            restaurant_id=restaurant.id,
+            table_id=table.id,
+            dining_session_id=paid_session.id,
+            order_number="REV-SERVED",
+            public_token=uuid.uuid4().hex,
+            status="served",
+            subtotal=Decimal("100.00"),
+            created_at=start_utc - timedelta(days=2),
+        )
+        rejected_order = Order(
+            restaurant_id=restaurant.id,
+            table_id=table.id,
+            dining_session_id=paid_session.id,
+            order_number="REV-REJECTED",
+            public_token=uuid.uuid4().hex,
+            status="rejected",
+            subtotal=Decimal("900.00"),
+            created_at=start_utc,
+        )
+        db.add_all([served_order, rejected_order])
+        db.add(Bill(
+            restaurant_id=restaurant.id,
+            dining_session_id=paid_session.id,
+            bill_number="REV-PAID",
+            status="paid",
+            subtotal=Decimal("100.00"),
+            tax_amount=Decimal("0.00"),
+            discount_amount=Decimal("0.00"),
+            total_amount=Decimal("100.00"),
+            generated_at=start_utc - timedelta(days=2),
+            paid_at=start_utc,
+            payment_method="counter_cash",
+        ))
+
+        pending_session = DiningSession(
+            restaurant_id=restaurant.id,
+            table_id=table.id,
+            public_token=uuid.uuid4().hex,
+            status="payment_pending",
+            opened_at=start_utc,
+        )
+        db.add(pending_session)
+        db.flush()
+        db.add(Bill(
+            restaurant_id=restaurant.id,
+            dining_session_id=pending_session.id,
+            bill_number="REV-PENDING",
+            status="payment_pending",
+            subtotal=Decimal("700.00"),
+            tax_amount=Decimal("0.00"),
+            discount_amount=Decimal("0.00"),
+            total_amount=Decimal("700.00"),
+            generated_at=start_utc,
+            paid_at=None,
+        ))
+
+        previous_session = DiningSession(
+            restaurant_id=restaurant.id,
+            table_id=table.id,
+            public_token=uuid.uuid4().hex,
+            status="paid",
+            opened_at=start_utc - timedelta(days=1),
+            closed_at=start_utc - timedelta(seconds=1),
+            paid_at=start_utc - timedelta(seconds=1),
+        )
+        db.add(previous_session)
+        db.flush()
+        db.add(Bill(
+            restaurant_id=restaurant.id,
+            dining_session_id=previous_session.id,
+            bill_number="REV-YESTERDAY",
+            status="paid",
+            subtotal=Decimal("600.00"),
+            tax_amount=Decimal("0.00"),
+            discount_amount=Decimal("0.00"),
+            total_amount=Decimal("600.00"),
+            generated_at=start_utc,
+            paid_at=start_utc - timedelta(seconds=1),
+            payment_method="counter_cash",
+        ))
+
+        db.add(QuickSale(
+            restaurant_id=restaurant.id,
+            order_number="REV-QS",
+            public_token=uuid.uuid4().hex,
+            idempotency_key=uuid.uuid4().hex,
+            sale_type="late_entry",
+            source="late_entry",
+            status="completed",
+            subtotal=Decimal("50.00"),
+            total_amount=Decimal("50.00"),
+            payment_method="cash",
+            entered_by_staff_id=owner_user.id,
+            entered_by_name=owner_user.name,
+            entered_by_role=owner_user.role,
+            paid_by_staff_id=owner_user.id,
+            completed_at=end_utc - timedelta(seconds=1),
+        ))
+        # The exclusive end boundary belongs to the following local day.
+        db.add(QuickSale(
+            restaurant_id=restaurant.id,
+            order_number="REV-QS-TOMORROW",
+            public_token=uuid.uuid4().hex,
+            idempotency_key=uuid.uuid4().hex,
+            sale_type="late_entry",
+            source="late_entry",
+            status="completed",
+            subtotal=Decimal("500.00"),
+            total_amount=Decimal("500.00"),
+            payment_method="cash",
+            entered_by_staff_id=owner_user.id,
+            entered_by_name=owner_user.name,
+            entered_by_role=owner_user.role,
+            paid_by_staff_id=owner_user.id,
+            completed_at=end_utc,
+        ))
+
+        other_restaurant = Restaurant(
+            name="Revenue Other",
+            slug=f"revenue-other-{uuid.uuid4().hex}",
+            is_active=True,
+            timezone="Asia/Kolkata",
+            currency="INR",
+        )
+        db.add(other_restaurant)
+        db.flush()
+        db.add(QuickSale(
+            restaurant_id=other_restaurant.id,
+            order_number="REV-OTHER",
+            public_token=uuid.uuid4().hex,
+            idempotency_key=uuid.uuid4().hex,
+            sale_type="late_entry",
+            source="late_entry",
+            status="completed",
+            subtotal=Decimal("999.00"),
+            total_amount=Decimal("999.00"),
+            payment_method="cash",
+            entered_by_staff_id=owner_user.id,
+            entered_by_name=owner_user.name,
+            entered_by_role=owner_user.role,
+            paid_by_staff_id=owner_user.id,
+            completed_at=start_utc,
+        ))
+        db.commit()
+
+        response = client.get(
+            "/admin/dashboard/summary",
+            headers={"Authorization": f"Bearer {owner_token}"},
+        )
+        assert response.status_code == 200
+        assert response.json()["today_revenue"] == "150.00"
+        assert response.json()["average_order_value"] == "75.00"
+
 
 # ────────────────────────────────────────────────────────────
 # 5. Restaurant Settings
@@ -506,11 +683,38 @@ class TestRestaurantSettings:
         assert data["currency"] == "INR"
         assert data["order_prefix"] == "TC"
         assert data["service_requests_enabled"] is True
+        assert data["gst_enabled"] is False
 
     def test_get_settings_kitchen_denied(self, restaurant, kitchen_token):
         headers = {"Authorization": f"Bearer {kitchen_token}"}
         r = client.get("/admin/settings", headers=headers)
         assert r.status_code == 403
+
+    def test_gst_settings_validation_and_restaurant_scope(self, db, restaurant, owner_token):
+        headers = {"Authorization": f"Bearer {owner_token}"}
+        incomplete = client.patch("/admin/settings", headers=headers, json={"gst_enabled": True})
+        assert incomplete.status_code == 422
+
+        invalid = client.patch("/admin/settings", headers=headers, json={
+            "gstin": "INVALID",
+            "default_gst_rate": "5.00",
+        })
+        assert invalid.status_code == 422
+
+        updated = client.patch("/admin/settings", headers=headers, json={
+            "gst_enabled": True,
+            "gstin": "32ABCDE1234F1Z5",
+            "legal_business_name": "Test Cafe Legal",
+            "registered_billing_address": "MG Road, Kochi",
+            "gst_state_name": "Kerala",
+            "gst_state_code": "32",
+            "default_gst_rate": "5.00",
+            "tax_mode": "exclusive",
+            "invoice_prefix": "TC",
+        })
+        assert updated.status_code == 200
+        assert updated.json()["gst_enabled"] is True
+        assert updated.json()["gstin"] == "32ABCDE1234F1Z5"
 
     def test_update_order_prefix(self, restaurant, owner_token):
         headers = {"Authorization": f"Bearer {owner_token}"}

@@ -166,14 +166,18 @@ class _OrderMenuView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final menuState = ref.watch(menuCategoriesProvider(tableId));
+    final menuState = ref.watch(menuViewProvider(tableId));
     final cartState = ref.watch(cartProvider);
 
     // Fetch table number
     final tables = ref.read(tablesProvider).value;
-    final tableNumber =
-        tables?.firstWhere((t) => t.id == tableId).tableNumber ??
-        'Table $tableId';
+    var tableNumber = 'Table $tableId';
+    for (final table in tables ?? const <StaffTableSummary>[]) {
+      if (table.id == tableId) {
+        tableNumber = table.tableNumber;
+        break;
+      }
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -234,7 +238,8 @@ class _OrderMenuView extends ConsumerWidget {
 
           // Menu Category Chips
           menuState.when(
-            data: (categories) {
+            data: (menu) {
+              final categories = menu.categories;
               return SizedBox(
                 height: 44,
                 child: ListView.separated(
@@ -279,20 +284,53 @@ class _OrderMenuView extends ConsumerWidget {
                 ),
               );
             },
-            loading: () => const SizedBox.shrink(),
-            error: (err, st) => const SizedBox.shrink(),
+            loading: () => const Padding(
+              padding: EdgeInsets.symmetric(horizontal: OmluSpacing.md),
+              child: OmluSkeletonLoader(width: double.infinity, height: 44),
+            ),
+            error: (err, st) => const Padding(
+              padding: EdgeInsets.symmetric(horizontal: OmluSpacing.md),
+              child: Text('Menu could not be loaded.'),
+            ),
           ),
           const SizedBox(height: OmluSpacing.md),
+          if (menuState.valueOrNull?.refreshWarning == true)
+            const Padding(
+              padding: EdgeInsets.fromLTRB(
+                OmluSpacing.md,
+                0,
+                OmluSpacing.md,
+                OmluSpacing.sm,
+              ),
+              child: Text(
+                'Showing saved menu. Refresh failed.',
+                style: TextStyle(color: OmluColors.statusNeedsBill),
+              ),
+            ),
 
           // Menu Items List
           Expanded(
             child: menuState.when(
-              data: (categories) {
+              data: (menu) {
+                final categories = menu.categories;
+                final categoryStillExists =
+                    selectedCategoryId == -1 ||
+                    categories.any(
+                      (category) => category.id == selectedCategoryId,
+                    );
+                final effectiveCategoryId = categoryStillExists
+                    ? selectedCategoryId
+                    : -1;
+                if (!categoryStillExists) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    onCategoryChanged(-1);
+                  });
+                }
                 // Filter items
                 final List<MenuItem> items = [];
                 for (final cat in categories) {
-                  if (selectedCategoryId == -1 ||
-                      cat.id == selectedCategoryId) {
+                  if (effectiveCategoryId == -1 ||
+                      cat.id == effectiveCategoryId) {
                     items.addAll(cat.items);
                   }
                 }
@@ -304,8 +342,14 @@ class _OrderMenuView extends ConsumerWidget {
                 }).toList();
 
                 if (filteredItems.isEmpty) {
-                  return const Center(
-                    child: Text('No items match your search.'),
+                  return Center(
+                    child: Text(
+                      categories.isEmpty
+                          ? 'No menu items have been added yet.'
+                          : searchQuery.isNotEmpty
+                          ? 'No items match your search.'
+                          : 'No menu items have been added yet.',
+                    ),
                   );
                 }
 
@@ -409,16 +453,39 @@ class _OrderMenuView extends ConsumerWidget {
                   },
                 );
               },
-              loading: () => ListView.builder(
-                padding: const EdgeInsets.all(OmluSpacing.md),
-                itemCount: 4,
-                itemBuilder: (context, index) => const Padding(
-                  padding: EdgeInsets.only(bottom: OmluSpacing.md),
-                  child: OmluSkeletonLoader(width: double.infinity, height: 96),
+              loading: () => Column(
+                children: [
+                  const Text('Loading menu…'),
+                  const SizedBox(height: OmluSpacing.sm),
+                  Expanded(
+                    child: ListView.builder(
+                      padding: const EdgeInsets.all(OmluSpacing.md),
+                      itemCount: 4,
+                      itemBuilder: (context, index) => const Padding(
+                        padding: EdgeInsets.only(bottom: OmluSpacing.md),
+                        child: OmluSkeletonLoader(
+                          width: double.infinity,
+                          height: 96,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              error: (err, st) => Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('Menu could not be loaded.'),
+                    const SizedBox(height: OmluSpacing.sm),
+                    OmluButton(
+                      text: 'Retry',
+                      onPressed: () =>
+                          ref.read(menuViewProvider(tableId).notifier).retry(),
+                    ),
+                  ],
                 ),
               ),
-              error: (err, st) =>
-                  Center(child: Text('Error loading menu: $err')),
             ),
           ),
           _BillingStatusCardView(tableId: tableId),

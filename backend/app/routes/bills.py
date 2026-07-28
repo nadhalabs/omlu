@@ -238,6 +238,7 @@ def confirm_staff_counter_payment(
     event_channels = [
         restaurant_channel(current_user.restaurant_id, "operations"),
         restaurant_channel(current_user.restaurant_id, "staff"),
+        restaurant_channel(current_user.restaurant_id, "admin"),
         session_channel(paid.dining_session.public_token),
         table_channel(current_user.restaurant_id, paid.dining_session.table_id),
     ]

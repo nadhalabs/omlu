@@ -200,7 +200,7 @@ export default function AdminDashboardClient() {
         <StatCard
           label="Today's Revenue"
           value={`${currency}${data.today_revenue}`}
-          sub="From served orders"
+          sub="Collected from paid bills and quick sales"
           icon="₹"
           accent="border-orange-700/30"
         />

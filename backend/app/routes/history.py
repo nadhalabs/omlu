@@ -20,6 +20,7 @@ from app.models.service_request import ServiceRequest
 from app.models.staff_user import StaffUser
 from app.models.quick_sale import QuickSale, QuickSaleItem
 from app.services.pdf_reports import build_performance_pdf
+from app.services.revenue import collected_revenue
 from app.utils.auth import RoleChecker
 
 
@@ -289,6 +290,15 @@ def _bill_row(bill: Bill) -> dict:
         "payment_status": bill.status,
         "payment_method": bill.payment_method,
         "paid_at": _iso(bill.paid_at),
+        "invoice_number": bill.invoice_number,
+        "invoice_date": _iso(bill.invoice_date),
+        "gst_enabled": bill.gst_enabled_snapshot,
+        "taxable_amount": _money(bill.taxable_amount) if bill.taxable_amount is not None else None,
+        "gst_rate": _money(bill.gst_rate) if bill.gst_rate is not None else None,
+        "cgst_amount": _money(bill.cgst_amount) if bill.cgst_amount is not None else None,
+        "sgst_amount": _money(bill.sgst_amount) if bill.sgst_amount is not None else None,
+        "igst_amount": _money(bill.igst_amount) if bill.igst_amount is not None else None,
+        "gstin": bill.gstin_snapshot,
     }
 
 
@@ -431,7 +441,6 @@ def performance_summary(
         func.count(Bill.id),
         func.coalesce(func.sum(case((Bill.status == "paid", 1), else_=0)), 0),
         func.coalesce(func.sum(case((Bill.status.in_(["draft", "issued"]), 1), else_=0)), 0),
-        func.coalesce(func.sum(case((Bill.status == "paid", Bill.total_amount), else_=0)), 0),
     ).filter(
         Bill.restaurant_id == current_user.restaurant_id,
         Bill.generated_at >= start_utc,
@@ -450,16 +459,27 @@ def performance_summary(
 
     paid_quick_sales = db.query(QuickSale).filter(QuickSale.restaurant_id == current_user.restaurant_id, QuickSale.status == "completed", QuickSale.completed_at >= start_utc, QuickSale.completed_at < end_utc).all()
     total_orders = int(order_metrics[0] or 0) + len(paid_quick_sales)
-    quick_revenue = sum((sale.total_amount for sale in paid_quick_sales), Decimal("0.00"))
-    total_revenue = Decimal(str(bill_metrics[3] or 0)) + quick_revenue
+    revenue = collected_revenue(
+        db,
+        restaurant_id=current_user.restaurant_id,
+        start_utc=start_utc,
+        end_utc=end_utc,
+    )
+    total_revenue = revenue.total
 
     revenue_by_day = [
         {"date": str(row[0]), "revenue": _money(row[1])}
         for row in db.query(
-            func.date(func.timezone(tz_name, Bill.generated_at)).label("day"),
+            func.date(func.timezone(tz_name, Bill.paid_at)).label("day"),
             func.coalesce(func.sum(Bill.total_amount), 0),
         )
-        .filter(Bill.restaurant_id == current_user.restaurant_id, Bill.status == "paid", Bill.generated_at >= start_utc, Bill.generated_at < end_utc)
+        .filter(
+            Bill.restaurant_id == current_user.restaurant_id,
+            Bill.status == "paid",
+            Bill.paid_at.isnot(None),
+            Bill.paid_at >= start_utc,
+            Bill.paid_at < end_utc,
+        )
         .group_by("day")
         .order_by("day")
         .all()
@@ -704,8 +724,9 @@ def _payment_breakdown(db: Session, staff: StaffUser, start_utc: datetime, end_u
     ).filter(
         Bill.restaurant_id == staff.restaurant_id,
         Bill.status == "paid",
-        Bill.generated_at >= start_utc,
-        Bill.generated_at < end_utc,
+        Bill.paid_at.isnot(None),
+        Bill.paid_at >= start_utc,
+        Bill.paid_at < end_utc,
     ).group_by(Bill.payment_method).all()
     quick_rows = db.query(QuickSale.payment_method, func.count(QuickSale.id), func.coalesce(func.sum(QuickSale.total_amount), 0)).filter(QuickSale.restaurant_id == staff.restaurant_id, QuickSale.status == "completed", QuickSale.completed_at >= start_utc, QuickSale.completed_at < end_utc).group_by(QuickSale.payment_method).all()
     merged: dict[str | None, list] = {}

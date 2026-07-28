@@ -94,7 +94,7 @@ def create_quick_sale(body: QuickSaleCreate, current_user: StaffUser = Depends(_
     if sale.status == "completed": _audit(db, current_user, sale, "quick_sale_completed", {"payment_method": body.payment_method})
     db.commit(); db.refresh(sale)
     event = EVENT_QUICK_SALE_COMPLETED if sale.status == "completed" else EVENT_ORDER_CREATED
-    channels = [restaurant_channel(current_user.restaurant_id, "operations"), restaurant_channel(current_user.restaurant_id, "staff")]
+    channels = [restaurant_channel(current_user.restaurant_id, "operations"), restaurant_channel(current_user.restaurant_id, "staff"), restaurant_channel(current_user.restaurant_id, "admin")]
     if sale.sale_type == "takeaway": channels.append(restaurant_channel(current_user.restaurant_id, "kitchen"))
     publish_event(event, restaurant_id=current_user.restaurant_id, channels=channels, resource_id=sale.id, state={"order_number": sale.order_number, "source": sale.source, "status": sale.status})
     return _serialize(sale)
@@ -109,5 +109,5 @@ def confirm_quick_sale_payment(public_token: str, body: QuickSalePayment, curren
     now = datetime.datetime.now(datetime.timezone.utc)
     sale.status = "completed"; sale.payment_method = body.method; sale.paid_by_staff_id = current_user.id; sale.paid_by_name = current_user.name; sale.paid_by_role = current_user.role; sale.completed_at = now
     _audit(db, current_user, sale, "quick_sale_payment_confirmed", {"payment_method": body.method}); db.commit(); db.refresh(sale)
-    publish_event(EVENT_QUICK_SALE_COMPLETED, restaurant_id=current_user.restaurant_id, channels=[restaurant_channel(current_user.restaurant_id, "operations"), restaurant_channel(current_user.restaurant_id, "staff")], resource_id=sale.id, state={"order_number": sale.order_number, "source": sale.source, "status": sale.status})
+    publish_event(EVENT_QUICK_SALE_COMPLETED, restaurant_id=current_user.restaurant_id, channels=[restaurant_channel(current_user.restaurant_id, "operations"), restaurant_channel(current_user.restaurant_id, "staff"), restaurant_channel(current_user.restaurant_id, "admin")], resource_id=sale.id, state={"order_number": sale.order_number, "source": sale.source, "status": sale.status})
     return _serialize(sale)

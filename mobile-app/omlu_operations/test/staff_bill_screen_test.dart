@@ -200,4 +200,65 @@ void main() {
     expect(find.textContaining('Cash'), findsNothing);
     expect(find.textContaining('UPI'), findsNothing);
   });
+
+  testWidgets('GST bill renders invoice identity and canonical tax split', (
+    tester,
+  ) async {
+    final api = OperationsApi(
+      ApiClient(
+        baseUrl: Uri.parse('https://api.example'),
+        transport: (_) async => const ApiResponse(
+          statusCode: 200,
+          body: {
+            'table': {
+              'id': 12,
+              'table_number': '6',
+              'state': 'occupied',
+              'has_open_session': true,
+            },
+            'session': {
+              'id': 100,
+              'session_token': 'session-100',
+              'status': 'payment_requested',
+              'orders': <Object?>[],
+              'bill': {
+                'bill_number': 'BILL-12',
+                'invoice_number': 'MM/2026-27/000001',
+                'invoice_date': '2026-07-20T12:00:00Z',
+                'status': 'issued',
+                'gst_enabled': true,
+                'gstin': '32ABCDE1234F1Z5',
+                'legal_business_name': 'Malabar Meals Private Limited',
+                'registered_billing_address': 'MG Road, Kochi',
+                'subtotal': '100.00',
+                'discount_amount': '0.00',
+                'taxable_amount': '100.00',
+                'gst_rate': '5.00',
+                'cgst_amount': '2.50',
+                'sgst_amount': '2.50',
+                'igst_amount': '0.00',
+                'tax_amount': '5.00',
+                'total_amount': '105.00',
+              },
+            },
+            'activity': <Object?>[],
+          },
+        ),
+      ),
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [operationsApiProvider.overrideWithValue(api)],
+        child: const MaterialApp(home: StaffBillScreen(tableId: 12)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Malabar Meals Private Limited'), findsOneWidget);
+    expect(find.textContaining('GSTIN: 32ABCDE1234F1Z5'), findsOneWidget);
+    expect(find.textContaining('MM/2026-27/000001'), findsOneWidget);
+    expect(find.text('Taxable subtotal'), findsOneWidget);
+    expect(find.text('CGST (2.50%)'), findsOneWidget);
+    expect(find.text('SGST (2.50%)'), findsOneWidget);
+    expect(find.textContaining('IGST'), findsNothing);
+  });
 }

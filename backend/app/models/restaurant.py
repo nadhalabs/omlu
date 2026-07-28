@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
-from sqlalchemy import DateTime, String, Boolean, Integer, CheckConstraint, func
+from decimal import Decimal
+from sqlalchemy import DateTime, String, Boolean, Integer, Numeric, CheckConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
@@ -20,6 +21,15 @@ class Restaurant(Base):
     currency: Mapped[str] = mapped_column(String(10), default="INR", server_default="INR")
     order_prefix: Mapped[str] = mapped_column(String(10), default="NS", server_default="NS")
     service_requests_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    gst_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
+    gstin: Mapped[Optional[str]] = mapped_column(String(15), nullable=True)
+    legal_business_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    registered_billing_address: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    gst_state_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    gst_state_code: Mapped[Optional[str]] = mapped_column(String(2), nullable=True)
+    default_gst_rate: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=Decimal("0.00"), server_default="0.00", nullable=False)
+    tax_mode: Mapped[str] = mapped_column(String(20), default="exclusive", server_default="exclusive", nullable=False)
+    invoice_prefix: Mapped[str] = mapped_column(String(10), default="INV", server_default="INV", nullable=False)
     operating_status: Mapped[str] = mapped_column(String(20), default="open", server_default="open", nullable=False)
     staff_operations_locked: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
     staff_locked_by_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
@@ -76,4 +86,6 @@ class Restaurant(Base):
 
     __table_args__ = (
         CheckConstraint("operating_status IN ('open', 'closing', 'closed')", name="chk_restaurant_operating_status"),
+        CheckConstraint("tax_mode IN ('inclusive', 'exclusive')", name="chk_restaurants_tax_mode"),
+        CheckConstraint("default_gst_rate >= 0 AND default_gst_rate <= 100", name="chk_restaurants_gst_rate"),
     )

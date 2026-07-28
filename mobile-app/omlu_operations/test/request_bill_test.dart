@@ -9,6 +9,32 @@ import 'package:omlu_operations/features/staff/cart_provider.dart';
 import 'package:omlu_operations/features/staff/new_order_screen.dart';
 import 'package:omlu_operations/features/staff/staff_shell.dart';
 import 'package:omlu_operations/features/auth_provider.dart';
+import 'package:omlu_operations/core/storage/operations_data_cache.dart';
+
+class TestMenuNotifier extends MenuNotifier {
+  TestMenuNotifier(OperationsApi api)
+    : super(
+        cache: OperationsDataCache(),
+        api: api,
+        tableId: 12,
+        restaurantScope: 'test',
+        startLoading: false,
+      ) {
+    state = const AsyncValue.data(
+      MenuViewData(
+        categories: [
+          MenuCategory(
+            id: 1,
+            name: 'Test Drinks',
+            items: [
+              MenuItem(id: 101, name: 'Cola', price: 40, isAvailable: true),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 void main() {
   late OperationsApi dummyApi;
@@ -159,7 +185,10 @@ void main() {
 
   Widget buildTestApp() {
     return ProviderScope(
-      overrides: [operationsApiProvider.overrideWithValue(dummyApi)],
+      overrides: [
+        operationsApiProvider.overrideWithValue(dummyApi),
+        menuViewProvider(12).overrideWith((ref) => TestMenuNotifier(dummyApi)),
+      ],
       child: const MaterialApp(home: StaffShell()),
     );
   }

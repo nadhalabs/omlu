@@ -10,6 +10,7 @@ import 'package:omlu_operations/features/staff/new_order_screen.dart';
 import 'package:omlu_operations/core/models/operations_models.dart';
 import 'package:omlu_operations/core/api/operations_api.dart';
 import 'package:omlu_operations/core/api/api_client.dart';
+import 'package:omlu_operations/core/storage/operations_data_cache.dart';
 
 // Mocks
 class MockTablesNotifier extends TablesNotifier {
@@ -30,6 +31,38 @@ class MockServiceRequestsNotifier extends ServiceRequestsNotifier {
   Future<void> fetchRequests({bool silent = false}) async {
     state = AsyncValue.data(mockData);
   }
+}
+
+class MockMenuNotifier extends MenuNotifier {
+  MockMenuNotifier(OperationsApi api, List<MenuCategory> categories)
+    : super(
+        cache: OperationsDataCache(),
+        api: api,
+        tableId: 2,
+        restaurantScope: 'test',
+        startLoading: false,
+      ) {
+    state = AsyncValue.data(MenuViewData(categories: categories));
+  }
+}
+
+class ErrorMenuNotifier extends MenuNotifier {
+  ErrorMenuNotifier(OperationsApi api)
+    : super(
+        cache: OperationsDataCache(),
+        api: api,
+        tableId: 2,
+        restaurantScope: 'test',
+        startLoading: false,
+      ) {
+    state = AsyncValue.error(
+      StateError('network details must not be shown'),
+      StackTrace.current,
+    );
+  }
+
+  @override
+  Future<void> retry() async {}
 }
 
 void main() {
@@ -108,7 +141,10 @@ void main() {
     dummyApi = OperationsApi(client);
   });
 
-  Widget buildShell({List<Override> overrides = const []}) {
+  Widget buildShell({
+    List<Override> overrides = const [],
+    MenuNotifier? menuNotifier,
+  }) {
     return ProviderScope(
       overrides: [
         tablesProvider.overrideWith(
@@ -117,7 +153,9 @@ void main() {
         serviceRequestsProvider.overrideWith(
           (ref) => MockServiceRequestsNotifier(dummyApi, ref, mockRequests),
         ),
-        menuCategoriesProvider(2).overrideWith((ref) => Future.value(mockMenu)),
+        menuViewProvider(2).overrideWith(
+          (ref) => menuNotifier ?? MockMenuNotifier(dummyApi, mockMenu),
+        ),
         ...overrides,
       ],
       child: const MaterialApp(home: StaffShell()),
@@ -207,6 +245,23 @@ void main() {
       expect(state.submissionState, SubmissionState.submitting);
       expect(state.items.isNotEmpty, true);
     });
+  });
+
+  testWidgets('menu failure is visible and retryable instead of blank', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      buildShell(menuNotifier: ErrorMenuNotifier(dummyApi)),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.add_circle_outline_rounded));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Table 2'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Menu could not be loaded.'), findsWidgets);
+    expect(find.text('Retry'), findsOneWidget);
+    expect(find.textContaining('network details'), findsNothing);
   });
 
   group('Requests Navigation Badge', () {

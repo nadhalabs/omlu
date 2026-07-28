@@ -460,13 +460,59 @@ class _BillBreakdown extends StatelessWidget {
             ],
           ),
           const SizedBox(height: OmluSpacing.md),
-          _MoneyRow(label: 'Subtotal', value: _amount(bill['subtotal'])),
-          _MoneyRow(label: 'Tax', value: _amount(bill['tax_amount'])),
+          if (bill['gst_enabled'] == true) ...[
+            Text(
+              _text(bill['legal_business_name']),
+              style: OmluTypography.bodyLarge.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            Text(
+              _text(bill['registered_billing_address']),
+              style: OmluTypography.bodySmall,
+            ),
+            Text(
+              'GSTIN: ${_text(bill['gstin'])}',
+              style: OmluTypography.bodySmall,
+            ),
+            Text(
+              'Invoice: ${_text(bill['invoice_number'])} · ${_text(bill['invoice_date'])}',
+              style: OmluTypography.bodySmall,
+            ),
+            const SizedBox(height: OmluSpacing.sm),
+          ],
+          _MoneyRow(
+            label: bill['gst_enabled'] == true ? 'Menu subtotal' : 'Subtotal',
+            value: _amount(bill['subtotal']),
+          ),
           const _MoneyRow(label: 'Service charge', value: 0),
           _MoneyRow(
             label: 'Discount',
             value: -_amount(bill['discount_amount']),
           ),
+          if (bill['gst_enabled'] == true) ...[
+            _MoneyRow(
+              label: 'Taxable subtotal',
+              value: _amount(bill['taxable_amount']),
+            ),
+            _MoneyRow(
+              label:
+                  'CGST (${(_amount(bill['gst_rate']) / 2).toStringAsFixed(2)}%)',
+              value: _amount(bill['cgst_amount']),
+            ),
+            _MoneyRow(
+              label:
+                  'SGST (${(_amount(bill['gst_rate']) / 2).toStringAsFixed(2)}%)',
+              value: _amount(bill['sgst_amount']),
+            ),
+            if (_amount(bill['igst_amount']) > 0)
+              _MoneyRow(
+                label:
+                    'IGST (${_amount(bill['gst_rate']).toStringAsFixed(2)}%)',
+                value: _amount(bill['igst_amount']),
+              ),
+          ] else
+            _MoneyRow(label: 'Tax', value: _amount(bill['tax_amount'])),
           const Divider(height: OmluSpacing.lg),
           _MoneyRow(label: 'Grand total', value: total, strong: true),
           _MoneyRow(label: 'Paid', value: paid),

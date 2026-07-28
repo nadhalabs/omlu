@@ -45,6 +45,22 @@ def update_restaurant_settings(
     for field, value in update_dict.items():
         setattr(restaurant, field, value)
 
+    if restaurant.gst_enabled:
+        required = {
+            "GSTIN": restaurant.gstin,
+            "Legal business name": restaurant.legal_business_name,
+            "Registered billing address": restaurant.registered_billing_address,
+            "State name": restaurant.gst_state_name,
+            "State code": restaurant.gst_state_code,
+        }
+        missing = [label for label, value in required.items() if not value]
+        if missing:
+            db.rollback()
+            raise HTTPException(
+                status_code=422,
+                detail=f"GST cannot be enabled until these fields are provided: {', '.join(missing)}.",
+            )
+
     db.commit()
     db.refresh(restaurant)
     return restaurant

@@ -59,6 +59,15 @@ export type BillHistoryRow = {
   payment_status: string;
   payment_method: string | null;
   paid_at: string | null;
+  invoice_number?: string | null;
+  invoice_date?: string | null;
+  gst_enabled?: boolean;
+  taxable_amount?: string | null;
+  gst_rate?: string | null;
+  cgst_amount?: string | null;
+  sgst_amount?: string | null;
+  igst_amount?: string | null;
+  gstin?: string | null;
 };
 
 export type SessionHistoryRow = {

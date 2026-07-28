@@ -23,6 +23,7 @@ from app.schemas.dashboard import (
 from app.utils.auth import RoleChecker
 from app.models.staff_user import StaffUser
 from app.models.quick_sale import QuickSale, QuickSaleItem
+from app.services.revenue import collected_revenue
 
 router = APIRouter(prefix="/admin/dashboard")
 
@@ -64,8 +65,8 @@ def get_dashboard_summary(
 
     Metric definitions:
     - today_order_count: All orders created during the restaurant's current local day
-    - today_revenue: Subtotal from orders whose 'served' status transition occurred today
-    - average_order_value: today_revenue / count of served-today orders (0 if none)
+    - today_revenue: Paid bills and completed paid Quick Sales collected today
+    - average_order_value: today_revenue / count of collected transactions (0 if none)
     - pending_order_count: Orders with status in (pending, accepted, preparing, ready)
     - rejected_order_count: Orders created today with status=rejected
     - top_selling_items: Item quantities from order_items in orders served today (uses snapshot item_name)
@@ -84,8 +85,8 @@ def get_dashboard_summary(
     ).scalar() or 0
     today_order_count += db.query(func.count(QuickSale.id)).filter(QuickSale.restaurant_id == restaurant_id, QuickSale.created_at >= day_start_utc, QuickSale.created_at < day_end_utc).scalar() or 0
 
-    # 2. Revenue: sum subtotals of orders whose 'served' status transition occurred today
-    # We join order_status_history to find orders marked 'served' today
+    # Served orders remain relevant to operational item rankings below, but
+    # collected revenue is intentionally derived only from payment records.
     from sqlalchemy import select
     served_today_subquery = select(OrderStatusHistory.order_id).where(
         OrderStatusHistory.new_status == "served",
@@ -105,9 +106,18 @@ def get_dashboard_summary(
     ).all()
 
 
-    today_revenue = (sum((o.subtotal for o in served_orders), Decimal("0.00")) + sum((s.total_amount for s in paid_quick_sales), Decimal("0.00")))
-    served_count = len(served_orders) + len(paid_quick_sales)
-    average_order_value = (today_revenue / served_count) if served_count > 0 else Decimal("0.00")
+    revenue = collected_revenue(
+        db,
+        restaurant_id=restaurant_id,
+        start_utc=day_start_utc,
+        end_utc=day_end_utc,
+    )
+    today_revenue = revenue.total
+    average_order_value = (
+        today_revenue / revenue.transaction_count
+        if revenue.transaction_count > 0
+        else Decimal("0.00")
+    )
 
     # 3. Pending orders (statuses that mean "in progress")
     pending_order_count = db.query(func.count(Order.id)).filter(
