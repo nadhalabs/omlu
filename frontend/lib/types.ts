@@ -28,6 +28,7 @@ export interface MenuOption {
   id: number;
   group_id: number;
   name: string;
+  kitchen_display_name: string | null;
   price_delta: string;
   available: boolean;
   display_order: number;
@@ -90,6 +91,7 @@ export interface PublicOrderResponseItem {
 
 export interface OrderItemSelectedOption {
   option_name: string;
+  kitchen_display_name?: string | null;
   group_name: string;
   option_type: "variant" | "addon";
   price_delta: string;
@@ -263,6 +265,7 @@ export interface KitchenOrderResponse {
   order_number: string;
   public_token: string;
   table_number: string;
+  source?: string | null;
   status: string;
   subtotal: string;
   customer_note: string | null;

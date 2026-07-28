@@ -136,6 +136,7 @@ class MenuOption(Base):
         index=True,
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    kitchen_display_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     price_delta: Mapped[Decimal] = mapped_column(
         Numeric(10, 2),
         CheckConstraint("price_delta >= 0", name="chk_menu_option_price_delta_non_negative"),

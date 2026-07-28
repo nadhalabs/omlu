@@ -185,6 +185,7 @@ def create_option(
         restaurant_id=current_user.restaurant_id,
         group_id=group.id,
         name=payload.name.strip(),
+        kitchen_display_name=payload.kitchen_display_name.strip() if payload.kitchen_display_name and payload.kitchen_display_name.strip() else None,
         price_delta=payload.price_delta,
         available=payload.available,
         display_order=payload.display_order,
@@ -203,10 +204,16 @@ def update_option(
     db: Session = Depends(get_db),
 ):
     option = _load_option(db, current_user.restaurant_id, option_id)
+    if "kitchen_display_name" in payload.model_fields_set:
+        option.kitchen_display_name = (
+            payload.kitchen_display_name.strip()
+            if payload.kitchen_display_name and payload.kitchen_display_name.strip()
+            else None
+        )
     for field in ("name", "price_delta", "available", "display_order"):
         value = getattr(payload, field)
         if value is not None:
-            setattr(option, field, value.strip() if field == "name" else value)
+            setattr(option, field, value.strip() if field in {"name", "kitchen_display_name"} else value)
     db.commit()
     db.refresh(option)
     return option

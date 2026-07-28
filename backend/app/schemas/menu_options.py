@@ -9,6 +9,7 @@ class MenuOptionResponse(BaseModel):
     id: int
     group_id: int
     name: str
+    kitchen_display_name: Optional[str] = None
     price_delta: Decimal
     available: bool
     display_order: int
@@ -69,6 +70,7 @@ class MenuOptionGroupResponse(MenuOptionGroupBase):
 class MenuOptionCreate(BaseModel):
     group_id: int
     name: str = Field(..., min_length=1, max_length=255)
+    kitchen_display_name: Optional[str] = Field(None, max_length=255)
     price_delta: Decimal = Field(default=Decimal("0.00"), ge=0)
     available: bool = True
     display_order: int = Field(default=0, ge=0)
@@ -76,6 +78,7 @@ class MenuOptionCreate(BaseModel):
 
 class MenuOptionUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=255)
+    kitchen_display_name: Optional[str] = Field(None, max_length=255)
     price_delta: Optional[Decimal] = Field(None, ge=0)
     available: Optional[bool] = None
     display_order: Optional[int] = Field(None, ge=0)

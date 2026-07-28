@@ -42,7 +42,14 @@ export type OrderHistoryDetail = OrderHistoryRow & {
   served_at: string | null;
   rejected_at: string | null;
   cancel_reason: string | null;
-  items: { item_name: string; quantity: number; unit_price: string; total_price: string; item_note: string | null }[];
+  items: {
+    item_name: string;
+    quantity: number;
+    unit_price: string;
+    total_price: string;
+    item_note: string | null;
+    selected_options: { option_name: string; kitchen_display_name?: string | null }[];
+  }[];
   status_history: { old_status: string | null; new_status: string; changed_at: string; changed_by: string | null }[];
 };
 

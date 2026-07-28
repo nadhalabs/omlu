@@ -275,6 +275,7 @@ def get_staff_table(
                             "selected_options": [
                                 {
                                     "option_name": option.option_name,
+                                    "kitchen_display_name": option.kitchen_display_name,
                                     "group_name": option.group_name,
                                     "option_type": option.option_type,
                                     "price_delta": _money(option.price_delta),

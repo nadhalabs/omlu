@@ -563,31 +563,38 @@ function OrderCard({
   onMarkReady,
   onMarkServed,
 }: OrderCardProps) {
+  const tableDisplay = order.table_number.trim();
+  const sourceHeading = order.source === "takeaway" || tableDisplay.toLowerCase() === "takeaway"
+    ? "TAKEAWAY"
+    : tableDisplay.toLowerCase().startsWith("table ")
+      ? tableDisplay.toLocaleUpperCase()
+      : `TABLE ${tableDisplay}`;
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 flex flex-col gap-3 shadow-sm hover:border-zinc-750 transition">
+    <article aria-label={`${sourceHeading}, order ${order.order_number}`} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 flex flex-col gap-4 shadow-sm hover:border-zinc-700 transition">
       {/* Header */}
-      <div className="flex items-start justify-between gap-2 border-b border-zinc-850 pb-2">
-        <div>
-          <h3 className="font-extrabold text-sm text-white">{order.order_number}</h3>
-          <span className={`font-bold text-[10px] ${order.table_number === "Takeaway" ? "rounded bg-orange-950/50 px-2 py-1 text-orange-400" : "text-zinc-500"}`}>{order.table_number === "Takeaway" ? "Takeaway" : `Table ${order.table_number}`}</span>
-        </div>
-        <span className="text-orange-500 font-mono font-bold text-[10px] whitespace-nowrap bg-orange-950/20 px-2 py-0.5 rounded-lg border border-orange-900/30">
-          ⏱️ {elapsedTime}
+      <div className="flex items-start justify-between gap-3 border-b border-zinc-800 pb-3">
+        <h3 className="min-w-0 break-words text-2xl font-black leading-tight tracking-wide text-white">{sourceHeading}</h3>
+        <span className="shrink-0 whitespace-nowrap rounded-lg border border-orange-900/40 bg-orange-950/30 px-2.5 py-1 text-sm font-black uppercase text-orange-400">
+          {elapsedTime}
         </span>
       </div>
 
       {/* Items list */}
-      <div className="flex flex-col gap-1.5 my-1">
+      <div className="flex flex-col gap-4">
         {order.items.map((item, idx) => (
-          <div key={idx} className="text-xs">
-            <div className="flex items-start justify-between gap-2 text-zinc-200">
-              <span className="font-semibold">
-                <span className="text-orange-500 font-black pr-1">{item.quantity}x</span> {item.item_name}
-              </span>
-            </div>
+          <div key={idx} className="min-w-0">
+            <p className="break-words text-lg font-extrabold leading-snug text-zinc-100">
+              <span className="text-orange-400">{item.quantity} ×</span> {item.item_name}
+            </p>
+            {item.selected_options.map((option, optionIndex) => (
+              <p key={`${option.option_name}-${optionIndex}`} className="mt-1 break-words pl-7 text-sm font-bold leading-snug text-cyan-300">
+                {option.kitchen_display_name || option.option_name}
+                {option.quantity > 1 ? ` × ${option.quantity}` : ""}
+              </p>
+            ))}
             {item.item_note && (
-              <p className="text-[10px] text-orange-500 font-bold italic ml-5 mt-0.5">
-                ↳ &quot;{item.item_note}&quot;
+              <p className="mt-2 break-words rounded-lg border border-amber-900/40 bg-amber-950/20 px-3 py-2 text-sm font-bold text-amber-300">
+                Note: {item.item_note}
               </p>
             )}
           </div>
@@ -600,15 +607,11 @@ function OrderCard({
           <span className="text-[9px] font-black text-zinc-500 uppercase tracking-wider block mb-0.5">
             Customer Note
           </span>
-          <p className="text-[10px] text-zinc-300 font-medium">&quot;{order.customer_note}&quot;</p>
+          <p className="break-words text-sm font-medium text-zinc-200">{order.customer_note}</p>
         </div>
       )}
 
-      {/* Subtotal */}
-      <div className="flex justify-between items-center text-xs font-bold text-zinc-500 border-t border-zinc-850 pt-2 mt-1">
-        <span>Subtotal</span>
-        <span className="text-zinc-300">₹{Number(order.subtotal).toFixed(2)}</span>
-      </div>
+      <p className="border-t border-zinc-800 pt-3 text-xs font-semibold text-zinc-500">Order {order.order_number}</p>
 
       {/* Actions */}
       <div className="flex gap-2 mt-2">
@@ -616,7 +619,8 @@ function OrderCard({
           <button
             disabled={isUpdating}
             onClick={onReject}
-            className="px-3 py-2 bg-zinc-800 hover:bg-zinc-750 text-red-500 hover:text-red-400 font-bold rounded-xl text-xs transition cursor-pointer disabled:opacity-50"
+            aria-label={`Reject order ${order.order_number}`}
+            className="min-h-12 px-4 bg-zinc-800 hover:bg-zinc-700 text-red-500 hover:text-red-400 font-bold rounded-xl text-sm transition cursor-pointer disabled:opacity-50"
           >
             ✕
           </button>
@@ -625,7 +629,7 @@ function OrderCard({
           <button
             disabled={isUpdating}
             onClick={onAccept}
-            className="flex-1 py-2 bg-orange-600 hover:bg-orange-700 text-white font-bold rounded-xl text-xs transition cursor-pointer disabled:opacity-50"
+            className="min-h-12 flex-1 bg-orange-600 hover:bg-orange-700 text-white font-bold rounded-xl text-sm transition cursor-pointer disabled:opacity-50"
           >
             Accept
           </button>
@@ -634,30 +638,30 @@ function OrderCard({
           <button
             disabled={isUpdating}
             onClick={onStartPrep}
-            className="flex-1 py-2 bg-cyan-600 hover:bg-cyan-700 text-white font-bold rounded-xl text-xs transition cursor-pointer disabled:opacity-50"
+            className="min-h-12 flex-1 bg-cyan-600 hover:bg-cyan-700 text-white font-bold rounded-xl text-sm transition cursor-pointer disabled:opacity-50"
           >
-            Prepare
+            Start Preparing
           </button>
         )}
         {onMarkReady && (
           <button
             disabled={isUpdating}
             onClick={onMarkReady}
-            className="flex-1 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl text-xs transition cursor-pointer disabled:opacity-50"
+            className="min-h-12 flex-1 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl text-sm transition cursor-pointer disabled:opacity-50"
           >
-            Ready
+            Mark Ready
           </button>
         )}
         {onMarkServed && (
           <button
             disabled={isUpdating}
             onClick={onMarkServed}
-            className="flex-1 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl text-xs transition cursor-pointer disabled:opacity-50"
+            className="min-h-12 flex-1 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl text-sm transition cursor-pointer disabled:opacity-50"
           >
-            Serve
+            Mark Served
           </button>
         )}
       </div>
-    </div>
+    </article>
   );
 }

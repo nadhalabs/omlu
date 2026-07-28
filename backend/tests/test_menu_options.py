@@ -220,6 +220,34 @@ def test_staff_order_customisations_and_kitchen_ticket(option_context):
     assert kitchen_order["items"][0]["selected_options"][0]["option_name"] == "Small"
 
 
+def test_kitchen_uses_immutable_concise_option_snapshot(option_context):
+    config = create_config(option_context)
+    updated = client.patch(
+        f"/admin/menu/options/{config['large']['id']}",
+        headers=auth(option_context),
+        json={"name": "Large - 450 ml", "kitchen_display_name": "Large"},
+    )
+    assert updated.status_code == 200
+    order = post_qr_order(
+        option_context,
+        order_payload(option_context, [{"group_id": config["variant_group"]["id"], "option_id": config["large"]["id"], "quantity": 1}]),
+    ).json()
+
+    client.patch(
+        f"/admin/menu/options/{config['large']['id']}",
+        headers=auth(option_context),
+        json={"name": "Family", "kitchen_display_name": "Family"},
+    )
+    kitchen = client.get(
+        f"/kitchen/restaurants/{option_context['restaurant_slug']}/orders",
+        headers=auth(option_context, "kitchen_token"),
+    ).json()
+    ticket = next(item for item in kitchen if item["order_number"] == order["order_number"])
+    snapshot = ticket["items"][0]["selected_options"][0]
+    assert snapshot["option_name"] == "Large - 450 ml"
+    assert snapshot["kitchen_display_name"] == "Large"
+
+
 def test_billing_totals_and_historical_snapshots_survive_option_changes(option_context):
     config = create_config(option_context)
     order = post_qr_order(

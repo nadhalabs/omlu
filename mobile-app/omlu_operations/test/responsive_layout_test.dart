@@ -66,7 +66,14 @@ void main() {
       status: 'preparing',
       subtotal: 120.0,
       createdAt: DateTime.now().subtract(const Duration(minutes: 12)),
-      items: const [KitchenOrderItem(name: 'Burger', quantity: 1)],
+      items: const [
+        KitchenOrderItem(
+          name: 'വെജ് ബർഗർ Extra Long Name',
+          quantity: 1,
+          selectedOptions: ['Large', 'Extra Cheese'],
+          note: 'No onion',
+        ),
+      ],
     ),
   ];
 
@@ -129,6 +136,9 @@ void main() {
     // In mobile stacked list, column titles are not displayed, it's just a simple list.
     expect(find.text('New'), findsNothing);
     expect(find.text('Preparing'), findsNothing);
+    expect(find.text('TABLE B2'), findsOneWidget);
+    expect(find.text('Large · Extra Cheese'), findsOneWidget);
+    expect(find.text('Order SO-102'), findsOneWidget);
 
     // Clean up physical size overrides
     tester.view.resetPhysicalSize();

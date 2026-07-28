@@ -45,5 +45,15 @@ test("Ready and served Takeaways expose Cash and UPI payment actions", () => {
 
 test("Kitchen renders a dedicated Takeaway label", () => {
   const kitchen = read("app/kitchen/[restaurantSlug]/KitchenDashboardClient.tsx");
-  assert.match(kitchen, /order\.table_number === "Takeaway"/);
+  assert.match(kitchen, /sourceHeading/);
+  assert.match(kitchen, /TAKEAWAY/);
+});
+
+test("Kitchen cards prioritize source and item snapshots over internal metadata", () => {
+  const kitchen = read("app/kitchen/[restaurantSlug]/KitchenDashboardClient.tsx");
+  assert.match(kitchen, /text-2xl font-black/);
+  assert.match(kitchen, /item\.quantity\} ×/);
+  assert.match(kitchen, /option\.kitchen_display_name \|\| option\.option_name/);
+  assert.match(kitchen, /Order \{order\.order_number\}/);
+  assert.doesNotMatch(kitchen, /<span>Subtotal<\/span>/);
 });

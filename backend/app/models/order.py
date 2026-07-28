@@ -154,6 +154,7 @@ class OrderItemSelectedOption(Base):
         index=True,
     )
     option_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    kitchen_display_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     group_name: Mapped[str] = mapped_column(String(255), nullable=False)
     option_type: Mapped[str] = mapped_column(String(50), nullable=False)
     price_delta: Mapped[Decimal] = mapped_column(

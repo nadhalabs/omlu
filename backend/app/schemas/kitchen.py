@@ -27,6 +27,7 @@ class KitchenOrderResponse(BaseModel):
     order_number: str
     public_token: str
     table_number: str
+    source: Optional[str] = None
     status: str
     subtotal: Decimal
     customer_note: Optional[str] = None

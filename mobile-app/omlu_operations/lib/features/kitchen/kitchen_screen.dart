@@ -34,9 +34,13 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
           .advanceStatus(token, currentStatus);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Could not update the order. Check the connection and try again.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Could not update the order. Check the connection and try again.',
+            ),
+          ),
+        );
       }
     } finally {
       if (mounted) {
@@ -60,7 +64,9 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
             tooltip: 'Profile and help',
             onSelected: (value) {
               if (value == 'help') showRoleHelp(context, StaffRole.kitchen);
-              if (value == 'refresh') ref.read(kitchenOrdersProvider.notifier).fetchOrders();
+              if (value == 'refresh') {
+                ref.read(kitchenOrdersProvider.notifier).fetchOrders();
+              }
               if (value == 'logout') ref.read(authProvider.notifier).logout();
             },
             itemBuilder: (_) => const [
@@ -74,65 +80,97 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
       body: ordersState.when(
         data: (orders) => LayoutBuilder(
           builder: (context, constraints) => constraints.maxWidth >= 600
-              ? _TabletBoardView(orders: orders, processingTokens: _processingTokens, onAction: _changeStatus)
-              : _MobileListView(orders: orders, processingTokens: _processingTokens, onAction: _changeStatus),
+              ? _TabletBoardView(
+                  orders: orders,
+                  processingTokens: _processingTokens,
+                  onAction: _changeStatus,
+                )
+              : _MobileListView(
+                  orders: orders,
+                  processingTokens: _processingTokens,
+                  onAction: _changeStatus,
+                ),
         ),
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (err, st) => Center(
           child: Padding(
             padding: const EdgeInsets.all(20),
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              const Icon(Icons.cloud_off_rounded, size: 48, color: OmluColors.textSecondary),
-              const SizedBox(height: 16),
-              const Text('Could not load orders. Check the connection and try again.', textAlign: TextAlign.center, style: OmluTypography.bodyMedium),
-              const SizedBox(height: 16),
-              FilledButton(onPressed: () => ref.read(kitchenOrdersProvider.notifier).fetchOrders(), child: const Text('Retry')),
-            ]),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.cloud_off_rounded,
+                  size: 48,
+                  color: OmluColors.textSecondary,
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Could not load orders. Check the connection and try again.',
+                  textAlign: TextAlign.center,
+                  style: OmluTypography.bodyMedium,
+                ),
+                const SizedBox(height: 16),
+                FilledButton(
+                  onPressed: () =>
+                      ref.read(kitchenOrdersProvider.notifier).fetchOrders(),
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
-    return LayoutBuilder(builder: (context, constraints) {
-      if (constraints.maxWidth < 600) return board;
-      return Scaffold(body: Row(children: [
-        NavigationRail(
-            selectedIndex: 0,
-            labelType: NavigationRailLabelType.all,
-            selectedIconTheme: const IconThemeData(color: OmluColors.accent),
-            unselectedIconTheme: const IconThemeData(
-              color: OmluColors.textSecondary,
-            ),
-            destinations: const [
-              NavigationRailDestination(
-                icon: Icon(Icons.restaurant_rounded),
-                label: Text('Kitchen Board'),
-              ),
-            ],
-            trailing: Expanded(
-              child: Align(
-                alignment: Alignment.bottomCenter,
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: OmluSpacing.md),
-                  child: IconButton(
-                    icon: const Icon(
-                      Icons.logout_rounded,
-                      color: OmluColors.textSecondary,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 600) return board;
+        return Scaffold(
+          body: Row(
+            children: [
+              NavigationRail(
+                selectedIndex: 0,
+                labelType: NavigationRailLabelType.all,
+                selectedIconTheme: const IconThemeData(
+                  color: OmluColors.accent,
+                ),
+                unselectedIconTheme: const IconThemeData(
+                  color: OmluColors.textSecondary,
+                ),
+                destinations: const [
+                  NavigationRailDestination(
+                    icon: Icon(Icons.restaurant_rounded),
+                    label: Text('Kitchen Board'),
+                  ),
+                ],
+                trailing: Expanded(
+                  child: Align(
+                    alignment: Alignment.bottomCenter,
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: OmluSpacing.md),
+                      child: IconButton(
+                        icon: const Icon(
+                          Icons.logout_rounded,
+                          color: OmluColors.textSecondary,
+                        ),
+                        onPressed: () =>
+                            ref.read(authProvider.notifier).logout(),
+                      ),
                     ),
-                    onPressed: () => ref.read(authProvider.notifier).logout(),
                   ),
                 ),
               ),
-            ),
-          ),
-          const VerticalDivider(
-            thickness: 1,
-            width: 1,
-            color: OmluColors.border,
-          ),
+              const VerticalDivider(
+                thickness: 1,
+                width: 1,
+                color: OmluColors.border,
+              ),
 
-        Expanded(child: board),
-      ]));
-    });
+              Expanded(child: board),
+            ],
+          ),
+        );
+      },
+    );
   }
 }
 
@@ -324,7 +362,18 @@ class _KitchenOrderCard extends StatelessWidget {
   String _formatElapsedTime(DateTime createdAt) {
     final diff = DateTime.now().difference(createdAt);
     if (diff.inMinutes <= 0) return 'Just now';
-    return '${diff.inMinutes}m ago';
+    return '${diff.inMinutes} min';
+  }
+
+  String _sourceHeading() {
+    if (order.source?.toLowerCase() == 'takeaway' ||
+        order.tableNumber.toLowerCase() == 'takeaway') {
+      return 'TAKEAWAY';
+    }
+    if (order.tableNumber.toLowerCase().startsWith('table ')) {
+      return order.tableNumber.toUpperCase();
+    }
+    return 'TABLE ${order.tableNumber}';
   }
 
   @override
@@ -339,9 +388,11 @@ class _KitchenOrderCard extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  order.tableNumber,
-                  style: OmluTypography.h2.copyWith(fontSize: 22),
-                  overflow: TextOverflow.ellipsis,
+                  _sourceHeading(),
+                  style: OmluTypography.h2.copyWith(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
               ),
               const SizedBox(width: OmluSpacing.xs),
@@ -352,7 +403,6 @@ class _KitchenOrderCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: OmluSpacing.xxs),
-          Text('Order: #${order.orderNumber}', style: OmluTypography.bodySmall),
           const Divider(height: 24, color: OmluColors.border),
 
           // Items
@@ -424,6 +474,13 @@ class _KitchenOrderCard extends StatelessWidget {
             ),
           ],
 
+          const SizedBox(height: OmluSpacing.sm),
+          Text(
+            'Order ${order.orderNumber}',
+            style: OmluTypography.bodySmall.copyWith(
+              color: OmluColors.textMuted,
+            ),
+          ),
           const SizedBox(height: OmluSpacing.md),
 
           // Action button
@@ -431,7 +488,9 @@ class _KitchenOrderCard extends StatelessWidget {
             OmluButton(
               text: _getActionButtonLabel(order.status),
               isLoading: isProcessing,
-              onPressed: isProcessing ? null : () => onAction(order.publicToken, order.status),
+              onPressed: isProcessing
+                  ? null
+                  : () => onAction(order.publicToken, order.status),
             ),
         ],
       ),

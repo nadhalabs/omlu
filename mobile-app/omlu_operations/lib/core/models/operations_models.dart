@@ -316,8 +316,11 @@ class KitchenOrderItem {
         for (final raw in json['selected_options'] as List? ?? const [])
           if (raw is Map)
             readString(
-              raw['option_name'],
-              fallback: readString(raw['name']),
+              raw['kitchen_display_name'],
+              fallback: readString(
+                raw['option_name'],
+                fallback: readString(raw['name']),
+              ),
             ),
       ],
     );
@@ -339,6 +342,7 @@ class KitchenOrder {
     required this.createdAt,
     this.items = const [],
     this.customerNote,
+    this.source,
   });
 
   factory KitchenOrder.fromJson(Map<String, Object?> json) {
@@ -357,6 +361,7 @@ class KitchenOrder {
       customerNote: json['customer_note'] == null
           ? null
           : readString(json['customer_note']),
+      source: json['source'] == null ? null : readString(json['source']),
     );
   }
 
@@ -368,6 +373,7 @@ class KitchenOrder {
   final DateTime createdAt;
   final List<KitchenOrderItem> items;
   final String? customerNote;
+  final String? source;
 
   KitchenOrder copyWith({String? status}) {
     return KitchenOrder(
@@ -379,6 +385,7 @@ class KitchenOrder {
       createdAt: createdAt,
       items: items,
       customerNote: customerNote,
+      source: source,
     );
   }
 }

@@ -15,6 +15,7 @@ class PricedSelectedOption:
     menu_option_id: int
     menu_option_group_id: int
     option_name: str
+    kitchen_display_name: str | None
     group_name: str
     option_type: str
     price_delta: Decimal
@@ -174,6 +175,7 @@ def _validate_selected_options(menu_item: MenuItem, requested_options) -> list[P
                     menu_option_id=option.id,
                     menu_option_group_id=group.id,
                     option_name=option.name,
+                    kitchen_display_name=option.kitchen_display_name,
                     group_name=group.name,
                     option_type=group.type,
                     price_delta=option.price_delta,

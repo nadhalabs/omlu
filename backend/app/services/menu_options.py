@@ -24,6 +24,7 @@ def serialize_option_group(group: MenuOptionGroup, *, include_inactive_options: 
                 "id": option.id,
                 "group_id": option.group_id,
                 "name": option.name,
+                "kitchen_display_name": option.kitchen_display_name,
                 "price_delta": option.price_delta,
                 "available": option.available,
                 "display_order": option.display_order,

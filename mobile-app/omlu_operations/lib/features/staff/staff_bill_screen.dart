@@ -404,11 +404,14 @@ class _OrderBillCard extends StatelessWidget {
                         ),
                         if (_listOfMaps(item['selected_options']).isNotEmpty)
                           Text(
-                            _listOfMaps(
-                              item['selected_options'],
-                            ).map((option) => _text(option['option_name'])).join(
-                              ' · ',
-                            ),
+                            _listOfMaps(item['selected_options'])
+                                .map(
+                                  (option) => _text(
+                                    option['kitchen_display_name'],
+                                    fallback: _text(option['option_name']),
+                                  ),
+                                )
+                                .join(' · '),
                             style: OmluTypography.bodySmall.copyWith(
                               color: OmluColors.accentDark,
                             ),

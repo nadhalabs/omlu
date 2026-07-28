@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { MenuOptionGroup } from "@/lib/types";
 
 type Props = { itemId: number; itemName: string };
-type DraftOption = { name: string; amount: string; available: boolean; display_order: number };
+type DraftOption = { name: string; kitchen_display_name: string; amount: string; available: boolean; display_order: number };
 
 async function jsonRequest<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init);
@@ -22,7 +22,7 @@ export default function MenuOptionEditor({ itemId, itemName }: Props) {
   const [maximum, setMaximum] = useState(1);
   const [displayOrder, setDisplayOrder] = useState(0);
   const [options, setOptions] = useState<DraftOption[]>([
-    { name: "", amount: "", available: true, display_order: 0 },
+    { name: "", kitchen_display_name: "", amount: "", available: true, display_order: 0 },
   ]);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -63,6 +63,7 @@ export default function MenuOptionEditor({ itemId, itemName }: Props) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             group_id: group.id, name: option.name.trim(),
+            kitchen_display_name: option.kitchen_display_name.trim() || null,
             price_delta: Number(option.amount), available: option.available,
             display_order: option.display_order,
           }),
@@ -74,7 +75,7 @@ export default function MenuOptionEditor({ itemId, itemName }: Props) {
         body: JSON.stringify({ option_group_id: group.id, display_order: displayOrder, active: true }),
       });
       setName("");
-      setOptions([{ name: "", amount: "", available: true, display_order: 0 }]);
+      setOptions([{ name: "", kitchen_display_name: "", amount: "", available: true, display_order: 0 }]);
       setMessage("Specification group saved.");
       await load();
     } catch (error) {
@@ -106,7 +107,8 @@ export default function MenuOptionEditor({ itemId, itemName }: Props) {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            name: option.name, price_delta: Number(option.price_delta),
+            name: option.name, kitchen_display_name: option.kitchen_display_name?.trim() || null,
+            price_delta: Number(option.price_delta),
             available: option.available, display_order: option.display_order,
           }),
         });
@@ -136,6 +138,7 @@ export default function MenuOptionEditor({ itemId, itemName }: Props) {
         </div>
         <div className="mt-2 space-y-2">{group.options.map((option, optionIndex) => <div key={option.id} className="flex flex-wrap items-center gap-2">
           <input aria-label="Option label" value={option.name} onChange={(event) => updateGroup(group.id, { options: group.options.map((entry, index) => index === optionIndex ? { ...entry, name: event.target.value } : entry) })} className="rounded border border-zinc-700 bg-zinc-900 p-2 text-white" />
+          <input aria-label="Kitchen display label" placeholder="Short kitchen label (optional)" value={option.kitchen_display_name || ""} onChange={(event) => updateGroup(group.id, { options: group.options.map((entry, index) => index === optionIndex ? { ...entry, kitchen_display_name: event.target.value } : entry) })} className="min-w-52 rounded border border-zinc-700 bg-zinc-900 p-2 text-white" />
           <label className="text-xs text-zinc-400">{group.type === "variant" ? "Final price ₹" : "Adds ₹"}<input type="number" min="0" step="0.01" value={option.price_delta} onChange={(event) => updateGroup(group.id, { options: group.options.map((entry, index) => index === optionIndex ? { ...entry, price_delta: event.target.value } : entry) })} className="ml-1 w-24 rounded bg-zinc-900 p-2 text-white" /></label>
           <label className="text-xs text-zinc-300"><input type="checkbox" checked={option.available} onChange={(event) => updateGroup(group.id, { options: group.options.map((entry, index) => index === optionIndex ? { ...entry, available: event.target.checked } : entry) })} /> Available</label>
         </div>)}</div>
@@ -154,9 +157,10 @@ export default function MenuOptionEditor({ itemId, itemName }: Props) {
       </div>
       <div className="mt-2 space-y-2">{options.map((option, index) => <div key={index} className="flex flex-wrap gap-2">
         <input placeholder="Option label" value={option.name} onChange={(event) => setOptions((current) => current.map((entry, position) => position === index ? { ...entry, name: event.target.value } : entry))} className="rounded border border-zinc-700 bg-zinc-900 p-2 text-white" />
+        <input placeholder="Short kitchen label (optional)" value={option.kitchen_display_name} onChange={(event) => setOptions((current) => current.map((entry, position) => position === index ? { ...entry, kitchen_display_name: event.target.value } : entry))} className="min-w-52 rounded border border-zinc-700 bg-zinc-900 p-2 text-white" />
         <label className="text-xs text-zinc-400">{type === "variant" ? "Final price ₹" : "Adds ₹"}<input type="number" min="0" step="0.01" value={option.amount} onChange={(event) => setOptions((current) => current.map((entry, position) => position === index ? { ...entry, amount: event.target.value } : entry))} className="ml-1 w-24 rounded bg-zinc-900 p-2 text-white" /></label>
       </div>)}</div>
-      <div className="mt-2 flex gap-2"><button type="button" onClick={() => setOptions((current) => [...current, { name: "", amount: "", available: true, display_order: current.length }])} className="rounded bg-zinc-800 px-3 py-2 text-xs font-bold text-white">+ Option</button><button type="button" disabled={saving} onClick={() => void createGroup()} className="rounded bg-orange-600 px-3 py-2 text-xs font-black text-white disabled:bg-zinc-800 disabled:text-zinc-400">{saving ? "Saving…" : "Save new group"}</button></div>
+      <div className="mt-2 flex gap-2"><button type="button" onClick={() => setOptions((current) => [...current, { name: "", kitchen_display_name: "", amount: "", available: true, display_order: current.length }])} className="rounded bg-zinc-800 px-3 py-2 text-xs font-bold text-white">+ Option</button><button type="button" disabled={saving} onClick={() => void createGroup()} className="rounded bg-orange-600 px-3 py-2 text-xs font-black text-white disabled:bg-zinc-800 disabled:text-zinc-400">{saving ? "Saving…" : "Save new group"}</button></div>
     </div>
   </section>;
 }

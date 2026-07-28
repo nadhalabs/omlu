@@ -20,6 +20,7 @@ class PublicOrderCreateRequest(BaseModel):
 
 class OrderItemSelectedOptionResponse(BaseModel):
     option_name: str
+    kitchen_display_name: Optional[str] = None
     group_name: str
     option_type: str
     price_delta: Decimal

@@ -108,6 +108,7 @@ export default function OrderHistoryClient() {
                   {detail.items.map((item, index) => (
                     <div key={`${item.item_name}-${index}`} className="py-2 text-sm">
                       <div className="font-bold text-white">{item.quantity} x {item.item_name}</div>
+                      {item.selected_options.map((option, optionIndex) => <div key={`${option.option_name}-${optionIndex}`} className="break-words text-cyan-300">{option.kitchen_display_name || option.option_name}</div>)}
                       <div className="text-zinc-500">₹{item.unit_price} · ₹{item.total_price}</div>
                       {item.item_note && <div className="text-orange-300">{item.item_note}</div>}
                     </div>
