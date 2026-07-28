@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     realtime_max_connections: int = 5000
     realtime_max_connections_per_session: int = 20
     realtime_max_connections_per_ip: int = 100
+    gemini_api_key: str | None = None
+    gemini_model: str | None = None
 
     @property
     def allowed_origins(self) -> List[str]:

@@ -326,6 +326,31 @@ export interface AdminMenuItemResponse {
   display_order: number;
 }
 
+export type MenuFoodType = "veg" | "non_veg" | "egg" | "unknown";
+
+export interface MenuImportDraftItem {
+  id: string;
+  category_name: string | null;
+  item_name: string;
+  description: string | null;
+  price: number | null;
+  food_type: MenuFoodType;
+  variants: { name: string; price: number }[];
+  warnings: string[];
+  item_confidence: number;
+  category_confidence: number;
+  selected: boolean;
+  duplicate: boolean;
+  duplicate_action?: "skip" | "replace" | "keep_both";
+}
+
+export interface MenuImportResponse {
+  id: string;
+  status: string;
+  general_warnings: string[];
+  items: MenuImportDraftItem[];
+}
+
 export interface AdminTableResponse {
   id: number;
   table_number: string;

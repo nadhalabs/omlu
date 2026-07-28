@@ -27,6 +27,8 @@ import {
   StaffAccountCreateRequest,
   StaffAccountResponse,
   PendingPaymentItem,
+  MenuImportResponse,
+  MenuImportDraftItem,
 } from "./types";
 
 export class ApiError extends Error {
@@ -902,6 +904,44 @@ export async function updateAdminMenuItemAvailability(
     if (error instanceof ApiError) throw error;
     throw new ApiError(500, "Could not connect to proxy server.");
   }
+}
+
+export async function scanAdminMenu(images: File[]): Promise<MenuImportResponse> {
+  const formData = new FormData();
+  images.forEach((image) => formData.append("images", image));
+  const response = await fetch("/api/admin/menu-imports", { method: "POST", body: formData });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new ApiError(response.status, body?.detail || "Menu scan failed.");
+  }
+  return body;
+}
+
+export async function confirmAdminMenuImport(
+  importId: string,
+  items: MenuImportDraftItem[],
+): Promise<{ status: string; imported: number; skipped: number }> {
+  const response = await fetch(`/api/admin/menu-imports/${encodeURIComponent(importId)}/confirm`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      items: items.map((item) => ({
+        draft_item_id: item.id,
+        selected: item.selected,
+        category_name: item.category_name,
+        item_name: item.item_name,
+        price: item.price,
+        food_type: item.food_type,
+        variants: item.variants,
+        duplicate_action: item.duplicate_action || "skip",
+      })),
+    }),
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new ApiError(response.status, body?.detail || "Menu import failed.");
+  }
+  return body;
 }
 
 export async function getAdminTables(): Promise<AdminTableResponse[]> {

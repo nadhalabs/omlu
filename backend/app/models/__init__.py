@@ -8,6 +8,7 @@ from app.models.dining_session import DiningSession
 from app.models.bill import Bill, RestaurantBillDailySequence
 from app.models.push_subscription import CustomerPushSubscription
 from app.models.quick_sale import QuickSale, QuickSaleItem
+from app.models.menu_import import MenuImportJob, MenuImportDraftItem
 
 __all__ = [
     "Restaurant",
@@ -32,4 +33,6 @@ __all__ = [
     "CustomerPushSubscription",
     "QuickSale",
     "QuickSaleItem",
+    "MenuImportJob",
+    "MenuImportDraftItem",
 ]

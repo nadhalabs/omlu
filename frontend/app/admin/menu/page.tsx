@@ -17,6 +17,7 @@ import {
 import { AdminCategoryResponse, AdminMenuItemResponse } from "@/lib/types";
 import { invalidateQueries } from "@/lib/queryCache";
 import { useModalScrollLock } from "@/components/useModalScrollLock";
+import MenuImportFlow from "./MenuImportFlow";
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
@@ -74,11 +75,13 @@ export default function AdminMenuPage() {
 
   // Action status loading for simple buttons
   const [updatingAvail, setUpdatingAvail] = useState<Record<number, boolean>>({});
+  const [importMenuOpen, setImportMenuOpen] = useState(false);
 
-  useModalScrollLock(categoryModal.open || itemModal.open, () => {
+  useModalScrollLock(categoryModal.open || itemModal.open || importMenuOpen, () => {
     if (catSaving || itemSaving) return;
     setCategoryModal({ open: false, mode: "create" });
     setItemModal({ open: false, mode: "create" });
+    setImportMenuOpen(false);
   });
 
   // Initial load
@@ -471,17 +474,25 @@ export default function AdminMenuPage() {
             <h2 className="text-sm font-black text-orange-500 uppercase tracking-wider">
               Dishes & Menu Items
             </h2>
-            <button
-              onClick={() => openItemModal("create")}
-              disabled={categories.length === 0}
-              className={`px-4 py-2 text-xs font-bold text-white rounded-xl transition ${
-                categories.length === 0
-                  ? "bg-zinc-800 text-zinc-500 cursor-not-allowed border border-zinc-800"
-                  : "bg-orange-600 hover:bg-orange-700 active:bg-orange-800 cursor-pointer"
-              }`}
-            >
-              + Add Menu Item
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => openItemModal("create")}
+                disabled={categories.length === 0}
+                className={`px-4 py-2 text-xs font-bold text-white rounded-xl transition ${
+                  categories.length === 0
+                    ? "bg-zinc-800 text-zinc-500 cursor-not-allowed border border-zinc-800"
+                    : "bg-orange-600 hover:bg-orange-700 active:bg-orange-800 cursor-pointer"
+                }`}
+              >
+                + Add Item
+              </button>
+              <button
+                onClick={() => setImportMenuOpen(true)}
+                className="rounded-xl border border-orange-700 bg-orange-950/30 px-4 py-2 text-xs font-bold text-orange-300 transition hover:bg-orange-950/60"
+              >
+                Import Menu
+              </button>
+            </div>
           </div>
 
           {/* Filters Panel */}
@@ -622,6 +633,25 @@ export default function AdminMenuPage() {
           )}
         </div>
       </div>
+
+      {importMenuOpen && (
+        <MenuImportFlow
+          categories={categories}
+          onClose={() => setImportMenuOpen(false)}
+          onImported={async (summary) => {
+            const [itemsData, catsData] = await Promise.all([
+              getAdminMenuItems(),
+              getAdminCategories(),
+            ]);
+            setItems(itemsData);
+            setCategories(catsData);
+            toast(
+              `Imported ${summary.imported} items${summary.skipped ? `; skipped ${summary.skipped}` : ""}.`,
+              "success",
+            );
+          }}
+        />
+      )}
 
       {/* CATEGORY FORM MODAL */}
       {categoryModal.open && (

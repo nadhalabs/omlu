@@ -72,6 +72,7 @@ from app.routes import (
     staff_tables_router,
     push_router,
     quick_sales_router,
+    menu_imports_router,
 )
 
 app.include_router(health_router)
@@ -93,6 +94,7 @@ app.include_router(realtime_router)
 app.include_router(staff_tables_router)
 app.include_router(push_router)
 app.include_router(quick_sales_router)
+app.include_router(menu_imports_router)
 
 
 @app.on_event("shutdown")
