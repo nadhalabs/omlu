@@ -12,10 +12,10 @@ class OperationsApi {
     String filter = 'all',
     bool forceRefresh = false,
   }) async {
-    final cacheKey = 'tables_$filter';
     if (!forceRefresh) {
       final cached = await _cache?.read(
-        cacheKey,
+        'tables',
+        identifier: filter,
         maxAge: const Duration(minutes: 2),
       );
       if (cached is List) {
@@ -30,7 +30,7 @@ class OperationsApi {
       query: {'filter': filter},
     );
     final items = json['items'] as List? ?? const [];
-    await _cache?.write(cacheKey, items);
+    await _cache?.write('tables', items, identifier: filter);
     return [
       for (final item in items)
         StaffTableSummary.fromJson(Map<String, Object?>.from(item as Map)),
@@ -53,7 +53,7 @@ class OperationsApi {
       body: draft.toJson(),
       idempotencyKey: idempotencyKey,
     );
-    await _cache?.invalidate('tables_all');
+    await _cache?.invalidate('tables', identifier: 'all');
     return OrderSummary.fromJson(json);
   }
 

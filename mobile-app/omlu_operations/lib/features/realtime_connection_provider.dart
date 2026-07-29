@@ -11,6 +11,7 @@ final realtimeClientProvider = Provider<RealtimeClient?>((ref) {
 
   final session = authState.value;
   if (session == null) return null;
+  final authRuntime = ref.watch(nativeAuthRuntimeProvider);
 
   // Determine WS channel based on role
   final channel = switch (session.role) {
@@ -24,12 +25,19 @@ final realtimeClientProvider = Provider<RealtimeClient?>((ref) {
     baseUrl: config.backendUrl,
     accessToken: session.accessToken,
     channel: channel,
+    authRuntime: authRuntime,
+    tenantScope: session.tenantScope,
   );
   final lifecycle = LifecycleRealtimeController(client)..attach();
+  final unregisterCleanup = authRuntime.registerCleanup((_) async {
+    lifecycle.detach();
+    await client.disconnect();
+  });
 
   // Auto connect/disconnect based on provider lifecycle
   client.connect();
   ref.onDispose(() {
+    unregisterCleanup();
     lifecycle.detach();
     client.disconnect();
     client.dispose();

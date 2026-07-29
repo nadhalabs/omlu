@@ -21,6 +21,10 @@ All tests run against an Alembic-built PostgreSQL database, real Next.js route h
 
 The web runtime suite covers TSW-01 and TSW-06 at the client authority boundary: complete-scope cache isolation, cleanup-before-redirect, teardown-before-account-B activation, stale-response rejection after generation or epoch changes, identity-storage removal with preference preservation, authenticated `401` teardown, and ordinary `403` preservation. Focused backend tests verify the `/me` scope contract and that the external epoch does not reveal the raw session JTI. Full browser/database deployment scenarios and non-web clients remain required by this matrix.
 
+### P1.3 Flutter coverage
+
+The native runtime suite exercises complete-scope equality/keying, persistent Restaurant A to Restaurant B isolation, application restart with a changed authority epoch, same numeric table identity across tenants, authoritative restaurant slug flow, cart/draft teardown, legacy-key deletion with preference preservation, teardown-before-B ordering, stale-response rejection, active and stale `401`, ordinary `403`, and real reconnect-timer cancellation. This covers the native portion of TSW-02–07 and TRT-07. Android WebView partition/navigation behavior and server-driven socket revocation remain unproven until P1.4/P1.5.
+
 ## Realtime and recovery
 
 | ID | Scenario | Required result |

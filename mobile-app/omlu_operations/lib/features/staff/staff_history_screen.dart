@@ -8,6 +8,7 @@ import '../../design_system/widgets/omlu_card.dart';
 import '../auth_provider.dart';
 
 final staffOrderHistoryProvider = FutureProvider<Map<String, Object?>>((ref) {
+  ref.watch(authProvider).valueOrNull?.tenantScope;
   return ref.watch(operationsApiProvider).fetchOperationalOrderHistory();
 });
 

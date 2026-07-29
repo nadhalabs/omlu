@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omlu_operations/core/api/api_client.dart';
 import 'package:omlu_operations/core/api/api_exceptions.dart';
 import 'package:omlu_operations/core/api/operations_api.dart';
-import 'package:omlu_operations/core/storage/operations_data_cache.dart';
+import 'test_auth_fixtures.dart';
 import 'package:omlu_operations/features/staff/menu_provider.dart';
 
 void main() {
@@ -20,7 +20,7 @@ void main() {
         ),
       );
       final notifier = MenuNotifier(
-        cache: OperationsDataCache(),
+        cache: testAuthenticatedCache().cache,
         api: api,
         tableId: 7,
         restaurantScope: 'restaurant-a',
@@ -53,8 +53,8 @@ void main() {
   );
 
   test('cached menu remains visible when network refresh fails', () async {
-    final cache = OperationsDataCache();
-    await cache.write('menu_restaurant-a_8', [
+    final cache = testAuthenticatedCache().cache;
+    await cache.write('staff-menu', [
       {
         'id': 1,
         'name_en': 'Cached',
@@ -62,7 +62,7 @@ void main() {
           {'id': 11, 'name_en': 'Saved item', 'price': 45},
         ],
       },
-    ]);
+    ], identifier: 'table:8');
     final api = OperationsApi(
       ApiClient(
         baseUrl: Uri.parse('https://omlu-api.onrender.com'),
@@ -110,7 +110,7 @@ void main() {
       ),
     );
     final notifier = MenuNotifier(
-      cache: OperationsDataCache(),
+      cache: testAuthenticatedCache().cache,
       api: api,
       tableId: 9,
       restaurantScope: 'restaurant-b',

@@ -9,12 +9,12 @@ import 'package:omlu_operations/features/staff/cart_provider.dart';
 import 'package:omlu_operations/features/staff/new_order_screen.dart';
 import 'package:omlu_operations/features/staff/staff_shell.dart';
 import 'package:omlu_operations/features/auth_provider.dart';
-import 'package:omlu_operations/core/storage/operations_data_cache.dart';
+import 'test_auth_fixtures.dart';
 
 class TestMenuNotifier extends MenuNotifier {
   TestMenuNotifier(OperationsApi api)
     : super(
-        cache: OperationsDataCache(),
+        cache: testAuthenticatedCache().cache,
         api: api,
         tableId: 12,
         restaurantScope: 'test',
@@ -184,9 +184,21 @@ void main() {
   });
 
   Widget buildTestApp() {
+    final dependencies = testAuthenticatedCache();
     return ProviderScope(
       overrides: [
         operationsApiProvider.overrideWithValue(dummyApi),
+        nativeAuthRuntimeProvider.overrideWithValue(dependencies.runtime),
+        operationsDataCacheProvider.overrideWithValue(dependencies.cache),
+        cartProvider.overrideWith(
+          (ref) => CartNotifier(
+            ref,
+            scope: testTenantScope,
+            restaurantSlug: 'test-restaurant',
+            cache: dependencies.cache,
+            authRuntime: dependencies.runtime,
+          ),
+        ),
         menuViewProvider(12).overrideWith((ref) => TestMenuNotifier(dummyApi)),
       ],
       child: const MaterialApp(home: StaffShell()),

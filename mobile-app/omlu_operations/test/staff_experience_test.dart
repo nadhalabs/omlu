@@ -10,7 +10,7 @@ import 'package:omlu_operations/features/staff/new_order_screen.dart';
 import 'package:omlu_operations/core/models/operations_models.dart';
 import 'package:omlu_operations/core/api/operations_api.dart';
 import 'package:omlu_operations/core/api/api_client.dart';
-import 'package:omlu_operations/core/storage/operations_data_cache.dart';
+import 'test_auth_fixtures.dart';
 
 // Mocks
 class MockTablesNotifier extends TablesNotifier {
@@ -36,7 +36,7 @@ class MockServiceRequestsNotifier extends ServiceRequestsNotifier {
 class MockMenuNotifier extends MenuNotifier {
   MockMenuNotifier(OperationsApi api, List<MenuCategory> categories)
     : super(
-        cache: OperationsDataCache(),
+        cache: testAuthenticatedCache().cache,
         api: api,
         tableId: 2,
         restaurantScope: 'test',
@@ -49,7 +49,7 @@ class MockMenuNotifier extends MenuNotifier {
 class ErrorMenuNotifier extends MenuNotifier {
   ErrorMenuNotifier(OperationsApi api)
     : super(
-        cache: OperationsDataCache(),
+        cache: testAuthenticatedCache().cache,
         api: api,
         tableId: 2,
         restaurantScope: 'test',
@@ -227,18 +227,26 @@ void main() {
       tester,
     ) async {
       // Setup cart with items and mark it submitting
+      final cartDependencies = testAuthenticatedCache();
       final container = ProviderContainer(
         overrides: [
           cartProvider.overrideWith(
-            (ref) => CartNotifier(ref)
-              ..state = CartState(
-                tableId: 2,
-                items: {
-                  '201:': const CartItem(menuItemId: 201, quantity: 2),
-                },
-                idempotencyKey: 'key-123',
-                submissionState: SubmissionState.submitting,
-              ),
+            (ref) =>
+                CartNotifier(
+                    ref,
+                    scope: testTenantScope,
+                    restaurantSlug: 'test-restaurant',
+                    cache: cartDependencies.cache,
+                    authRuntime: cartDependencies.runtime,
+                  )
+                  ..state = CartState(
+                    tableId: 2,
+                    items: {
+                      '201:': const CartItem(menuItemId: 201, quantity: 2),
+                    },
+                    idempotencyKey: 'key-123',
+                    submissionState: SubmissionState.submitting,
+                  ),
           ),
         ],
       );

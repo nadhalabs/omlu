@@ -15,6 +15,7 @@ import 'cart_provider.dart';
 import 'cart_screen.dart';
 import '../../core/models/operations_models.dart';
 import 'staff_bill_screen.dart';
+import '../auth_provider.dart';
 
 class NewOrderScreen extends ConsumerStatefulWidget {
   const NewOrderScreen({super.key});
@@ -97,9 +98,14 @@ class _TablePickerView extends ConsumerWidget {
               return OmluCard(
                 onTap: () {
                   ref.read(selectedTableIdProvider.notifier).state = table.id;
-                  ref
-                      .read(cartProvider.notifier)
-                      .setTable(table.id, table.tableNumber);
+                  final authoritativeSlug = ref
+                      .read(authProvider)
+                      .valueOrNull
+                      ?.restaurantSlug;
+                  if (authoritativeSlug == null || authoritativeSlug.isEmpty) {
+                    return;
+                  }
+                  ref.read(cartProvider.notifier).setTable(table.id);
                 },
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -653,10 +659,9 @@ class _MenuOptionSelectorState extends State<_MenuOptionSelector> {
                   ),
                 ),
                 const SizedBox(height: OmluSpacing.xs),
-                for (final option in [...group.options]
-                  ..sort(
-                    (a, b) => a.displayOrder.compareTo(b.displayOrder),
-                  ))
+                for (final option in [
+                  ...group.options,
+                ]..sort((a, b) => a.displayOrder.compareTo(b.displayOrder)))
                   if (option.available)
                     CheckboxListTile(
                       contentPadding: EdgeInsets.zero,
@@ -680,9 +685,7 @@ class _MenuOptionSelectorState extends State<_MenuOptionSelector> {
                   const Text('Total', style: OmluTypography.h3),
                   Text(
                     '₹${widget.item.previewUnitPrice(_values).toStringAsFixed(2)}',
-                    style: OmluTypography.h2.copyWith(
-                      color: OmluColors.accent,
-                    ),
+                    style: OmluTypography.h2.copyWith(color: OmluColors.accent),
                   ),
                 ],
               ),

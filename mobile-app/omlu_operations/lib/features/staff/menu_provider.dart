@@ -254,8 +254,6 @@ class MenuNotifier extends StateNotifier<AsyncValue<MenuViewData>> {
   int _requestVersion = 0;
   bool _requestInFlight = false;
 
-  String get _cacheKey => 'menu_${restaurantScope}_$tableId';
-
   Future<void> load({bool background = false}) async {
     if (_requestInFlight) return;
     _requestInFlight = true;
@@ -264,7 +262,8 @@ class MenuNotifier extends StateNotifier<AsyncValue<MenuViewData>> {
 
     if (current == null) {
       final cached = await _cache.read(
-        _cacheKey,
+        'staff-menu',
+        identifier: 'table:$tableId',
         maxAge: const Duration(days: 30),
       );
       if (cached != null) {
@@ -296,7 +295,11 @@ class MenuNotifier extends StateNotifier<AsyncValue<MenuViewData>> {
       final rawCategories = detail['menu_categories'];
       final categories = parseMenuCategories(rawCategories);
       if (requestVersion != _requestVersion || !mounted) return;
-      await _cache.write(_cacheKey, rawCategories);
+      await _cache.write(
+        'staff-menu',
+        rawCategories,
+        identifier: 'table:$tableId',
+      );
       state = AsyncValue.data(MenuViewData(categories: categories));
     } catch (error, stackTrace) {
       if (requestVersion != _requestVersion || !mounted) return;
@@ -329,6 +332,7 @@ final tableDetailProvider = FutureProvider.family<Map<String, Object?>, int>((
   ref,
   tableId,
 ) async {
+  ref.watch(authProvider).valueOrNull?.tenantScope;
   final api = ref.watch(operationsApiProvider);
   return api.fetchStaffTableDetail(tableId);
 });
@@ -338,6 +342,7 @@ final menuCategoriesProvider = FutureProvider.family<List<MenuCategory>, int>((
   ref,
   tableId,
 ) async {
+  ref.watch(authProvider).valueOrNull?.tenantScope;
   final detail = await ref.watch(tableDetailProvider(tableId).future);
   final rawCategories = detail['menu_categories'] as List? ?? const [];
   return parseMenuCategories(rawCategories);
@@ -346,7 +351,7 @@ final menuCategoriesProvider = FutureProvider.family<List<MenuCategory>, int>((
 final menuViewProvider = StateNotifierProvider.autoDispose
     .family<MenuNotifier, AsyncValue<MenuViewData>, int>((ref, tableId) {
       final session = ref.watch(authProvider).valueOrNull;
-      final scope = session?.restaurantSlug;
+      final scope = session?.tenantScope.fingerprint;
       if (scope == null || scope.isEmpty) {
         return MenuNotifier(
           cache: ref.watch(operationsDataCacheProvider),

@@ -5,7 +5,10 @@ import '../auth_provider.dart';
 import 'pending_payments_tab.dart';
 
 final pendingBillProvider = FutureProvider.family<Map<String, Object?>, String>(
-  (ref, number) => ref.watch(operationsApiProvider).fetchBill(number),
+  (ref, number) {
+    ref.watch(authProvider).valueOrNull?.tenantScope;
+    return ref.watch(operationsApiProvider).fetchBill(number);
+  },
 );
 
 class PendingBillReviewScreen extends ConsumerWidget {

@@ -35,6 +35,8 @@ IDs and severities below preserve each supplied finding as separate acceptance c
 | PR-029 | Medium | Android native download trust boundary; WebView/native Android | WebView boundary | P5 | TSEC-05–07 | Yes |
 | PR-030 | Medium | Accessibility/feedback gaps; web/Flutter components | UX | P5 | TUX-02–05 | Yes |
 
+P1.3 closes the native Flutter cache/cart/provider portion of PR-001 and the native client teardown/reconnect portion of PR-002. PR-001 remains open for Android WebView partition/navigation validation, and PR-002 remains open for server WebSocket authority parity and revocation-driven disconnection.
+
 ## New contradictions found during source inspection
 
 - Flutter’s `restaurantSlug` cart field is populated with `tableNumber` in two entry paths, not only one.

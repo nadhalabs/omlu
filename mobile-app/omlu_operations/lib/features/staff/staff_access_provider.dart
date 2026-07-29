@@ -1,8 +1,5 @@
-import 'dart:convert';
-
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../core/api/api_exceptions.dart';
 import '../../core/models/role_session.dart';
@@ -88,11 +85,12 @@ class StaffAccessState {
 class StaffAccessNotifier extends StateNotifier<StaffAccessState>
     with WidgetsBindingObserver {
   StaffAccessNotifier(this._ref, RoleSession session)
-    : _staffId = _jwtSubject(session.accessToken),
-      _storageKey =
-          'staff_access_v1_${session.restaurantSlug}_${session.profile.username ?? session.profile.email}',
+    : _staffId = session.tenantScope.actorId.toString(),
       super(const StaffAccessState()) {
     WidgetsBinding.instance.addObserver(this);
+    _unregisterCleanup = _ref
+        .read(nativeAuthRuntimeProvider)
+        .registerCleanup((_) => WidgetsBinding.instance.removeObserver(this));
     _ref.listen(realtimeEventStreamProvider, (_, next) {
       next.whenData(handleEvent);
     });
@@ -118,30 +116,16 @@ class StaffAccessNotifier extends StateNotifier<StaffAccessState>
 
   final Ref _ref;
   final String? _staffId;
-  final String _storageKey;
-  static const _storage = FlutterSecureStorage();
+  void Function()? _unregisterCleanup;
   bool _refreshing = false;
-
-  static String? _jwtSubject(String token) {
-    try {
-      final parts = token.split('.');
-      if (parts.length != 3) return null;
-      final payload = jsonDecode(
-        utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))),
-      );
-      return payload is Map ? payload['sub']?.toString() : null;
-    } catch (_) {
-      return null;
-    }
-  }
 
   Future<void> _restore() async {
     try {
-      final saved = await _storage.read(key: _storageKey);
-      if (saved != null) {
-        state = StaffAccessState.fromJson(
-          Map<String, Object?>.from(jsonDecode(saved) as Map),
-        );
+      final saved = await _ref
+          .read(operationsDataCacheProvider)
+          .read('staff-access-status', maxAge: const Duration(days: 30));
+      if (saved is Map) {
+        state = StaffAccessState.fromJson(Map<String, Object?>.from(saved));
       } else {
         state = state.copyWith(loading: false);
       }
@@ -153,7 +137,9 @@ class StaffAccessNotifier extends StateNotifier<StaffAccessState>
 
   Future<void> _persist() async {
     try {
-      await _storage.write(key: _storageKey, value: jsonEncode(state.toJson()));
+      await _ref
+          .read(operationsDataCacheProvider)
+          .write('staff-access-status', state.toJson());
     } catch (_) {}
   }
 
@@ -201,7 +187,9 @@ class StaffAccessNotifier extends StateNotifier<StaffAccessState>
           _confirmUnlock(restaurantClosed: false);
         }
       case 'staff.unlocked':
-        if (_isCurrentStaffEvent(event)) _confirmUnlock(individualLocked: false);
+        if (_isCurrentStaffEvent(event)) {
+          _confirmUnlock(individualLocked: false);
+        }
       case 'staff.all_unlocked':
         _confirmUnlock(globalLocked: false);
     }
@@ -287,16 +275,21 @@ class StaffAccessNotifier extends StateNotifier<StaffAccessState>
 
   @override
   void dispose() {
+    _unregisterCleanup?.call();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 }
 
 final staffAccessProvider =
-    StateNotifierProvider.autoDispose<StaffAccessNotifier, StaffAccessState>((ref) {
+    StateNotifierProvider.autoDispose<StaffAccessNotifier, StaffAccessState>((
+      ref,
+    ) {
       final session = ref.read(authProvider).value;
       if (session == null || session.role != StaffRole.staff) {
-        throw StateError('Staff access state requires an active Staff session.');
+        throw StateError(
+          'Staff access state requires an active Staff session.',
+        );
       }
       return StaffAccessNotifier(ref, session);
     });

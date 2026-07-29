@@ -13,9 +13,13 @@ import '../realtime_connection_provider.dart';
 import '../staff/tables_provider.dart';
 import '../staff/staff_bill_screen.dart';
 
-final adminTabProvider = StateProvider<int>((ref) => 0);
+final adminTabProvider = StateProvider<int>((ref) {
+  ref.watch(authProvider).valueOrNull?.tenantScope;
+  return 0;
+});
 
 final staffAccountsProvider = FutureProvider<List<dynamic>>((ref) async {
+  ref.watch(authProvider).valueOrNull?.tenantScope;
   final api = ref.watch(operationsApiProvider);
   return api.fetchStaffAccounts();
 });

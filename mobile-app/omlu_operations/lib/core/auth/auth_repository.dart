@@ -1,26 +1,47 @@
 import '../api/api_client.dart';
 import '../api/api_exceptions.dart';
 import '../models/role_session.dart';
+import '../storage/operations_data_cache.dart';
 import '../storage/token_storage.dart';
+import 'flutter_tenant_scope.dart';
+import 'native_auth_runtime.dart';
+
+class AuthenticatedProfile {
+  const AuthenticatedProfile(this.profile, this.scope);
+  final StaffProfile profile;
+  final FlutterTenantScope scope;
+}
 
 class AuthRepository {
   AuthRepository({
     required ApiClient apiClient,
     required TokenStorage tokenStorage,
+    required NativeAuthRuntime authRuntime,
+    required OperationsDataCache operationsCache,
     DateTime Function()? now,
   }) : _apiClient = apiClient,
        _tokenStorage = tokenStorage,
-       _now = now ?? DateTime.now;
+       _authRuntime = authRuntime,
+       _operationsCache = operationsCache,
+       _now = now ?? DateTime.now {
+    _authRuntime.registerCleanup(
+      (_) => _operationsCache.clearAuthenticatedData(),
+    );
+  }
 
   final ApiClient _apiClient;
   final TokenStorage _tokenStorage;
+  final NativeAuthRuntime _authRuntime;
+  final OperationsDataCache _operationsCache;
   final DateTime Function() _now;
+  Future<void>? _teardown;
 
   Future<RoleSession> login({
     required String restaurantSlug,
     required String login,
     required String password,
   }) async {
+    await terminate(reason: 'account_switch', revokeServer: true);
     final json = await _apiClient.postJson(
       '/auth/staff/login',
       body: {
@@ -29,65 +50,102 @@ class AuthRepository {
         'password': password,
       },
     );
-    final session = _sessionFromLoginJson(json);
-    _apiClient.accessToken = session.accessToken;
-    await _tokenStorage.save(session);
-    return session;
+    final token = json['access_token'] as String?;
+    final expiresIn = json['expires_in'] as int?;
+    if (token == null || expiresIn == null) {
+      throw const ApiException('Malformed login response.');
+    }
+    _apiClient.accessToken = token;
+    try {
+      final authenticated = await currentUser();
+      final session = RoleSession(
+        accessToken: token,
+        expiresAt: _now().toUtc().add(Duration(seconds: expiresIn)),
+        profile: authenticated.profile,
+        tenantScope: authenticated.scope,
+      );
+      _authRuntime.activate(authenticated.scope);
+      await _operationsCache.initializeScope();
+      await _tokenStorage.save(session);
+      return session;
+    } catch (_) {
+      await terminate(reason: 'login_me_failed', revokeServer: true);
+      rethrow;
+    }
   }
 
   Future<RoleSession?> restore() async {
-    final session = await _tokenStorage.read();
-    if (session == null || session.isExpired) {
-      await logoutLocal();
+    final stored = await _tokenStorage.read();
+    if (stored == null || stored.isExpired) {
+      await terminate(reason: 'invalid_session_restore', revokeServer: false);
       return null;
     }
-    _apiClient.accessToken = session.accessToken;
+    _apiClient.accessToken = stored.accessToken;
     try {
-      final profile = await currentUser();
+      final authenticated = await currentUser();
       final refreshed = RoleSession(
-        accessToken: session.accessToken,
-        expiresAt: session.expiresAt,
-        profile: profile,
+        accessToken: stored.accessToken,
+        expiresAt: stored.expiresAt,
+        profile: authenticated.profile,
+        tenantScope: authenticated.scope,
       );
+      _authRuntime.activate(authenticated.scope);
+      await _operationsCache.initializeScope();
       await _tokenStorage.save(refreshed);
       return refreshed;
     } on AuthenticationException {
-      await logoutLocal();
+      await terminate(reason: 'restore_unauthorized', revokeServer: false);
       return null;
+    } catch (_) {
+      await terminate(reason: 'restore_me_failed', revokeServer: false);
+      rethrow;
     }
   }
 
-  Future<StaffProfile> currentUser() async {
+  Future<AuthenticatedProfile> currentUser() async {
     final json = await _apiClient.getJson('/auth/staff/me');
-    return StaffProfile.fromJson(json);
-  }
-
-  Future<void> logout() async {
-    try {
-      await _apiClient.postJson('/auth/staff/logout');
-    } on AuthenticationException {
-      // A revoked/expired token is already logged out from the app perspective.
-    } finally {
-      await logoutLocal();
+    final scopeJson = json['scope'];
+    if (scopeJson is! Map) {
+      throw const ApiException(
+        'Authenticated profile is missing tenant scope.',
+      );
     }
+    return AuthenticatedProfile(
+      StaffProfile.fromJson(json),
+      FlutterTenantScope.fromJson(Map<String, Object?>.from(scopeJson)),
+    );
   }
 
-  Future<void> logoutLocal() async {
+  Future<void> logout() =>
+      terminate(reason: 'explicit_logout', revokeServer: true);
+
+  set onAuthenticationInvalid(
+    Future<void> Function(NativeAuthorityLease lease)? handler,
+  ) {
+    _apiClient.onAuthenticationInvalid = handler;
+  }
+
+  Future<void> terminate({required String reason, required bool revokeServer}) {
+    final existing = _teardown;
+    if (existing != null) return existing;
+    final future = _performTeardown(reason, revokeServer);
+    _teardown = future;
+    return future.whenComplete(() => _teardown = null);
+  }
+
+  Future<void> _performTeardown(String reason, bool revokeServer) async {
+    await _authRuntime.terminate(reason: reason);
+    if (revokeServer) {
+      try {
+        await _apiClient.postJson('/auth/staff/logout');
+      } on ApiException {
+        // Local authority still terminates when server revocation is unavailable.
+      }
+    }
     _apiClient.accessToken = null;
     await _tokenStorage.clear();
   }
 
-  RoleSession _sessionFromLoginJson(Map<String, Object?> json) {
-    final token = json['access_token'] as String?;
-    final expiresIn = json['expires_in'] as int?;
-    final staffJson = json['staff'];
-    if (token == null || expiresIn == null || staffJson is! Map) {
-      throw const ApiException('Malformed login response.');
-    }
-    return RoleSession(
-      accessToken: token,
-      expiresAt: _now().toUtc().add(Duration(seconds: expiresIn)),
-      profile: StaffProfile.fromJson(Map<String, Object?>.from(staffJson)),
-    );
-  }
+  Future<void> logoutLocal() =>
+      terminate(reason: 'local_logout', revokeServer: false);
 }

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'api_exceptions.dart';
+import '../auth/native_auth_runtime.dart';
 
 class ApiRequest {
   const ApiRequest({
@@ -38,15 +39,19 @@ class ApiClient {
     String? accessToken,
     Duration timeout = const Duration(seconds: 20),
     ApiTransport? transport,
+    NativeAuthRuntime? authRuntime,
   }) : _baseUrl = baseUrl,
        _accessToken = accessToken,
        _timeout = timeout,
-       _transport = transport ?? _dartIoTransport;
+       _transport = transport ?? _dartIoTransport,
+       _authRuntime = authRuntime;
 
   final Uri _baseUrl;
   final Duration _timeout;
   final ApiTransport _transport;
+  final NativeAuthRuntime? _authRuntime;
   String? _accessToken;
+  Future<void> Function(NativeAuthorityLease lease)? onAuthenticationInvalid;
 
   set accessToken(String? value) => _accessToken = value;
 
@@ -94,6 +99,16 @@ class ApiClient {
     String? idempotencyKey,
     Map<String, String> query = const {},
   }) async {
+    final runtime = _authRuntime;
+    final authenticated = _accessToken != null;
+    final isAuthorityBootstrap =
+        path == '/auth/staff/me' || path == '/auth/staff/logout';
+    NativeAuthorityLease? lease;
+    if (authenticated && runtime != null && runtime.isActive) {
+      lease = runtime.capture();
+    } else if (authenticated && runtime != null && !isAuthorityBootstrap) {
+      throw StateError('Authenticated request blocked until /me validation.');
+    }
     final uri = _baseUrl.replace(
       path: _joinPath(_baseUrl.path, path),
       queryParameters: query.isEmpty ? null : query,
@@ -110,7 +125,13 @@ class ApiClient {
       final response = await _transport(
         ApiRequest(method: method, uri: uri, headers: headers, body: body),
       ).timeout(_timeout);
+      if (response.statusCode == 401 && lease != null) {
+        if (runtime!.isCurrent(lease)) {
+          await onAuthenticationInvalid?.call(lease);
+        }
+      }
       _throwForStatus(response);
+      if (lease != null) runtime!.ensureCurrent(lease);
       return response;
     } on TimeoutException {
       throw const ApiTimeoutException('The request timed out.');

@@ -82,7 +82,10 @@ final pendingPaymentsProvider =
     StateNotifierProvider<
       PendingPaymentsNotifier,
       AsyncValue<List<Map<String, Object?>>>
-    >((ref) => PendingPaymentsNotifier(ref.watch(operationsApiProvider), ref));
+    >((ref) {
+      ref.watch(authProvider).valueOrNull?.tenantScope;
+      return PendingPaymentsNotifier(ref.watch(operationsApiProvider), ref);
+    });
 
 final pendingPaymentsCountProvider = Provider<int>(
   (ref) => ref.watch(pendingPaymentsProvider).valueOrNull?.length ?? 0,

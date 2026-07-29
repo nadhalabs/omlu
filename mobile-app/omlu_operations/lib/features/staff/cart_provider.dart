@@ -1,7 +1,11 @@
+import 'dart:async';
 import 'dart:math';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_exceptions.dart';
+import '../../core/auth/flutter_tenant_scope.dart';
+import '../../core/auth/native_auth_runtime.dart';
 import '../../core/models/operations_models.dart';
+import '../../core/storage/operations_data_cache.dart';
 import '../auth_provider.dart';
 
 enum SubmissionState { idle, submitting, success, error }
@@ -32,7 +36,9 @@ class CartItem {
 class CartState {
   const CartState({
     this.tableId,
+    this.restaurantId,
     this.restaurantSlug,
+    this.scope,
     this.items = const {},
     required this.idempotencyKey,
     this.submissionState = SubmissionState.idle,
@@ -40,7 +46,9 @@ class CartState {
   });
 
   final int? tableId;
+  final int? restaurantId;
   final String? restaurantSlug;
+  final FlutterTenantScope? scope;
   final Map<String, CartItem> items;
   final String idempotencyKey;
   final SubmissionState submissionState;
@@ -50,7 +58,9 @@ class CartState {
 
   CartState copyWith({
     int? tableId,
+    int? restaurantId,
     String? restaurantSlug,
+    FlutterTenantScope? scope,
     Map<String, CartItem>? items,
     String? idempotencyKey,
     SubmissionState? submissionState,
@@ -59,9 +69,11 @@ class CartState {
   }) {
     return CartState(
       tableId: clearTable ? null : (tableId ?? this.tableId),
+      restaurantId: restaurantId ?? this.restaurantId,
       restaurantSlug: clearTable
           ? null
           : (restaurantSlug ?? this.restaurantSlug),
+      scope: scope ?? this.scope,
       items: items ?? this.items,
       idempotencyKey: idempotencyKey ?? this.idempotencyKey,
       submissionState: submissionState ?? this.submissionState,
@@ -71,10 +83,34 @@ class CartState {
 }
 
 class CartNotifier extends StateNotifier<CartState> {
-  CartNotifier(this._ref)
-    : super(CartState(idempotencyKey: _generateIdempotencyKey()));
+  CartNotifier(
+    this._ref, {
+    required FlutterTenantScope? scope,
+    required String? restaurantSlug,
+    required OperationsDataCache cache,
+    required NativeAuthRuntime authRuntime,
+  }) : _cache = cache,
+       _scope = scope,
+       _restaurantSlug = restaurantSlug,
+       super(
+         CartState(
+           restaurantId: scope?.restaurantId,
+           restaurantSlug: restaurantSlug,
+           scope: scope,
+           idempotencyKey: _generateIdempotencyKey(),
+         ),
+       ) {
+    if (scope != null) {
+      unawaited(_restore());
+      _unregisterCleanup = authRuntime.registerCleanup((_) => clearAll());
+    }
+  }
 
   final Ref _ref;
+  final OperationsDataCache _cache;
+  final FlutterTenantScope? _scope;
+  final String? _restaurantSlug;
+  void Function()? _unregisterCleanup;
 
   static String _generateIdempotencyKey() {
     final random = Random();
@@ -86,21 +122,40 @@ class CartNotifier extends StateNotifier<CartState> {
     return 'send-order-${DateTime.now().millisecondsSinceEpoch}-$suffix';
   }
 
-  void setTable(int tableId, String restaurantSlug) {
+  void setTable(int tableId) {
+    final scope = _scope;
+    if (scope == null || _restaurantSlug == null) {
+      throw StateError('Cannot create a cart before /me validation.');
+    }
     if (state.tableId == tableId) return;
-    state = state.copyWith(tableId: tableId, restaurantSlug: restaurantSlug);
+    state = CartState(
+      tableId: tableId,
+      restaurantId: scope.restaurantId,
+      restaurantSlug: _restaurantSlug,
+      scope: scope,
+      idempotencyKey: _generateIdempotencyKey(),
+    );
+    _persist();
   }
 
   void clear() {
     state = CartState(
       tableId: state.tableId,
+      restaurantId: state.restaurantId,
       restaurantSlug: state.restaurantSlug,
+      scope: state.scope,
       idempotencyKey: _generateIdempotencyKey(),
     );
+    _persist();
   }
 
   void clearAll() {
-    state = CartState(idempotencyKey: _generateIdempotencyKey());
+    state = CartState(
+      restaurantId: _scope?.restaurantId,
+      restaurantSlug: _restaurantSlug,
+      scope: _scope,
+      idempotencyKey: _generateIdempotencyKey(),
+    );
   }
 
   static String lineKey(
@@ -141,9 +196,13 @@ class CartNotifier extends StateNotifier<CartState> {
       );
     }
     state = state.copyWith(items: updated);
+    _persist();
   }
 
-  void removeItem(int menuItemId, {List<MenuOptionSelection> selectedOptions = const []}) {
+  void removeItem(
+    int menuItemId, {
+    List<MenuOptionSelection> selectedOptions = const [],
+  }) {
     final key = lineKey(menuItemId, selectedOptions);
     final current = state.items[key];
     if (current == null) return;
@@ -155,12 +214,14 @@ class CartNotifier extends StateNotifier<CartState> {
       updated[key] = current.copyWith(quantity: current.quantity - 1);
     }
     state = state.copyWith(items: updated);
+    _persist();
   }
 
   void updateQuantity(String lineKey, int quantity) {
     if (quantity <= 0) {
       final updated = Map<String, CartItem>.from(state.items)..remove(lineKey);
       state = state.copyWith(items: updated);
+      _persist();
       return;
     }
     final current = state.items[lineKey];
@@ -169,6 +230,7 @@ class CartNotifier extends StateNotifier<CartState> {
     final updated = Map<String, CartItem>.from(state.items);
     updated[lineKey] = current.copyWith(quantity: quantity);
     state = state.copyWith(items: updated);
+    _persist();
   }
 
   void updateItemNote(String lineKey, String? note) {
@@ -180,6 +242,7 @@ class CartNotifier extends StateNotifier<CartState> {
       clearNote: note == null || note.trim().isEmpty,
     );
     state = state.copyWith(items: updated);
+    _persist();
   }
 
   Future<void> submitOrder() async {
@@ -212,6 +275,7 @@ class CartNotifier extends StateNotifier<CartState> {
       );
 
       state = state.copyWith(submissionState: SubmissionState.success);
+      _persist();
     } catch (e) {
       state = state.copyWith(
         submissionState: SubmissionState.error,
@@ -222,10 +286,99 @@ class CartNotifier extends StateNotifier<CartState> {
       rethrow;
     }
   }
+
+  Future<void> _restore() async {
+    final scope = _scope;
+    if (scope == null) return;
+    try {
+      final cached = await _cache.read(
+        'staff-cart-draft',
+        identifier: 'active',
+        maxAge: const Duration(days: 30),
+      );
+      if (!mounted || cached is! Map) return;
+      final json = Map<String, Object?>.from(cached);
+      if (json['restaurant_id'] != scope.restaurantId ||
+          json['table_id'] is! int) {
+        return;
+      }
+      final items = <String, CartItem>{};
+      for (final raw in json['items'] as List? ?? const []) {
+        final item = Map<String, Object?>.from(raw as Map);
+        final selections = <MenuOptionSelection>[
+          for (final rawOption in item['selected_options'] as List? ?? const [])
+            MenuOptionSelection(
+              groupId: (rawOption as Map)['group_id'] as int,
+              optionId: rawOption['option_id'] as int,
+              quantity: rawOption['quantity'] as int? ?? 1,
+            ),
+        ];
+        final cartItem = CartItem(
+          menuItemId: item['menu_item_id'] as int,
+          quantity: item['quantity'] as int,
+          note: item['item_note'] as String?,
+          selectedOptions: selections,
+        );
+        items[lineKey(cartItem.menuItemId, selections)] = cartItem;
+      }
+      state = CartState(
+        tableId: json['table_id'] as int,
+        restaurantId: scope.restaurantId,
+        restaurantSlug: _restaurantSlug,
+        scope: scope,
+        items: items,
+        idempotencyKey:
+            json['idempotency_key'] as String? ?? _generateIdempotencyKey(),
+      );
+    } catch (_) {
+      // A corrupt or old-authority draft is never allowed to repopulate state.
+    }
+  }
+
+  void _persist() {
+    if (_scope == null) return;
+    unawaited(
+      _cache
+          .write('staff-cart-draft', {
+            'restaurant_id': state.restaurantId,
+            'restaurant_slug': state.restaurantSlug,
+            'table_id': state.tableId,
+            'idempotency_key': state.idempotencyKey,
+            'items': [
+              for (final item in state.items.values)
+                {
+                  'menu_item_id': item.menuItemId,
+                  'quantity': item.quantity,
+                  'item_note': item.note,
+                  'selected_options': [
+                    for (final option in item.selectedOptions) option.toJson(),
+                  ],
+                },
+            ],
+          }, identifier: 'active')
+          .catchError((_) {}),
+    );
+  }
+
+  @override
+  void dispose() {
+    _unregisterCleanup?.call();
+    super.dispose();
+  }
 }
 
 final cartProvider = StateNotifierProvider<CartNotifier, CartState>((ref) {
-  return CartNotifier(ref);
+  final session = ref.watch(authProvider).valueOrNull;
+  return CartNotifier(
+    ref,
+    scope: session?.tenantScope,
+    restaurantSlug: session?.restaurantSlug,
+    cache: ref.watch(operationsDataCacheProvider),
+    authRuntime: ref.watch(nativeAuthRuntimeProvider),
+  );
 });
 
-final selectedTableIdProvider = StateProvider<int?>((ref) => null);
+final selectedTableIdProvider = StateProvider<int?>((ref) {
+  ref.watch(authProvider).valueOrNull?.tenantScope;
+  return null;
+});

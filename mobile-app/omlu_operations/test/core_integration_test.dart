@@ -2,11 +2,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omlu_operations/core/api/api_client.dart';
 import 'package:omlu_operations/core/api/api_exceptions.dart';
 import 'package:omlu_operations/core/api/operations_api.dart';
-import 'package:omlu_operations/core/auth/auth_repository.dart';
 import 'package:omlu_operations/core/models/operations_models.dart';
 import 'package:omlu_operations/core/models/role_session.dart';
 import 'package:omlu_operations/core/realtime/realtime_client.dart';
 import 'package:omlu_operations/core/storage/token_storage.dart';
+import 'test_auth_fixtures.dart';
 
 void main() {
   group('AuthRepository', () {
@@ -48,12 +48,18 @@ void main() {
                 'must_change_password': false,
                 'restaurant_name': 'Demo',
                 'restaurant_slug': 'demo',
+                'scope': {
+                  'restaurant_id': 1,
+                  'actor_id': 10,
+                  'role': 'kitchen',
+                  'authority_epoch': 'v1.test-opaque-epoch',
+                },
               },
             );
           },
         );
         final storage = MemoryTokenStorage();
-        final auth = AuthRepository(apiClient: client, tokenStorage: storage);
+        final auth = testAuthRepository(client, storage);
 
         final session = await auth.login(
           restaurantSlug: 'demo',
@@ -91,10 +97,11 @@ void main() {
             restaurantName: 'Demo',
             restaurantSlug: 'demo',
           ),
+          tenantScope: testTenantScope,
         ),
       );
 
-      final auth = AuthRepository(apiClient: client, tokenStorage: storage);
+      final auth = testAuthRepository(client, storage);
 
       expect(await auth.restore(), isNull);
       expect(await storage.read(), isNull);

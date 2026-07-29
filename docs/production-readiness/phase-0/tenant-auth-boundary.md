@@ -20,6 +20,18 @@ Authenticated browser cache and staff-cart keys are built centrally from the com
 
 P1.2 is web-only. Flutter, Android WebView state, server WebSocket authority/revocation, Redis, database migrations, and authority-invalidating `403` error codes remain assigned to later tasks.
 
+### P1.3 Flutter implementation record
+
+The native operations application consumes the authoritative `/auth/staff/me` scope through immutable `FlutterTenantScope` in `mobile-app/omlu_operations/lib/core/auth/flutter_tenant_scope.dart`. `NativeAuthRuntime` owns the active scope, lifecycle generation, teardown phase, and cleanup barrier. Token restoration does not activate providers or operational storage until `/me` succeeds; login first terminates any previous authority and persists the new session only after its scope validates.
+
+`OperationsDataCache` builds every authenticated cache, cart, draft, and staff-access key through the versioned complete-scope builder. Representative keys contain restaurant ID, actor ID, role, opaque authority epoch, feature, and identifier. The staff cart persists its exact tenant/table draft and stable in-progress idempotency key, resets incompatible table selections, and obtains restaurant slug only from the validated session. The two table-entry paths no longer pass `tableNumber` as `restaurantSlug`.
+
+Explicit logout, active-authority `401`, expiry, invalid restore, failed login `/me`, and account switching converge on the idempotent native teardown. Realtime/lifecycle observers, reconnect timers, carts, provider scope, operational cache, token, and identity are ended before another scope can activate. HTTP, cache, and realtime work is guarded by scope plus lifecycle generation, so late Account A work cannot mutate or terminate Account B. Ordinary `403` remains in-session.
+
+Legacy `omlu_reference_cache_v1_*`, `staff_access_v1_*`, `tables_all`, `staff_cart`, `selected_table`, `kitchen_orders`, and `pending_payments` records are deleted rather than attributed to a tenant. Theme, language, onboarding, public customer state, and other non-operational preferences remain untouched. Offline cold start intentionally exposes no confidential operational cache until `/me` validates.
+
+P1.3 does not change Android WebView navigation/storage, server WebSocket authorization or forced revocation, or Redis channel identity; those remain P1.4/P1.5 work.
+
 ## Scope propagation contract
 
 | Location | Required namespace/validation |

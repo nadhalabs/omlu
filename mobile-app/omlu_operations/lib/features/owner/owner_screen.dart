@@ -14,10 +14,14 @@ import '../staff/tables_provider.dart';
 import '../staff/service_requests_provider.dart';
 import '../staff/staff_bill_screen.dart';
 
-final ownerTabProvider = StateProvider<int>((ref) => 0);
+final ownerTabProvider = StateProvider<int>((ref) {
+  ref.watch(authProvider).valueOrNull?.tenantScope;
+  return 0;
+});
 final dashboardSummaryProvider = FutureProvider<Map<String, Object?>>((
   ref,
 ) async {
+  ref.watch(authProvider).valueOrNull?.tenantScope;
   final api = ref.watch(operationsApiProvider);
   return api.fetchDashboardSummary();
 });

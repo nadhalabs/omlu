@@ -8,8 +8,8 @@ import 'package:omlu_operations/core/api/operations_api.dart';
 import 'package:omlu_operations/core/api/api_client.dart';
 import 'package:omlu_operations/features/auth_provider.dart';
 import 'package:omlu_operations/core/models/role_session.dart';
-import 'package:omlu_operations/core/auth/auth_repository.dart';
 import 'package:omlu_operations/core/storage/token_storage.dart';
+import 'test_auth_fixtures.dart';
 
 class MockKitchenOrdersNotifier extends KitchenOrdersNotifier {
   // ignore: use_super_parameters
@@ -43,6 +43,7 @@ class DummyAuthStateNotifier extends AuthStateNotifier {
           restaurantName: 'Omlu Demo',
           restaurantSlug: 'omlu-demo',
         ),
+        tenantScope: testScopeFor(StaffRole.kitchen),
       ),
     );
   }
@@ -92,12 +93,12 @@ void main() {
       overrides: [
         authProvider.overrideWith(
           (ref) => DummyAuthStateNotifier(
-            AuthRepository(
-              apiClient: ApiClient(
+            testAuthRepository(
+              ApiClient(
                 baseUrl: Uri.parse('https://api.example'),
                 transport: (_) async => throw UnimplementedError(),
               ),
-              tokenStorage: MemoryTokenStorage(),
+              MemoryTokenStorage(),
             ),
           ),
         ),

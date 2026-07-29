@@ -11,7 +11,10 @@ import 'requests_screen.dart';
 import 'service_requests_provider.dart';
 import 'staff_history_screen.dart';
 
-final staffTabProvider = StateProvider<int>((ref) => 0);
+final staffTabProvider = StateProvider<int>((ref) {
+  ref.watch(authProvider).valueOrNull?.tenantScope;
+  return 0;
+});
 
 class StaffShell extends ConsumerWidget {
   const StaffShell({super.key});

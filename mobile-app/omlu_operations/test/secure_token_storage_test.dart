@@ -2,6 +2,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omlu_operations/core/models/role_session.dart';
 import 'package:omlu_operations/core/storage/secure_token_storage.dart';
+import 'test_auth_fixtures.dart';
 
 class MockFlutterSecureStorage extends FlutterSecureStorage {
   final Map<String, String> _data = {};
@@ -106,6 +107,7 @@ void main() {
         restaurantName: 'Test Diner',
         restaurantSlug: 'test-diner',
       ),
+      tenantScope: testTenantScope,
     );
 
     setUp(() {

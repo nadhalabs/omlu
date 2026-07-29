@@ -1,16 +1,6 @@
-enum StaffRole {
-  owner,
-  admin,
-  staff,
-  kitchen;
+import '../auth/flutter_tenant_scope.dart';
 
-  static StaffRole fromJson(String value) {
-    return StaffRole.values.firstWhere(
-      (role) => role.name == value,
-      orElse: () => throw FormatException('Unsupported staff role: $value'),
-    );
-  }
-}
+export '../auth/flutter_tenant_scope.dart' show StaffRole;
 
 enum OperationsHome { staff, kitchen, owner, admin }
 
@@ -65,11 +55,13 @@ class RoleSession {
     required this.accessToken,
     required this.expiresAt,
     required this.profile,
+    required this.tenantScope,
   });
 
   final String accessToken;
   final DateTime expiresAt;
   final StaffProfile profile;
+  final FlutterTenantScope tenantScope;
 
   String get restaurantSlug => profile.restaurantSlug;
   StaffRole get role => profile.role;
@@ -89,6 +81,7 @@ class RoleSession {
     'access_token': accessToken,
     'expires_at': expiresAt.toUtc().toIso8601String(),
     'profile': profile.toJson(),
+    'tenant_scope': tenantScope.toJson(),
   };
 
   factory RoleSession.fromJson(Map<String, Object?> json) {
@@ -97,6 +90,9 @@ class RoleSession {
       expiresAt: DateTime.parse(json['expires_at'] as String),
       profile: StaffProfile.fromJson(
         Map<String, Object?>.from(json['profile'] as Map? ?? {}),
+      ),
+      tenantScope: FlutterTenantScope.fromJson(
+        Map<String, Object?>.from(json['tenant_scope'] as Map? ?? {}),
       ),
     );
   }

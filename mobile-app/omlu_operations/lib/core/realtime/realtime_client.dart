@@ -3,6 +3,9 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
+import '../auth/flutter_tenant_scope.dart';
+import '../auth/native_auth_runtime.dart';
+
 enum RealtimeConnectionState {
   disconnected,
   connecting,
@@ -73,17 +76,23 @@ class RealtimeClient {
     required String channel,
     ReconnectPolicy reconnectPolicy = const ReconnectPolicy(),
     WebSocketConnector? connector,
+    NativeAuthRuntime? authRuntime,
+    FlutterTenantScope? tenantScope,
   }) : _baseUrl = baseUrl,
        _accessToken = accessToken,
        _channel = channel,
        _reconnectPolicy = reconnectPolicy,
-       _connector = connector ?? ((uri) => WebSocket.connect(uri.toString()));
+       _connector = connector ?? ((uri) => WebSocket.connect(uri.toString())),
+       _authRuntime = authRuntime,
+       _tenantScope = tenantScope;
 
   final Uri _baseUrl;
   final String _accessToken;
   final String _channel;
   final ReconnectPolicy _reconnectPolicy;
   final WebSocketConnector _connector;
+  final NativeAuthRuntime? _authRuntime;
+  final FlutterTenantScope? _tenantScope;
   final _events = StreamController<RealtimeEvent>.broadcast();
   final _states = StreamController<RealtimeConnectionState>.broadcast();
   final Set<String> _seenEventIds = <String>{};
@@ -92,6 +101,7 @@ class RealtimeClient {
   bool _closedByClient = false;
   bool _opening = false;
   int _attempt = 0;
+  Timer? _reconnectTimer;
 
   Stream<RealtimeEvent> get events => _events.stream;
   Stream<RealtimeConnectionState> get states => _states.stream;
@@ -104,6 +114,8 @@ class RealtimeClient {
 
   Future<void> disconnect() async {
     _closedByClient = true;
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
     await _socket?.close();
     _socket = null;
     _states.add(RealtimeConnectionState.disconnected);
@@ -149,12 +161,23 @@ class RealtimeClient {
   }
 
   void _handleMessage(Object? message) {
+    final runtime = _authRuntime;
+    final scope = _tenantScope;
+    if (runtime != null &&
+        (scope == null || runtime.scope != scope || !runtime.isActive)) {
+      return;
+    }
     if (message is! String) return;
     final decoded = jsonDecode(message);
     if (decoded is! Map) return;
     final type = decoded['type'];
     if (type == 'heartbeat' || type == 'connection.ready') return;
     final event = RealtimeEvent.fromJson(Map<String, Object?>.from(decoded));
+    if (scope != null &&
+        event.restaurantId != null &&
+        event.restaurantId != scope.restaurantId) {
+      return;
+    }
     if (event.id.isEmpty || _seenEventIds.contains(event.id)) return;
     _seenEventIds.add(event.id);
     if (_seenEventIds.length > 500) {
@@ -167,10 +190,13 @@ class RealtimeClient {
     if (_closedByClient) return;
     _attempt += 1;
     _states.add(RealtimeConnectionState.reconnecting);
-    await Future<void>.delayed(_reconnectPolicy.delayForAttempt(_attempt));
-    if (!_closedByClient) {
-      await _open(RealtimeConnectionState.reconnecting);
-    }
+    _reconnectTimer?.cancel();
+    _reconnectTimer = Timer(_reconnectPolicy.delayForAttempt(_attempt), () {
+      _reconnectTimer = null;
+      if (!_closedByClient) {
+        unawaited(_open(RealtimeConnectionState.reconnecting));
+      }
+    });
   }
 
   Uri _staffWsUri() {

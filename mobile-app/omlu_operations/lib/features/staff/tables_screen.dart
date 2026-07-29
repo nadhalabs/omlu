@@ -22,7 +22,11 @@ class TablesScreen extends ConsumerWidget {
     if (table.billStatus == 'payment_pending') return 'Waiting for Payment';
     if (table.billRequested) return 'Bill Requested';
     if (table.attention.contains('ready_order')) return 'Food Ready';
-    if (table.activeOrderCount > 0 || table.state == 'occupied' || table.hasOpenSession) return 'Occupied';
+    if (table.activeOrderCount > 0 ||
+        table.state == 'occupied' ||
+        table.hasOpenSession) {
+      return 'Occupied';
+    }
     return 'Available';
   }
 
@@ -46,12 +50,7 @@ class TablesScreen extends ConsumerWidget {
 
     void proceed() {
       ref.read(selectedTableIdProvider.notifier).state = table.id;
-      ref
-          .read(cartProvider.notifier)
-          .setTable(
-            table.id,
-            table.tableNumber,
-          ); // reuse tableNumber as slug or identifier
+      ref.read(cartProvider.notifier).setTable(table.id);
       ref.read(staffTabProvider.notifier).state = 1; // Switch to New Order tab
     }
 
@@ -99,7 +98,9 @@ class TablesScreen extends ConsumerWidget {
             tooltip: 'Profile and help',
             onSelected: (value) {
               if (value == 'help') showRoleHelp(context, StaffRole.staff);
-              if (value == 'refresh') ref.read(tablesProvider.notifier).fetchTables();
+              if (value == 'refresh') {
+                ref.read(tablesProvider.notifier).fetchTables();
+              }
               if (value == 'logout') ref.read(authProvider.notifier).logout();
             },
             itemBuilder: (_) => const [
@@ -121,104 +122,126 @@ class TablesScreen extends ConsumerWidget {
             );
           }
 
-          final occupied = tables.where((table) => table.hasOpenSession || table.state == 'occupied').length;
-          final ready = tables.where((table) => table.attention.contains('ready_order')).length;
-          final requests = tables.where((table) => table.attention.any((item) => item.contains('request'))).length;
+          final occupied = tables
+              .where(
+                (table) => table.hasOpenSession || table.state == 'occupied',
+              )
+              .length;
+          final ready = tables
+              .where((table) => table.attention.contains('ready_order'))
+              .length;
+          final requests = tables
+              .where(
+                (table) =>
+                    table.attention.any((item) => item.contains('request')),
+              )
+              .length;
           return CustomScrollView(
             slivers: [
-              SliverToBoxAdapter(child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                child: Wrap(spacing: 8, runSpacing: 8, children: [
-                  _SummaryChip(label: 'Occupied', count: occupied),
-                  _SummaryChip(label: 'Ready', count: ready),
-                  _SummaryChip(label: 'Requests', count: requests),
-                ]),
-              )),
-              SliverPadding(
-                padding: const EdgeInsets.all(OmluSpacing.md),
-                sliver: SliverGrid.builder(
-            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: 220,
-              mainAxisExtent: 175,
-              crossAxisSpacing: OmluSpacing.md,
-              mainAxisSpacing: OmluSpacing.md,
-            ),
-            itemCount: tables.length,
-            itemBuilder: (context, index) {
-              final table = tables[index];
-              final status = _getTableStatus(table);
-              final statusColor = _getStatusColor(status);
-              final showBill =
-                  table.activeOrderCount > 0 || table.state == 'occupied';
-
-              return OmluCard(
-                padding: EdgeInsets.zero,
-                onTap: () => _handleTableTap(context, ref, table),
-                borderColor: statusColor.withValues(alpha: 0.3),
+              SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.all(OmluSpacing.md),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              table.tableNumber,
-                              style: OmluTypography.h2.copyWith(fontSize: 22),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          if (table.openedMinutesAgo != null &&
-                              table.openedMinutesAgo! > 0) ...[
-                            const SizedBox(width: OmluSpacing.xs),
-                            Text(
-                              '${table.openedMinutesAgo}m ago',
-                              style: OmluTypography.bodySmall,
-                            ),
-                          ],
-                        ],
-                      ),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: statusColor.withValues(alpha: 0.12),
-                              borderRadius: OmluRadius.borderSm,
-                            ),
-                            child: Text(
-                              status,
-                              style: OmluTypography.label.copyWith(
-                                color: statusColor,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: OmluSpacing.xs),
-                          if (showBill)
-                            Text(
-                              '${table.activeOrderCount} active order${table.activeOrderCount == 1 ? '' : 's'}${table.currentBillAmount > 0 ? ' · ₹${table.currentBillAmount.toStringAsFixed(2)}' : ''}',
-                              style: OmluTypography.bodyMedium.copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
-                            )
-                          else
-                            const Text('--', style: OmluTypography.bodyMedium),
-                        ],
-                      ),
+                      _SummaryChip(label: 'Occupied', count: occupied),
+                      _SummaryChip(label: 'Ready', count: ready),
+                      _SummaryChip(label: 'Requests', count: requests),
                     ],
                   ),
                 ),
-              );
-            },
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.all(OmluSpacing.md),
+                sliver: SliverGrid.builder(
+                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: 220,
+                    mainAxisExtent: 175,
+                    crossAxisSpacing: OmluSpacing.md,
+                    mainAxisSpacing: OmluSpacing.md,
+                  ),
+                  itemCount: tables.length,
+                  itemBuilder: (context, index) {
+                    final table = tables[index];
+                    final status = _getTableStatus(table);
+                    final statusColor = _getStatusColor(status);
+                    final showBill =
+                        table.activeOrderCount > 0 || table.state == 'occupied';
+
+                    return OmluCard(
+                      padding: EdgeInsets.zero,
+                      onTap: () => _handleTableTap(context, ref, table),
+                      borderColor: statusColor.withValues(alpha: 0.3),
+                      child: Padding(
+                        padding: const EdgeInsets.all(OmluSpacing.md),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    table.tableNumber,
+                                    style: OmluTypography.h2.copyWith(
+                                      fontSize: 22,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                if (table.openedMinutesAgo != null &&
+                                    table.openedMinutesAgo! > 0) ...[
+                                  const SizedBox(width: OmluSpacing.xs),
+                                  Text(
+                                    '${table.openedMinutesAgo}m ago',
+                                    style: OmluTypography.bodySmall,
+                                  ),
+                                ],
+                              ],
+                            ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: statusColor.withValues(alpha: 0.12),
+                                    borderRadius: OmluRadius.borderSm,
+                                  ),
+                                  child: Text(
+                                    status,
+                                    style: OmluTypography.label.copyWith(
+                                      color: statusColor,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: OmluSpacing.xs),
+                                if (showBill)
+                                  Text(
+                                    '${table.activeOrderCount} active order${table.activeOrderCount == 1 ? '' : 's'}${table.currentBillAmount > 0 ? ' · ₹${table.currentBillAmount.toStringAsFixed(2)}' : ''}',
+                                    style: OmluTypography.bodyMedium.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  )
+                                else
+                                  const Text(
+                                    '--',
+                                    style: OmluTypography.bodyMedium,
+                                  ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ),
             ],
@@ -246,7 +269,10 @@ class TablesScreen extends ConsumerWidget {
                 color: Colors.red,
               ),
               const SizedBox(height: 16),
-              const Text('Could not load tables. Check the connection and try again.', style: OmluTypography.bodyMedium),
+              const Text(
+                'Could not load tables. Check the connection and try again.',
+                style: OmluTypography.bodyMedium,
+              ),
               const SizedBox(height: 16),
               ElevatedButton(
                 onPressed: () =>
@@ -268,7 +294,14 @@ class _SummaryChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-    decoration: BoxDecoration(color: OmluColors.surface, borderRadius: OmluRadius.borderCircular, border: Border.all(color: OmluColors.border)),
-    child: Text('$label $count', style: OmluTypography.label.copyWith(fontWeight: FontWeight.w700)),
+    decoration: BoxDecoration(
+      color: OmluColors.surface,
+      borderRadius: OmluRadius.borderCircular,
+      border: Border.all(color: OmluColors.border),
+    ),
+    child: Text(
+      '$label $count',
+      style: OmluTypography.label.copyWith(fontWeight: FontWeight.w700),
+    ),
   );
 }

@@ -78,6 +78,7 @@ final tablesProvider =
     StateNotifierProvider<TablesNotifier, AsyncValue<List<StaffTableSummary>>>((
       ref,
     ) {
+      ref.watch(authProvider).valueOrNull?.tenantScope;
       final api = ref.watch(operationsApiProvider);
       return TablesNotifier(api, ref);
     });

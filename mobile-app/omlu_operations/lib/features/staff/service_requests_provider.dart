@@ -61,6 +61,7 @@ final serviceRequestsProvider =
     StateNotifierProvider<ServiceRequestsNotifier, AsyncValue<List<dynamic>>>((
       ref,
     ) {
+      ref.watch(authProvider).valueOrNull?.tenantScope;
       final api = ref.watch(operationsApiProvider);
       return ServiceRequestsNotifier(api, ref);
     });

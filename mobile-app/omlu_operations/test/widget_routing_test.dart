@@ -12,6 +12,7 @@ import 'package:omlu_operations/core/models/role_session.dart';
 import 'package:omlu_operations/core/auth/auth_repository.dart';
 import 'package:omlu_operations/core/api/api_client.dart';
 import 'package:omlu_operations/core/storage/token_storage.dart';
+import 'test_auth_fixtures.dart';
 
 class AuthStateNotifierMock extends AuthStateNotifier {
   AuthStateNotifierMock(RoleSession? initialSession, AuthRepository repository)
@@ -33,10 +34,7 @@ void main() {
       baseUrl: Uri.parse('https://api.example'),
       transport: (request) async => throw UnimplementedError(),
     );
-    dummyRepository = AuthRepository(
-      apiClient: client,
-      tokenStorage: MemoryTokenStorage(),
-    );
+    dummyRepository = testAuthRepository(client, MemoryTokenStorage());
   });
 
   Widget buildTestApp({required List<Override> overrides}) {
@@ -70,6 +68,7 @@ void main() {
         restaurantName: 'Omlu Demo',
         restaurantSlug: 'omlu-demo',
       ),
+      tenantScope: testScopeFor(StaffRole.staff),
     );
     await tester.pumpWidget(
       buildTestApp(
@@ -97,6 +96,7 @@ void main() {
         restaurantName: 'Omlu Demo',
         restaurantSlug: 'omlu-demo',
       ),
+      tenantScope: testScopeFor(StaffRole.kitchen),
     );
     await tester.pumpWidget(
       buildTestApp(
@@ -124,6 +124,7 @@ void main() {
         restaurantName: 'Omlu Demo',
         restaurantSlug: 'omlu-demo',
       ),
+      tenantScope: testScopeFor(StaffRole.owner),
     );
     await tester.pumpWidget(
       buildTestApp(
@@ -151,6 +152,7 @@ void main() {
         restaurantName: 'Omlu Demo',
         restaurantSlug: 'omlu-demo',
       ),
+      tenantScope: testScopeFor(StaffRole.admin),
     );
     await tester.pumpWidget(
       buildTestApp(
