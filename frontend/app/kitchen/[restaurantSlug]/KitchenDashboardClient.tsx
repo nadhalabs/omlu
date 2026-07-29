@@ -420,8 +420,8 @@ export default function KitchenDashboardClient({
           >
             Back to dashboard
           </Link>}
-          <button onClick={() => setAvailabilityOpen(true)} className="px-3 py-2 text-sm font-normal text-zinc-400 hover:text-white">Manage availability</button>
-          <button onClick={focusMode ? exitFocusMode : enterFocusMode} aria-label={focusMode ? "Exit kitchen full screen" : "Enlarge kitchen display"} className="px-3 py-2 text-sm font-normal text-zinc-400 hover:text-white">
+          <button onClick={() => setAvailabilityOpen(true)} className="cursor-pointer rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm font-normal text-zinc-300 transition hover:border-zinc-600 hover:bg-zinc-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 disabled:cursor-not-allowed disabled:opacity-50">Manage availability</button>
+          <button onClick={focusMode ? exitFocusMode : enterFocusMode} aria-label={focusMode ? "Exit kitchen full screen" : "Enlarge kitchen display"} className="cursor-pointer rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm font-normal text-zinc-300 transition hover:border-zinc-600 hover:bg-zinc-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 disabled:cursor-not-allowed disabled:opacity-50">
             ⛶ {focusMode ? "Exit" : "Enlarge"}
           </button>
           {/* Sound Alert Toggle */}
