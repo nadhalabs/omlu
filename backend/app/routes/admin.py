@@ -1,13 +1,14 @@
+import json
 import secrets
 import qrcode
 from io import BytesIO
 from typing import List, Optional
 from decimal import Decimal
-from fastapi import APIRouter, Depends, HTTPException, Response, status as fastapi_status, Query
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status as fastapi_status, Query
 from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
 from app.config import settings
-from app.models.staff_user import StaffUser
+from app.models.staff_user import AuditLog, StaffUser
 from app.models.menu import MenuCategory, MenuItem
 from app.models.restaurant_table import RestaurantTable
 from app.models.order import OrderItem
@@ -410,6 +411,7 @@ def delete_menu_item(
 def update_item_availability(
     item_id: int,
     avail_req: MenuItemAvailabilityUpdate,
+    request: Request,
     current_user: StaffUser = Depends(get_current_staff_user),
     db: Session = Depends(get_db)
 ):
@@ -425,7 +427,25 @@ def update_item_availability(
             detail="Menu item not found"
         )
 
+    previous = item.is_available
     item.is_available = avail_req.is_available
+    db.add(
+        AuditLog(
+            restaurant_id=current_user.restaurant_id,
+            actor_user_id=current_user.id,
+            actor_role=current_user.role,
+            target_type="menu_item",
+            target_id=str(item.id),
+            action="availability_updated",
+            previous_value=json.dumps({"is_available": previous}),
+            new_value=json.dumps(
+                {
+                    "is_available": item.is_available,
+                    "request_id": getattr(request.state, "request_id", None),
+                }
+            ),
+        )
+    )
     db.commit()
     db.refresh(item)
     publish_event(

@@ -10,6 +10,7 @@ import { useRealtime } from "@/lib/realtime";
 import { registerAuthenticatedCleanup } from "@/lib/authRuntime.mjs";
 import { useOmluUi } from "@/components/OmluUiProvider";
 import { useConfirmedSignOut } from "@/components/useConfirmedSignOut";
+import { KitchenAvailabilityDialog } from "./KitchenAvailabilityDialog";
 
 interface KitchenDashboardClientProps {
   restaurantSlug: string;
@@ -35,6 +36,8 @@ export default function KitchenDashboardClient({
 
   // Sound configuration
   const [soundEnabled, setSoundEnabled] = useState<boolean>(false);
+  const [focusMode, setFocusMode] = useState(false);
+  const [availabilityOpen, setAvailabilityOpen] = useState(false);
 
   // Action status mapping to disable buttons (token -> boolean)
   const [updatingTokens, setUpdatingTokens] = useState<Record<string, boolean>>({});
@@ -130,6 +133,36 @@ export default function KitchenDashboardClient({
       } catch {}
     }
   };
+
+  const exitFocusMode = useCallback(() => {
+    setFocusMode(false);
+    if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+  }, []);
+
+  const enterFocusMode = async () => {
+    setFocusMode(true);
+    try {
+      await document.documentElement.requestFullscreen?.();
+    } catch {
+      // The enlarged layout remains active when browser full-screen is denied.
+    }
+  };
+
+  useEffect(() => {
+    if (!focusMode) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !availabilityOpen) exitFocusMode();
+    };
+    const onFullscreenChange = () => {
+      if (!document.fullscreenElement) setFocusMode(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("fullscreenchange", onFullscreenChange);
+    };
+  }, [availabilityOpen, exitFocusMode, focusMode]);
 
   // Fetch kitchen orders
   const fetchOrders = useCallback(async (showLoading = true) => {
@@ -364,35 +397,35 @@ export default function KitchenDashboardClient({
   };
 
   return (
-    <div className="omlu-light-shell flex flex-col flex-1 min-h-screen p-6">
+    <div className={`omlu-light-shell flex flex-col flex-1 min-h-screen ${focusMode ? "p-3 md:p-4" : "p-6"}`}>
       {/* Top Header Banner displaying Staff name, role, restaurant and logout */}
-      <header className="flex flex-col md:flex-row items-start md:items-center justify-between gap-5 border-b border-zinc-800 pb-5 mb-6">
+      <header className={`flex items-center justify-between gap-4 border-b border-zinc-800 pb-4 ${focusMode ? "mb-4" : "mb-6 flex-col md:flex-row md:items-center"}`}>
         <div>
-          <span className="text-orange-500 font-extrabold uppercase tracking-wider text-xs">
-            OMLU Kitchen • {staffInfo.restaurant_name}
-          </span>
-          <h1 className="text-3xl font-black tracking-tight text-white mt-1">
-            Active Orders
-          </h1>
+          <span className="text-xs font-normal text-zinc-500">Kitchen display</span>
+          {!focusMode && <><h1 className="text-3xl font-black tracking-tight text-white mt-1">Active Orders</h1>
           <p className="text-zinc-500 text-xs mt-1.5 font-bold">
             Logged in as <span className="text-zinc-300 font-black">{staffInfo.name}</span> (Role: <span className="text-orange-500 font-black uppercase text-[10px] bg-orange-950/20 px-2 py-0.5 rounded border border-orange-900/30">{staffInfo.role}</span>)
           </p>
           <p className="mt-1 text-[11px] font-bold uppercase tracking-wide text-zinc-600">
             Real-time: {realtimeStatus}
             {lastUpdated ? ` • Updated ${lastUpdated.toLocaleTimeString()}` : ""}
-          </p>
+          </p></>}
         </div>
 
         {/* Action / Sync controls */}
         <div className="flex flex-wrap items-center gap-3 self-stretch md:self-auto justify-between">
-          <Link
+          {!focusMode && <Link
             href={dashboardHref}
             className="px-4 py-2.5 rounded-xl text-sm font-bold bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition"
           >
             Back to dashboard
-          </Link>
+          </Link>}
+          <button onClick={() => setAvailabilityOpen(true)} className="px-3 py-2 text-sm font-normal text-zinc-400 hover:text-white">Manage availability</button>
+          <button onClick={focusMode ? exitFocusMode : enterFocusMode} aria-label={focusMode ? "Exit kitchen full screen" : "Enlarge kitchen display"} className="px-3 py-2 text-sm font-normal text-zinc-400 hover:text-white">
+            ⛶ {focusMode ? "Exit" : "Enlarge"}
+          </button>
           {/* Sound Alert Toggle */}
-          <button
+          {!focusMode && <button
             onClick={handleToggleSound}
             className={`px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 cursor-pointer transition ${
               soundEnabled
@@ -401,29 +434,29 @@ export default function KitchenDashboardClient({
             }`}
           >
             {soundEnabled ? "🔊 Sound Enabled" : "🔇 Sound Disabled"}
-          </button>
+          </button>}
 
           {/* Manual Refresh */}
-          <button
+          {!focusMode && <button
             onClick={() => fetchOrders(true)}
             className="p-2.5 bg-zinc-800 hover:bg-zinc-700 rounded-xl cursor-pointer text-sm font-bold text-zinc-300 transition"
             title="Refresh"
           >
             🔄
-          </button>
+          </button>}
 
           {/* Logout Button */}
-          <button
+          {!focusMode && <button
             onClick={requestSignOut}
             disabled={signOutPending}
             className="px-4 py-2.5 bg-red-650/20 hover:bg-red-650/30 border border-red-900/40 text-red-400 text-sm font-bold rounded-xl cursor-pointer transition"
           >
             Sign Out
-          </button>
+          </button>}
         </div>
       </header>
 
-      <AndroidDownloadCard variant="compact" dismissible className="mb-6" />
+      {!focusMode && <AndroidDownloadCard variant="compact" dismissible className="mb-6" />}
 
       {/* API Connection Indicator */}
       {error && (
@@ -445,7 +478,7 @@ export default function KitchenDashboardClient({
           <span className="text-zinc-500 text-sm font-bold mt-4">Loading active orders...</span>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 flex-1 items-start">
+        <div className={`grid flex-1 items-start overflow-x-auto ${focusMode ? "grid-cols-4 gap-3 min-w-[1050px]" : "grid-cols-1 gap-6 md:grid-cols-4"}`}>
           {/* COLUMN 1: NEW */}
           <div className="bg-zinc-950/40 border border-zinc-800/40 rounded-3xl p-4 flex flex-col gap-4 min-h-[70vh]">
             <div className="flex items-center justify-between border-b border-zinc-800 pb-2 mb-1">
@@ -547,6 +580,7 @@ export default function KitchenDashboardClient({
         </div>
       )}
 
+      <KitchenAvailabilityDialog open={availabilityOpen} onClose={() => setAvailabilityOpen(false)} />
     </div>
   );
 }

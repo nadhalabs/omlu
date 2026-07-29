@@ -35,6 +35,7 @@ app.add_middleware(
 async def request_logging_middleware(request: Request, call_next):
     """Log every request with method, path, status, and timing. Never log secrets or bodies."""
     request_id = str(uuid.uuid4())[:8]
+    request.state.request_id = request_id
     start_time = time.time()
 
     response = await call_next(request)

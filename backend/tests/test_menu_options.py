@@ -12,7 +12,7 @@ from app.models.order import Order, OrderItem, OrderItemSelectedOption
 from app.models.restaurant import Restaurant
 from app.models.restaurant_table import RestaurantTable
 from app.models.menu import MenuCategory, MenuItem
-from app.models.staff_user import StaffUser
+from app.models.staff_user import AuditLog, StaffUser
 from app.utils.auth import hash_password
 from tests.auth_helpers import create_session_access_token as create_access_token
 
@@ -280,11 +280,51 @@ def test_simple_menu_item_ordering_remains_unchanged(option_context):
     assert body["items"][0]["selected_options"] == []
 
 
-def test_staff_availability_permissions(option_context):
+def test_staff_and_kitchen_availability_permissions(option_context):
     config = create_config(option_context)
     staff = client.patch(f"/staff/availability/options/{config['large']['id']}", headers=auth(option_context, "staff_token"), json={"available": False})
     kitchen = client.patch(f"/staff/availability/options/{config['small']['id']}", headers=auth(option_context, "kitchen_token"), json={"available": False})
 
     assert staff.status_code == 200
     assert staff.json()["available"] is False
-    assert kitchen.status_code == 403
+    assert kitchen.status_code == 200
+
+
+def test_kitchen_item_availability_is_tenant_scoped_and_audited(option_context):
+    response = client.patch(
+        f"/staff/availability/items/{option_context['item_id']}",
+        headers=auth(option_context, "kitchen_token"),
+        json={"is_available": False},
+    )
+    cross_tenant = client.patch(
+        f"/staff/availability/items/{option_context['other_item_id']}",
+        headers=auth(option_context, "kitchen_token"),
+        json={"is_available": False},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"id": option_context["item_id"], "is_available": False}
+    assert cross_tenant.status_code == 404
+
+    db = SessionLocal()
+    audit = db.query(AuditLog).filter(
+        AuditLog.restaurant_id == option_context["restaurant_id"],
+        AuditLog.target_type == "menu_item",
+        AuditLog.target_id == str(option_context["item_id"]),
+        AuditLog.action == "availability_updated",
+    ).order_by(AuditLog.id.desc()).first()
+    assert audit is not None
+    assert audit.actor_role == "kitchen"
+    assert audit.previous_value == '{"is_available": true}'
+    assert '"is_available": false' in audit.new_value
+    assert '"request_id":' in audit.new_value
+    db.close()
+
+
+def test_kitchen_cannot_use_full_menu_mutation(option_context):
+    response = client.patch(
+        f"/admin/menu-items/{option_context['item_id']}",
+        headers=auth(option_context, "kitchen_token"),
+        json={"name_en": "Changed", "price": "1.00"},
+    )
+    assert response.status_code == 403

@@ -1,11 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+import json
+
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
 from app.models.menu import MenuCategory, MenuItem, MenuItemOptionGroup, MenuOption, MenuOptionGroup
 from app.models.menu_import import MenuImportDraftItem, MenuImportJob
 from app.models.order import OrderItemSelectedOption
-from app.models.staff_user import StaffUser
+from app.models.staff_user import AuditLog, StaffUser
 from app.schemas.admin import MenuItemAvailabilityUpdate
 from app.schemas.menu_options import (
     MenuItemOptionGroupAttach,
@@ -25,7 +27,36 @@ from app.utils.auth import RoleChecker
 
 router = APIRouter()
 admin_roles = RoleChecker(["owner", "admin"])
-availability_roles = RoleChecker(["owner", "admin", "staff"])
+availability_roles = RoleChecker(["owner", "admin", "staff", "kitchen"])
+
+
+def _availability_audit(
+    db: Session,
+    request: Request,
+    actor: StaffUser,
+    target_type: str,
+    target_id: int,
+    field: str,
+    previous: bool,
+    current: bool,
+) -> None:
+    db.add(
+        AuditLog(
+            restaurant_id=actor.restaurant_id,
+            actor_user_id=actor.id,
+            actor_role=actor.role,
+            target_type=target_type,
+            target_id=str(target_id),
+            action="availability_updated",
+            previous_value=json.dumps({field: previous}),
+            new_value=json.dumps(
+                {
+                    field: current,
+                    "request_id": getattr(request.state, "request_id", None),
+                }
+            ),
+        )
+    )
 
 
 def _load_group(db: Session, restaurant_id: int, group_id: int) -> MenuOptionGroup:
@@ -330,13 +361,16 @@ def staff_availability(
 def staff_update_item_availability(
     item_id: int,
     payload: MenuItemAvailabilityUpdate,
+    request: Request,
     current_user: StaffUser = Depends(availability_roles),
     db: Session = Depends(get_db),
 ):
     item = db.query(MenuItem).filter(MenuItem.id == item_id, MenuItem.restaurant_id == current_user.restaurant_id).first()
     if not item:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Menu item not found")
+    previous = item.is_available
     item.is_available = payload.is_available
+    _availability_audit(db, request, current_user, "menu_item", item.id, "is_available", previous, item.is_available)
     db.commit()
     publish_event(
         EVENT_AVAILABILITY_UPDATED,
@@ -357,11 +391,14 @@ def staff_update_item_availability(
 def staff_update_option_availability(
     option_id: int,
     payload: MenuOptionAvailabilityUpdate,
+    request: Request,
     current_user: StaffUser = Depends(availability_roles),
     db: Session = Depends(get_db),
 ):
     option = _load_option(db, current_user.restaurant_id, option_id)
+    previous = option.available
     option.available = payload.available
+    _availability_audit(db, request, current_user, "menu_option", option.id, "available", previous, option.available)
     db.commit()
     publish_event(
         EVENT_AVAILABILITY_UPDATED,
@@ -382,13 +419,39 @@ def staff_update_option_availability(
 def staff_update_category_availability(
     category_id: int,
     payload: MenuItemAvailabilityUpdate,
+    request: Request,
     current_user: StaffUser = Depends(availability_roles),
     db: Session = Depends(get_db),
 ):
     category = db.query(MenuCategory).filter(MenuCategory.id == category_id, MenuCategory.restaurant_id == current_user.restaurant_id).first()
     if not category:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Category not found")
-    updated = db.query(MenuItem).filter(MenuItem.category_id == category.id).update({"is_available": payload.is_available})
+    category_items = db.query(MenuItem).filter(
+        MenuItem.category_id == category.id,
+        MenuItem.restaurant_id == current_user.restaurant_id,
+    ).all()
+    previous = {str(item.id): item.is_available for item in category_items}
+    for item in category_items:
+        item.is_available = payload.is_available
+    updated = len(category_items)
+    db.add(
+        AuditLog(
+            restaurant_id=current_user.restaurant_id,
+            actor_user_id=current_user.id,
+            actor_role=current_user.role,
+            target_type="menu_category",
+            target_id=str(category.id),
+            action="availability_updated",
+            previous_value=json.dumps({"item_availability": previous}),
+            new_value=json.dumps(
+                {
+                    "is_available": payload.is_available,
+                    "updated_items": updated,
+                    "request_id": getattr(request.state, "request_id", None),
+                }
+            ),
+        )
+    )
     db.commit()
     publish_event(
         EVENT_AVAILABILITY_UPDATED,
