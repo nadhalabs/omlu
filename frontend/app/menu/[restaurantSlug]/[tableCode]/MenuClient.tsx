@@ -8,7 +8,6 @@ import {
   getPublicDiningSession,
   addOrderToDiningSession,
   getTableSessionStatus,
-  getTableParticipantAuthority,
   joinSecureTableSession,
   startSecureTableSession,
   ApiError,
@@ -81,9 +80,6 @@ export default function MenuClient({
   const [joinCode, setJoinCode] = useState("");
   const [joinError, setJoinError] = useState<string | null>(null);
   const [joining, setJoining] = useState(false);
-  const [visibleJoinCode, setVisibleJoinCode] = useState<string | null>(null);
-  const [joinCodeCopied, setJoinCodeCopied] = useState(false);
-  const [participantCount, setParticipantCount] = useState(0);
 
   // Fetch menu data
   const fetchMenu = useCallback(async (showInitialLoader = false) => {
@@ -267,32 +263,6 @@ export default function MenuClient({
     return () => window.clearTimeout(timeout);
   }, [validateSavedSession]);
 
-  const refreshParticipantAuthority = useCallback(async () => {
-    if (!participantToken || !currentSession) return;
-    try {
-      const authority = await getTableParticipantAuthority(currentSession.public_token, participantToken);
-      setVisibleJoinCode(authority.join_code);
-      setJoinCodeCopied(false);
-      setParticipantCount(authority.participant_count);
-      await validateSavedSession();
-    } catch (err) {
-      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
-        clearParticipantToken(restaurantSlug, tableCode);
-        clearPublicSessionToken(restaurantSlug, tableCode);
-        setParticipantToken(null);
-        setVisibleJoinCode(null);
-        clearOrderingState();
-        setExpiredSessionNotice("Your access to this table has ended. Scan the table QR again if a new session has started.");
-      }
-    }
-  }, [clearOrderingState, currentSession, participantToken, restaurantSlug, tableCode, validateSavedSession]);
-
-  const copyVisibleJoinCode = useCallback(async () => {
-    if (!visibleJoinCode) return;
-    await navigator.clipboard.writeText(visibleJoinCode);
-    setJoinCodeCopied(true);
-  }, [visibleJoinCode]);
-
   useRealtime({
     enabled: Boolean(participantToken && currentSession),
     target: {
@@ -300,8 +270,8 @@ export default function MenuClient({
       token: currentSession?.public_token || "",
       participantToken: participantToken || undefined,
     },
-    onEvent: () => void refreshParticipantAuthority(),
-    onReconnect: () => void refreshParticipantAuthority(),
+    onEvent: () => void validateSavedSession(),
+    onReconnect: () => void validateSavedSession(),
   });
 
   useEffect(() => {
@@ -521,8 +491,6 @@ export default function MenuClient({
         const authority = await startSecureTableSession(restaurantSlug, tableCode);
         activeParticipantToken = authority.participant_token;
         setParticipantToken(authority.participant_token);
-        setVisibleJoinCode(authority.join_code);
-        setParticipantCount(authority.participant_count);
         saveParticipantToken(restaurantSlug, tableCode, authority.participant_token);
         savePublicSessionToken(restaurantSlug, tableCode, authority.session.public_id);
         saveSessionParticipantToken(authority.session.public_id, authority.participant_token);
@@ -577,8 +545,6 @@ export default function MenuClient({
       savePublicSessionToken(restaurantSlug, tableCode, authority.session.public_id);
       saveSessionParticipantToken(authority.session.public_id, authority.participant_token);
       setParticipantToken(authority.participant_token);
-      setVisibleJoinCode(authority.join_code);
-      setParticipantCount(authority.participant_count);
       const session = await getPublicDiningSession(authority.session.public_id, authority.participant_token);
       setCurrentSession(session);
       setJoinCode("");
@@ -599,8 +565,6 @@ export default function MenuClient({
       savePublicSessionToken(restaurantSlug, tableCode, authority.session.public_id);
       saveSessionParticipantToken(authority.session.public_id, authority.participant_token);
       setParticipantToken(authority.participant_token);
-      setVisibleJoinCode(authority.join_code);
-      setParticipantCount(authority.participant_count);
       setCurrentSession(await getPublicDiningSession(authority.session.public_id, authority.participant_token));
       setTableOccupied(true);
     } catch (err) {
@@ -831,23 +795,6 @@ export default function MenuClient({
             <section className="flex items-center justify-between gap-4 rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
               <div><p className="font-black">Ready to order?</p><p className="text-xs text-zinc-500">Start secure ordering for this table.</p></div>
               <button disabled={joining} onClick={handleStartOrdering} className="shrink-0 rounded-xl bg-orange-600 px-5 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:text-zinc-600">{joining ? "Starting…" : "Start ordering"}</button>
-            </section>
-          )}
-
-          {participantToken && visibleJoinCode && (
-            <section className="rounded-2xl border border-orange-200 bg-orange-50 px-4 py-4 dark:border-orange-900/50 dark:bg-orange-950/20" aria-labelledby="invite-table-title">
-              <h2 id="invite-table-title" className="font-black text-zinc-950 dark:text-white">Invite people at your table</h2>
-              <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-300">Other people at this table can scan the same QR and enter this code.</p>
-              <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-orange-200 bg-white px-4 py-3 dark:border-orange-900/60 dark:bg-zinc-950">
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">Four-digit join code</p>
-                  <p className="mt-1 text-2xl font-black tracking-[0.3em] text-zinc-950 dark:text-white">{visibleJoinCode}</p>
-                </div>
-                <button type="button" onClick={() => void copyVisibleJoinCode()} className="min-h-11 rounded-xl bg-orange-600 px-4 py-2 text-sm font-black text-white">
-                  {joinCodeCopied ? "Copied" : "Copy"}
-                </button>
-              </div>
-              <p className="mt-2 text-xs text-zinc-500">{participantCount} device{participantCount === 1 ? "" : "s"} joined · Only share this code with people sitting at your table.</p>
             </section>
           )}
 

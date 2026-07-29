@@ -8,6 +8,7 @@ import {
   createPublicServiceRequest,
   requestPublicSessionBill,
   getPublicDiningSession,
+  getTableParticipantAuthority,
 } from "@/lib/api";
 import { PublicDiningSessionResponse } from "@/lib/types";
 import {
@@ -40,6 +41,8 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
   const [pushStatus, setPushStatus] = useState<"idle" | "loading" | "enabled" | "unsupported" | "error">("idle");
   const [pushMessage, setPushMessage] = useState<string | null>(null);
   const [participantToken, setParticipantToken] = useState<string | null>(() => readSessionParticipantToken(sessionToken));
+  const [visibleJoinCode, setVisibleJoinCode] = useState<string | null>(null);
+  const [joinCodeCopied, setJoinCodeCopied] = useState(false);
   const fetchInFlightRef = useRef(false);
   const pendingFetchRef = useRef(false);
 
@@ -245,16 +248,24 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
             setLastUpdated(new Date());
 
             if (["closed", "cancelled"].includes(data.status)) {
+              setVisibleJoinCode(null);
               clearPublicSessionToken(data.restaurant_slug, data.table_code);
               clearLegacyPublicReceiptToken(data.restaurant_slug, data.table_code);
               clearSessionParticipantToken(sessionToken);
               setParticipantToken(null);
             } else {
+              const participantAuthority = await getTableParticipantAuthority(sessionToken, authority);
+              setVisibleJoinCode(participantAuthority.join_code);
+              setJoinCodeCopied(false);
               savePublicSessionToken(data.restaurant_slug, data.table_code, data.public_token);
               clearLegacyPublicReceiptToken(data.restaurant_slug, data.table_code);
             }
           } catch (err) {
             if (err instanceof ApiError) {
+              if (err.status === 401 || err.status === 403) {
+                setVisibleJoinCode(null);
+                setParticipantToken(null);
+              }
               setError(err.status === 404 ? t.notFound : err.message);
             } else {
               setError(t.connectionError);
@@ -270,6 +281,12 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
     },
     [sessionToken, t.connectionError, t.notFound]
   );
+
+  const copyJoinCode = useCallback(async () => {
+    if (!visibleJoinCode) return;
+    await navigator.clipboard.writeText(visibleJoinCode);
+    setJoinCodeCopied(true);
+  }, [visibleJoinCode]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => fetchSession(true), 0);
@@ -521,6 +538,19 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
               </p>
             </div>
           </div>
+
+          {participantToken && visibleJoinCode && ["open", "payment_requested", "payment_pending"].includes(session.status) && (
+            <section className="mt-4 flex flex-col gap-3 rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 dark:border-orange-900/50 dark:bg-orange-950/20 sm:flex-row sm:items-center sm:justify-between" aria-labelledby="session-invite-title">
+              <div className="min-w-0">
+                <h2 id="session-invite-title" className="text-sm font-black text-zinc-950 dark:text-white">Invite people at your table</h2>
+                <p className="mt-1 text-lg font-black text-orange-700 dark:text-orange-400">Join code: <span className="tracking-[0.18em]">{visibleJoinCode}</span></p>
+                <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-300">Other people can scan this table QR and enter this code.</p>
+              </div>
+              <button type="button" onClick={() => void copyJoinCode()} className="min-h-10 shrink-0 rounded-xl bg-orange-600 px-4 py-2 text-sm font-black text-white">
+                {joinCodeCopied ? "Copied" : "Copy code"}
+              </button>
+            </section>
+          )}
 
           <div className="mt-5 grid grid-cols-2 gap-3">
             <div className="rounded-2xl bg-zinc-50 p-4 dark:bg-zinc-800/50">
