@@ -18,6 +18,7 @@ from app.routes.staff_tables import router as staff_tables_router
 from app.routes.push import router as push_router
 from app.routes.quick_sales import router as quick_sales_router
 from app.routes.menu_imports import router as menu_imports_router
+from app.routes.table_participants import router as table_participants_router
 
 __all__ = [
     "public_menu_router",
@@ -40,4 +41,5 @@ __all__ = [
     "push_router",
     "quick_sales_router",
     "menu_imports_router",
+    "table_participants_router",
 ]

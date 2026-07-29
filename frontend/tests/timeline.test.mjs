@@ -112,7 +112,7 @@ const source = readFileSync(
 test("SessionClient listens to existing session WebSocket", () => {
   // Confirm useRealtime is hooked to session WebSocket using sessionToken
   assert.match(source, /useRealtime\(\{/);
-  assert.match(source, /target:\s*\{\s*kind:\s*["']session["'],\s*token:\s*sessionToken\s*\}/);
+  assert.match(source, /target:\s*\{\s*kind:\s*["']session["'],\s*token:\s*sessionToken,\s*participantToken:/);
 });
 
 test("WebSocket event triggers fetchSession refetch without page reload", () => {

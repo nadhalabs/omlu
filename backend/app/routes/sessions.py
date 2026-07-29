@@ -12,6 +12,8 @@ from app.models.restaurant_table import RestaurantTable
 from app.models.staff_user import StaffUser
 from app.schemas.sessions import StaffSessionListItem, StaffSessionDetail
 from app.services.realtime import EVENT_SESSION_CLOSED, EVENT_TABLE_UPDATED, publish_event, restaurant_channel, session_channel, table_channel
+from app.services.table_participants import invalidate_session_participants
+from app.models.staff_user import AuditLog
 from app.utils.auth import RoleChecker, get_current_staff_user
 
 router = APIRouter()
@@ -162,6 +164,16 @@ def close_empty_session(
     session.status = "cancelled"
     session.closed_at = now
     session.closed_by_staff_id = current_user.id
+    invalidated = invalidate_session_participants(db, session, "Session closed by staff")
+    db.add(AuditLog(
+        restaurant_id=current_user.restaurant_id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role,
+        target_type="dining_session",
+        target_id=str(session.id),
+        action="table_participants_invalidated",
+        new_value=f'{{"count": {invalidated}, "reason": "session_cancelled"}}',
+    ))
     session_id = session.id
     table_id = session.table_id
     token = session.public_token

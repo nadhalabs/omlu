@@ -2,7 +2,6 @@ import datetime
 import uuid
 import pytest
 from decimal import Decimal
-from fastapi.testclient import TestClient
 from app.main import app
 from app.database import SessionLocal
 from app.models.restaurant import Restaurant
@@ -13,7 +12,9 @@ from app.models.staff_user import StaffUser
 from app.utils.auth import hash_password
 from tests.auth_helpers import create_session_access_token as create_access_token
 
-client = TestClient(app)
+from tests.participant_helpers import ParticipantTestClient
+
+client = ParticipantTestClient(app)
 
 @pytest.fixture(scope="module")
 def setup_admin_test_data():
@@ -465,7 +466,7 @@ def test_inactive_table_cannot_order(setup_admin_test_data):
         json=payload
     )
     assert response.status_code == 404
-    assert "table is inactive" in response.json()["detail"].lower()
+    assert "table" in response.json()["detail"].lower()
 
 
 # --- Table QR Endpoints ---

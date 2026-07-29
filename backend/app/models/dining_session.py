@@ -52,6 +52,11 @@ class DiningSession(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
+    join_code_hash: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    join_code_ciphertext: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    join_code_created_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    join_code_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    join_code_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
 
     __table_args__ = (
         CheckConstraint(
@@ -89,6 +94,11 @@ class DiningSession(Base):
         "Bill",
         back_populates="dining_session",
         uselist=False,
+    )
+    participants: Mapped[List["TableSessionParticipant"]] = relationship(
+        "TableSessionParticipant",
+        back_populates="session",
+        cascade="all, delete-orphan",
     )
 
     @property

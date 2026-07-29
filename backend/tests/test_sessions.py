@@ -3,7 +3,6 @@ import uuid
 from decimal import Decimal
 
 import pytest
-from fastapi.testclient import TestClient
 
 from app.main import app
 from app.database import SessionLocal
@@ -17,7 +16,9 @@ from app.models.staff_user import StaffUser
 from app.utils.auth import hash_password
 from tests.auth_helpers import create_session_access_token as create_access_token
 
-client = TestClient(app)
+from tests.participant_helpers import ParticipantTestClient
+
+client = ParticipantTestClient(app)
 
 
 @pytest.fixture

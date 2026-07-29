@@ -43,6 +43,16 @@ export type ManualOrderPayload = {
   customer_note: string | null;
 };
 
+export type StaffTableParticipants = {
+  join_code: string;
+  participants: {
+    public_id: string;
+    label: string;
+    joined_at: string;
+    revoked_at: string | null;
+  }[];
+};
+
 async function parseError(res: Response, fallback: string) {
   const data = await res.json().catch(() => ({}));
   return typeof data.detail === "string" ? data.detail : fallback;
@@ -87,4 +97,32 @@ export async function requestStaffTableBill(tableId: number): Promise<StaffServi
   const res = await fetch(`/api/staff/tables/${tableId}/bill-request`, { method: "POST", body: "{}" });
   if (!res.ok) throw new Error(await parseError(res, "Could not request bill."));
   return res.json();
+}
+
+export async function getStaffTableParticipants(sessionToken: string): Promise<StaffTableParticipants> {
+  const res = await fetch(`/api/staff/table-sessions/${encodeURIComponent(sessionToken)}/participants`, { cache: "no-store" });
+  if (!res.ok) throw new Error(await parseError(res, "Could not load customer devices."));
+  return res.json();
+}
+
+export async function rotateStaffTableJoinCode(sessionToken: string): Promise<{ join_code: string }> {
+  const res = await fetch(`/api/staff/table-sessions/${encodeURIComponent(sessionToken)}/rotate-join-code`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "{}",
+  });
+  if (!res.ok) throw new Error(await parseError(res, "Could not rotate the join code."));
+  return res.json();
+}
+
+export async function revokeStaffTableParticipant(sessionToken: string, participantId: string): Promise<void> {
+  const res = await fetch(
+    `/api/staff/table-sessions/${encodeURIComponent(sessionToken)}/participants/${encodeURIComponent(participantId)}/revoke`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason: "Revoked from the staff table view" }),
+    }
+  );
+  if (!res.ok) throw new Error(await parseError(res, "Could not revoke this device."));
 }

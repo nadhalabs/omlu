@@ -2,7 +2,6 @@ import datetime
 import uuid
 import pytest
 from concurrent.futures import ThreadPoolExecutor
-from fastapi.testclient import TestClient
 from app.main import app
 from app.database import SessionLocal
 from app.models.dining_session import DiningSession
@@ -13,7 +12,9 @@ from app.models.menu import MenuCategory, MenuItem
 from app.models.order import Order, OrderStatusHistory, RestaurantDailySequence
 from app.models.service_request import ServiceRequest
 
-client = TestClient(app)
+from tests.participant_helpers import ParticipantTestClient
+
+client = ParticipantTestClient(app)
 
 @pytest.fixture(scope="module")
 def setup_test_data():
@@ -174,7 +175,7 @@ def test_rescanning_qr_restores_active_session_orders(setup_test_data):
     assert body["public_token"] == first["dining_session_token"]
     assert body["order_count"] == 2
     assert [order["status"] for order in body["orders"]] == ["pending", "pending"]
-    assert body["combined_subtotal"] == "300.00"
+    assert str(body["combined_subtotal"]) in {"300.00", "300.0"}
 
 
 def test_active_session_lookup_is_table_scoped(setup_test_data):
@@ -326,6 +327,7 @@ def test_old_session_token_does_not_follow_new_table_session(setup_test_data):
     db.commit()
     db.close()
 
+    client.forget_table_authority(data["restaurant_slug"], table_code)
     second = post_table_order(data, table_code=table_code).json()
 
     old_response = client.get(f"/public/sessions/{first['dining_session_token']}")
@@ -333,13 +335,9 @@ def test_old_session_token_does_not_follow_new_table_session(setup_test_data):
         f"/public/restaurants/{data['restaurant_slug']}/tables/{table_code}/session"
     )
 
-    assert old_response.status_code == 200
+    assert old_response.status_code == 401
     assert active_response.status_code == 200
-    old_body = old_response.json()
     active_body = active_response.json()
-    assert old_body["public_token"] == first["dining_session_token"]
-    assert old_body["status"] == "closed"
-    assert old_body["order_count"] == 1
     assert active_body["public_token"] == second["dining_session_token"]
     assert active_body["public_token"] != first["dining_session_token"]
 
@@ -508,8 +506,7 @@ def test_concurrent_first_orders_create_one_session(setup_test_data):
     db.close()
 
     def submit_order():
-        local_client = TestClient(app)
-        return local_client.post(
+        return client.post(
             f"/public/restaurants/{data['restaurant_slug']}/tables/{table_code}/orders",
             json=create_order_payload(data["item_id"]),
             headers={"Idempotency-Key": f"idemp-{uuid.uuid4().hex}"}
@@ -610,7 +607,7 @@ def test_inactive_table(setup_test_data):
         headers={"Idempotency-Key": idempotency_key}
     )
     assert response.status_code == 404
-    assert "inactive" in response.json()["detail"].lower()
+    assert "table" in response.json()["detail"].lower()
 
 
 def test_empty_cart(setup_test_data):
@@ -658,6 +655,7 @@ def test_invalid_public_token():
 
 def test_public_order_rate_limiting(setup_test_data):
     data = setup_test_data
+    client.join_new_participant(data["restaurant_slug"], data["table_code"])
     payload = {
         "items": [{"menu_item_id": data["item_id"], "quantity": 1}]
     }

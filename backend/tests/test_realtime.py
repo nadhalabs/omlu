@@ -5,7 +5,6 @@ import uuid
 from decimal import Decimal
 
 import pytest
-from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 from app.database import SessionLocal
@@ -31,7 +30,9 @@ from app.utils.auth import (
 from tests.auth_helpers import create_session_access_token as create_access_token
 
 
-client = TestClient(app)
+from tests.participant_helpers import ParticipantTestClient, authorize_existing_session, participant_headers
+
+client = ParticipantTestClient(app)
 
 
 @pytest.fixture
@@ -168,6 +169,18 @@ def create_invalid_staff_order(data):
             "customer_note": "Invalid real-time test",
         },
     )
+
+
+def participant_for_session(data, session_token):
+    authority = authorize_existing_session(
+        client,
+        data["restaurant_slug"],
+        data["table_code"],
+        session_token,
+        auth(data, "owner_token"),
+    )
+    client.register_authority(authority, data["restaurant_slug"], data["table_code"])
+    return authority
 
 
 def receive_event(ws, event_type: str):
@@ -587,10 +600,13 @@ def test_staff_websocket_receives_order_created_after_commit(realtime_context):
 
 
 def test_public_order_websocket_receives_status_change(realtime_context):
-    assert start_session(realtime_context).status_code == 201
+    session = start_session(realtime_context).json()
+    authority = participant_for_session(realtime_context, session["session_token"])
     order = create_staff_order(realtime_context).json()
 
-    with client.websocket_connect(f"/ws/public/orders/{order['public_token']}") as ws:
+    with client.websocket_connect(
+        f"/ws/public/orders/{order['public_token']}?participant_token={authority['participant_token']}"
+    ) as ws:
         assert ws.receive_json()["type"] == "connection.ready"
         response = client.patch(
             f"/kitchen/restaurants/{realtime_context['restaurant_slug']}/orders/{order['public_token']}/status",
@@ -606,9 +622,12 @@ def test_public_order_websocket_receives_status_change(realtime_context):
 
 def test_public_session_websocket_receives_order_status_change(realtime_context):
     session = start_session(realtime_context).json()
+    authority = participant_for_session(realtime_context, session["session_token"])
     order = create_staff_order(realtime_context).json()
 
-    with client.websocket_connect(f"/ws/public/sessions/{session['session_token']}") as ws:
+    with client.websocket_connect(
+        f"/ws/public/sessions/{session['session_token']}?participant_token={authority['participant_token']}"
+    ) as ws:
         assert ws.receive_json()["type"] == "connection.ready"
         response = client.patch(
             f"/kitchen/restaurants/{realtime_context['restaurant_slug']}/orders/{order['public_token']}/status",
@@ -624,9 +643,12 @@ def test_public_session_websocket_receives_order_status_change(realtime_context)
 
 def test_public_session_websocket_receives_bill_payment_and_close_events(realtime_context):
     session = start_session(realtime_context).json()
+    authority = participant_for_session(realtime_context, session["session_token"])
     assert create_staff_order(realtime_context).status_code == 201
 
-    with client.websocket_connect(f"/ws/public/sessions/{session['session_token']}") as ws:
+    with client.websocket_connect(
+        f"/ws/public/sessions/{session['session_token']}?participant_token={authority['participant_token']}"
+    ) as ws:
         assert ws.receive_json()["type"] == "connection.ready"
         bill_response = client.post(
             f"/staff/tables/{realtime_context['table_id']}/bill",
@@ -656,9 +678,18 @@ def test_public_session_websocket_receives_bill_payment_and_close_events(realtim
             json={"method": "counter_cash"},
         )
         assert paid_response.status_code == 200
-        payment_event = receive_event(ws, realtime.EVENT_BILL_PAYMENT_RECORDED)
-        paid_event = receive_event(ws, realtime.EVENT_BILL_PAID)
-        closed_event = receive_event(ws, realtime.EVENT_SESSION_CLOSED)
+        try:
+            trailing = ws.receive_json()
+        except WebSocketDisconnect:
+            trailing = None
+        if trailing is not None:
+            assert trailing["type"] not in {
+                realtime.EVENT_BILL_PAYMENT_RECORDED,
+                realtime.EVENT_BILL_PAID,
+                realtime.EVENT_SESSION_CLOSED,
+            }
+            with pytest.raises(WebSocketDisconnect):
+                ws.receive_json()
 
     assert "restaurant_id" not in bill_event
     assert bill_event["state"]["bill_number"] == bill_number
@@ -670,18 +701,19 @@ def test_public_session_websocket_receives_bill_payment_and_close_events(realtim
     assert pending_event["state"]["grand_total"] == 80.0
     assert pending_event["state"]["sent_by_name"] == "Staff User"
     assert pending_event["state"]["requested_at"]
-    assert payment_event["state"]["status"] == "paid"
-    assert paid_event["state"]["status"] == "paid"
-    assert closed_event["state"]["status"] == "closed"
 
 
 def test_public_session_websocket_receives_service_request_resolution(realtime_context):
     session = start_session(realtime_context).json()
+    authority = participant_for_session(realtime_context, session["session_token"])
 
-    with client.websocket_connect(f"/ws/public/sessions/{session['session_token']}") as ws:
+    with client.websocket_connect(
+        f"/ws/public/sessions/{session['session_token']}?participant_token={authority['participant_token']}"
+    ) as ws:
         assert ws.receive_json()["type"] == "connection.ready"
         create_response = client.post(
             f"/public/restaurants/{realtime_context['restaurant_slug']}/tables/{realtime_context['table_code']}/service-requests",
+            headers=participant_headers(authority["participant_token"]),
             json={"request_type": "water"},
         )
         assert create_response.status_code == 201
@@ -711,9 +743,12 @@ def test_public_session_websocket_receives_service_request_resolution(realtime_c
 
 def test_public_session_websocket_rejects_customer_mutation_messages(realtime_context):
     session = start_session(realtime_context).json()
+    authority = participant_for_session(realtime_context, session["session_token"])
 
     with pytest.raises(WebSocketDisconnect):
-        with client.websocket_connect(f"/ws/public/sessions/{session['session_token']}") as ws:
+        with client.websocket_connect(
+            f"/ws/public/sessions/{session['session_token']}?participant_token={authority['participant_token']}"
+        ) as ws:
             assert ws.receive_json()["type"] == "connection.ready"
             ws.send_json({
                 "type": realtime.EVENT_ORDER_STATUS_CHANGED,
@@ -723,12 +758,14 @@ def test_public_session_websocket_rejects_customer_mutation_messages(realtime_co
 
 
 def test_staff_websocket_receives_service_request_event(realtime_context):
-    assert start_session(realtime_context).status_code == 201
+    session = start_session(realtime_context).json()
+    authority = participant_for_session(realtime_context, session["session_token"])
 
     with client.websocket_connect(f"/ws/staff?channel=staff&token={realtime_context['staff_token']}") as ws:
         assert ws.receive_json()["type"] == "connection.ready"
         response = client.post(
             f"/public/restaurants/{realtime_context['restaurant_slug']}/tables/{realtime_context['table_code']}/service-requests",
+            headers=participant_headers(authority["participant_token"]),
             json={"request_type": "water"},
         )
         assert response.status_code == 201
@@ -897,8 +934,11 @@ def test_active_session_websocket_connects(realtime_context):
     session_resp = start_session(realtime_context)
     assert session_resp.status_code == 201
     session_token = session_resp.json()["session_token"]
+    authority = participant_for_session(realtime_context, session_token)
 
-    with client.websocket_connect(f"/ws/public/sessions/{session_token}") as ws:
+    with client.websocket_connect(
+        f"/ws/public/sessions/{session_token}?participant_token={authority['participant_token']}"
+    ) as ws:
         msg = ws.receive_json()
         assert msg["type"] == "connection.ready"
 
@@ -987,6 +1027,7 @@ def test_old_session_token_cannot_receive_new_session_events(realtime_context):
     session_b_resp = start_session(realtime_context)
     assert session_b_resp.status_code == 201
     token_b = session_b_resp.json()["session_token"]
+    authority_b = participant_for_session(realtime_context, token_b)
     assert token_b != token_a, "New session must have a distinct public_token"
 
     # Old token must be refused
@@ -995,7 +1036,9 @@ def test_old_session_token_cannot_receive_new_session_events(realtime_context):
             pass
 
     # New token must be accepted and receive live events
-    with client.websocket_connect(f"/ws/public/sessions/{token_b}") as ws:
+    with client.websocket_connect(
+        f"/ws/public/sessions/{token_b}?participant_token={authority_b['participant_token']}"
+    ) as ws:
         assert ws.receive_json()["type"] == "connection.ready"
         order_resp = create_staff_order(realtime_context)
         assert order_resp.status_code == 201

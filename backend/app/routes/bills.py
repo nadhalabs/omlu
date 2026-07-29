@@ -1,6 +1,6 @@
 import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
@@ -15,6 +15,8 @@ from app.services.bills import (
     issue_bill,
     send_bill_to_counter,
 )
+from app.services.table_participants import enforce_session_action_rate, load_participant, participant_token_header
+from app.services.table_participants import invalidate_session_participants
 from app.utils.auth import OperationalWriteChecker, RoleChecker
 from app.services.realtime import (
     EVENT_BILL_GENERATED,
@@ -45,6 +47,8 @@ _payment_record_roles = RoleChecker(["owner", "admin"])
 )
 def request_public_session_bill(
     session_token: str,
+    request: Request,
+    participant_token: str = Depends(participant_token_header),
     db: Session = Depends(get_db),
 ):
     session = db.query(DiningSession).filter(
@@ -52,6 +56,12 @@ def request_public_session_bill(
     ).with_for_update().first()
     if not session:
         raise HTTPException(status_code=404, detail="Dining session not found")
+    load_participant(db, participant_token, session_token=session_token, lock_for_action=True)
+    enforce_session_action_rate(
+        db, session, action="bill_request",
+        ip_value=request.client.host if request.client else "unknown",
+        participant_token=participant_token, limit=5,
+    )
     if session.status not in {"open", "payment_requested"}:
         raise HTTPException(status_code=409, detail="Bill cannot be requested for this session")
     bill = create_or_refresh_bill_for_session(db, session)
@@ -81,6 +91,8 @@ def request_public_session_bill(
 )
 def create_public_session_bill(
     session_token: str,
+    request: Request,
+    participant_token: str = Depends(participant_token_header),
     db: Session = Depends(get_db),
 ):
     dining_session = db.query(DiningSession).options(
@@ -90,6 +102,12 @@ def create_public_session_bill(
 
     if not dining_session:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dining session not found")
+    load_participant(db, participant_token, session_token=session_token, lock_for_action=True)
+    enforce_session_action_rate(
+        db, dining_session, action="bill_create",
+        ip_value=request.client.host if request.client else "unknown",
+        participant_token=participant_token, limit=5,
+    )
 
     bill = create_or_refresh_bill_for_session(db, dining_session)
     db.commit()
@@ -108,12 +126,34 @@ def create_public_session_bill(
     return build_bill_response(db, bill)
 
 
+@router.post(
+    "/staff/sessions/{session_token}/bill",
+    response_model=BillResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_staff_session_bill(
+    session_token: str,
+    current_user: StaffUser = Depends(_bill_issue_roles),
+    db: Session = Depends(get_db),
+):
+    dining_session = db.query(DiningSession).filter(
+        DiningSession.public_token == session_token,
+        DiningSession.restaurant_id == current_user.restaurant_id,
+    ).first()
+    if not dining_session:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dining session not found")
+    bill = create_or_refresh_bill_for_session(db, dining_session)
+    db.commit()
+    return build_bill_response(db, bill)
+
+
 @router.get(
     "/public/sessions/{session_token}/bill",
     response_model=BillResponse,
 )
 def get_public_session_bill(
     session_token: str,
+    participant_token: str = Depends(participant_token_header),
     db: Session = Depends(get_db),
 ):
     dining_session = db.query(DiningSession).filter(
@@ -122,6 +162,7 @@ def get_public_session_bill(
 
     if not dining_session:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dining session not found")
+    load_participant(db, participant_token, session_token=session_token)
 
     bill = db.query(Bill).filter(Bill.dining_session_id == dining_session.id).first()
     if not bill:
@@ -278,6 +319,16 @@ def confirm_staff_counter_payment(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
 
     paid = confirm_counter_payment(db, bill, current_user, payload.method)
+    invalidated = invalidate_session_participants(db, paid.dining_session, "Session closed after payment")
+    db.add(AuditLog(
+        restaurant_id=current_user.restaurant_id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role,
+        target_type="dining_session",
+        target_id=str(paid.dining_session_id),
+        action="table_participants_invalidated",
+        new_value=f'{{"count": {invalidated}, "reason": "payment_completed"}}',
+    ))
     db.commit()
     event_channels = [
         restaurant_channel(current_user.restaurant_id, "operations"),

@@ -14,6 +14,8 @@ import {
   clearLegacyPublicReceiptToken,
   clearPublicSessionToken,
   savePublicSessionToken,
+  readSessionParticipantToken,
+  clearSessionParticipantToken,
 } from "@/lib/publicSessionStorage";
 import { useRealtime } from "@/lib/realtime";
 import { customerPushSupported, enableCustomerPush } from "@/lib/customerPush";
@@ -37,13 +39,13 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
   const [billActionError, setBillActionError] = useState<string | null>(null);
   const [pushStatus, setPushStatus] = useState<"idle" | "loading" | "enabled" | "unsupported" | "error">("idle");
   const [pushMessage, setPushMessage] = useState<string | null>(null);
+  const [participantToken, setParticipantToken] = useState<string | null>(() => readSessionParticipantToken(sessionToken));
   const fetchInFlightRef = useRef(false);
   const pendingFetchRef = useRef(false);
 
   const [expandedOrders, setExpandedOrders] = useState<Record<string, boolean>>({});
   const [animatedStages, setAnimatedStages] = useState<Record<string, string>>({});
   const prevStatusesRef = useRef<Record<string, string>>({});
-
   useEffect(() => {
     if (!session || !session.orders) return;
     const newAnimatedStages: Record<string, string> = {};
@@ -235,7 +237,9 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
           pendingFetchRef.current = false;
           if (shouldShowLoading) setLoading(true);
           try {
-            const data = await getPublicDiningSession(sessionToken);
+            const authority = readSessionParticipantToken(sessionToken);
+            if (!authority) throw new ApiError(401, "Your access to this table has ended.");
+            const data = await getPublicDiningSession(sessionToken, authority);
             setSession(data);
             setError(null);
             setLastUpdated(new Date());
@@ -243,6 +247,8 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
             if (["closed", "cancelled"].includes(data.status)) {
               clearPublicSessionToken(data.restaurant_slug, data.table_code);
               clearLegacyPublicReceiptToken(data.restaurant_slug, data.table_code);
+              clearSessionParticipantToken(sessionToken);
+              setParticipantToken(null);
             } else {
               savePublicSessionToken(data.restaurant_slug, data.table_code, data.public_token);
               clearLegacyPublicReceiptToken(data.restaurant_slug, data.table_code);
@@ -285,7 +291,8 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
   }, [fetchSession]);
 
   const realtimeStatus = useRealtime({
-    target: { kind: "session", token: sessionToken },
+    enabled: Boolean(participantToken),
+    target: { kind: "session", token: sessionToken, participantToken: participantToken || undefined },
     onEvent: () => void fetchSession(false),
     onReconnect: () => void fetchSession(false),
   });
@@ -319,7 +326,8 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
     setBillActionLoading("view");
     setBillActionError(null);
     try {
-      await createOrRefreshPublicBill(session.public_token);
+      if (!participantToken) throw new Error("Your access to this table has ended.");
+      await createOrRefreshPublicBill(session.public_token, participantToken);
       router.push(`/bill/${session.public_token}`);
     } catch (err) {
       setBillActionError(err instanceof Error ? err.message : "Failed to prepare bill.");
@@ -333,7 +341,8 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
     setBillActionLoading("request");
     setBillActionError(null);
     try {
-      await requestPublicSessionBill(session.public_token);
+      if (!participantToken) throw new Error("Your access to this table has ended.");
+      await requestPublicSessionBill(session.public_token, participantToken);
       setBillActionError(null);
       setServiceMessage((prev) => ({ ...prev, bill: t.billRequestSent }));
       router.push(`/bill/${session.public_token}`);
@@ -349,9 +358,10 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
     setServiceStatus((prev) => ({ ...prev, [type]: "loading" }));
     setServiceMessage((prev) => ({ ...prev, [type]: "" }));
     try {
+      if (!participantToken) throw new Error("Your access to this table has ended.");
       await createPublicServiceRequest(session.restaurant_slug, session.table_code, {
         request_type: type,
-      });
+      }, participantToken);
       setServiceStatus((prev) => ({ ...prev, [type]: "success" }));
       setServiceMessage((prev) => ({ ...prev, [type]: t.requestSent }));
       setTimeout(() => {
@@ -384,7 +394,8 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
     setPushStatus("loading");
     setPushMessage(null);
     try {
-      await enableCustomerPush(session.public_token);
+      if (!participantToken) throw new Error("Your access to this table has ended.");
+      await enableCustomerPush(session.public_token, participantToken);
       setPushStatus("enabled");
       setPushMessage(t.pushEnabled);
     } catch (err) {

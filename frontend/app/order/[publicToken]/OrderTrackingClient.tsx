@@ -4,12 +4,11 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   getPublicOrder,
-  createOrRefreshPublicBill,
   createPublicServiceRequest,
   ApiError,
 } from "@/lib/api";
 import { PublicOrderResponse } from "@/lib/types";
-import { savePublicSessionToken } from "@/lib/publicSessionStorage";
+import { readOrderParticipantToken, readSessionParticipantToken, savePublicSessionToken } from "@/lib/publicSessionStorage";
 import { useRealtime } from "@/lib/realtime";
 
 interface OrderTrackingClientProps {
@@ -118,7 +117,7 @@ export default function OrderTrackingClient({
   const fetchOrder = useCallback(async (showLoading = true) => {
     if (showLoading) setLoading(true);
     try {
-      const data = await getPublicOrder(publicToken);
+      const data = await getPublicOrder(publicToken, readOrderParticipantToken(publicToken));
       setOrderData(data);
       setError(null);
       setLastUpdated(new Date());
@@ -134,7 +133,14 @@ export default function OrderTrackingClient({
   }, [publicToken]);
 
   useRealtime({
-    target: { kind: "order", token: publicToken },
+    enabled: !orderData?.dining_session_token || Boolean(readSessionParticipantToken(orderData.dining_session_token)),
+    target: {
+      kind: "order",
+      token: publicToken,
+      participantToken: orderData?.dining_session_token
+        ? readSessionParticipantToken(orderData.dining_session_token) || undefined
+        : undefined,
+    },
     onEvent: () => void fetchOrder(false),
     onReconnect: () => void fetchOrder(false),
   });
@@ -481,7 +487,7 @@ export default function OrderTrackingClient({
                   <div key={type} className="flex flex-col gap-1">
                     <button
                       id={`sr-btn-${type}`}
-                      disabled={status === "loading" || status === "success"}
+                      disabled={status === "loading" || status === "success" || !orderData.dining_session_token || !readSessionParticipantToken(orderData.dining_session_token)}
                       onClick={async () => {
                         setSrStatus((prev) => ({ ...prev, [type]: "loading" }));
                         setSrMessage((prev) => ({ ...prev, [type]: "" }));
@@ -489,7 +495,10 @@ export default function OrderTrackingClient({
                           await createPublicServiceRequest(
                             orderData.restaurant_slug!,
                             orderData.table_code!,
-                            { request_type: type as "waiter" | "water", public_order_token: publicToken }
+                            { request_type: type as "waiter" | "water", public_order_token: publicToken },
+                            orderData.dining_session_token
+                              ? readSessionParticipantToken(orderData.dining_session_token) || ""
+                              : ""
                           );
                           setSrStatus((prev) => ({ ...prev, [type]: "success" }));
                           setSrMessage((prev) => ({ ...prev, [type]: t.requestSent }));

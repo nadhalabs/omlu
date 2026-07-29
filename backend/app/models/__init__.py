@@ -9,6 +9,7 @@ from app.models.bill import Bill, RestaurantBillDailySequence, RestaurantInvoice
 from app.models.push_subscription import CustomerPushSubscription
 from app.models.quick_sale import QuickSale, QuickSaleItem, QuickSaleItemSelectedOption
 from app.models.menu_import import MenuImportJob, MenuImportDraftItem
+from app.models.table_session_participant import TableSessionCreationAttempt, TableSessionJoinAttempt, TableSessionParticipant
 
 __all__ = [
     "Restaurant",
@@ -37,4 +38,7 @@ __all__ = [
     "QuickSaleItemSelectedOption",
     "MenuImportJob",
     "MenuImportDraftItem",
+    "TableSessionParticipant",
+    "TableSessionJoinAttempt",
+    "TableSessionCreationAttempt",
 ]

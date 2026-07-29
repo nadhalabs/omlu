@@ -31,6 +31,7 @@ from app.services.realtime import (
     table_channel,
 )
 from app.utils.auth import AuthenticatedContext, external_authority_epoch, resolve_bearer_token_context
+from app.services.table_participants import load_participant
 
 
 router = APIRouter()
@@ -188,6 +189,8 @@ async def _event_loop(
     limit_key: str,
     staff_authority: StaffConnectionAuthority | None = None,
     staff_token: str | None = None,
+    participant_token: str | None = None,
+    participant_session_token: str | None = None,
 ) -> None:
     if not await _acquire_connection(websocket, limit_key):
         await websocket.close(code=1013)
@@ -203,6 +206,15 @@ async def _event_loop(
     try:
         await websocket.send_json({"type": "connection.ready"})
         while True:
+            if participant_token and participant_session_token:
+                authority_db = SessionLocal()
+                try:
+                    load_participant(authority_db, participant_token, session_token=participant_session_token)
+                except HTTPException:
+                    await websocket.close(code=1008)
+                    break
+                finally:
+                    authority_db.close()
             event_task = asyncio.create_task(queue.get())
             done, pending = await asyncio.wait(
                 {event_task, client_reader},
@@ -230,6 +242,15 @@ async def _event_loop(
                 ):
                     await websocket.close(code=1008)
                     break
+                if participant_token and participant_session_token:
+                    authority_db = SessionLocal()
+                    try:
+                        load_participant(authority_db, participant_token, session_token=participant_session_token)
+                    except HTTPException:
+                        await websocket.close(code=1008)
+                        break
+                    finally:
+                        authority_db.close()
                 try:
                     await websocket.send_json(event.public_payload(include_restaurant_id=include_restaurant_id))
                     record_delivery(event, success=True)
@@ -287,17 +308,32 @@ async def staff_realtime(websocket: WebSocket):
 
 
 @router.websocket("/ws/public/sessions/{session_token}")
-async def public_session_realtime(websocket: WebSocket, session_token: str):
+async def public_session_realtime(websocket: WebSocket, session_token: str, participant_token: str | None = None):
     db = SessionLocal()
     try:
         session = db.query(DiningSession).filter(DiningSession.public_token == session_token).first()
         if not session or session.status not in ACTIVE_DINING_SESSION_STATUSES:
             await websocket.close(code=1008)
             return
+        if not participant_token:
+            await websocket.close(code=1008)
+            return
+        try:
+            participant = load_participant(db, participant_token, session_token=session_token)
+        except HTTPException:
+            await websocket.close(code=1008)
+            return
         channels = {session_channel(session.public_token)}
     finally:
         db.close()
-    await _event_loop(websocket, channels, include_restaurant_id=False, limit_key=f"session:{session_token}")
+    await _event_loop(
+        websocket,
+        channels,
+        include_restaurant_id=False,
+        limit_key=f"participant:{participant.public_id}",
+        participant_token=participant_token,
+        participant_session_token=session_token,
+    )
 
 
 @router.websocket("/ws/public/restaurants/{restaurant_slug}/tables/{table_code}/menu")
@@ -326,16 +362,34 @@ async def public_menu_realtime(websocket: WebSocket, restaurant_slug: str, table
 
 
 @router.websocket("/ws/public/orders/{public_token}")
-async def public_order_realtime(websocket: WebSocket, public_token: str):
+async def public_order_realtime(websocket: WebSocket, public_token: str, participant_token: str | None = None):
     db = SessionLocal()
     try:
         order = db.query(Order).options(joinedload(Order.dining_session)).filter(Order.public_token == public_token).first()
         if not order:
             await websocket.close(code=1008)
             return
+        participant_session_token = None
+        if order.dining_session:
+            if not participant_token:
+                await websocket.close(code=1008)
+                return
+            try:
+                load_participant(db, participant_token, session_token=order.dining_session.public_token)
+            except HTTPException:
+                await websocket.close(code=1008)
+                return
+            participant_session_token = order.dining_session.public_token
         channels = {order_channel(order.public_token)}
         if order.dining_session:
             channels.add(session_channel(order.dining_session.public_token))
     finally:
         db.close()
-    await _event_loop(websocket, channels, include_restaurant_id=False, limit_key=f"order:{public_token}")
+    await _event_loop(
+        websocket,
+        channels,
+        include_restaurant_id=False,
+        limit_key=f"order:{public_token}",
+        participant_token=participant_token if participant_session_token else None,
+        participant_session_token=participant_session_token,
+    )

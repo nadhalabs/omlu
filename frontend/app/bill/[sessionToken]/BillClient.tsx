@@ -8,9 +8,12 @@ import { buildWhatsAppBillShareUrl } from "@/lib/billShare";
 import { useRealtime } from "@/lib/realtime";
 import {
   clearLegacyPublicReceiptToken,
+  clearParticipantToken,
   clearPublicSessionToken,
+  clearSessionParticipantToken,
   hasSeenPaymentSuccess,
   markPaymentSuccessSeen,
+  readSessionParticipantToken,
 } from "@/lib/publicSessionStorage";
 
 interface BillClientProps {
@@ -24,9 +27,9 @@ export default function BillClient({ sessionToken }: BillClientProps) {
   const [error, setError] = useState<string | null>(null);
   const [language, setLanguage] = useState<"en" | "ml">("en");
   const [showPaymentSuccess, setShowPaymentSuccess] = useState<boolean>(false);
+  const [participantToken] = useState<string | null>(() => readSessionParticipantToken(sessionToken));
   const hasLoadedBillRef = useRef(false);
   const paidStatusRef = useRef<string | null>(null);
-
   const labels = {
     en: {
       title: "Table Bill",
@@ -182,7 +185,9 @@ export default function BillClient({ sessionToken }: BillClientProps) {
       }
 
       clearPublicSessionToken(data.restaurant_slug, data.table_code);
+      clearParticipantToken(data.restaurant_slug, data.table_code);
       clearLegacyPublicReceiptToken(data.restaurant_slug, data.table_code);
+      clearSessionParticipantToken(sessionToken);
 
       if (!hasLoadedBillRef.current && source === "initial") {
         markPaymentSuccessSeen(sessionToken, billKey);
@@ -211,7 +216,9 @@ export default function BillClient({ sessionToken }: BillClientProps) {
     ) => {
       if (showLoading) setLoading(true);
       try {
-        const data = await getPublicBill(sessionToken);
+        const authority = readSessionParticipantToken(sessionToken);
+        if (!authority) throw new ApiError(401, "Your access to this table has ended.");
+        const data = await getPublicBill(sessionToken, authority);
         applyFetchedBill(data, source);
       } catch (err) {
         if (err instanceof ApiError) {
@@ -244,7 +251,8 @@ export default function BillClient({ sessionToken }: BillClientProps) {
   }, [fetchBill]);
 
   useRealtime({
-    target: { kind: "session", token: sessionToken },
+    enabled: Boolean(participantToken),
+    target: { kind: "session", token: sessionToken, participantToken: participantToken || undefined },
     onEvent: () => void fetchBill(false, "event"),
     onReconnect: () => void fetchBill(false, "poll"),
   });

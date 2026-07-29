@@ -20,9 +20,10 @@ from app.models.staff_user import StaffUser
 from app.services.bills import calculate_gst_totals, generate_invoice_number, indian_financial_year
 from app.utils.auth import hash_password
 from tests.auth_helpers import create_session_access_token as create_access_token
+from tests.participant_helpers import ParticipantTestClient, authorize_existing_session, participant_headers
 
 
-client = TestClient(app)
+client = ParticipantTestClient(app)
 
 
 @pytest.fixture
@@ -153,6 +154,15 @@ def bill_context():
         "other_token": create_access_token({"sub": str(other_owner.id), "restaurant_id": other_restaurant.id, "role": "owner"}),
     }
     db.close()
+    authority = authorize_existing_session(
+        client,
+        data["restaurant_slug"],
+        data["table_code"],
+        data["session_token"],
+        {"Authorization": f"Bearer {data['owner_token']}"},
+    )
+    data["participant_token"] = authority["participant_token"]
+    client.register_authority(authority, data["restaurant_slug"], data["table_code"])
 
     yield data
 
@@ -200,7 +210,10 @@ def add_order(
 
 
 def create_bill(data):
-    return client.post(f"/public/sessions/{data['session_token']}/bill")
+    return client.post(
+        f"/public/sessions/{data['session_token']}/bill",
+        headers=participant_headers(data["participant_token"]),
+    )
 
 
 def issue_bill_for(data, token_key="owner_token"):
@@ -844,7 +857,10 @@ def test_empty_session_closure_racing_with_bill_creation_is_consistent(bill_cont
 
     def create_bill_request():
         local_client = TestClient(app)
-        return local_client.post(f"/public/sessions/{bill_context['session_token']}/bill")
+        return local_client.post(
+            f"/public/sessions/{bill_context['session_token']}/bill",
+            headers=participant_headers(bill_context["participant_token"]),
+        )
 
     def close_session():
         local_client = TestClient(app)
@@ -985,6 +1001,7 @@ def test_new_session_can_start_for_same_table_after_counter_payment(bill_context
     send_to_counter(bill_context, issued["bill_number"])
     confirm_counter_payment(bill_context, issued["bill_number"], method="counter_cash")
 
+    client.forget_table_authority(bill_context["restaurant_slug"], bill_context["table_code"])
     response = client.post(
         f"/public/restaurants/{bill_context['restaurant_slug']}/tables/{bill_context['table_code']}/orders",
         json={"items": [{"menu_item_id": bill_context["item_id"], "quantity": 1}]},
@@ -1026,6 +1043,7 @@ def test_paid_customer_data_is_isolated_from_fresh_qr_scan_and_new_session(bill_
     assert "payment_status" not in menu_body
     assert "receipt" not in menu_body
 
+    client.forget_table_authority(bill_context["restaurant_slug"], bill_context["table_code"])
     customer_b_order = client.post(
         f"/public/restaurants/{bill_context['restaurant_slug']}/tables/{bill_context['table_code']}/orders",
         json={"items": [{"menu_item_id": bill_context["item_id"], "quantity": 1}]},
@@ -1046,21 +1064,13 @@ def test_paid_customer_data_is_isolated_from_fresh_qr_scan_and_new_session(bill_
     assert customer_b_body["orders"][0]["items"][0]["item_name"] != "Customer A Item"
 
     customer_a_receipt = client.get(f"/public/sessions/{bill_context['session_token']}/bill")
-    assert customer_a_receipt.status_code == 200
-    customer_a_bill = customer_a_receipt.json()
-    assert customer_a_bill["session_token"] == bill_context["session_token"]
-    assert customer_a_bill["status"] == "paid"
-    assert customer_a_bill["orders"][0]["items"][0]["item_name"] == "Customer A Item"
+    assert customer_a_receipt.status_code == 401
 
     customer_b_bill_from_a_receipt = client.get(f"/public/sessions/{customer_b_token}/bill")
     assert customer_b_bill_from_a_receipt.status_code == 404
 
     customer_a_session = client.get(f"/public/sessions/{bill_context['session_token']}")
-    assert customer_a_session.status_code == 200
-    customer_a_body = customer_a_session.json()
-    assert customer_a_body["public_token"] == bill_context["session_token"]
-    assert customer_a_body["public_token"] != customer_b_token
-    assert customer_a_body["orders"][0]["public_token"] == customer_a_order_token
+    assert customer_a_session.status_code == 401
 
 
 def test_paid_bill_generation_returns_existing_paid_bill(bill_context):
@@ -1071,11 +1081,10 @@ def test_paid_bill_generation_returns_existing_paid_bill(bill_context):
 
     response = create_bill(bill_context)
 
-    assert response.status_code == 201
-    body = response.json()
-    assert body["bill_number"] == issued["bill_number"]
-    assert body["status"] == "paid"
-    assert body["payment_method"] == "counter_cash"
+    assert response.status_code == 401
+    db = SessionLocal()
+    assert db.query(Bill).filter(Bill.bill_number == issued["bill_number"], Bill.status == "paid").count() == 1
+    db.close()
 
 
 def test_historical_bill_remains_readable_without_payment_fields(bill_context):
@@ -1134,9 +1143,20 @@ def test_unique_bill_number(bill_context):
     ))
     db.commit()
     second_token = session.public_token
+    second_table_code = table.table_code
     db.close()
 
-    second = client.post(f"/public/sessions/{second_token}/bill").json()
+    authority = authorize_existing_session(
+        client,
+        bill_context["restaurant_slug"],
+        second_table_code,
+        second_token,
+        {"Authorization": f"Bearer {bill_context['owner_token']}"},
+    )
+    second = client.post(
+        f"/public/sessions/{second_token}/bill",
+        headers=participant_headers(authority["participant_token"]),
+    ).json()
 
     assert second["bill_number"] != first["bill_number"]
 
@@ -1146,7 +1166,10 @@ def test_concurrent_generation_creates_one_bill(bill_context):
 
     def submit():
         local_client = TestClient(app)
-        return local_client.post(f"/public/sessions/{bill_context['session_token']}/bill")
+        return local_client.post(
+            f"/public/sessions/{bill_context['session_token']}/bill",
+            headers=participant_headers(bill_context["participant_token"]),
+        )
 
     with ThreadPoolExecutor(max_workers=2) as executor:
         responses = list(executor.map(lambda _: submit(), range(2)))

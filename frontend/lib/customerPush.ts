@@ -54,7 +54,7 @@ export async function getCustomerPushConfig(): Promise<PushConfig> {
   });
 }
 
-export async function enableCustomerPush(sessionToken: string) {
+export async function enableCustomerPush(sessionToken: string, participantToken: string) {
   if (!customerPushSupported()) {
     throw new ApiError(400, "This browser does not support push notifications.");
   }
@@ -80,7 +80,7 @@ export async function enableCustomerPush(sessionToken: string) {
 
   await requestJson(`${publicBackendBaseUrl()}/public/sessions/${encodeURIComponent(sessionToken)}/push-subscriptions`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-Participant-Token": participantToken },
     body: JSON.stringify(subscription.toJSON()),
   });
 

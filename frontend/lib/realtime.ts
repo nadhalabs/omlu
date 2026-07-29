@@ -15,8 +15,8 @@ export type RealtimeEvent = {
 };
 
 type PublicTarget =
-  | { kind: "session"; token: string }
-  | { kind: "order"; token: string }
+  | { kind: "session"; token: string; participantToken?: string }
+  | { kind: "order"; token: string; participantToken?: string }
   | { kind: "menu"; restaurantSlug: string; tableCode: string };
 
 type StaffTarget = {
@@ -63,10 +63,14 @@ async function getStaffWsToken() {
 async function buildRealtimeUrl(target: PublicTarget | StaffTarget) {
   const base = websocketBaseUrl();
   if (target.kind === "session") {
-    return `${base}/ws/public/sessions/${encodeURIComponent(target.token)}`;
+    const params = new URLSearchParams();
+    if (target.participantToken) params.set("participant_token", target.participantToken);
+    return `${base}/ws/public/sessions/${encodeURIComponent(target.token)}?${params.toString()}`;
   }
   if (target.kind === "order") {
-    return `${base}/ws/public/orders/${encodeURIComponent(target.token)}`;
+    const params = new URLSearchParams();
+    if (target.participantToken) params.set("participant_token", target.participantToken);
+    return `${base}/ws/public/orders/${encodeURIComponent(target.token)}?${params.toString()}`;
   }
   if (target.kind === "menu") {
     return `${base}/ws/public/restaurants/${encodeURIComponent(target.restaurantSlug)}/tables/${encodeURIComponent(target.tableCode)}/menu`;
@@ -132,7 +136,7 @@ export function useRealtime({
         if (!active) return;
 
         socketRef.current?.close();
-        realtimeLog("connecting", { url, target: targetRef.current });
+        realtimeLog("connecting", { target: targetRef.current.kind });
         const socket = new WebSocket(url);
         socketRef.current = socket;
 

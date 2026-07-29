@@ -23,6 +23,7 @@ from app.services.dining_sessions import (
     get_or_create_open_session,
 )
 from app.services.order_pricing import validate_and_price_order_items
+from app.services.table_participants import enforce_session_action_rate, load_participant, participant_token_header
 from app.services.realtime import (
     EVENT_ORDER_CREATED,
     EVENT_SESSION_UPDATED,
@@ -201,6 +202,7 @@ def create_order_in_session(
     key_clean: str,
     created_by_staff_id: int | None = None,
     source: str = "customer_qr",
+    created_by_participant_id: int | None = None,
 ) -> Order:
     existing_order = db.query(Order).options(
             selectinload(Order.items).selectinload(OrderItem.selected_options),
@@ -251,6 +253,7 @@ def create_order_in_session(
             customer_note=order_req.customer_note,
             source=source,
             created_by_staff_id=created_by_staff_id,
+            created_by_participant_id=created_by_participant_id,
             idempotency_key=key_clean
         )
         db.add(new_order)
@@ -324,6 +327,7 @@ def create_public_order(
     order_req: PublicOrderCreateRequest,
     request: Request,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
+    participant_token: str = Depends(participant_token_header),
     db: Session = Depends(get_db)
 ):
     # 1. Rate limiting
@@ -371,8 +375,22 @@ def create_public_order(
             detail="Table is inactive"
         )
 
-    dining_session = get_orderable_session_for_table(db, restaurant, table)
-    new_order = create_order_in_session(db, restaurant, table, dining_session, order_req, key_clean)
+    dining_session = find_current_open_session_for_table(db, table.id)
+    if not dining_session:
+        raise HTTPException(status_code=409, detail="Start ordering to create secure table access.")
+    participant = load_participant(
+        db,
+        participant_token,
+        restaurant_id=restaurant.id,
+        table_id=table.id,
+        session_token=dining_session.public_token,
+        require_open_for_ordering=True,
+    )
+    enforce_session_action_rate(
+        db, dining_session, action="customer_order", ip_value=client_ip,
+        participant_token=participant_token, limit=15,
+    )
+    new_order = create_order_in_session(db, restaurant, table, dining_session, order_req, key_clean, created_by_participant_id=participant.id)
     db.commit()
     publish_event(
         EVENT_ORDER_CREATED,
@@ -393,11 +411,11 @@ def create_public_order(
 
 @router.get(
     "/public/restaurants/{restaurant_slug}/tables/{table_code}/session",
-    response_model=PublicDiningSessionResponse
 )
 def get_active_public_table_session(
     restaurant_slug: str,
     table_code: str,
+    participant_token: str = Depends(participant_token_header),
     db: Session = Depends(get_db)
 ):
     restaurant = db.query(Restaurant).filter(
@@ -430,6 +448,7 @@ def get_active_public_table_session(
             detail="No active table session found"
         )
 
+    load_participant(db, participant_token, restaurant_id=restaurant.id, table_id=table.id, session_token=dining_session.public_token)
     return build_session_response(db, dining_session)
 
 
@@ -439,6 +458,7 @@ def get_active_public_table_session(
 )
 def get_public_session(
     session_token: str,
+    participant_token: str = Depends(participant_token_header),
     db: Session = Depends(get_db)
 ):
     dining_session = db.query(DiningSession).filter(
@@ -448,6 +468,7 @@ def get_public_session(
     if not dining_session:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dining session not found")
 
+    load_participant(db, participant_token, session_token=session_token)
     return build_session_response(db, dining_session)
 
 
@@ -461,6 +482,7 @@ def create_public_session_order(
     order_req: PublicOrderCreateRequest,
     request: Request,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
+    participant_token: str = Depends(participant_token_header),
     db: Session = Depends(get_db)
 ):
     client_ip = request.client.host if request.client else "127.0.0.1"
@@ -490,6 +512,18 @@ def create_public_session_order(
     if not dining_session.table.is_active:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Table is inactive")
 
+    participant = load_participant(
+        db,
+        participant_token,
+        restaurant_id=dining_session.restaurant_id,
+        table_id=dining_session.table_id,
+        session_token=session_token,
+        require_open_for_ordering=True,
+    )
+    enforce_session_action_rate(
+        db, dining_session, action="customer_order", ip_value=client_ip,
+        participant_token=participant_token, limit=15,
+    )
     new_order = create_order_in_session(
         db,
         dining_session.restaurant,
@@ -497,6 +531,7 @@ def create_public_session_order(
         dining_session,
         order_req,
         key_clean,
+        created_by_participant_id=participant.id,
     )
     db.commit()
     publish_event(
@@ -529,6 +564,7 @@ def create_public_session_order(
 )
 def get_public_order(
     public_token: str,
+    x_participant_token: str | None = Header(None, alias="X-Participant-Token"),
     db: Session = Depends(get_db)
 ):
     order = db.query(Order).options(
@@ -545,6 +581,16 @@ def get_public_order(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Order not found"
+        )
+    if order.dining_session_id:
+        if not x_participant_token:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Join this table to continue")
+        load_participant(
+            db,
+            x_participant_token,
+            restaurant_id=order.restaurant_id,
+            table_id=order.table_id,
+            session_token=order.dining_session.public_token,
         )
 
     return build_order_response(db, order)

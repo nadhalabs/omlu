@@ -38,7 +38,7 @@ test("customer never sees the obsolete Owner/Admin staff-handoff wording", () =>
 test("bill workflow messages refresh from session realtime events", () => {
   assert.match(
     billClient,
-    /target:\s*\{\s*kind:\s*"session",\s*token:\s*sessionToken\s*\}/,
+    /target:\s*\{\s*kind:\s*"session",\s*token:\s*sessionToken,\s*participantToken:/,
   );
   assert.match(
     billClient,

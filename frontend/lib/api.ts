@@ -29,6 +29,7 @@ import {
   MenuImportResponse,
   MenuImportDraftItem,
 } from "./types";
+import { saveOrderParticipantToken } from "./publicSessionStorage";
 import {
   activateWebTenantScope,
   handleAuthenticationStatus,
@@ -121,7 +122,8 @@ export async function createPublicOrder(
   restaurantSlug: string,
   tableCode: string,
   body: PublicOrderCreateRequest,
-  idempotencyKey: string
+  idempotencyKey: string,
+  participantToken: string
 ): Promise<PublicOrderResponse> {
   const baseUrl = publicBackendBaseUrl();
   const url = `${baseUrl}/public/restaurants/${encodeURIComponent(
@@ -134,6 +136,7 @@ export async function createPublicOrder(
       headers: {
         "Content-Type": "application/json",
         "Idempotency-Key": idempotencyKey,
+        "X-Participant-Token": participantToken,
       },
       body: JSON.stringify(body),
     });
@@ -151,7 +154,9 @@ export async function createPublicOrder(
       throw new ApiError(response.status, message);
     }
 
-    return await response.json();
+    const order = await response.json();
+    saveOrderParticipantToken(order.public_token, participantToken);
+    return order;
   } catch (error) {
     if (error instanceof ApiError) {
       throw error;
@@ -161,7 +166,8 @@ export async function createPublicOrder(
 }
 
 export async function getPublicDiningSession(
-  sessionToken: string
+  sessionToken: string,
+  participantToken: string
 ): Promise<PublicDiningSessionResponse> {
   const baseUrl = publicBackendBaseUrl();
   const url = `${baseUrl}/public/sessions/${encodeURIComponent(sessionToken)}`;
@@ -172,6 +178,7 @@ export async function getPublicDiningSession(
       cache: "no-store",
       headers: {
         "Content-Type": "application/json",
+        "X-Participant-Token": participantToken,
       },
     });
 
@@ -233,10 +240,73 @@ export async function getActivePublicDiningSession(
   }
 }
 
+export type TableParticipantAuthority = {
+  participant_token: string;
+  participant: { public_id: string; joined_at: string; label: string };
+  session: { public_id: string; table_number: string; status: string };
+  join_code: string;
+  participant_count: number;
+};
+
+export async function getTableParticipantAuthority(
+  sessionToken: string,
+  participantToken: string
+): Promise<Omit<TableParticipantAuthority, "participant_token">> {
+  const response = await fetch(
+    `${publicBackendBaseUrl()}/public/sessions/${encodeURIComponent(sessionToken)}/participant`,
+    {
+      cache: "no-store",
+      headers: { "X-Participant-Token": participantToken },
+    }
+  );
+  const body = await response.json().catch(() => null);
+  if (!response.ok) throw new ApiError(response.status, body?.detail || "Table access has ended.");
+  return body;
+}
+
+export async function getTableSessionStatus(restaurantSlug: string, tableCode: string): Promise<{ occupied: boolean }> {
+  const response = await fetch(`${publicBackendBaseUrl()}/public/restaurants/${encodeURIComponent(restaurantSlug)}/tables/${encodeURIComponent(tableCode)}/session-status`, { cache: "no-store" });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) throw new ApiError(response.status, body?.detail || "Could not check table access.");
+  return body;
+}
+
+export async function startSecureTableSession(restaurantSlug: string, tableCode: string): Promise<TableParticipantAuthority> {
+  const response = await fetch(`${publicBackendBaseUrl()}/public/restaurants/${encodeURIComponent(restaurantSlug)}/tables/${encodeURIComponent(tableCode)}/sessions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Device-ID": getOrCreatePublicDeviceId() },
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) throw new ApiError(response.status, body?.detail || "Could not start table ordering.");
+  return body;
+}
+
+export async function joinSecureTableSession(restaurantSlug: string, tableCode: string, code: string): Promise<TableParticipantAuthority> {
+  const response = await fetch(`${publicBackendBaseUrl()}/public/restaurants/${encodeURIComponent(restaurantSlug)}/tables/${encodeURIComponent(tableCode)}/join`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code, device_id: getOrCreatePublicDeviceId() }),
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) throw new ApiError(response.status, body?.detail || "Could not join table.");
+  return body;
+}
+
+function getOrCreatePublicDeviceId(): string {
+  const key = "omlu_public_device_id";
+  let value = window.localStorage.getItem(key);
+  if (!value) {
+    value = crypto.randomUUID();
+    window.localStorage.setItem(key, value);
+  }
+  return value;
+}
+
 export async function addOrderToDiningSession(
   sessionToken: string,
   body: PublicOrderCreateRequest,
-  idempotencyKey: string
+  idempotencyKey: string,
+  participantToken: string
 ): Promise<PublicDiningSessionResponse> {
   const baseUrl = publicBackendBaseUrl();
   const url = `${baseUrl}/public/sessions/${encodeURIComponent(sessionToken)}/orders`;
@@ -247,6 +317,7 @@ export async function addOrderToDiningSession(
       headers: {
         "Content-Type": "application/json",
         "Idempotency-Key": idempotencyKey,
+        "X-Participant-Token": participantToken,
       },
       body: JSON.stringify(body),
     });
@@ -272,7 +343,8 @@ export async function addOrderToDiningSession(
 }
 
 export async function createOrRefreshPublicBill(
-  sessionToken: string
+  sessionToken: string,
+  participantToken = ""
 ): Promise<BillResponse> {
   const baseUrl = publicBackendBaseUrl();
   const url = `${baseUrl}/public/sessions/${encodeURIComponent(sessionToken)}/bill`;
@@ -280,7 +352,7 @@ export async function createOrRefreshPublicBill(
   try {
     const response = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-Participant-Token": participantToken },
     });
 
     if (!response.ok) {
@@ -301,8 +373,20 @@ export async function createOrRefreshPublicBill(
   }
 }
 
+export async function createOrRefreshStaffSessionBill(sessionToken: string): Promise<BillResponse> {
+  const response = await fetch(`/api/staff/sessions/${encodeURIComponent(sessionToken)}/bill`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "{}",
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) throw new ApiError(response.status, body?.detail || "Could not prepare the bill.");
+  return body;
+}
+
 export async function getPublicBill(
-  sessionToken: string
+  sessionToken: string,
+  participantToken = ""
 ): Promise<BillResponse> {
   const baseUrl = publicBackendBaseUrl();
   const url = `${baseUrl}/public/sessions/${encodeURIComponent(sessionToken)}/bill`;
@@ -311,7 +395,7 @@ export async function getPublicBill(
     const response = await fetch(url, {
       method: "GET",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-Participant-Token": participantToken },
     });
 
     if (!response.ok) {
@@ -419,7 +503,8 @@ export async function requestStaffPaymentAssistance(
 }
 
 export async function getPublicOrder(
-  publicToken: string
+  publicToken: string,
+  participantToken?: string | null
 ): Promise<PublicOrderResponse> {
   const baseUrl = publicBackendBaseUrl();
   const url = `${baseUrl}/public/orders/${encodeURIComponent(publicToken)}`;
@@ -429,6 +514,7 @@ export async function getPublicOrder(
       method: "GET",
       headers: {
         "Content-Type": "application/json",
+        ...(participantToken ? { "X-Participant-Token": participantToken } : {}),
       },
     });
 
@@ -1058,14 +1144,15 @@ export async function regenerateAdminTableCode(
 export async function createPublicServiceRequest(
   restaurantSlug: string,
   tableCode: string,
-  body: ServiceRequestCreate
+  body: ServiceRequestCreate,
+  participantToken = ""
 ): Promise<PublicServiceRequestResponse> {
   const baseUrl = publicBackendBaseUrl();
   const url = `${baseUrl}/public/restaurants/${encodeURIComponent(restaurantSlug)}/tables/${encodeURIComponent(tableCode)}/service-requests`;
   try {
     const res = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-Participant-Token": participantToken },
       body: JSON.stringify(body),
     });
     if (!res.ok) {
@@ -1083,10 +1170,10 @@ export async function createPublicServiceRequest(
   }
 }
 
-export async function requestPublicSessionBill(sessionToken: string): Promise<BillResponse> {
+export async function requestPublicSessionBill(sessionToken: string, participantToken: string): Promise<BillResponse> {
   const response = await fetch(
     `${publicBackendBaseUrl()}/public/sessions/${encodeURIComponent(sessionToken)}/bill-request`,
-    { method: "POST", headers: { "Content-Type": "application/json" } },
+    { method: "POST", headers: { "Content-Type": "application/json", "X-Participant-Token": participantToken } },
   );
   const body = await response.json().catch(() => null);
   if (!response.ok) throw new ApiError(response.status, body?.detail || "Failed to request bill.");

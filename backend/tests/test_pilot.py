@@ -84,7 +84,9 @@ def override_test_database(test_engine):
         app.dependency_overrides.update(previous_overrides)
 
 
-client = TestClient(app)
+from tests.participant_helpers import ParticipantTestClient
+
+client = ParticipantTestClient(app)
 
 
 
@@ -97,6 +99,7 @@ def clean_db(test_engine):
     """Drop and recreate tables before each test for isolation."""
     Base.metadata.drop_all(bind=test_engine)
     Base.metadata.create_all(bind=test_engine)
+    client.clear_participant_authorities()
     yield
 
 
@@ -138,6 +141,18 @@ def table(db, restaurant):
     db.commit()
     db.refresh(t)
     return t
+
+
+@pytest.fixture
+def participant_authority(restaurant, table):
+    response = client.post(
+        f"/public/restaurants/{restaurant.slug}/tables/{table.table_code}/sessions",
+        headers={"X-Device-ID": f"pilot-{uuid.uuid4().hex}"},
+    )
+    assert response.status_code == 201
+    authority = response.json()
+    client.register_authority(authority, restaurant.slug, table.table_code)
+    return authority
 
 
 @pytest.fixture
@@ -277,9 +292,10 @@ class TestHealthEndpoints:
 # ────────────────────────────────────────────────────────────
 
 class TestPublicServiceRequests:
-    def test_create_waiter_request(self, restaurant, table, placed_order):
+    def test_create_waiter_request(self, restaurant, table, placed_order, participant_authority):
         r = client.post(
             f"/public/restaurants/{restaurant.slug}/tables/{table.table_code}/service-requests",
+            headers={"X-Participant-Token": participant_authority["participant_token"]},
             json={"request_type": "waiter", "public_order_token": placed_order.public_token},
         )
         assert r.status_code == 201
@@ -290,88 +306,100 @@ class TestPublicServiceRequests:
         assert "table_id" not in data
         assert "resolved_by_staff_id" not in data
 
-    def test_create_water_request(self, restaurant, table):
+    def test_create_water_request(self, restaurant, table, participant_authority):
         r = client.post(
             f"/public/restaurants/{restaurant.slug}/tables/{table.table_code}/service-requests",
+            headers={"X-Participant-Token": participant_authority["participant_token"]},
             json={"request_type": "water"},
         )
         assert r.status_code == 201
 
-    def test_create_bill_request(self, restaurant, table):
+    def test_create_bill_request(self, restaurant, table, participant_authority):
         r = client.post(
             f"/public/restaurants/{restaurant.slug}/tables/{table.table_code}/service-requests",
+            headers={"X-Participant-Token": participant_authority["participant_token"]},
             json={"request_type": "bill"},
         )
         assert r.status_code == 422
 
-    def test_invalid_request_type_rejected(self, restaurant, table):
+    def test_invalid_request_type_rejected(self, restaurant, table, participant_authority):
         r = client.post(
             f"/public/restaurants/{restaurant.slug}/tables/{table.table_code}/service-requests",
+            headers={"X-Participant-Token": participant_authority["participant_token"]},
             json={"request_type": "coffee"},
         )
         assert r.status_code in (400, 422)
 
-    def test_service_request_ip_rate_limiting(self, table):
+    def test_service_request_ip_rate_limiting(self, table, participant_authority):
         """The public service-request endpoint should throttle by client IP."""
         for _ in range(5):
             r = client.post(
                 f"/public/restaurants/missing-restaurant/tables/{table.table_code}/service-requests",
+                headers={"X-Participant-Token": participant_authority["participant_token"]},
                 json={"request_type": "waiter"},
             )
             assert r.status_code == 404
 
         r = client.post(
             f"/public/restaurants/missing-restaurant/tables/{table.table_code}/service-requests",
+            headers={"X-Participant-Token": participant_authority["participant_token"]},
             json={"request_type": "waiter"},
         )
         assert r.status_code == 429
         assert "too many requests" in r.json()["detail"].lower()
 
-    def test_duplicate_pending_request_blocked(self, restaurant, table):
+    def test_duplicate_pending_request_blocked(self, restaurant, table, participant_authority):
         """Two requests of the same type when one is already pending should be blocked."""
         client.post(
             f"/public/restaurants/{restaurant.slug}/tables/{table.table_code}/service-requests",
+            headers={"X-Participant-Token": participant_authority["participant_token"]},
             json={"request_type": "waiter"},
         )
         r = client.post(
             f"/public/restaurants/{restaurant.slug}/tables/{table.table_code}/service-requests",
+            headers={"X-Participant-Token": participant_authority["participant_token"]},
             json={"request_type": "waiter"},
         )
         assert r.status_code == 429
 
-    def test_different_type_allowed_independently(self, restaurant, table):
+    def test_different_type_allowed_independently(self, restaurant, table, participant_authority):
         """Sending water after waiter is pending should work (different types)."""
         client.post(
             f"/public/restaurants/{restaurant.slug}/tables/{table.table_code}/service-requests",
+            headers={"X-Participant-Token": participant_authority["participant_token"]},
             json={"request_type": "waiter"},
         )
         r = client.post(
             f"/public/restaurants/{restaurant.slug}/tables/{table.table_code}/service-requests",
+            headers={"X-Participant-Token": participant_authority["participant_token"]},
             json={"request_type": "water"},
         )
         assert r.status_code == 201
 
-    def test_inactive_restaurant_rejected(self, db, restaurant, table):
+    def test_inactive_restaurant_rejected(self, db, restaurant, table, participant_authority):
         restaurant.is_active = False
         db.commit()
         r = client.post(
             f"/public/restaurants/{restaurant.slug}/tables/{table.table_code}/service-requests",
+            headers={"X-Participant-Token": participant_authority["participant_token"]},
             json={"request_type": "waiter"},
         )
         assert r.status_code == 404
 
-    def test_service_requests_disabled_blocked(self, db, restaurant, table):
+    def test_service_requests_disabled_blocked(self, db, restaurant, table, participant_authority):
         restaurant.service_requests_enabled = False
         db.commit()
         r = client.post(
             f"/public/restaurants/{restaurant.slug}/tables/{table.table_code}/service-requests",
+            headers={"X-Participant-Token": participant_authority["participant_token"]},
             json={"request_type": "waiter"},
         )
         assert r.status_code == 403
 
-    def test_invalid_order_token_rejected(self, restaurant, table):
+    def test_invalid_order_token_rejected(self, restaurant, table, participant_authority):
         r = client.post(
             f"/public/restaurants/{restaurant.slug}/tables/{table.table_code}/service-requests",
+            headers={"X-Participant-Token": participant_authority["participant_token"]},
             json={"request_type": "waiter", "public_order_token": "invalid-token-xyz"},
         )
         assert r.status_code == 400

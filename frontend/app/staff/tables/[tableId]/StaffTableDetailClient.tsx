@@ -3,20 +3,37 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { getStaffMe, resolveStaffServiceRequest } from "@/lib/api";
-import { getStaffTableDetail, requestStaffTableBill, StaffTableDetail } from "@/lib/staffTables";
+import {
+  getStaffTableDetail,
+  getStaffTableParticipants,
+  requestStaffTableBill,
+  revokeStaffTableParticipant,
+  rotateStaffTableJoinCode,
+  StaffTableDetail,
+  StaffTableParticipants,
+} from "@/lib/staffTables";
 import { useRealtime } from "@/lib/realtime";
 import { CurrentStaffResponse } from "@/lib/types";
+import { useOmluUi } from "@/components/OmluUiProvider";
 
 export default function StaffTableDetailClient({ tableId }: { tableId: number }) {
+  const { confirm: confirmDialog } = useOmluUi();
   const [detail, setDetail] = useState<StaffTableDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [staffInfo, setStaffInfo] = useState<CurrentStaffResponse | null>(null);
+  const [participants, setParticipants] = useState<StaffTableParticipants | null>(null);
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setDetail(await getStaffTableDetail(tableId));
+      const nextDetail = await getStaffTableDetail(tableId);
+      setDetail(nextDetail);
+      setParticipants(
+        nextDetail.session
+          ? await getStaffTableParticipants(nextDetail.session.session_token)
+          : null
+      );
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load table.");
@@ -66,6 +83,7 @@ export default function StaffTableDetailClient({ tableId }: { tableId: number })
   const sessionClosedForBilling = detail?.session?.status === "closed" || detail?.session?.status === "paid" || bill?.status === "paid";
   const canRequestBill = Boolean(detail?.session && hasValidOrder && !bill && !pendingBillRequest && !sessionClosedForBilling);
   const billUrl = detail?.session?.session_token ? `/bill/${encodeURIComponent(detail.session.session_token)}` : null;
+  const activeParticipants = participants?.participants.filter((participant) => !participant.revoked_at) || [];
   return (
     <div className="min-h-screen bg-zinc-950 px-3 py-5 text-zinc-100 sm:px-4 sm:py-8">
       <div className="mx-auto flex max-w-6xl flex-col gap-5">
@@ -150,6 +168,69 @@ export default function StaffTableDetailClient({ tableId }: { tableId: number })
                   {bill && <div className="mt-4 text-sm text-zinc-400">Bill {bill.bill_number} · ₹{bill.total_amount} · {bill.status}</div>}
                   {staffInfo?.role === "staff" && <div className="mt-3 text-xs text-zinc-500">Staff can generate and send the bill. Only Owner/Admin can record payment.</div>}
                 </div>
+              </div>
+            </section>
+            <section className="rounded-lg border border-zinc-800 bg-zinc-900 p-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="font-black text-white">Customer devices: {activeParticipants.length}</h2>
+                  <p className="mt-1 text-sm text-zinc-400">
+                    Current join code: <span className="font-black tracking-[0.18em] text-white">{participants?.join_code || "—"}</span>
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={Boolean(busy)}
+                  onClick={async () => {
+                    if (await confirmDialog({
+                      title: "Rotate join code?",
+                      message: "The previous code will stop working immediately. Already joined devices stay connected.",
+                      confirmLabel: "Rotate code",
+                    })) {
+                      void run("rotate-code", () => rotateStaffTableJoinCode(detail.session!.session_token));
+                    }
+                  }}
+                  className="rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm font-bold text-zinc-100 hover:border-orange-500 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Rotate code
+                </button>
+              </div>
+              <div className="mt-4 grid gap-2">
+                {participants?.participants.map((participant) => (
+                  <div key={participant.public_id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-zinc-950 px-3 py-2">
+                    <div className={participant.revoked_at ? "text-zinc-600" : "text-zinc-200"}>
+                      <span className="font-bold">{participant.label}</span>
+                      <span className="ml-2 text-xs">
+                        {participant.revoked_at ? "Revoked" : `Joined ${new Date(participant.joined_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`}
+                      </span>
+                    </div>
+                    {!participant.revoked_at && (
+                      <button
+                        type="button"
+                        disabled={Boolean(busy)}
+                        onClick={async () => {
+                          if (await confirmDialog({
+                            title: `Revoke ${participant.label}?`,
+                            message: "That device will immediately lose ordering and table-session access. Existing accepted orders remain unchanged.",
+                            confirmLabel: "Revoke device",
+                            tone: "destructive",
+                          })) {
+                            void run(
+                              `revoke-${participant.public_id}`,
+                              () => revokeStaffTableParticipant(detail.session!.session_token, participant.public_id)
+                            );
+                          }
+                        }}
+                        className="rounded-md border border-red-900/70 px-2.5 py-1.5 text-xs font-bold text-red-300 hover:border-red-600 hover:text-red-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Revoke
+                      </button>
+                    )}
+                  </div>
+                ))}
+                {participants && participants.participants.length === 0 && (
+                  <p className="text-sm text-zinc-500">No customer devices have joined.</p>
+                )}
               </div>
             </section>
             <section className="rounded-lg border border-zinc-800 bg-zinc-900 p-5">

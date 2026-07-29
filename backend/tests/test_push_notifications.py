@@ -10,6 +10,7 @@ from app.models.push_subscription import CustomerPushSubscription
 from app.models.restaurant import Restaurant
 from app.models.restaurant_table import RestaurantTable
 from app.services import push_notifications
+from app.services.table_participants import create_participant
 from app.services.realtime import (
     EVENT_BILL_PAID,
     EVENT_ORDER_STATUS_CHANGED,
@@ -43,11 +44,16 @@ def _setup_session(status="open"):
         status=status,
     )
     db.add(session)
+    db.flush()
+    participant_token = None
+    if status == "open":
+        _, participant_token = create_participant(db, session, "127.0.0.1", "push-test")
     db.commit()
     data = {
         "restaurant_id": restaurant.id,
         "session_id": session.id,
         "session_token": session.public_token,
+        "participant_token": participant_token,
     }
     db.close()
     return data
@@ -77,6 +83,7 @@ def test_customer_push_subscription_is_session_scoped(monkeypatch):
     try:
         response = client.post(
             f"/public/sessions/{data['session_token']}/push-subscriptions",
+            headers={"X-Participant-Token": data["participant_token"]},
             json=_subscription_payload(),
         )
 
@@ -92,6 +99,20 @@ def test_customer_push_subscription_is_session_scoped(monkeypatch):
         _cleanup(data["restaurant_id"])
 
 
+def test_customer_push_subscription_requires_participant_authority(monkeypatch):
+    data = _setup_session()
+    monkeypatch.setattr(settings, "vapid_public_key", "public-key")
+    monkeypatch.setattr(settings, "vapid_private_key", "private-key")
+    try:
+        response = client.post(
+            f"/public/sessions/{data['session_token']}/push-subscriptions",
+            json=_subscription_payload("unauthorized"),
+        )
+        assert response.status_code == 401
+    finally:
+        _cleanup(data["restaurant_id"])
+
+
 def test_customer_push_rejects_closed_session(monkeypatch):
     data = _setup_session(status="closed")
     monkeypatch.setattr(settings, "vapid_public_key", "public-key")
@@ -99,6 +120,7 @@ def test_customer_push_rejects_closed_session(monkeypatch):
     try:
         response = client.post(
             f"/public/sessions/{data['session_token']}/push-subscriptions",
+            headers={"X-Participant-Token": "closed-session-token"},
             json=_subscription_payload(),
         )
 

@@ -14,6 +14,7 @@ from app.schemas.push import (
     CustomerPushSubscriptionRequest,
     CustomerPushSubscriptionResponse,
 )
+from app.services.table_participants import enforce_session_action_rate, load_participant, participant_token_header
 
 
 router = APIRouter()
@@ -52,13 +53,20 @@ def create_customer_push_subscription(
     session_token: str,
     payload: CustomerPushSubscriptionRequest,
     request: Request,
+    participant_token: str = Depends(participant_token_header),
     db: Session = Depends(get_db),
 ):
-    _check_rate_limit(f"{request.client.host if request.client else 'unknown'}:{session_token[:12]}")
+    client_ip = request.client.host if request.client else "unknown"
+    _check_rate_limit(f"{client_ip}:{session_token[:12]}")
+    session = _active_session_or_404(db, session_token)
+    load_participant(db, participant_token, session_token=session_token, lock_for_action=True)
+    enforce_session_action_rate(
+        db, session, action="push_subscription", ip_value=client_ip,
+        participant_token=participant_token, limit=10, window_seconds=300,
+    )
     if not (settings.vapid_public_key and settings.vapid_private_key):
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Push notifications are not configured.")
 
-    session = _active_session_or_404(db, session_token)
     expires_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=settings.customer_push_ttl_seconds)
     endpoint = str(payload.endpoint)
     subscription = db.query(CustomerPushSubscription).filter(
@@ -91,11 +99,13 @@ def create_customer_push_subscription(
 def delete_customer_push_subscription(
     session_token: str,
     payload: CustomerPushSubscriptionRequest,
+    participant_token: str = Depends(participant_token_header),
     db: Session = Depends(get_db),
 ):
     session = db.query(DiningSession).filter(DiningSession.public_token == session_token).first()
     if not session:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dining session not found")
+    load_participant(db, participant_token, session_token=session_token, lock_for_action=True)
     db.query(CustomerPushSubscription).filter(
         CustomerPushSubscription.dining_session_id == session.id,
         CustomerPushSubscription.endpoint == str(payload.endpoint),

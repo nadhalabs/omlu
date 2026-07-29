@@ -6,7 +6,7 @@ import {
   getStaffServiceRequests,
   resolveStaffServiceRequest,
   confirmStaffCounterPayment,
-  createOrRefreshPublicBill,
+  createOrRefreshStaffSessionBill,
   getStaffMe,
   issueStaffBill,
   requestStaffPaymentAssistance,
@@ -143,7 +143,7 @@ export default function AdminRequestsClient() {
     try {
       const bill = req.bill_number
         ? null
-        : await createOrRefreshPublicBill(req.dining_session_token);
+        : await createOrRefreshStaffSessionBill(req.dining_session_token);
       const billNumber = req.bill_number || bill?.bill_number;
       if (!billNumber) {
         throw new Error("Bill could not be prepared.");
@@ -177,7 +177,7 @@ export default function AdminRequestsClient() {
     try {
       const bill = req.bill_number
         ? null
-        : await createOrRefreshPublicBill(req.dining_session_token);
+        : await createOrRefreshStaffSessionBill(req.dining_session_token);
       const billNumber = req.bill_number || bill?.bill_number;
       if (!billNumber) {
         throw new Error("Bill could not be prepared.");
@@ -213,7 +213,7 @@ export default function AdminRequestsClient() {
     try {
       const bill = req.bill_number
         ? null
-        : await createOrRefreshPublicBill(req.dining_session_token);
+        : await createOrRefreshStaffSessionBill(req.dining_session_token);
       const billNumber = req.bill_number || bill?.bill_number;
       if (!billNumber) {
         throw new Error("Bill could not be prepared.");

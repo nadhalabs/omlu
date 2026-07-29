@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     jwt_secret_key: str   # Required secret key for staff JWT token authentication
     jwt_algorithm: str = "HS256"
     jwt_access_token_minutes: int = 480
+    participant_hmac_secret: str | None = None
     redis_url: str | None = None
     vapid_public_key: str | None = None
     vapid_private_key: str | None = None

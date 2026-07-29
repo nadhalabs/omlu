@@ -24,6 +24,7 @@ from app.services.realtime import (
     session_channel,
     table_channel,
 )
+from app.services.table_participants import enforce_session_action_rate, load_participant, participant_token_header
 
 router = APIRouter()
 
@@ -60,6 +61,7 @@ def create_public_service_request(
     table_code: str,
     req_body: ServiceRequestCreate,
     request: Request,
+    participant_token: str = Depends(participant_token_header),
     db: Session = Depends(get_db)
 ):
     """Public endpoint: customer submits a service request from their table."""
@@ -101,6 +103,21 @@ def create_public_service_request(
     ).first()
     if not table:
         raise HTTPException(status_code=404, detail="Table not found or inactive")
+    authority_session = find_current_open_session_for_table(db, table.id)
+    if not authority_session:
+        raise HTTPException(status_code=401, detail="Join this table to continue")
+    load_participant(
+        db,
+        participant_token,
+        restaurant_id=restaurant.id,
+        table_id=table.id,
+        session_token=authority_session.public_token,
+        lock_for_action=True,
+    )
+    enforce_session_action_rate(
+        db, authority_session, action="service_request", ip_value=client_ip,
+        participant_token=participant_token, limit=5,
+    )
 
     # 6. If order token provided, validate it belongs to this restaurant and table
     order_id = None

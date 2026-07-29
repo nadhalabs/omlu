@@ -5,9 +5,12 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import {
   getPublicMenu,
-  createPublicOrder,
   getPublicDiningSession,
   addOrderToDiningSession,
+  getTableSessionStatus,
+  getTableParticipantAuthority,
+  joinSecureTableSession,
+  startSecureTableSession,
   ApiError,
 } from "@/lib/api";
 import {
@@ -20,6 +23,10 @@ import {
 import {
   clearLegacyPublicReceiptToken,
   clearPublicSessionToken,
+  clearParticipantToken,
+  readParticipantToken,
+  saveParticipantToken,
+  saveSessionParticipantToken,
   readPublicSessionToken,
   savePublicSessionToken,
 } from "@/lib/publicSessionStorage";
@@ -69,6 +76,13 @@ export default function MenuClient({
   const [sessionNotice, setSessionNotice] = useState<string | null>(null);
   const [sessionCompleteNotice, setSessionCompleteNotice] = useState<string | null>(null);
   const [expiredSessionNotice, setExpiredSessionNotice] = useState<string | null>(null);
+  const [participantToken, setParticipantToken] = useState<string | null>(null);
+  const [tableOccupied, setTableOccupied] = useState(false);
+  const [joinCode, setJoinCode] = useState("");
+  const [joinError, setJoinError] = useState<string | null>(null);
+  const [joining, setJoining] = useState(false);
+  const [visibleJoinCode, setVisibleJoinCode] = useState<string | null>(null);
+  const [participantCount, setParticipantCount] = useState(0);
 
   // Fetch menu data
   const fetchMenu = useCallback(async (showInitialLoader = false) => {
@@ -100,6 +114,18 @@ export default function MenuClient({
     }, 0);
     return () => window.clearTimeout(timeout);
   }, [fetchMenu]);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(async () => {
+      try {
+        const status = await getTableSessionStatus(restaurantSlug, tableCode);
+        setTableOccupied(status.occupied);
+      } catch {
+        // Menu browsing remains available if occupancy status cannot be loaded.
+      }
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [restaurantSlug, tableCode]);
 
   useRealtime({
     target: { kind: "menu", restaurantSlug, tableCode },
@@ -150,6 +176,7 @@ export default function MenuClient({
   ) => {
     const queryToken = new URLSearchParams(window.location.search).get("session");
     const savedToken = readPublicSessionToken(restaurantSlug, tableCode);
+    const savedParticipantToken = readParticipantToken(restaurantSlug, tableCode);
 
     setSessionLoading(true);
     clearLegacyPublicReceiptToken(restaurantSlug, tableCode);
@@ -161,7 +188,7 @@ export default function MenuClient({
     }
 
     const tokenToValidate = queryToken || savedToken;
-    if (!tokenToValidate) {
+    if (!tokenToValidate || !savedParticipantToken) {
       clearOrderingState();
       setSessionCompleteNotice(null);
       setExpiredSessionNotice(null);
@@ -171,7 +198,7 @@ export default function MenuClient({
     }
 
     try {
-      const session = await getPublicDiningSession(tokenToValidate);
+      const session = await getPublicDiningSession(tokenToValidate, savedParticipantToken);
       const belongsToThisTable =
         session.restaurant_slug === restaurantSlug &&
         session.table_code === tableCode;
@@ -203,6 +230,8 @@ export default function MenuClient({
       }
 
       savePublicSessionToken(restaurantSlug, tableCode, session.public_token);
+      setParticipantToken(savedParticipantToken);
+      setTableOccupied(true);
       clearLegacyPublicReceiptToken(restaurantSlug, tableCode);
       setSessionCompleteNotice(null);
       setExpiredSessionNotice(null);
@@ -214,6 +243,8 @@ export default function MenuClient({
       );
     } catch {
       clearPublicSessionToken(restaurantSlug, tableCode);
+      clearParticipantToken(restaurantSlug, tableCode);
+      setParticipantToken(null);
       clearLegacyPublicReceiptToken(restaurantSlug, tableCode);
       clearOrderingState();
       setSessionCompleteNotice(null);
@@ -234,6 +265,36 @@ export default function MenuClient({
     const timeout = window.setTimeout(() => void validateSavedSession(), 0);
     return () => window.clearTimeout(timeout);
   }, [validateSavedSession]);
+
+  const refreshParticipantAuthority = useCallback(async () => {
+    if (!participantToken || !currentSession) return;
+    try {
+      const authority = await getTableParticipantAuthority(currentSession.public_token, participantToken);
+      setVisibleJoinCode(authority.join_code);
+      setParticipantCount(authority.participant_count);
+      await validateSavedSession();
+    } catch (err) {
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        clearParticipantToken(restaurantSlug, tableCode);
+        clearPublicSessionToken(restaurantSlug, tableCode);
+        setParticipantToken(null);
+        setVisibleJoinCode(null);
+        clearOrderingState();
+        setExpiredSessionNotice("Your access to this table has ended. Scan the table QR again if a new session has started.");
+      }
+    }
+  }, [clearOrderingState, currentSession, participantToken, restaurantSlug, tableCode, validateSavedSession]);
+
+  useRealtime({
+    enabled: Boolean(participantToken && currentSession),
+    target: {
+      kind: "session",
+      token: currentSession?.public_token || "",
+      participantToken: participantToken || undefined,
+    },
+    onEvent: () => void refreshParticipantAuthority(),
+    onReconnect: () => void refreshParticipantAuthority(),
+  });
 
   useEffect(() => {
     const handlePageShow = (event: PageTransitionEvent) => {
@@ -446,25 +507,34 @@ export default function MenuClient({
         throw new ApiError(409, t.billLocked);
       }
 
-      const sessionResponse = currentSession?.status === "open"
+      let activeParticipantToken = participantToken;
+      let activeSession = currentSession;
+      if (!activeSession && !tableOccupied) {
+        const authority = await startSecureTableSession(restaurantSlug, tableCode);
+        activeParticipantToken = authority.participant_token;
+        setParticipantToken(authority.participant_token);
+        setVisibleJoinCode(authority.join_code);
+        setParticipantCount(authority.participant_count);
+        saveParticipantToken(restaurantSlug, tableCode, authority.participant_token);
+        savePublicSessionToken(restaurantSlug, tableCode, authority.session.public_id);
+        saveSessionParticipantToken(authority.session.public_id, authority.participant_token);
+        activeSession = await getPublicDiningSession(authority.session.public_id, authority.participant_token);
+        setCurrentSession(activeSession);
+        setTableOccupied(true);
+      }
+      if (!activeParticipantToken || !activeSession) {
+        throw new ApiError(401, "Enter the table’s 4-digit join code to order with this group.");
+      }
+      const sessionResponse = activeSession.status === "open"
         ? await addOrderToDiningSession(
-            currentSession.public_token,
+            activeSession.public_token,
             payload,
-            idempotencyKey
+            idempotencyKey,
+            activeParticipantToken,
           )
         : null;
 
-      const orderResponse = sessionResponse
-        ? null
-        : await createPublicOrder(
-            restaurantSlug,
-            tableCode,
-            payload,
-            idempotencyKey
-          );
-
-      const sessionToken =
-        sessionResponse?.public_token || orderResponse?.dining_session_token;
+      const sessionToken = sessionResponse?.public_token;
 
       if (!sessionToken) {
         throw new ApiError(500, "Order was placed, but no table session was returned.");
@@ -486,6 +556,50 @@ export default function MenuClient({
       }
     } finally {
       setIsPlacingOrder(false);
+    }
+  };
+
+  const handleJoinTable = async () => {
+    if (joining || !/^\d{4}$/.test(joinCode)) return;
+    setJoining(true);
+    setJoinError(null);
+    try {
+      const authority = await joinSecureTableSession(restaurantSlug, tableCode, joinCode);
+      saveParticipantToken(restaurantSlug, tableCode, authority.participant_token);
+      savePublicSessionToken(restaurantSlug, tableCode, authority.session.public_id);
+      saveSessionParticipantToken(authority.session.public_id, authority.participant_token);
+      setParticipantToken(authority.participant_token);
+      setVisibleJoinCode(authority.join_code);
+      setParticipantCount(authority.participant_count);
+      const session = await getPublicDiningSession(authority.session.public_id, authority.participant_token);
+      setCurrentSession(session);
+      setJoinCode("");
+    } catch (err) {
+      setJoinError(err instanceof ApiError ? err.message : "Could not join this table.");
+    } finally {
+      setJoining(false);
+    }
+  };
+
+  const handleStartOrdering = async () => {
+    if (joining) return;
+    setJoining(true);
+    setJoinError(null);
+    try {
+      const authority = await startSecureTableSession(restaurantSlug, tableCode);
+      saveParticipantToken(restaurantSlug, tableCode, authority.participant_token);
+      savePublicSessionToken(restaurantSlug, tableCode, authority.session.public_id);
+      saveSessionParticipantToken(authority.session.public_id, authority.participant_token);
+      setParticipantToken(authority.participant_token);
+      setVisibleJoinCode(authority.join_code);
+      setParticipantCount(authority.participant_count);
+      setCurrentSession(await getPublicDiningSession(authority.session.public_id, authority.participant_token));
+      setTableOccupied(true);
+    } catch (err) {
+      setTableOccupied(err instanceof ApiError && err.status === 409);
+      setJoinError(err instanceof ApiError ? err.message : "Could not start ordering.");
+    } finally {
+      setJoining(false);
     }
   };
 
@@ -590,7 +704,7 @@ export default function MenuClient({
   };
 
   const draftSelectedOptions = selectedOptionsFromDraft();
-  const orderingDisabled = Boolean(sessionCompleteNotice || expiredSessionNotice);
+  const orderingDisabled = Boolean(sessionCompleteNotice || expiredSessionNotice || (tableOccupied && !participantToken));
 
   Object.values(cart).forEach((line) => {
     const item = allItemsMap[line.menu_item_id];
@@ -682,6 +796,42 @@ export default function MenuClient({
                 </button>
               </div>
             </div>
+          )}
+
+          {tableOccupied && !participantToken && (
+            <section className="rounded-2xl border border-orange-200 bg-orange-50 p-4 dark:border-orange-900/50 dark:bg-orange-950/20" aria-labelledby="join-table-title">
+              <h2 id="join-table-title" className="font-black text-zinc-950 dark:text-white">Table already active</h2>
+              <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-300">Enter the 4-digit table code to join ordering. Ask someone at your table for the code.</p>
+              <div className="mt-3 flex gap-2">
+                <input
+                  value={joinCode}
+                  onChange={(event) => setJoinCode(event.target.value.replace(/\D/g, "").slice(0, 4))}
+                  inputMode="numeric"
+                  pattern="[0-9]{4}"
+                  maxLength={4}
+                  autoComplete="one-time-code"
+                  aria-label="4-digit table join code"
+                  className="min-w-0 flex-1 rounded-xl border border-zinc-300 bg-white px-4 py-3 text-center text-lg font-black tracking-[0.35em] text-zinc-950 outline-none focus:ring-2 focus:ring-orange-600"
+                />
+                <button disabled={joining || joinCode.length !== 4} onClick={handleJoinTable} className="rounded-xl bg-orange-600 px-5 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:text-zinc-600">{joining ? "Joining…" : "Join table"}</button>
+              </div>
+              {joinError && <p role="alert" className="mt-2 text-sm font-semibold text-red-700 dark:text-red-400">{joinError}</p>}
+            </section>
+          )}
+
+          {!tableOccupied && !participantToken && (
+            <section className="flex items-center justify-between gap-4 rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+              <div><p className="font-black">Ready to order?</p><p className="text-xs text-zinc-500">Start secure ordering for this table.</p></div>
+              <button disabled={joining} onClick={handleStartOrdering} className="shrink-0 rounded-xl bg-orange-600 px-5 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:text-zinc-600">{joining ? "Starting…" : "Start ordering"}</button>
+            </section>
+          )}
+
+          {participantToken && visibleJoinCode && (
+            <section className="rounded-2xl border border-zinc-200 bg-zinc-100 px-4 py-3 text-sm dark:border-zinc-800 dark:bg-zinc-900">
+              <p className="text-xs font-bold text-zinc-500">Table access</p>
+              <p className="mt-1 font-black">Join code: <span className="tracking-[0.2em]">{visibleJoinCode}</span></p>
+              <p className="text-xs text-zinc-500">{participantCount} device{participantCount === 1 ? "" : "s"} joined · Only share this code with people sitting at your table.</p>
+            </section>
           )}
 
           {sessionNotice && (
