@@ -25,6 +25,18 @@ The web runtime suite covers TSW-01 and TSW-06 at the client authority boundary:
 
 The native runtime suite exercises complete-scope equality/keying, persistent Restaurant A to Restaurant B isolation, application restart with a changed authority epoch, same numeric table identity across tenants, authoritative restaurant slug flow, cart/draft teardown, legacy-key deletion with preference preservation, teardown-before-B ordering, stale-response rejection, active and stale `401`, ordinary `403`, and real reconnect-timer cancellation. This covers the native portion of TSW-02–07 and TRT-07. Android WebView partition/navigation behavior and server-driven socket revocation remain unproven until P1.4/P1.5.
 
+### P1.4 WebView coverage
+
+The WebView authority runtime suite covers the embedded-browser portion of TSW-02 and TSW-06: explicit scope activation, logout and all native authority-invalidating signals, cookie/DOM/WebStorage/cache cleanup callback completion, anonymous login/register preservation, forced password-change access, privileged back/deep-link rejection after teardown, stale callback rejection, restart without remembered authority, ordinary `403` preservation, idempotent concurrent termination, and teardown-before-Account-B activation. Server-driven live-socket revocation remains P1.5.
+
+### P1.5 WebSocket coverage
+
+Database-backed live-socket tests cover HTTP-equivalent handshake rejection for expired tokens, unknown/revoked JTI, security-version mismatch, wrong restaurant, and role-inappropriate channels. Open sockets are then terminated by explicit logout, revoke-all, password reset, suspension, deletion, role change, and restaurant reassignment. Coverage includes multiple connections for one session, multiple sessions for one actor, Redis broker propagation across two instances, and lock-event preservation under the documented non-terminating lock policy.
+
+### P1.6 integrated status
+
+Host-side validation passes for backend HTTP/realtime, web scope/teardown, Flutter scope/persistence/teardown, WebView authority state, Android debug compilation, same-identifier isolation, and stale work. TSW-01–07 and TRT-07–08 have executable component/integration evidence. TSW-02 remains open for device-level WebView cookie/storage/process-restart observation, and distributed TRT revocation remains open for a real Redis multi-process drill; the two-broker fake Redis test is strong implementation evidence but not deployment evidence.
+
 ## Realtime and recovery
 
 | ID | Scenario | Required result |

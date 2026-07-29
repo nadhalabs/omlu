@@ -1,4 +1,6 @@
 import asyncio
+import datetime
+import os
 import uuid
 from decimal import Decimal
 
@@ -13,10 +15,19 @@ from app.models.menu import MenuCategory, MenuItem
 from app.models.order import Order
 from app.models.restaurant import Restaurant
 from app.models.restaurant_table import RestaurantTable
-from app.models.staff_user import StaffUser
+from app.models.staff_user import StaffSession, StaffUser
 from app.services import realtime
-from app.services.realtime import InMemoryRealtimeBroker, RedisRealtimeBroker, RealtimeEvent
-from app.utils.auth import hash_password
+from app.services.realtime import (
+    AuthorityRevocation,
+    InMemoryRealtimeBroker,
+    RedisRealtimeBroker,
+    RealtimeEvent,
+)
+from app.utils.auth import (
+    create_access_token as create_raw_access_token,
+    decode_access_token,
+    hash_password,
+)
 from tests.auth_helpers import create_session_access_token as create_access_token
 
 
@@ -105,6 +116,10 @@ def realtime_context():
         "table_id": table.id,
         "table_code": table.table_code,
         "item_id": item.id,
+        "owner_id": users["owner"].id,
+        "admin_id": users["admin"].id,
+        "staff_id": users["staff"].id,
+        "kitchen_id": users["kitchen"].id,
         "owner_token": create_access_token({"sub": str(users["owner"].id), "restaurant_id": restaurant.id, "role": "owner"}),
         "admin_token": create_access_token({"sub": str(users["admin"].id), "restaurant_id": restaurant.id, "role": "admin"}),
         "staff_token": create_access_token({"sub": str(users["staff"].id), "restaurant_id": restaurant.id, "role": "staff"}),
@@ -161,6 +176,12 @@ def receive_event(ws, event_type: str):
         if message.get("type") == event_type:
             return message
     raise AssertionError(f"Did not receive {event_type}")
+
+
+def assert_authority_close(ws):
+    message = ws.receive()
+    assert message["type"] == "websocket.close"
+    assert message["code"] == 1008
 
 
 def test_in_memory_broker_scopes_channels_and_unsubscribes():
@@ -268,6 +289,61 @@ def test_redis_broker_exchanges_events_between_instances():
     asyncio.run(run())
 
 
+def test_redis_broker_propagates_authority_revocation_between_instances():
+    async def run():
+        server = FakeRedisServer()
+        broker_a = RedisRealtimeBroker("redis://test", client_factory=server.client)
+        broker_b = RedisRealtimeBroker("redis://test", client_factory=server.client)
+        channel = realtime.authority_actor_channel(42)
+        subscriber_id, queue = await broker_b.subscribe({channel})
+        message = AuthorityRevocation(
+            actor_id=42,
+            restaurant_id=7,
+            reason="role_changed",
+        )
+
+        await broker_a._publish(message)
+
+        received = await asyncio.wait_for(queue.get(), timeout=1)
+        assert isinstance(received, AuthorityRevocation)
+        assert received.actor_id == 42
+        assert received.reason == "role_changed"
+        await broker_b.unsubscribe(subscriber_id)
+
+    asyncio.run(run())
+
+
+@pytest.mark.skipif(
+    not os.getenv("TEST_REDIS_URL"),
+    reason="Set TEST_REDIS_URL for the real Redis multi-process-equivalent drill.",
+)
+def test_real_redis_propagates_authority_revocation_between_brokers():
+    async def run():
+        redis_url = os.environ["TEST_REDIS_URL"]
+        broker_a = RedisRealtimeBroker(redis_url)
+        broker_b = RedisRealtimeBroker(redis_url)
+        actor_id = int(uuid.uuid4().int % 1_000_000_000)
+        channel = realtime.authority_actor_channel(actor_id)
+        subscriber_id, queue = await broker_b.subscribe({channel})
+        message = AuthorityRevocation(
+            actor_id=actor_id,
+            restaurant_id=7,
+            reason="real_redis_revocation_test",
+        )
+        try:
+            await broker_a._publish(message)
+            received = await asyncio.wait_for(queue.get(), timeout=3)
+            assert isinstance(received, AuthorityRevocation)
+            assert received.actor_id == actor_id
+            assert received.reason == message.reason
+        finally:
+            await broker_b.unsubscribe(subscriber_id)
+            await broker_a.shutdown()
+            await broker_b.shutdown()
+
+    asyncio.run(run())
+
+
 def test_staff_websocket_rejects_kitchen_user_from_staff_channel(realtime_context):
     with pytest.raises(WebSocketDisconnect):
         with client.websocket_connect(f"/ws/staff?channel=staff&token={realtime_context['kitchen_token']}"):
@@ -280,6 +356,220 @@ def test_kitchen_websocket_rejects_general_operations_channel(realtime_context):
             f"/ws/staff?channel=operations&token={realtime_context['kitchen_token']}"
         ):
             pass
+
+
+def test_staff_websocket_rejects_revoked_session_at_handshake(realtime_context):
+    payload = decode_access_token(realtime_context["staff_token"])
+    db = SessionLocal()
+    db.query(StaffSession).filter(
+        StaffSession.token_jti == payload["jti"],
+    ).update({"status": "revoked"})
+    db.commit()
+    db.close()
+
+    with pytest.raises(WebSocketDisconnect):
+        with client.websocket_connect(
+            f"/ws/staff?channel=staff&token={realtime_context['staff_token']}"
+        ):
+            pass
+
+
+def test_staff_websocket_rejects_security_version_mismatch(realtime_context):
+    db = SessionLocal()
+    staff = db.get(StaffUser, realtime_context["staff_id"])
+    staff.security_version = (staff.security_version or 0) + 1
+    db.commit()
+    db.close()
+
+    with pytest.raises(WebSocketDisconnect):
+        with client.websocket_connect(
+            f"/ws/staff?channel=staff&token={realtime_context['staff_token']}"
+        ):
+            pass
+
+
+def test_staff_websocket_rejects_expired_token(realtime_context):
+    expired = create_access_token(
+        {
+            "sub": str(realtime_context["staff_id"]),
+            "restaurant_id": realtime_context["restaurant_id"],
+            "role": "staff",
+        },
+        expires_delta=datetime.timedelta(seconds=-1),
+    )
+    with pytest.raises(WebSocketDisconnect):
+        with client.websocket_connect(f"/ws/staff?channel=staff&token={expired}"):
+            pass
+
+
+def test_staff_websocket_rejects_unknown_jti_and_cross_restaurant_claim(
+    realtime_context,
+):
+    unknown_jti = create_raw_access_token(
+        {
+            "sub": str(realtime_context["staff_id"]),
+            "restaurant_id": realtime_context["restaurant_id"],
+            "role": "staff",
+            "security_version": 0,
+            "jti": uuid.uuid4().hex,
+        }
+    )
+    wrong_restaurant = create_raw_access_token(
+        {
+            "sub": str(realtime_context["staff_id"]),
+            "restaurant_id": realtime_context["other_restaurant_id"],
+            "role": "staff",
+            "security_version": 0,
+            "jti": uuid.uuid4().hex,
+        }
+    )
+    for token in (unknown_jti, wrong_restaurant):
+        with pytest.raises(WebSocketDisconnect):
+            with client.websocket_connect(
+                f"/ws/staff?channel=staff&token={token}"
+            ):
+                pass
+
+
+def test_explicit_logout_disconnects_all_connections_for_session(realtime_context):
+    url = f"/ws/staff?channel=staff&token={realtime_context['staff_token']}"
+    with client.websocket_connect(url) as first, client.websocket_connect(url) as second:
+        assert first.receive_json()["type"] == "connection.ready"
+        assert second.receive_json()["type"] == "connection.ready"
+        response = client.post(
+            "/auth/staff/logout",
+            headers=auth(realtime_context),
+        )
+        assert response.status_code == 200
+        assert_authority_close(first)
+        assert_authority_close(second)
+
+
+def test_revoke_all_disconnects_live_staff_socket(realtime_context):
+    with client.websocket_connect(
+        f"/ws/staff?channel=staff&token={realtime_context['staff_token']}"
+    ) as ws:
+        assert ws.receive_json()["type"] == "connection.ready"
+        response = client.post(
+            f"/admin/staff/{realtime_context['staff_id']}/sessions/revoke",
+            headers=auth(realtime_context, "owner_token"),
+        )
+        assert response.status_code == 200
+        assert_authority_close(ws)
+
+
+def test_revoke_all_disconnects_multiple_sessions_for_actor(realtime_context):
+    second_token = create_access_token(
+        {
+            "sub": str(realtime_context["staff_id"]),
+            "restaurant_id": realtime_context["restaurant_id"],
+            "role": "staff",
+        }
+    )
+    first_url = f"/ws/staff?channel=staff&token={realtime_context['staff_token']}"
+    second_url = f"/ws/staff?channel=staff&token={second_token}"
+    with client.websocket_connect(first_url) as first, client.websocket_connect(
+        second_url
+    ) as second:
+        assert first.receive_json()["type"] == "connection.ready"
+        assert second.receive_json()["type"] == "connection.ready"
+        response = client.post(
+            f"/admin/staff/{realtime_context['staff_id']}/sessions/revoke",
+            headers=auth(realtime_context, "owner_token"),
+        )
+        assert response.status_code == 200
+        assert_authority_close(first)
+        assert_authority_close(second)
+
+
+def test_role_change_immediately_removes_old_channel_privilege(realtime_context):
+    with client.websocket_connect(
+        f"/ws/staff?channel=staff&token={realtime_context['staff_token']}"
+    ) as ws:
+        assert ws.receive_json()["type"] == "connection.ready"
+        response = client.patch(
+            f"/admin/staff/{realtime_context['staff_id']}",
+            headers=auth(realtime_context, "owner_token"),
+            json={"role": "kitchen"},
+        )
+        assert response.status_code == 200
+        assert_authority_close(ws)
+
+
+def test_suspension_disconnects_live_staff_socket(realtime_context):
+    with client.websocket_connect(
+        f"/ws/staff?channel=staff&token={realtime_context['staff_token']}"
+    ) as ws:
+        assert ws.receive_json()["type"] == "connection.ready"
+        response = client.patch(
+            f"/admin/staff/{realtime_context['staff_id']}",
+            headers=auth(realtime_context, "owner_token"),
+            json={"status": "suspended", "reason": "security test"},
+        )
+        assert response.status_code == 200
+        assert_authority_close(ws)
+
+
+def test_password_reset_disconnects_live_staff_socket(realtime_context):
+    with client.websocket_connect(
+        f"/ws/staff?channel=staff&token={realtime_context['staff_token']}"
+    ) as ws:
+        assert ws.receive_json()["type"] == "connection.ready"
+        response = client.post(
+            f"/admin/staff/{realtime_context['staff_id']}/reset-password",
+            headers=auth(realtime_context, "owner_token"),
+            json={"temporary_password": "654321"},
+        )
+        assert response.status_code == 200
+        assert_authority_close(ws)
+
+
+def test_deletion_disconnects_live_staff_socket(realtime_context):
+    with client.websocket_connect(
+        f"/ws/staff?channel=staff&token={realtime_context['staff_token']}"
+    ) as ws:
+        assert ws.receive_json()["type"] == "connection.ready"
+        response = client.delete(
+            f"/admin/staff/{realtime_context['staff_id']}",
+            headers=auth(realtime_context, "owner_token"),
+        )
+        assert response.status_code == 204
+        assert_authority_close(ws)
+
+
+def test_restaurant_reassignment_revalidation_ends_old_socket(realtime_context):
+    with client.websocket_connect(
+        f"/ws/staff?channel=staff&token={realtime_context['staff_token']}"
+    ) as ws:
+        assert ws.receive_json()["type"] == "connection.ready"
+        db = SessionLocal()
+        staff = db.get(StaffUser, realtime_context["staff_id"])
+        old_restaurant_id = staff.restaurant_id
+        staff.restaurant_id = realtime_context["other_restaurant_id"]
+        staff.security_version = (staff.security_version or 0) + 1
+        db.commit()
+        db.close()
+        realtime.publish_authority_revocation(
+            actor_id=realtime_context["staff_id"],
+            restaurant_id=old_restaurant_id,
+            reason="restaurant_reassigned",
+        )
+        assert_authority_close(ws)
+
+
+def test_operations_lock_preserves_socket_for_lock_event(realtime_context):
+    with client.websocket_connect(
+        f"/ws/staff?channel=staff&token={realtime_context['staff_token']}"
+    ) as ws:
+        assert ws.receive_json()["type"] == "connection.ready"
+        response = client.post(
+            f"/admin/staff/{realtime_context['staff_id']}/lock",
+            headers=auth(realtime_context, "owner_token"),
+            json={"reason": "pause operations", "confirm_active_operations": True},
+        )
+        assert response.status_code == 200
+        event = receive_event(ws, realtime.EVENT_STAFF_LOCKED)
+        assert event["state"]["staff_id"] == realtime_context["staff_id"]
 
 
 def test_staff_websocket_receives_order_created_after_commit(realtime_context):

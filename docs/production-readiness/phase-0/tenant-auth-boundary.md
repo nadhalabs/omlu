@@ -32,6 +32,30 @@ Legacy `omlu_reference_cache_v1_*`, `staff_access_v1_*`, `tables_all`, `staff_ca
 
 P1.3 does not change Android WebView navigation/storage, server WebSocket authorization or forced revocation, or Redis channel identity; those remain P1.4/P1.5 work.
 
+### P1.4 Android WebView implementation record
+
+`WebViewAuthorityRuntime` in `mobile-app/omlu_operations/lib/src/webview_authority_runtime.dart` replaces remembered-route authority with explicit `unknown → validating → authenticated(scope) → terminating → anonymous` state. The embedded browser activates only from the already validated native `FlutterTenantScope`; loading or remembering a privileged URL never establishes authority. Anonymous login/register routes are never rewritten, forced password-change routes remain reachable, and an anonymous or terminated runtime rejects privileged history/deep-link navigation.
+
+The WebView registers its idempotent teardown with the P1.3 native runtime. Web-origin logout/login navigation joins native logout, then clears DOM local/session storage, enumerable IndexedDB databases, WebView local storage, disk/memory cache, cookies, current URL, and remembered workspace before another scope may activate. Generation changes and scope removal make late page callbacks unable to restore Account A. Ordinary `403` has no termination transition. Runtime tests cover logout, `401`, expiry, revocation, suspension/deletion, role/restaurant changes, forced password change, stale callbacks, back/restart behavior, cleanup, concurrent termination, and A-to-B ordering.
+
+P1.4 does not alter the native download boundary assigned to P5.3 and does not implement server WebSocket authority or revocation.
+
+### P1.5 WebSocket authority implementation record
+
+`resolve_bearer_token_context` in `backend/app/utils/auth.py` exposes the canonical P1.1 resolver to non-HTTP bearer transports. `/ws/staff` now uses that resolver at handshake and at every event-delivery/heartbeat boundary, validating signature/expiry, actor, claimed/current restaurant, current database role/status, restaurant activity, security version, JTI, and active `StaffSession`. Channel permission is derived from the current database role.
+
+Every staff connection binds an immutable `StaffConnectionAuthority` containing a random connection ID, restaurant/actor IDs, role, opaque external authority epoch, HMAC-derived internal session key, connection time, and requested channel. It subscribes to actor, opaque-session, and restaurant authority channels in addition to its permitted operational channels. Raw JTI is never sent through Redis, client payloads, logs, or metrics.
+
+Logout emits a session-targeted disconnect after commit. Password/security changes, revoke-all, role changes, suspension/removal, password reset, and deletion emit actor-targeted disconnects after commit. Restaurant-wide authority messages are supported for restaurant deactivation/reassignment flows. The configured broker transports the same internal `AuthorityRevocation` message in memory or through Redis Pub/Sub; production configuration now requires Redis so revocation reaches every worker. Multiple sockets for one session and multiple sessions for one actor close with code `1008`.
+
+Current product policy treats global/individual operations locks and `open|closing|closed` operating status as write-policy restrictions, not identity termination. Those sockets remain connected to receive lock/status and later unlock/reopen events, while HTTP privileged writes return `403`. Periodic/event-boundary database revalidation is the missed-message and token-expiry backstop. Publication remains post-commit best effort rather than transactional outbox delivery; that durability gap remains P4.
+
+### P1.6 integrated validation record
+
+The database-backed backend suite, browser authority runtime, Flutter native persistence/generation suite, WebView authority runtime, debug Android compilation, and live TestClient WebSocket suite pass together. Covered cross-client invariants include complete-scope key separation, same numeric table isolation, A-to-B teardown ordering, epoch changes, late-response/stale-`401` rejection, reconnect cancellation, WebView workspace cleanup semantics, HTTP session enforcement, and live socket termination.
+
+Closure evidence is still incomplete in this environment. No Android device/emulator is connected, so the actual platform WebView cookie/DOM storage plugin calls cannot be observed across a real process restart. `redis-cli` is unavailable, so the Redis message path is validated with two independent `RedisRealtimeBroker` instances against the faithful fake Redis server, not a real Redis service with separate application processes. Exact remaining commands are an Android integration test on an attached emulator/device and the authority-revocation suite with `REDIS_URL` pointing to a disposable Redis instance. Until both pass, Phase 1 remains partially completed and the overall readiness decision remains NO-GO.
+
 ## Scope propagation contract
 
 | Location | Required namespace/validation |
@@ -67,12 +91,12 @@ An authenticated browser `401` always terminates. P1.2 preserves the session for
 
 ## WebSocket contract
 
-At handshake the server MUST perform the same authority load as HTTP and bind `{staff_id, restaurant_id, role, security_version, jti}` to the connection. A distributed revocation channel MUST close matching connections for session revoke, revoke-all, password/security version change, role/status/restaurant change, locks that terminate access, and restaurant deactivation. Heartbeats SHOULD revalidate at a bounded interval as a backstop.
+At handshake the server performs the same authority load as HTTP and binds canonical actor/restaurant/role/epoch plus an internal opaque session key to the connection. Redis-distributed revocation closes matching connections for session revoke, revoke-all, password/security version change, role/status/restaurant change, and restaurant deactivation. Event delivery and heartbeats revalidate against current database authority as a backstop.
 
 Clients MUST cancel reconnect before clearing credentials. Reconnect obtains a new short-lived WS credential; it MUST NOT reuse a terminated access token. Channel authorization is server-generated from role; callers cannot subscribe by naming arbitrary privileged channels. Public channel payloads use an allowlist and capability status is rechecked.
 
 ## WebView and native download boundary
 
-Authentication routes MUST never be rewritten to a remembered workspace. The shell MUST receive an explicit `auth.terminated` signal or observe login navigation, clear `_hasAuthenticatedWorkspace` and `_currentUri`, clear WebView identity stores, and replace history with `/login`. A newly authenticated identity starts a new partition.
+Authentication routes MUST never be rewritten to a remembered workspace. P1.4 implements this with the scope-bound `WebViewAuthorityRuntime`; native teardown or observed anonymous-auth navigation clears the remembered URL/workspace and WebView identity stores before returning to the native login root. A newly authenticated identity starts only after cleanup completes.
 
 Native downloads MUST accept only HTTPS URLs on an explicit configured host/path allowlist, reject redirects outside it, sanitize filenames/MIME types, avoid forwarding auth cookies to external origins, use scoped storage, and show origin/size/type before opening. APK distribution MUST include integrity/signing verification and version provenance.

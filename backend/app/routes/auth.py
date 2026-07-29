@@ -12,6 +12,7 @@ from app.schemas.auth import (
     StaffPasswordChangeRequest,
     StaffPasswordChangeResponse,
 )
+from app.services.realtime import publish_authority_revocation
 from app.utils.auth import (
     decode_access_token,
     normalize_email,
@@ -254,6 +255,11 @@ def change_password(
     access_token, expires_in_seconds = _issue_session_token(current_user, request, db)
     db.commit()
     db.refresh(current_user)
+    publish_authority_revocation(
+        actor_id=current_user.id,
+        restaurant_id=current_user.restaurant_id,
+        reason="password_changed",
+    )
     return {
         "access_token": access_token,
         "token_type": "bearer",
@@ -284,4 +290,11 @@ def logout(
             session.revoked_by_staff_id = current_user.id
     _audit(db, current_user, request, "logout")
     db.commit()
+    if token_jti:
+        publish_authority_revocation(
+            actor_id=current_user.id,
+            restaurant_id=current_user.restaurant_id,
+            reason="logout",
+            session_jti=token_jti,
+        )
     return {"success": True}

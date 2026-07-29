@@ -48,8 +48,10 @@ class Settings(BaseSettings):
                 raise ValueError("FRONTEND_URLS must contain only explicit production origins")
             if not self.public_frontend_url.startswith("https://"):
                 raise ValueError("PUBLIC_FRONTEND_URL must use HTTPS in production")
-            if self.require_redis and not self.redis_url:
-                raise ValueError("REDIS_URL is required when REQUIRE_REDIS=true")
+            if not self.redis_url:
+                raise ValueError(
+                    "REDIS_URL is required in production for distributed realtime authority revocation"
+                )
         return self
 
     model_config = SettingsConfigDict(

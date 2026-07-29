@@ -2,6 +2,8 @@
 
 Status: **complete as a specification; launch decision remains NO-GO**.
 
+Phase 1 implementation through P1.5 is present, but Phase 1 closure remains incomplete: P1.6 host-side suites pass, while device-level Android WebView storage verification and a real Redis multi-process revocation drill still require their respective test environments.
+
 This package defines the contracts that remediation MUST implement consistently in the FastAPI backend, PostgreSQL, Alembic, Next.js, Flutter, Android WebView, WebSockets, Redis, analytics, exports, background work, and tests. It is based on repository commit `f60574fade319987a928795cd4fdbe12975488d0` (readiness audit: 24/100). Phase 0 changes documentation only. It does not fix a vulnerability, change runtime behavior, migrate data, or make OMLU pilot-ready.
 
 ## Documents

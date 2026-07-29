@@ -34,6 +34,27 @@ void main() {
       },
     );
 
+    test('separates anonymous auth from forced password change', () {
+      expect(
+        policy.isAnonymousAuthRoute(
+          Uri.parse('https://omlu.example/register'),
+        ),
+        true,
+      );
+      expect(
+        policy.isAnonymousAuthRoute(
+          Uri.parse('https://omlu.example/staff/change-password'),
+        ),
+        false,
+      );
+      expect(
+        policy.isForcedPasswordChangeRoute(
+          Uri.parse('https://omlu.example/staff/change-password'),
+        ),
+        true,
+      );
+    });
+
     test('detects authenticated workspace routes and role roots', () {
       expect(
         policy.isAuthenticatedWorkspace(

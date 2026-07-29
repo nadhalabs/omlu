@@ -4,6 +4,9 @@ import json
 import logging
 import threading
 import uuid
+import base64
+import hashlib
+import hmac
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -36,6 +39,7 @@ EVENT_STAFF_ALL_LOCKED = "staff.all_locked"
 EVENT_STAFF_ALL_UNLOCKED = "staff.all_unlocked"
 EVENT_RESTAURANT_STATUS_CHANGED = "restaurant.status_changed"
 EVENT_QUICK_SALE_COMPLETED = "quick_sale.completed"
+AUTHORITY_REVOKED = "authority.revoked"
 
 
 @dataclass
@@ -166,6 +170,63 @@ class RealtimeEvent:
         )
 
 
+@dataclass(frozen=True)
+class AuthorityRevocation:
+    """Internal broker message. Session identity is HMAC-derived, never raw."""
+
+    actor_id: int | None
+    restaurant_id: int
+    reason: str
+    session_key: str | None = None
+    message_id: str = field(default_factory=lambda: uuid.uuid4().hex)
+
+    @property
+    def channels(self) -> tuple[str, ...]:
+        channels = [authority_restaurant_channel(self.restaurant_id)]
+        if self.actor_id is not None:
+            channels.append(authority_actor_channel(self.actor_id))
+        if self.session_key:
+            channels.append(authority_session_channel(self.session_key))
+        return tuple(channels)
+
+    def broker_payload(self) -> str:
+        return json.dumps(
+            {
+                "kind": AUTHORITY_REVOKED,
+                "id": self.message_id,
+                "actor_id": self.actor_id,
+                "restaurant_id": self.restaurant_id,
+                "reason": self.reason,
+                "session_key": self.session_key,
+                "channels": list(self.channels),
+            },
+            separators=(",", ":"),
+        )
+
+    @classmethod
+    def from_broker_payload(cls, payload: str | bytes) -> "AuthorityRevocation":
+        if isinstance(payload, bytes):
+            payload = payload.decode("utf-8")
+        data = json.loads(payload)
+        return cls(
+            actor_id=int(data["actor_id"]) if data.get("actor_id") is not None else None,
+            restaurant_id=int(data["restaurant_id"]),
+            reason=str(data["reason"]),
+            session_key=data.get("session_key"),
+            message_id=str(data["id"]),
+        )
+
+
+def broker_message_from_payload(
+    payload: str | bytes,
+) -> "RealtimeEvent | AuthorityRevocation":
+    raw = payload.decode("utf-8") if isinstance(payload, bytes) else payload
+    data = json.loads(raw)
+    if data.get("kind") == AUTHORITY_REVOKED:
+        return AuthorityRevocation.from_broker_payload(raw)
+    return RealtimeEvent.from_broker_payload(raw)
+
+
 _PUBLIC_STATE_DENYLIST = {
     "restaurant_id",
     "table_id",
@@ -199,7 +260,7 @@ class RealtimeBroker:
     async def unsubscribe(self, subscriber_id: str) -> None:
         raise NotImplementedError
 
-    def publish(self, event: RealtimeEvent) -> None:
+    def publish(self, event: RealtimeEvent | AuthorityRevocation) -> None:
         raise NotImplementedError
 
     async def health(self) -> dict[str, Any]:
@@ -223,7 +284,7 @@ class InMemoryRealtimeBroker(RealtimeBroker):
     async def subscribe(self, channels: set[str]):
         subscriber_id = uuid.uuid4().hex
         loop = asyncio.get_running_loop()
-        queue: asyncio.Queue[RealtimeEvent] = asyncio.Queue(maxsize=100)
+        queue: asyncio.Queue[RealtimeEvent | AuthorityRevocation] = asyncio.Queue(maxsize=100)
         async with self._lock:
             self._subscribers[subscriber_id] = (channels, loop, queue)
         return subscriber_id, queue
@@ -232,7 +293,7 @@ class InMemoryRealtimeBroker(RealtimeBroker):
         async with self._lock:
             self._subscribers.pop(subscriber_id, None)
 
-    def publish(self, event: RealtimeEvent) -> None:
+    def publish(self, event: RealtimeEvent | AuthorityRevocation) -> None:
         with _metrics_lock:
             metrics.publish_total += 1
         for channels, loop, queue in list(self._subscribers.values()):
@@ -347,7 +408,7 @@ class RedisRealtimeBroker(RealtimeBroker):
                 async for message in current_pubsub.listen():
                     if message.get("type") != "message":
                         continue
-                    event = RealtimeEvent.from_broker_payload(message["data"])
+                    event = broker_message_from_payload(message["data"])
                     try:
                         queue.put_nowait(event)
                     except asyncio.QueueFull:
@@ -406,7 +467,7 @@ class RedisRealtimeBroker(RealtimeBroker):
             metrics.redis_available = True
         return pubsub
 
-    def publish(self, event: RealtimeEvent) -> None:
+    def publish(self, event: RealtimeEvent | AuthorityRevocation) -> None:
         with _metrics_lock:
             metrics.publish_total += 1
         try:
@@ -418,7 +479,7 @@ class RedisRealtimeBroker(RealtimeBroker):
         except Exception as exc:
             logger.warning(
                 "realtime.redis.publish_schedule_failed event_type=%s channel_count=%d error=%s",
-                event.type,
+                getattr(event, "type", AUTHORITY_REVOKED),
                 len(event.channels),
                 exc.__class__.__name__,
             )
@@ -427,7 +488,7 @@ class RedisRealtimeBroker(RealtimeBroker):
                 metrics.redis_publish_failures += 1
                 metrics.redis_available = False
 
-    async def _publish(self, event: RealtimeEvent) -> None:
+    async def _publish(self, event: RealtimeEvent | AuthorityRevocation) -> None:
         client = self._new_client()
         try:
             payload = event.broker_payload()
@@ -504,6 +565,45 @@ def order_channel(public_token: str) -> str:
 
 def table_channel(restaurant_id: int, table_id: int) -> str:
     return f"restaurant:{restaurant_id}:table:{table_id}"
+
+
+def authority_session_key(session_jti: str) -> str:
+    digest = hmac.new(
+        settings.jwt_secret_key.encode("utf-8"),
+        session_jti.encode("utf-8"),
+        hashlib.sha256,
+    ).digest()
+    return base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
+
+
+def authority_session_channel(session_key: str) -> str:
+    return f"authority:session:{session_key}"
+
+
+def authority_actor_channel(actor_id: int) -> str:
+    return f"authority:actor:{actor_id}"
+
+
+def authority_restaurant_channel(restaurant_id: int) -> str:
+    return f"authority:restaurant:{restaurant_id}"
+
+
+def publish_authority_revocation(
+    *,
+    actor_id: int | None,
+    restaurant_id: int,
+    reason: str,
+    session_jti: str | None = None,
+) -> None:
+    """Force matching live sockets closed through the configured shared broker."""
+    broker.publish(
+        AuthorityRevocation(
+            actor_id=actor_id,
+            restaurant_id=restaurant_id,
+            reason=reason,
+            session_key=authority_session_key(session_jti) if session_jti else None,
+        )
+    )
 
 
 def publish_event(

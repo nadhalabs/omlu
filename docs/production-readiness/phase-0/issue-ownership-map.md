@@ -37,6 +37,10 @@ IDs and severities below preserve each supplied finding as separate acceptance c
 
 P1.3 closes the native Flutter cache/cart/provider portion of PR-001 and the native client teardown/reconnect portion of PR-002. PR-001 remains open for Android WebView partition/navigation validation, and PR-002 remains open for server WebSocket authority parity and revocation-driven disconnection.
 
+P1.4 implements the Android WebView remembered-workspace fix for PR-013 with scope-bound authority and executable teardown/navigation tests. Final closure still requires device-level WebView cookie/storage and process-restart observation; the unrelated native download trust boundary remains PR-029/P5.3. PR-002 remains open for P1.5.
+
+P1.5 implements the PR-002 Phase 1 authority boundary: staff sockets use the HTTP-equivalent resolver, bind canonical scope/session identity, receive broker-distributed targeted revocation, and revalidate before delivery/heartbeat. Live database-backed tests prove old sockets close for session and actor invalidation, and two broker instances prove Redis message semantics against a faithful fake. Final closure still requires a real Redis multi-process drill. Transactional durability of post-commit publication remains the general P4 outbox gap.
+
 ## New contradictions found during source inspection
 
 - Flutter’s `restaurantSlug` cart field is populated with `tableNumber` in two entry paths, not only one.

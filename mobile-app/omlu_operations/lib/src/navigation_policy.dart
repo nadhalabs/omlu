@@ -2,12 +2,19 @@ class NavigationPolicy {
   const NavigationPolicy();
 
   bool isAuthRoute(Uri uri) {
+    return isAnonymousAuthRoute(uri) || isForcedPasswordChangeRoute(uri);
+  }
+
+  bool isAnonymousAuthRoute(Uri uri) {
     final path = _normalizedPath(uri);
     return path == '/login' ||
         path == '/staff/login' ||
-        path == '/register' ||
-        path == '/staff/change-password' ||
-        path.contains('/change-password');
+        path == '/register';
+  }
+
+  bool isForcedPasswordChangeRoute(Uri uri) {
+    final path = _normalizedPath(uri);
+    return path == '/staff/change-password' || path.contains('/change-password');
   }
 
   bool isAuthenticatedWorkspace(Uri uri) {

@@ -242,6 +242,21 @@ def get_authenticated_context(
     return _resolve_authenticated_context(credentials, db)
 
 
+def resolve_bearer_token_context(
+    token: str,
+    db: Session,
+    *,
+    allow_password_change: bool = False,
+) -> AuthenticatedContext:
+    """Resolve non-HTTP bearer transports through the canonical authority path."""
+    credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
+    return _resolve_authenticated_context(
+        credentials,
+        db,
+        allow_password_change=allow_password_change,
+    )
+
+
 def get_authenticated_context_for_password_change(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_scheme),
     db: Session = Depends(get_db),

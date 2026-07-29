@@ -9,8 +9,9 @@ No phase begins its dependent work until prerequisite contract tests pass. Compa
 | P1.1 TenantScope + authority epoch | Phase 0 | auth utils/routes/schemas; web/Flutter models | Server-issued scope everywhere; no DB migration initially; old tokens rejected after rollout window; TSW-03, TRT-08; rollback feature flag only before new tokens required | Yes |
 | P1.2 Scoped storage/cache/cart | P1.1 | queryCache/public storage/MenuClient; Flutter cache/cart/providers | All keys scoped and legacy keys purged/quarantined; storage version migration; TSW-01–05 | Yes |
 | P1.3 Atomic teardown/account switch | P1.1–2 | web auth/realtime, Flutter auth/providers/realtime | One idempotent coordinator for all triggers; no schema migration; TSW-01–10, TRT-07 | Yes |
-| P1.4 WebView auth correctness | P1.3 | WebView shell/navigation policy/tests | Auth navigation wins and clears partition/history; TSW-02,06 | Yes |
-| P1.5 WS HTTP-parity authorization | P1.1, P1.3 | realtime route/service/Redis/clients | JTI/version/role/lock revalidation and disconnect; MAY need revocation registry; TRT-01–08 | Yes |
+| P1.4 WebView auth correctness | P1.3 | `webview_authority_runtime.dart`, WebView shell/navigation policy/tests | Implemented: scope-bound authority; auth navigation joins native teardown and clears cookies/DOM storage/cache/workspace; TSW-02,06 runtime coverage | Yes |
+| P1.5 WS HTTP-parity authorization | P1.1, P1.3 | canonical auth resolver, realtime route/service, Redis broker, auth/staff mutations | Implemented: active JTI/version/role/scope validation, targeted distributed disconnect, delivery/heartbeat revalidation; TRT-01–08 | Yes |
+| P1.6 Cross-client identity validation | P1.4–5 | backend/web/Flutter/WebView/realtime suites and deployment-like environments | Host suites and Android debug compile pass; closure blocked on attached-device WebView storage/restart test and real Redis multi-process revocation drill | Yes |
 
 Rollback: deploy clients that understand both old/new scope envelope first, then enforce server epoch. Never roll back to cross-scope cache reuse; purge instead.
 

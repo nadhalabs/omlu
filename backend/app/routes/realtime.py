@@ -1,8 +1,11 @@
 import asyncio
+import datetime
 import json
+import uuid
 from collections import Counter
+from dataclasses import dataclass
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session, joinedload
 
 from app.config import settings
@@ -11,8 +14,12 @@ from app.models.dining_session import ACTIVE_DINING_SESSION_STATUSES, DiningSess
 from app.models.order import Order
 from app.models.restaurant import Restaurant
 from app.models.restaurant_table import RestaurantTable
-from app.models.staff_user import StaffUser
 from app.services.realtime import (
+    AuthorityRevocation,
+    authority_actor_channel,
+    authority_restaurant_channel,
+    authority_session_channel,
+    authority_session_key,
     broker,
     order_channel,
     public_menu_channel,
@@ -23,7 +30,7 @@ from app.services.realtime import (
     session_channel,
     table_channel,
 )
-from app.utils.auth import decode_access_token
+from app.utils.auth import AuthenticatedContext, external_authority_epoch, resolve_bearer_token_context
 
 
 router = APIRouter()
@@ -41,22 +48,76 @@ _active_by_limit_key: Counter[str] = Counter()
 _connection_lock = asyncio.Lock()
 
 
-def _staff_from_token(db: Session, token: str | None) -> StaffUser | None:
+@dataclass(frozen=True, slots=True)
+class StaffConnectionAuthority:
+    connection_id: str
+    restaurant_id: int
+    actor_id: int
+    role: str
+    authority_epoch: str
+    session_key: str
+    connected_at: datetime.datetime
+    requested_channel: str
+
+
+def _staff_context_from_token(
+    db: Session,
+    token: str | None,
+) -> AuthenticatedContext | None:
     if not token:
         return None
-    payload = decode_access_token(token)
-    if not payload:
+    try:
+        return resolve_bearer_token_context(token, db)
+    except (HTTPException, TypeError, ValueError):
         return None
-    staff_id = payload.get("sub")
-    restaurant_id = payload.get("restaurant_id")
-    if not staff_id or not restaurant_id:
-        return None
-    return db.query(StaffUser).options(joinedload(StaffUser.restaurant)).filter(
-        StaffUser.id == int(staff_id),
-        StaffUser.restaurant_id == int(restaurant_id),
-        StaffUser.is_active == True,
-        StaffUser.status == "active",
-    ).first()
+
+
+def _connection_authority(
+    context: AuthenticatedContext,
+    requested: str,
+) -> StaffConnectionAuthority:
+    return StaffConnectionAuthority(
+        connection_id=uuid.uuid4().hex,
+        restaurant_id=context.scope.restaurant_id,
+        actor_id=context.scope.actor_id,
+        role=context.scope.role,
+        authority_epoch=external_authority_epoch(context.scope),
+        session_key=authority_session_key(context.session.token_jti),
+        connected_at=datetime.datetime.now(datetime.timezone.utc),
+        requested_channel=requested,
+    )
+
+
+def _is_current_staff_authority(
+    token: str,
+    authority: StaffConnectionAuthority,
+) -> bool:
+    db = SessionLocal()
+    try:
+        context = _staff_context_from_token(db, token)
+        if context is None:
+            return False
+        return (
+            context.scope.restaurant_id == authority.restaurant_id
+            and context.scope.actor_id == authority.actor_id
+            and context.scope.role == authority.role
+            and external_authority_epoch(context.scope) == authority.authority_epoch
+            and authority.requested_channel
+            in ROLE_CHANNELS.get(context.scope.role, set())
+        )
+    finally:
+        db.close()
+
+
+def _revokes_connection(
+    message: AuthorityRevocation,
+    authority: StaffConnectionAuthority,
+) -> bool:
+    if message.restaurant_id != authority.restaurant_id:
+        return False
+    if message.actor_id is not None and message.actor_id != authority.actor_id:
+        return False
+    return message.session_key is None or message.session_key == authority.session_key
 
 
 def _is_allowed_read_only_client_message(message: dict) -> bool:
@@ -119,7 +180,15 @@ async def _release_connection(websocket: WebSocket, limit_key: str) -> None:
         record_connection_closed()
 
 
-async def _event_loop(websocket: WebSocket, channels: set[str], *, include_restaurant_id: bool, limit_key: str) -> None:
+async def _event_loop(
+    websocket: WebSocket,
+    channels: set[str],
+    *,
+    include_restaurant_id: bool,
+    limit_key: str,
+    staff_authority: StaffConnectionAuthority | None = None,
+    staff_token: str | None = None,
+) -> None:
     if not await _acquire_connection(websocket, limit_key):
         await websocket.close(code=1013)
         return
@@ -150,6 +219,17 @@ async def _event_loop(websocket: WebSocket, channels: set[str], *, include_resta
                 break
             if event_task in done:
                 event = event_task.result()
+                if isinstance(event, AuthorityRevocation):
+                    if staff_authority and _revokes_connection(event, staff_authority):
+                        await websocket.close(code=1008)
+                        break
+                    continue
+                if staff_authority and (
+                    not staff_token
+                    or not _is_current_staff_authority(staff_token, staff_authority)
+                ):
+                    await websocket.close(code=1008)
+                    break
                 try:
                     await websocket.send_json(event.public_payload(include_restaurant_id=include_restaurant_id))
                     record_delivery(event, success=True)
@@ -157,6 +237,12 @@ async def _event_loop(websocket: WebSocket, channels: set[str], *, include_resta
                     record_delivery(event, success=False)
                     raise
             else:
+                if staff_authority and (
+                    not staff_token
+                    or not _is_current_staff_authority(staff_token, staff_authority)
+                ):
+                    await websocket.close(code=1008)
+                    break
                 await websocket.send_json({"type": "heartbeat"})
     except WebSocketDisconnect:
         pass
@@ -172,19 +258,32 @@ async def staff_realtime(websocket: WebSocket):
     requested = websocket.query_params.get("channel", "operations")
     db = SessionLocal()
     try:
-        staff = _staff_from_token(db, token)
-        if not staff or not staff.restaurant or not staff.restaurant.is_active:
+        context = _staff_context_from_token(db, token)
+        if context is None:
             await websocket.close(code=1008)
             return
-        if requested not in ROLE_CHANNELS.get(staff.role, set()):
+        if requested not in ROLE_CHANNELS.get(context.scope.role, set()):
             await websocket.close(code=1008)
             return
-        channels = {restaurant_channel(staff.restaurant_id, requested)}
-        if staff.role != "kitchen":
-            channels.add(restaurant_channel(staff.restaurant_id, "operations"))
+        authority = _connection_authority(context, requested)
+        channels = {
+            restaurant_channel(authority.restaurant_id, requested),
+            authority_actor_channel(authority.actor_id),
+            authority_session_channel(authority.session_key),
+            authority_restaurant_channel(authority.restaurant_id),
+        }
+        if authority.role != "kitchen":
+            channels.add(restaurant_channel(authority.restaurant_id, "operations"))
     finally:
         db.close()
-    await _event_loop(websocket, channels, include_restaurant_id=True, limit_key=f"staff:{staff.restaurant_id}:{requested}")
+    await _event_loop(
+        websocket,
+        channels,
+        include_restaurant_id=True,
+        limit_key=f"staff-session:{authority.session_key}",
+        staff_authority=authority,
+        staff_token=token,
+    )
 
 
 @router.websocket("/ws/public/sessions/{session_token}")

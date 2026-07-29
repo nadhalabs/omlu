@@ -25,7 +25,8 @@ from app.schemas.staff_management import (
 )
 from app.services.realtime import (
     EVENT_RESTAURANT_STATUS_CHANGED, EVENT_STAFF_ALL_LOCKED, EVENT_STAFF_ALL_UNLOCKED,
-    EVENT_STAFF_LOCKED, EVENT_STAFF_UNLOCKED, publish_event, restaurant_channel,
+    EVENT_STAFF_LOCKED, EVENT_STAFF_UNLOCKED, publish_authority_revocation,
+    publish_event, restaurant_channel,
 )
 from app.utils.auth import RoleChecker, hash_password
 from app.utils.validation import (
@@ -321,6 +322,7 @@ def update_staff_account(
 
     previous = {"role": target.role, "status": target.status, "is_active": target.is_active}
     action = "user_updated"
+    authority_changed = False
 
     if body.role is not None:
         role = body.role.strip().lower()
@@ -333,6 +335,7 @@ def update_staff_account(
             target.security_version = (target.security_version or 0) + 1
             _revoke_sessions(db, target, current_user)
             action = "role_changed"
+            authority_changed = True
 
     if body.status is not None:
         new_status = body.status.strip().lower()
@@ -349,6 +352,7 @@ def update_staff_account(
             target.security_version = (target.security_version or 0) + 1
             _revoke_sessions(db, target, current_user)
             action = "user_removed" if new_status == "removed" else "user_suspended"
+            authority_changed = True
         elif new_status == "active":
             target.disabled_at = None
             target.disabled_by_staff_id = None
@@ -366,6 +370,12 @@ def update_staff_account(
     )
     db.commit()
     db.refresh(target)
+    if authority_changed:
+        publish_authority_revocation(
+            actor_id=target.id,
+            restaurant_id=target.restaurant_id,
+            reason=action,
+        )
     sessions = db.query(StaffSession).filter(StaffSession.staff_user_id == target.id).all()
     return _serialize_staff(target, sessions)
 
@@ -401,6 +411,11 @@ def reset_staff_password(
     _audit(db, current_user, request, "pin_reset" if target.role in {"staff", "kitchen"} else "password_reset_initiated", target)
     db.commit()
     db.refresh(target)
+    publish_authority_revocation(
+        actor_id=target.id,
+        restaurant_id=target.restaurant_id,
+        reason="password_reset",
+    )
     return _serialize_staff(target, [])
 
 
@@ -422,6 +437,11 @@ def revoke_staff_sessions(
     _audit(db, current_user, request, "active_sessions_revoked", target, new_value={"revoked": revoked})
     db.commit()
     db.refresh(target)
+    publish_authority_revocation(
+        actor_id=target.id,
+        restaurant_id=target.restaurant_id,
+        reason="sessions_revoked",
+    )
     sessions = db.query(StaffSession).filter(StaffSession.staff_user_id == target.id).all()
     return _serialize_staff(target, sessions)
 
@@ -450,4 +470,9 @@ def remove_staff_access(
     _revoke_sessions(db, target, current_user)
     _audit(db, current_user, request, "user_removed", target, previous_value=previous)
     db.commit()
+    publish_authority_revocation(
+        actor_id=target.id,
+        restaurant_id=target.restaurant_id,
+        reason="user_removed",
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
