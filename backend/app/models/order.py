@@ -48,6 +48,7 @@ class Order(Base):
         ),
         index=True
     )
+    cancellation_reason: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     subtotal: Mapped[Decimal] = mapped_column(
         Numeric(10, 2),
         CheckConstraint("subtotal >= 0", name="chk_order_subtotal_positive")

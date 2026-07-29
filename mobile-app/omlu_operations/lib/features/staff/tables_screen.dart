@@ -85,6 +85,16 @@ class TablesScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tablesState = ref.watch(tablesProvider);
+    ref.listen(forcedSessionClosureNoticeProvider, (previous, next) {
+      if (next == null || next == previous) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(next)));
+        ref.read(forcedSessionClosureNoticeProvider.notifier).state = null;
+      });
+    });
 
     return Scaffold(
       appBar: AppBar(
@@ -211,13 +221,21 @@ class TablesScreen extends ConsumerWidget {
                                     vertical: 4,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: statusColor.withValues(alpha: 0.12),
+                                    color:
+                                        (table.emptyTableReport != null
+                                                ? OmluColors.statusPreparing
+                                                : statusColor)
+                                            .withValues(alpha: 0.12),
                                     borderRadius: OmluRadius.borderSm,
                                   ),
                                   child: Text(
-                                    status,
+                                    table.emptyTableReport != null
+                                        ? 'Empty reported'
+                                        : status,
                                     style: OmluTypography.label.copyWith(
-                                      color: statusColor,
+                                      color: table.emptyTableReport != null
+                                          ? OmluColors.statusPreparing
+                                          : statusColor,
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),

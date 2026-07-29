@@ -161,6 +161,7 @@ def _order_row(order: Order, staff_names: dict[int, str]) -> dict:
         "session_token": order.dining_session.public_token if order.dining_session else None,
         "item_count": item_count,
         "status": order.status,
+        "cancellation_reason": order.cancellation_reason,
         "total": _money(order.subtotal),
         "accepted_by": staff_names.get(accepted_by_id) if accepted_by_id else None,
         "served_by": staff_names.get(served_by_id) if served_by_id else None,

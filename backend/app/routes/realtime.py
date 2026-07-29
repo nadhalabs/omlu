@@ -17,6 +17,7 @@ from app.models.restaurant_table import RestaurantTable
 from app.services.realtime import (
     AuthorityRevocation,
     EVENT_BILL_PAID,
+    EVENT_SESSION_FORCE_CLOSED,
     authority_actor_channel,
     authority_restaurant_channel,
     authority_session_channel,
@@ -243,14 +244,14 @@ async def _event_loop(
                         participant_is_current = False
                     finally:
                         authority_db.close()
-                terminal_payment = (
+                terminal_session_event = (
                     not participant_is_current
-                    and event.type == EVENT_BILL_PAID
+                    and event.type in {EVENT_BILL_PAID, EVENT_SESSION_FORCE_CLOSED}
                     and event.state.get("session_token") == participant_session_token
                 )
-                if not participant_is_current and not terminal_payment:
+                if not participant_is_current and not terminal_session_event:
                     # Revocation blocks already-queued active-session events, but
-                    # the payment terminal is allowed to cross this boundary once.
+                    # the session terminal is allowed to cross this boundary once.
                     continue
                 try:
                     await websocket.send_json(event.public_payload(include_restaurant_id=include_restaurant_id))
@@ -258,7 +259,7 @@ async def _event_loop(
                 except Exception:
                     record_delivery(event, success=False)
                     raise
-                if terminal_payment:
+                if terminal_session_event:
                     await websocket.close(code=1000)
                     break
             else:

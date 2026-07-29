@@ -1,4 +1,6 @@
+import datetime
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
 
 import pytest
@@ -6,13 +8,16 @@ import pytest
 from app.database import SessionLocal
 from app.main import app
 from app.models.bill import Bill
-from app.models.dining_session import DiningSession
+from app.models.dining_session import ACTIVE_DINING_SESSION_STATUSES, DiningSession
+from app.models.empty_table_report import EmptyTableReport
 from app.models.menu import MenuCategory, MenuItem
 from app.models.order import Order, OrderStatusHistory
 from app.models.restaurant import Restaurant
 from app.models.restaurant_table import RestaurantTable
 from app.models.service_request import ServiceRequest
 from app.models.staff_user import AuditLog, StaffUser
+from app.models.table_session_participant import TableSessionParticipant
+from app.services.table_participants import create_participant, ensure_join_authority
 from app.utils.auth import hash_password
 from tests.auth_helpers import create_session_access_token as create_access_token
 
@@ -178,6 +183,236 @@ def request_staff_table_bill(data, table_key="table_id", token_key="staff_token"
         headers=auth(data, token_key),
         json={},
     )
+
+
+def report_empty(data, token_key="staff_token", session_token=None):
+    if session_token is None:
+        db = SessionLocal()
+        session_token = db.query(DiningSession.public_token).filter(
+            DiningSession.restaurant_id == data["restaurant_id"],
+            DiningSession.table_id == data["table_id"],
+            DiningSession.status.in_(ACTIVE_DINING_SESSION_STATUSES),
+        ).scalar()
+        db.close()
+    return client.post(
+        f"/staff/tables/{data['table_id']}/empty-table-report",
+        headers=auth(data, token_key),
+        json={"session_token": session_token},
+    )
+
+
+def test_empty_table_report_permissions_duplicates_and_dismissal(staff_order_context):
+    start_session(staff_order_context)
+    created = report_empty(staff_order_context)
+    assert created.status_code == 201
+    assert created.json()["status"] == "open"
+    assert created.json()["session_token"]
+    assert report_empty(staff_order_context).status_code == 409
+    assert report_empty(staff_order_context, "kitchen_token").status_code == 403
+    assert client.post(
+        f"/staff/tables/{staff_order_context['table_id']}/empty-table-report/dismiss",
+        headers=auth(staff_order_context, "staff_token"),
+        json={},
+    ).status_code == 403
+    dismissed = client.post(
+        f"/staff/tables/{staff_order_context['table_id']}/empty-table-report/dismiss",
+        headers=auth(staff_order_context, "admin_token"),
+        json={},
+    )
+    assert dismissed.status_code == 200
+    assert report_empty(staff_order_context).status_code == 201
+
+
+def test_empty_table_report_requires_expected_session_token(staff_order_context):
+    start_session(staff_order_context)
+    response = client.post(
+        f"/staff/tables/{staff_order_context['table_id']}/empty-table-report",
+        headers=auth(staff_order_context),
+        json={},
+    )
+    assert response.status_code == 422
+
+
+def test_empty_table_report_rejects_replacement_session_after_preflight(staff_order_context):
+    original = start_session(staff_order_context).json()
+    original_token = original["session_token"]
+    db = SessionLocal()
+    original_session = db.query(DiningSession).filter(
+        DiningSession.restaurant_id == staff_order_context["restaurant_id"],
+        DiningSession.public_token == original_token,
+    ).one()
+    original_session.status = "closed"
+    original_session.closed_at = datetime.datetime.now(datetime.timezone.utc)
+    db.commit()
+    db.close()
+
+    replacement = start_session(staff_order_context)
+    assert replacement.status_code == 201
+    replacement_token = replacement.json()["session_token"]
+    assert replacement_token != original_token
+
+    stale_submission = report_empty(
+        staff_order_context,
+        session_token=original_token,
+    )
+    assert stale_submission.status_code == 409
+    assert stale_submission.json()["detail"] == (
+        "This table session changed. Refresh and try again."
+    )
+
+    db = SessionLocal()
+    replacement_session = db.query(DiningSession).filter(
+        DiningSession.restaurant_id == staff_order_context["restaurant_id"],
+        DiningSession.public_token == replacement_token,
+    ).one()
+    assert db.query(EmptyTableReport).filter(
+        EmptyTableReport.session_id == replacement_session.id,
+    ).count() == 0
+    db.close()
+
+
+def test_empty_table_report_tenant_isolation(staff_order_context):
+    start_session(staff_order_context)
+    report_empty(staff_order_context)
+    assert client.post(
+        f"/staff/tables/{staff_order_context['table_id']}/empty-table-report/dismiss",
+        headers=auth(staff_order_context, "other_token"),
+        json={},
+    ).status_code == 409
+
+
+def test_close_reported_session_cancels_orders_bill_participants_and_report(staff_order_context):
+    first = create_manual_order(staff_order_context)
+    assert first.status_code == 201
+    for _ in range(3):
+        assert create_manual_order(staff_order_context).status_code == 201
+    db = SessionLocal()
+    session = db.query(DiningSession).filter(
+        DiningSession.table_id == staff_order_context["table_id"],
+        DiningSession.status == "open",
+    ).one()
+    orders = db.query(Order).filter(Order.dining_session_id == session.id).order_by(Order.id).all()
+    for order, state in zip(orders, ["pending", "accepted", "preparing", "ready"]):
+        order.status = state
+    ensure_join_authority(session)
+    participant, raw_token = create_participant(db, session, "127.0.0.1", "close-test")
+    db.commit()
+    session_token = session.public_token
+    participant_id = participant.id
+    db.close()
+
+    bill = client.post(
+        f"/staff/tables/{staff_order_context['table_id']}/bill",
+        headers=auth(staff_order_context, "staff_token"),
+        json={},
+    )
+    assert bill.status_code == 201 and bill.json()["status"] == "draft"
+    assert report_empty(staff_order_context).status_code == 201
+    closed = client.post(
+        f"/staff/tables/{staff_order_context['table_id']}/empty-table-report/close-session",
+        headers=auth(staff_order_context, "owner_token"),
+        json={},
+    )
+    assert closed.status_code == 200
+    assert closed.json()["cancelled_orders"] == 4
+    assert client.get(
+        f"/public/sessions/{session_token}",
+        headers={"X-Participant-Token": raw_token},
+    ).status_code == 401
+
+    db = SessionLocal()
+    session = db.query(DiningSession).filter(DiningSession.public_token == session_token).one()
+    orders = db.query(Order).filter(Order.dining_session_id == session.id).all()
+    stored_bill = db.query(Bill).filter(Bill.dining_session_id == session.id).one()
+    report = db.query(EmptyTableReport).filter(EmptyTableReport.session_id == session.id).one()
+    participant = db.query(TableSessionParticipant).filter(TableSessionParticipant.id == participant_id).one()
+    assert session.status == "cancelled"
+    assert all(order.status == "rejected" and order.cancellation_reason == "session_closed_empty_table" for order in orders)
+    assert stored_bill.status == "cancelled"
+    assert report.status == "resolved_by_session_close"
+    assert participant.revoked_at is not None
+    assert db.query(AuditLog).filter(AuditLog.action == "order_cancelled_empty_table").count() >= 4
+    db.close()
+
+
+def test_reported_session_close_is_controlled_when_repeated(staff_order_context):
+    start_session(staff_order_context)
+    report_empty(staff_order_context)
+    first = client.post(
+        f"/staff/tables/{staff_order_context['table_id']}/empty-table-report/close-session",
+        headers=auth(staff_order_context, "admin_token"), json={},
+    )
+    second = client.post(
+        f"/staff/tables/{staff_order_context['table_id']}/empty-table-report/close-session",
+        headers=auth(staff_order_context, "admin_token"), json={},
+    )
+    assert first.status_code == 200
+    assert second.status_code == 409
+
+
+def test_concurrent_empty_table_report_creation_keeps_one_open(staff_order_context):
+    start_session(staff_order_context)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        responses = list(executor.map(lambda _: report_empty(staff_order_context), range(2)))
+    assert sorted(response.status_code for response in responses) == [201, 409]
+    db = SessionLocal()
+    assert db.query(EmptyTableReport).filter(
+        EmptyTableReport.restaurant_id == staff_order_context["restaurant_id"],
+        EmptyTableReport.status == "open",
+    ).count() == 1
+    db.close()
+
+
+def test_concurrent_close_and_dismiss_has_one_resolution(staff_order_context):
+    start_session(staff_order_context)
+    report_empty(staff_order_context)
+    paths = [
+        f"/staff/tables/{staff_order_context['table_id']}/empty-table-report/close-session",
+        f"/staff/tables/{staff_order_context['table_id']}/empty-table-report/dismiss",
+    ]
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        responses = list(executor.map(
+            lambda path: client.post(path, headers=auth(staff_order_context, "owner_token"), json={}),
+            paths,
+        ))
+    assert sorted(response.status_code for response in responses) == [200, 409]
+    db = SessionLocal()
+    report = db.query(EmptyTableReport).filter(EmptyTableReport.restaurant_id == staff_order_context["restaurant_id"]).one()
+    assert report.status in {"dismissed", "resolved_by_session_close"}
+    db.close()
+
+
+def test_empty_table_close_rolls_back_on_partial_failure(staff_order_context, monkeypatch):
+    create_manual_order(staff_order_context)
+    report_empty(staff_order_context)
+    db = SessionLocal()
+    session = db.query(DiningSession).filter(
+        DiningSession.restaurant_id == staff_order_context["restaurant_id"],
+        DiningSession.table_id == staff_order_context["table_id"],
+        DiningSession.status == "open",
+    ).one()
+    session_id = session.id
+    db.close()
+
+    monkeypatch.setattr(
+        "app.routes.staff_tables.invalidate_session_participants",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("forced rollback")),
+    )
+    with pytest.raises(RuntimeError, match="forced rollback"):
+        client.post(
+            f"/staff/tables/{staff_order_context['table_id']}/empty-table-report/close-session",
+            headers=auth(staff_order_context, "owner_token"),
+            json={},
+        )
+    db = SessionLocal()
+    session = db.query(DiningSession).filter(DiningSession.id == session_id).one()
+    order = db.query(Order).filter(Order.dining_session_id == session_id).one()
+    report = db.query(EmptyTableReport).filter(EmptyTableReport.session_id == session_id).one()
+    assert session.status == "open"
+    assert order.status == "pending"
+    assert order.cancellation_reason is None
+    assert report.status == "open"
+    db.close()
 
 
 @pytest.mark.parametrize("token_key", ["owner_token", "admin_token", "staff_token"])

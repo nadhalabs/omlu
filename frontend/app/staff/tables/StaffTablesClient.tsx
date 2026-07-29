@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { StaffBottomNav } from "@/components/staff/StaffBottomNav";
 import { getStaffMe } from "@/lib/api";
-import { getStaffTables, StaffTableSummary } from "@/lib/staffTables";
+import { closeReportedTableSession, dismissEmptyTableReport, getStaffTables, StaffTableSummary } from "@/lib/staffTables";
 import { useRealtime } from "@/lib/realtime";
 import { CurrentStaffResponse } from "@/lib/types";
 import { queryKeys, useCachedQuery } from "@/lib/queryCache";
+import { useOmluUi } from "@/components/OmluUiProvider";
 
 const filters = [
   ["all", "All"],
@@ -23,6 +24,14 @@ function elapsed(value: number | null) {
   if (value === null) return null;
   if (value < 60) return `${value}m`;
   return `${Math.floor(value / 60)}h ${value % 60}m`;
+}
+
+function reportedAgo(value: string) {
+  const minutes = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 60_000));
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 1_440) return `${Math.floor(minutes / 60)}h ago`;
+  return `${Math.floor(minutes / 1_440)}d ago`;
 }
 
 function simpleStatus(table: StaffTableSummary): SimpleStatus {
@@ -42,6 +51,7 @@ function statusClasses(status: SimpleStatus) {
 }
 
 export default function StaffTablesClient() {
+  const { confirm: confirmDialog } = useOmluUi();
   const [filter, setFilter] = useState<(typeof filters)[number][0]>("all");
   const [search, setSearch] = useState("");
   const tablesQuery = useCallback(async () => {
@@ -72,6 +82,10 @@ export default function StaffTablesClient() {
     onEvent: () => void load().catch(() => undefined),
     onReconnect: () => void load().catch(() => undefined),
   });
+  useEffect(() => {
+    const interval = window.setInterval(() => void load().catch(() => undefined), 15_000);
+    return () => window.clearInterval(interval);
+  }, [load]);
 
   const visibleTables = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -87,6 +101,24 @@ export default function StaffTablesClient() {
       return matchesQuery && matchesFilter;
     });
   }, [filter, search, tables]);
+  const reportCount = tables.filter((table) => table.empty_table_report).length;
+  const canResolveReports = staffInfo?.role === "owner" || staffInfo?.role === "admin";
+  const resolveReport = async (table: StaffTableSummary, action: "dismiss" | "close") => {
+    const confirmed = await confirmDialog(action === "close" ? {
+      title: `Close Table ${table.table_number}?`,
+      message: "This will cancel all orders from this session, remove them from the active kitchen dashboard, void the draft bill, and end the session.",
+      confirmLabel: "Close Session",
+      tone: "destructive",
+    } : {
+      title: "Dismiss this empty-table report?",
+      message: "The table session and its orders will remain unchanged.",
+      confirmLabel: "Dismiss Report",
+    });
+    if (!confirmed) return;
+    if (action === "close") await closeReportedTableSession(table.id);
+    else await dismissEmptyTableReport(table.id);
+    await load();
+  };
 
   return (
     <div className="min-h-screen bg-[var(--omlu-background)] px-4 pb-28 pt-5 text-zinc-950">
@@ -97,7 +129,8 @@ export default function StaffTablesClient() {
           </button>
           <div className="text-center">
             <p className="text-xs font-bold text-zinc-400">{staffInfo?.restaurant_name || "OMLU"}</p>
-            <h1 className="text-2xl font-black text-orange-600">Tables</h1>
+            <h1 className="text-2xl font-black text-orange-600">Active Tables</h1>
+            {reportCount > 0 && <p className="text-xs font-black text-amber-700">{reportCount} empty-table {reportCount === 1 ? "report" : "reports"}</p>}
           </div>
           <Link href="/staff/requests" className="flex h-12 w-12 items-center justify-center rounded-full text-2xl text-zinc-900" aria-label="Requests">
             ⌾
@@ -150,17 +183,29 @@ export default function StaffTablesClient() {
               const openFor = elapsed(table.opened_minutes_ago);
               const amount = Number(table.current_bill_amount || 0);
               return (
-                <Link
+                <article
                   key={table.id}
-                  href={`/staff/orders/new?tableId=${table.id}`}
                   className={`min-w-0 min-h-44 rounded-3xl border p-4 text-center shadow-sm shadow-orange-100/60 ${statusClasses(status)}`}
                 >
+                  <Link href={`/staff/tables/${table.id}`} className="block">
                   <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-white/70 text-2xl">●●</div>
                   <div className="break-words text-xl font-black text-zinc-950">Table {table.table_number}</div>
                   {amount > 0 && <div className="mt-1 text-sm font-bold text-zinc-600">₹{table.current_bill_amount}</div>}
                   {openFor && <div className="mt-1 text-xs font-semibold text-zinc-500">{openFor}</div>}
                   <div className="mt-4 inline-flex min-h-9 items-center rounded-full bg-white/75 px-4 text-sm font-black">{status}</div>
-                </Link>
+                  </Link>
+                  {table.empty_table_report && (
+                    <div className="mt-3 rounded-2xl border border-amber-500 bg-amber-50 p-3 text-left text-amber-950">
+                      <p className="text-sm font-black">Staff reported this table empty</p>
+                      <p className="mt-1 text-xs">Reported by {table.empty_table_report.reported_by_name} · {reportedAgo(table.empty_table_report.reported_at)}</p>
+                      <p className="mt-0.5 text-[11px] opacity-75">{new Date(table.empty_table_report.reported_at).toLocaleString()}</p>
+                      {canResolveReports && <div className="mt-3 flex flex-wrap gap-2">
+                        <button onClick={() => void resolveReport(table, "close")} className="rounded-lg bg-zinc-900 px-3 py-2 text-xs font-black text-white">Close Session</button>
+                        <button onClick={() => void resolveReport(table, "dismiss")} className="rounded-lg border border-amber-700 px-3 py-2 text-xs font-black">Dismiss Report</button>
+                      </div>}
+                    </div>
+                  )}
+                </article>
               );
             })}
           </div>

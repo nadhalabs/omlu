@@ -5,14 +5,17 @@ from decimal import Decimal
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
+from pydantic import BaseModel
 from sqlalchemy import or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.database import get_db
 from app.models.bill import Bill
 from app.models.dining_session import ACTIVE_DINING_SESSION_STATUSES, DiningSession
+from app.models.empty_table_report import EmptyTableReport
 from app.models.menu import MenuCategory, MenuItem, MenuItemOptionGroup, MenuOptionGroup
-from app.models.order import Order, OrderItem
+from app.models.order import Order, OrderItem, OrderStatusHistory
 from app.models.restaurant_table import RestaurantTable
 from app.models.service_request import ServiceRequest
 from app.models.staff_user import AuditLog, StaffUser
@@ -23,10 +26,16 @@ from app.services.bills import build_bill_response, create_or_refresh_bill_for_s
 from app.services.dining_sessions import create_session_safely, find_current_open_session_for_table, get_or_create_open_session
 from app.services.menu_options import serialize_item_option_groups
 from app.services.realtime import (
+    EVENT_DRAFT_BILL_VOIDED,
+    EVENT_EMPTY_TABLE_DISMISSED,
+    EVENT_EMPTY_TABLE_REPORTED,
+    EVENT_EMPTY_TABLE_RESOLVED,
     EVENT_BILL_GENERATED,
     EVENT_ORDER_CREATED,
     EVENT_SERVICE_REQUEST_CREATED,
     EVENT_SESSION_OPENED,
+    EVENT_SESSION_FORCE_CLOSED,
+    EVENT_SESSION_ORDERS_CANCELLED,
     EVENT_TABLE_UPDATED,
     publish_event,
     order_channel,
@@ -34,12 +43,19 @@ from app.services.realtime import (
     session_channel,
     table_channel,
 )
+from app.services.table_participants import invalidate_session_participants
 from app.utils.auth import OperationalWriteChecker, RoleChecker
 
 
 router = APIRouter(prefix="/staff/tables")
 _staff_roles = RoleChecker(["owner", "admin", "staff"])
 _staff_write_roles = OperationalWriteChecker(["owner", "admin", "staff"])
+_report_role = OperationalWriteChecker(["staff"])
+_report_resolution_roles = OperationalWriteChecker(["owner", "admin"])
+
+
+class EmptyTableReportCreateRequest(BaseModel):
+    session_token: str
 
 
 def _audit(db: Session, actor: StaffUser, action: str, target_type: str, target_id: str, new_value: dict | None = None) -> None:
@@ -99,6 +115,24 @@ def _table_summary(db: Session, table: RestaurantTable, session: DiningSession |
         active_order_count = len([order for order in session.orders if order.status != "rejected"])
         ready_count = len([order for order in session.orders if order.status == "ready"])
         current_bill_amount = session.bill.total_amount if session.bill else sum((order.subtotal for order in session.orders if order.status != "rejected"), Decimal("0.00"))
+    report = None
+    if session:
+        report = db.query(EmptyTableReport).filter(
+            EmptyTableReport.restaurant_id == table.restaurant_id,
+            EmptyTableReport.table_id == table.id,
+            EmptyTableReport.session_id == session.id,
+            EmptyTableReport.status == "open",
+        ).first()
+    report_payload = None
+    if report:
+        reporter = db.query(StaffUser).filter(
+            StaffUser.id == report.reported_by_user_id,
+            StaffUser.restaurant_id == table.restaurant_id,
+        ).first()
+        report_payload = {
+            "reported_at": report.reported_at.isoformat(),
+            "reported_by_name": reporter.name if reporter else "Staff",
+        }
     attention = [request.request_type for request in pending_requests]
     if ready_count:
         attention.append("ready_order")
@@ -114,6 +148,7 @@ def _table_summary(db: Session, table: RestaurantTable, session: DiningSession |
         "opened_minutes_ago": _minutes_since(session.opened_at) if session else None,
         "attention": attention,
         "bill_requested": bool(session and session.status in {"payment_requested", "payment_pending"}) or "bill" in attention,
+        "empty_table_report": report_payload,
     }
 
 
@@ -171,6 +206,7 @@ def list_staff_tables(
     )
     sessions = {session.table_id: session for session in _active_session_query(db, current_user.restaurant_id).all()}
     items = [_table_summary(db, table, sessions.get(table.id)) for table in tables]
+    items.sort(key=lambda item: 0 if item["empty_table_report"] else 1)
     if filter == "available":
         items = [item for item in items if not item["has_open_session"]]
     elif filter == "occupied":
@@ -318,7 +354,160 @@ def get_staff_table(
             for category in categories
         ],
         "activity": activity,
+        "empty_table_report": _table_summary(db, table, session)["empty_table_report"],
     }
+
+
+def _report_channels(restaurant_id: int, table_id: int, session_token: str) -> list[str]:
+    return [
+        restaurant_channel(restaurant_id, "operations"),
+        restaurant_channel(restaurant_id, "staff"),
+        restaurant_channel(restaurant_id, "admin"),
+        restaurant_channel(restaurant_id, "kitchen"),
+        table_channel(restaurant_id, table_id),
+        session_channel(session_token),
+    ]
+
+
+@router.post("/{table_id}/empty-table-report", status_code=status.HTTP_201_CREATED)
+def report_table_empty(
+    table_id: int,
+    payload: EmptyTableReportCreateRequest,
+    current_user: StaffUser = Depends(_report_role),
+    db: Session = Depends(get_db),
+):
+    session = db.query(DiningSession).filter(
+        DiningSession.restaurant_id == current_user.restaurant_id,
+        DiningSession.table_id == table_id,
+        DiningSession.status.in_(ACTIVE_DINING_SESSION_STATUSES),
+    ).with_for_update().first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Active session not found")
+    if session.public_token != payload.session_token:
+        raise HTTPException(
+            status_code=409,
+            detail="This table session changed. Refresh and try again.",
+        )
+    existing = db.query(EmptyTableReport).filter(
+        EmptyTableReport.restaurant_id == current_user.restaurant_id,
+        EmptyTableReport.session_id == session.id,
+        EmptyTableReport.status == "open",
+    ).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="Empty table already reported")
+    report = EmptyTableReport(
+        restaurant_id=current_user.restaurant_id,
+        table_id=table_id,
+        session_id=session.id,
+        reported_by_user_id=current_user.id,
+    )
+    db.add(report)
+    _audit(db, current_user, "empty_table_reported", "dining_session", str(session.id), {"table_id": table_id})
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Empty table already reported")
+    db.refresh(report)
+    publish_event(EVENT_EMPTY_TABLE_REPORTED, restaurant_id=current_user.restaurant_id, channels=_report_channels(current_user.restaurant_id, table_id, session.public_token), resource_id=report.id, state={"table_id": table_id, "session_token": session.public_token, "reported_at": report.reported_at.isoformat()})
+    return {
+        "status": "open",
+        "session_token": session.public_token,
+        "reported_at": report.reported_at,
+        "reported_by_name": current_user.name,
+    }
+
+
+def _lock_open_report(db: Session, current_user: StaffUser, table_id: int):
+    report = db.query(EmptyTableReport).filter(
+        EmptyTableReport.restaurant_id == current_user.restaurant_id,
+        EmptyTableReport.table_id == table_id,
+        EmptyTableReport.status == "open",
+    ).with_for_update().first()
+    if not report:
+        raise HTTPException(status_code=409, detail="No unresolved empty-table report")
+    session = db.query(DiningSession).filter(
+        DiningSession.id == report.session_id,
+        DiningSession.restaurant_id == current_user.restaurant_id,
+        DiningSession.table_id == table_id,
+    ).with_for_update().first()
+    if not session:
+        raise HTTPException(status_code=409, detail="Reported session is no longer available")
+    return report, session
+
+
+@router.post("/{table_id}/empty-table-report/dismiss")
+def dismiss_empty_table_report(
+    table_id: int,
+    current_user: StaffUser = Depends(_report_resolution_roles),
+    db: Session = Depends(get_db),
+):
+    report, session = _lock_open_report(db, current_user, table_id)
+    now = datetime.datetime.now(datetime.timezone.utc)
+    report.status = "dismissed"
+    report.resolved_at = now
+    report.resolved_by_user_id = current_user.id
+    report.resolution_reason = "dismissed"
+    _audit(db, current_user, "empty_table_report_dismissed", "dining_session", str(session.id), {"table_id": table_id})
+    db.commit()
+    publish_event(EVENT_EMPTY_TABLE_DISMISSED, restaurant_id=current_user.restaurant_id, channels=_report_channels(current_user.restaurant_id, table_id, session.public_token), resource_id=report.id, state={"table_id": table_id, "session_token": session.public_token})
+    return {"status": "dismissed"}
+
+
+@router.post("/{table_id}/empty-table-report/close-session")
+def close_reported_empty_table_session(
+    table_id: int,
+    current_user: StaffUser = Depends(_report_resolution_roles),
+    db: Session = Depends(get_db),
+):
+    report, session = _lock_open_report(db, current_user, table_id)
+    if session.status not in ACTIVE_DINING_SESSION_STATUSES:
+        raise HTTPException(status_code=409, detail="Reported session is no longer active")
+    bill = db.query(Bill).filter(
+        Bill.restaurant_id == current_user.restaurant_id,
+        Bill.dining_session_id == session.id,
+    ).with_for_update().first()
+    if bill and bill.status != "draft":
+        raise HTTPException(status_code=409, detail=f"Cannot close a session with a {bill.status} bill")
+    orders = db.query(Order).filter(
+        Order.restaurant_id == current_user.restaurant_id,
+        Order.dining_session_id == session.id,
+    ).with_for_update().all()
+    now = datetime.datetime.now(datetime.timezone.utc)
+    cancelled = []
+    for order in orders:
+        if order.status in {"pending", "accepted", "preparing", "ready"}:
+            old_status = order.status
+            order.status = "rejected"
+            order.cancellation_reason = "session_closed_empty_table"
+            db.add(OrderStatusHistory(order_id=order.id, old_status=old_status, new_status="rejected", changed_by_staff_id=current_user.id))
+            _audit(db, current_user, "order_cancelled_empty_table", "order", str(order.id), {"table_id": table_id, "session_id": session.id, "reason": order.cancellation_reason})
+            cancelled.append(order)
+    if bill:
+        bill.status = "cancelled"
+        _audit(db, current_user, "draft_bill_voided_empty_table", "bill", str(bill.id), {"table_id": table_id, "session_id": session.id})
+    session.status = "cancelled"
+    session.closed_at = now
+    session.closed_by_staff_id = current_user.id
+    invalidated = invalidate_session_participants(db, session, "Session closed after empty-table report")
+    report.status = "resolved_by_session_close"
+    report.resolved_at = now
+    report.resolved_by_user_id = current_user.id
+    report.resolution_reason = "session_closed_empty_table"
+    _audit(db, current_user, "empty_table_session_closed", "dining_session", str(session.id), {"table_id": table_id, "cancelled_order_ids": [order.id for order in cancelled]})
+    _audit(db, current_user, "table_participants_invalidated", "dining_session", str(session.id), {"table_id": table_id, "count": invalidated, "reason": "session_closed_empty_table"})
+    db.commit()
+    channels = _report_channels(current_user.restaurant_id, table_id, session.public_token)
+    for event_type, state in (
+        (EVENT_SESSION_ORDERS_CANCELLED, {"table_id": table_id, "session_token": session.public_token, "count": len(cancelled)}),
+        (EVENT_DRAFT_BILL_VOIDED, {"table_id": table_id, "session_token": session.public_token, "bill_number": bill.bill_number if bill else None}),
+        (EVENT_EMPTY_TABLE_RESOLVED, {"table_id": table_id, "session_token": session.public_token}),
+        (EVENT_SESSION_FORCE_CLOSED, {"table_id": table_id, "session_token": session.public_token, "status": "cancelled"}),
+        (EVENT_TABLE_UPDATED, {"table_id": table_id}),
+    ):
+        if event_type != EVENT_DRAFT_BILL_VOIDED or bill:
+            publish_event(event_type, restaurant_id=current_user.restaurant_id, channels=channels, resource_id=session.id, state=state)
+    return {"status": "closed", "cancelled_orders": len(cancelled)}
 
 
 @router.post("/{table_id}/sessions", status_code=status.HTTP_201_CREATED)

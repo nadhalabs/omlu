@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
 from app.models.bill import Bill
 from app.models.dining_session import DiningSession
+from app.models.empty_table_report import EmptyTableReport
 from app.models.staff_user import AuditLog, StaffUser
 from app.schemas.bill import BillResponse, CounterPaymentRequest
 from app.services.bills import (
@@ -361,6 +362,16 @@ def confirm_staff_counter_payment(
 
     paid = confirm_counter_payment(db, bill, current_user, payload.method)
     invalidated = invalidate_session_participants(db, paid.dining_session, "Session closed after payment")
+    open_report = db.query(EmptyTableReport).filter(
+        EmptyTableReport.restaurant_id == current_user.restaurant_id,
+        EmptyTableReport.session_id == paid.dining_session_id,
+        EmptyTableReport.status == "open",
+    ).with_for_update().first()
+    if open_report:
+        open_report.status = "resolved_by_session_close"
+        open_report.resolved_at = paid.paid_at
+        open_report.resolved_by_user_id = current_user.id
+        open_report.resolution_reason = "payment_completed"
     db.add(AuditLog(
         restaurant_id=current_user.restaurant_id,
         actor_user_id=current_user.id,

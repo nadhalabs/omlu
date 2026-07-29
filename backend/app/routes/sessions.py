@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 from app.database import get_db
 from app.models.bill import Bill
 from app.models.dining_session import ACTIVE_DINING_SESSION_STATUSES, DiningSession
+from app.models.empty_table_report import EmptyTableReport
 from app.models.order import Order, OrderItem
 from app.models.restaurant_table import RestaurantTable
 from app.models.staff_user import StaffUser
@@ -165,6 +166,16 @@ def close_empty_session(
     session.closed_at = now
     session.closed_by_staff_id = current_user.id
     invalidated = invalidate_session_participants(db, session, "Session closed by staff")
+    open_report = db.query(EmptyTableReport).filter(
+        EmptyTableReport.restaurant_id == current_user.restaurant_id,
+        EmptyTableReport.session_id == session.id,
+        EmptyTableReport.status == "open",
+    ).with_for_update().first()
+    if open_report:
+        open_report.status = "resolved_by_session_close"
+        open_report.resolved_at = now
+        open_report.resolved_by_user_id = current_user.id
+        open_report.resolution_reason = "session_closed_normally"
     db.add(AuditLog(
         restaurant_id=current_user.restaurant_id,
         actor_user_id=current_user.id,

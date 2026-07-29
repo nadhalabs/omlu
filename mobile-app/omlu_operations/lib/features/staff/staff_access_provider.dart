@@ -235,7 +235,9 @@ class StaffAccessNotifier extends StateNotifier<StaffAccessState>
     _refreshing = true;
     try {
       await _ref.read(authRepositoryProvider).currentUser();
-      await _ref.read(operationsApiProvider).fetchStaffTables();
+      await _ref
+          .read(operationsApiProvider)
+          .fetchStaffTables(forceRefresh: true);
       final next = (candidate ?? state).copyWith(loading: false);
       state = next.locked
           ? next

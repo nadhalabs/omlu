@@ -10,6 +10,7 @@ from app.models.push_subscription import CustomerPushSubscription
 from app.models.quick_sale import QuickSale, QuickSaleItem, QuickSaleItemSelectedOption
 from app.models.menu_import import MenuImportJob, MenuImportDraftItem
 from app.models.table_session_participant import TableSessionCreationAttempt, TableSessionJoinAttempt, TableSessionParticipant
+from app.models.empty_table_report import EmptyTableReport
 
 __all__ = [
     "Restaurant",
@@ -41,4 +42,5 @@ __all__ = [
     "TableSessionParticipant",
     "TableSessionJoinAttempt",
     "TableSessionCreationAttempt",
+    "EmptyTableReport",
 ]

@@ -12,6 +12,7 @@ export type StaffTableSummary = {
   opened_minutes_ago: number | null;
   attention: string[];
   bill_requested: boolean;
+  empty_table_report: null | { reported_at: string; reported_by_name: string };
 };
 
 export type StaffTableDetail = {
@@ -36,6 +37,7 @@ export type StaffTableDetail = {
   requests: { id: number; request_type: string; created_at: string; status: string }[];
   menu_categories: { id: number; name_en: string; items: { id: number; name_en: string; price: string; is_available: boolean; option_groups?: MenuOptionGroup[] }[] }[];
   activity: { type: string; label: string; timestamp: string | null }[];
+  empty_table_report: null | { reported_at: string; reported_by_name: string };
 };
 
 export type ManualOrderPayload = {
@@ -125,4 +127,27 @@ export async function revokeStaffTableParticipant(sessionToken: string, particip
     }
   );
   if (!res.ok) throw new Error(await parseError(res, "Could not revoke this device."));
+}
+
+export async function reportStaffTableEmpty(
+  tableId: number,
+  sessionToken: string
+): Promise<{ status: string; session_token: string; reported_at: string; reported_by_name: string }> {
+  const res = await fetch(`/api/staff/tables/${tableId}/empty-table-report`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ session_token: sessionToken }),
+  });
+  if (!res.ok) throw new Error(await parseError(res, "Could not report this table."));
+  return res.json();
+}
+
+export async function dismissEmptyTableReport(tableId: number): Promise<void> {
+  const res = await fetch(`/api/staff/tables/${tableId}/empty-table-report/dismiss`, { method: "POST", body: "{}" });
+  if (!res.ok) throw new Error(await parseError(res, "Could not dismiss this report."));
+}
+
+export async function closeReportedTableSession(tableId: number): Promise<void> {
+  const res = await fetch(`/api/staff/tables/${tableId}/empty-table-report/close-session`, { method: "POST", body: "{}" });
+  if (!res.ok) throw new Error(await parseError(res, "Could not close this session."));
 }

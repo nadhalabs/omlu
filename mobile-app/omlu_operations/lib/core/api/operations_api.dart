@@ -43,6 +43,18 @@ class OperationsApi {
     return _client.getJson('/staff/tables/$tableId');
   }
 
+  Future<EmptyTableReport> reportTableEmpty({
+    required int tableId,
+    required String sessionToken,
+  }) async {
+    final json = await _client.postJson(
+      '/staff/tables/$tableId/empty-table-report',
+      body: <String, Object?>{'session_token': sessionToken},
+    );
+    await _cache?.invalidate('tables', identifier: 'all');
+    return EmptyTableReport.fromJson(json);
+  }
+
   Future<OrderSummary> createStaffOrder({
     required int tableId,
     required StaffOrderDraft draft,

@@ -94,6 +94,7 @@ class StaffTableSummary {
     this.billStatus,
     this.billNumber,
     this.hasActiveBillRequest = false,
+    this.emptyTableReport,
   });
 
   factory StaffTableSummary.fromJson(Map<String, Object?> json) {
@@ -121,6 +122,9 @@ class StaffTableSummary {
         readString(value),
     ];
     final billRequested = json['bill_requested'] as bool? ?? false;
+    final emptyTableReport = EmptyTableReport.tryParse(
+      json['empty_table_report'],
+    );
 
     return StaffTableSummary(
       id: id,
@@ -139,6 +143,7 @@ class StaffTableSummary {
       billStatus: null,
       billNumber: null,
       hasActiveBillRequest: billRequested || attention.contains('bill'),
+      emptyTableReport: emptyTableReport,
     );
   }
 
@@ -230,6 +235,9 @@ class StaffTableSummary {
         });
     final hasActiveBillRequest =
         billRequested || attention.contains('bill') || hasPendingBillRequest;
+    final emptyTableReport = EmptyTableReport.tryParse(
+      json['empty_table_report'] ?? tableMap['empty_table_report'],
+    );
 
     return StaffTableSummary(
       id: id,
@@ -248,6 +256,7 @@ class StaffTableSummary {
       billStatus: billStatus,
       billNumber: billNumber,
       hasActiveBillRequest: hasActiveBillRequest,
+      emptyTableReport: emptyTableReport,
     );
   }
 
@@ -267,6 +276,66 @@ class StaffTableSummary {
   final String? billStatus;
   final String? billNumber;
   final bool hasActiveBillRequest;
+  final EmptyTableReport? emptyTableReport;
+
+  StaffTableSummary copyWith({
+    bool? hasOpenSession,
+    String? sessionToken,
+    String? sessionStatus,
+    EmptyTableReport? emptyTableReport,
+    bool clearEmptyTableReport = false,
+  }) => StaffTableSummary(
+    id: id,
+    tableNumber: tableNumber,
+    state: state,
+    hasOpenSession: hasOpenSession ?? this.hasOpenSession,
+    sessionToken: sessionToken ?? this.sessionToken,
+    sessionStatus: sessionStatus ?? this.sessionStatus,
+    activeOrderCount: activeOrderCount,
+    currentBillAmount: currentBillAmount,
+    openedMinutesAgo: openedMinutesAgo,
+    attention: attention,
+    billRequested: billRequested,
+    activeSessionId: activeSessionId,
+    billId: billId,
+    billStatus: billStatus,
+    billNumber: billNumber,
+    hasActiveBillRequest: hasActiveBillRequest,
+    emptyTableReport: clearEmptyTableReport
+        ? null
+        : emptyTableReport ?? this.emptyTableReport,
+  );
+}
+
+class EmptyTableReport {
+  const EmptyTableReport({
+    this.status = 'open',
+    this.sessionToken,
+    this.reportedByName,
+    this.reportedAt,
+  });
+
+  factory EmptyTableReport.fromJson(Map<String, Object?> json) =>
+      EmptyTableReport(
+        status: readString(json['status'], fallback: 'open'),
+        sessionToken: json['session_token'] == null
+            ? null
+            : readString(json['session_token']),
+        reportedByName: json['reported_by_name'] == null
+            ? null
+            : readString(json['reported_by_name']),
+        reportedAt: DateTime.tryParse(readString(json['reported_at']))?.toUtc(),
+      );
+
+  static EmptyTableReport? tryParse(Object? value) {
+    if (value is! Map) return null;
+    return EmptyTableReport.fromJson(Map<String, Object?>.from(value));
+  }
+
+  final String status;
+  final String? sessionToken;
+  final String? reportedByName;
+  final DateTime? reportedAt;
 }
 
 class OrderSummary {

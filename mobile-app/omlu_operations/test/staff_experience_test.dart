@@ -163,6 +163,32 @@ void main() {
   }
 
   group('Tables Screen Layout Validation', () {
+    testWidgets('shows a compact unresolved empty-table report badge', (
+      tester,
+    ) async {
+      final reportedTables = [
+        mockTables.first,
+        mockTables.last.copyWith(
+          emptyTableReport: EmptyTableReport(
+            reportedByName: 'Asha',
+            reportedAt: DateTime.parse('2026-07-30T10:15:00Z'),
+          ),
+        ),
+      ];
+      await tester.pumpWidget(
+        buildShell(
+          overrides: [
+            tablesProvider.overrideWith(
+              (ref) => MockTablesNotifier(dummyApi, ref, reportedTables),
+            ),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Empty reported'), findsOneWidget);
+    });
+
     testWidgets(
       'omits guest counts, open session buttons and shows table statuses cleanly',
       (tester) async {

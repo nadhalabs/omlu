@@ -9,6 +9,7 @@ import {
   requestStaffTableBill,
   revokeStaffTableParticipant,
   rotateStaffTableJoinCode,
+  reportStaffTableEmpty,
   StaffTableDetail,
   StaffTableParticipants,
 } from "@/lib/staffTables";
@@ -44,6 +45,10 @@ export default function StaffTableDetailClient({ tableId }: { tableId: number })
   useEffect(() => {
     const timeout = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timeout);
+  }, [load]);
+  useEffect(() => {
+    const interval = window.setInterval(() => void load(), 15_000);
+    return () => window.clearInterval(interval);
   }, [load]);
   useEffect(() => {
     let cancelled = false;
@@ -118,6 +123,26 @@ export default function StaffTableDetailClient({ tableId }: { tableId: number })
               <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4"><div className="text-xs text-zinc-500">Requests</div><div className="text-2xl font-black">{detail.requests.length}</div></div>
               <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4"><div className="text-xs text-zinc-500">Payment</div><div className="text-lg font-black">{bill?.status || detail.session.status}</div></div>
             </section>
+            {staffInfo?.role === "staff" && (
+              <section className="rounded-lg border border-zinc-800 bg-zinc-900 p-5">
+                {detail.empty_table_report ? (
+                  <div className="rounded-lg border border-amber-700/50 bg-amber-950/30 p-4 text-amber-200">
+                    <p className="font-black">Empty table reported</p>
+                    <p className="mt-1 text-xs">Reported {new Date(detail.empty_table_report.reported_at).toLocaleString()}</p>
+                  </div>
+                ) : (
+                  <button disabled={Boolean(busy)} onClick={async () => {
+                    if (await confirmDialog({
+                      title: "Report this table as empty?",
+                      message: "The owner or admin will review the table and decide whether to close the session.",
+                      confirmLabel: "Report Empty Table",
+                    })) void run("report-empty", () => reportStaffTableEmpty(tableId, detail.session!.session_token));
+                  }} className="rounded-lg border border-amber-700 bg-amber-950/30 px-4 py-3 text-sm font-black text-amber-200 disabled:opacity-50">
+                    Report Table Empty
+                  </button>
+                )}
+              </section>
+            )}
             <section className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
               <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-5">
                 <h2 className="font-black text-white">Active Orders Timeline</h2>
