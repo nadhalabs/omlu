@@ -28,6 +28,7 @@ class PricedOrderItem:
     menu_item_id: int
     item_name: str
     quantity: int
+    base_price: Decimal
     unit_price: Decimal
     total_price: Decimal
     item_note: str | None
@@ -113,6 +114,7 @@ def validate_and_price_order_items(
                 menu_item_id=menu_item.id,
                 item_name=menu_item.name_en,
                 quantity=quantity,
+                base_price=menu_item.price,
                 unit_price=unit_price,
                 total_price=total_price,
                 item_note=line["item_note"],

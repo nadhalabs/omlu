@@ -1,17 +1,19 @@
 import datetime
 import json
 import secrets
-from decimal import Decimal
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
-from app.models.menu import MenuItem, MenuItemOptionGroup
-from app.models.quick_sale import QuickSale, QuickSaleItem
+from app.models.menu import MenuItem, MenuItemOptionGroup, MenuOptionGroup
+from app.models.quick_sale import QuickSale, QuickSaleItem, QuickSaleItemSelectedOption
 from app.models.staff_user import AuditLog, StaffUser
+from app.schemas.order import PublicOrderCreateRequest
 from app.schemas.quick_sale import QuickSaleCreate, QuickSalePayment
+from app.services.menu_options import serialize_item_option_groups
+from app.services.order_pricing import validate_and_price_order_items
 from app.services.realtime import EVENT_ORDER_CREATED, EVENT_QUICK_SALE_COMPLETED, publish_event, restaurant_channel
 from app.utils.auth import RoleChecker
 
@@ -27,7 +29,25 @@ def _serialize(sale: QuickSale, *, financial: bool = True) -> dict:
         "total": f"{sale.total_amount:.2f}", "entered_by_id": sale.entered_by_staff_id,
         "entered_by_name": sale.entered_by_name, "entered_by_role": sale.entered_by_role,
         "created_at": sale.created_at.isoformat(), "completed_at": sale.completed_at.isoformat() if sale.completed_at else None,
-        "items": [{"menu_item_id": item.menu_item_id, "item_name": item.item_name, "quantity": item.quantity, "unit_price": f"{item.unit_price:.2f}", "total_price": f"{item.total_price:.2f}"} for item in sale.items],
+        "items": [{
+            "menu_item_id": item.menu_item_id,
+            "item_name": item.item_name,
+            "quantity": item.quantity,
+            "base_price": f"{item.base_price:.2f}",
+            "unit_price": f"{item.unit_price:.2f}",
+            "total_price": f"{item.total_price:.2f}",
+            "item_note": item.item_note,
+            "selected_options": [{
+                "menu_option_id": option.menu_option_id,
+                "menu_option_group_id": option.menu_option_group_id,
+                "option_name": option.option_name,
+                "kitchen_display_name": option.kitchen_display_name,
+                "group_name": option.group_name,
+                "option_type": option.option_type,
+                "price_delta": f"{option.price_delta:.2f}",
+                "quantity": option.quantity,
+            } for option in item.selected_options],
+        } for item in sale.items],
     }
     if financial:
         result.update({"payment_method": sale.payment_method, "paid_by_name": sale.paid_by_name, "paid_by_role": sale.paid_by_role})
@@ -53,6 +73,7 @@ def quick_sale_home(current_user: StaffUser = Depends(_owner_admin), db: Session
     menu = db.query(MenuItem).options(
         selectinload(MenuItem.option_group_links)
         .selectinload(MenuItemOptionGroup.group)
+        .selectinload(MenuOptionGroup.options)
     ).filter(MenuItem.restaurant_id == current_user.restaurant_id, MenuItem.is_available == True).order_by(MenuItem.name_en).all()
     sales = db.query(QuickSale).options(selectinload(QuickSale.items)).filter(QuickSale.restaurant_id == current_user.restaurant_id).order_by(QuickSale.created_at.desc()).limit(100).all()
     return {
@@ -64,6 +85,7 @@ def quick_sale_home(current_user: StaffUser = Depends(_owner_admin), db: Session
                 link.active and link.group and link.group.active
                 for link in item.option_group_links
             ),
+            "option_groups": serialize_item_option_groups(item),
         } for item in menu],
         "active_takeaways": [_serialize(s) for s in sales if s.sale_type == "takeaway" and s.status != "completed"],
         "completed_today": [_serialize(s) for s in sales if s.status == "completed" and s.completed_at and start <= s.completed_at < end],
@@ -72,30 +94,23 @@ def quick_sale_home(current_user: StaffUser = Depends(_owner_admin), db: Session
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_quick_sale(body: QuickSaleCreate, current_user: StaffUser = Depends(_owner_admin), db: Session = Depends(get_db)):
-    existing = db.query(QuickSale).options(selectinload(QuickSale.items)).filter(QuickSale.restaurant_id == current_user.restaurant_id, QuickSale.idempotency_key == body.idempotency_key).first()
+    existing = db.query(QuickSale).options(
+        selectinload(QuickSale.items).selectinload(QuickSaleItem.selected_options)
+    ).filter(QuickSale.restaurant_id == current_user.restaurant_id, QuickSale.idempotency_key == body.idempotency_key).first()
     if existing:
         return _serialize(existing)
     if body.sale_type == "late_entry" and not body.payment_method:
         raise HTTPException(status_code=422, detail="Late Entry requires Cash or UPI payment confirmation")
     if body.sale_type == "takeaway" and body.payment_method:
         raise HTTPException(status_code=422, detail="Takeaway payment is confirmed only after the order is ready")
-    requested = {item.menu_item_id: item.quantity for item in body.items}
-    menu_items = db.query(MenuItem).options(
-        selectinload(MenuItem.option_group_links)
-        .selectinload(MenuItemOptionGroup.group)
-    ).filter(MenuItem.restaurant_id == current_user.restaurant_id, MenuItem.id.in_(requested), MenuItem.is_available == True).all()
-    if len(menu_items) != len(requested):
-        raise HTTPException(status_code=422, detail="One or more menu items are unavailable")
-    if any(
-        link.active and link.group and link.group.active
-        for item in menu_items
-        for link in item.option_group_links
-    ):
-        raise HTTPException(
-            status_code=422,
-            detail="Items with specifications are not available in Quick Sale yet. Use assisted ordering.",
-        )
-    subtotal = sum((item.price * requested[item.id] for item in menu_items), Decimal("0.00"))
+    subtotal, priced_items = validate_and_price_order_items(
+        db,
+        current_user.restaurant_id,
+        PublicOrderCreateRequest(
+            items=[item.model_dump() for item in body.items],
+            customer_note=body.note,
+        ),
+    )
     now = datetime.datetime.now(datetime.timezone.utc)
     sale = QuickSale(
         restaurant_id=current_user.restaurant_id, order_number="PENDING", public_token=f"qs_{secrets.token_urlsafe(24)}",
@@ -110,9 +125,29 @@ def create_quick_sale(body: QuickSaleCreate, current_user: StaffUser = Depends(_
         completed_at=now if body.sale_type == "late_entry" else None,
     )
     db.add(sale); db.flush(); sale.order_number = f"QS-{sale.id:06d}"
-    for item in menu_items:
-        quantity = requested[item.id]
-        sale.items.append(QuickSaleItem(menu_item_id=item.id, item_name=item.name_en, quantity=quantity, unit_price=item.price, total_price=item.price * quantity))
+    for priced in priced_items:
+        sale_item = QuickSaleItem(
+            menu_item_id=priced.menu_item_id,
+            item_name=priced.item_name,
+            quantity=priced.quantity,
+            base_price=priced.base_price,
+            unit_price=priced.unit_price,
+            total_price=priced.total_price,
+            item_note=priced.item_note,
+        )
+        for option in priced.selected_options:
+            sale_item.selected_options.append(QuickSaleItemSelectedOption(
+                menu_option_id=option.menu_option_id,
+                menu_option_group_id=option.menu_option_group_id,
+                option_name=option.option_name,
+                kitchen_display_name=option.kitchen_display_name,
+                group_name=option.group_name,
+                option_type=option.option_type,
+                price_delta=option.price_delta,
+                quantity=option.quantity,
+                display_order=option.display_order,
+            ))
+        sale.items.append(sale_item)
     _audit(db, current_user, sale, "quick_sale_created", {"type": sale.sale_type, "total": str(subtotal), "payment_method": body.payment_method})
     if sale.status == "completed": _audit(db, current_user, sale, "quick_sale_completed", {"payment_method": body.payment_method})
     db.commit(); db.refresh(sale)

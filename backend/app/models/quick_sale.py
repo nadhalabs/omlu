@@ -54,12 +54,46 @@ class QuickSaleItem(Base):
     menu_item_id: Mapped[Optional[int]] = mapped_column(ForeignKey("menu_items.id", ondelete="SET NULL"), nullable=True)
     item_name: Mapped[str] = mapped_column(String(255), nullable=False)
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    base_price: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
     unit_price: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
     total_price: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    item_note: Mapped[Optional[str]] = mapped_column(String(300), nullable=True)
 
     sale: Mapped[QuickSale] = relationship("QuickSale", back_populates="items")
+    selected_options: Mapped[List["QuickSaleItemSelectedOption"]] = relationship(
+        "QuickSaleItemSelectedOption",
+        back_populates="quick_sale_item",
+        cascade="all, delete-orphan",
+    )
 
     __table_args__ = (
         CheckConstraint("quantity > 0", name="chk_quick_sale_item_quantity"),
-        CheckConstraint("unit_price >= 0 AND total_price >= 0", name="chk_quick_sale_item_amounts"),
+        CheckConstraint("base_price >= 0 AND unit_price >= 0 AND total_price >= 0", name="chk_quick_sale_item_amounts"),
+    )
+
+
+class QuickSaleItemSelectedOption(Base):
+    __tablename__ = "quick_sale_item_selected_options"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    quick_sale_item_id: Mapped[int] = mapped_column(
+        ForeignKey("quick_sale_items.id", ondelete="CASCADE", deferrable=True, initially="DEFERRED"),
+        nullable=False,
+        index=True,
+    )
+    menu_option_id: Mapped[Optional[int]] = mapped_column(ForeignKey("menu_options.id", ondelete="SET NULL"), nullable=True, index=True)
+    menu_option_group_id: Mapped[Optional[int]] = mapped_column(ForeignKey("menu_option_groups.id", ondelete="SET NULL"), nullable=True, index=True)
+    option_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    kitchen_display_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    group_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    option_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    price_delta: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    display_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+
+    quick_sale_item: Mapped[QuickSaleItem] = relationship("QuickSaleItem", back_populates="selected_options")
+
+    __table_args__ = (
+        CheckConstraint("price_delta >= 0", name="chk_quick_sale_option_price_nonnegative"),
+        CheckConstraint("quantity > 0", name="chk_quick_sale_option_quantity_positive"),
     )

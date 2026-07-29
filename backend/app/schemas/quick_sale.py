@@ -1,10 +1,13 @@
 from typing import Literal, Optional
 from pydantic import BaseModel, Field
+from app.schemas.order import SelectedOptionRequest
 
 
 class QuickSaleItemCreate(BaseModel):
     menu_item_id: int
-    quantity: int = Field(ge=1, le=99)
+    quantity: int = Field(ge=1, le=50)
+    item_note: Optional[str] = Field(default=None, max_length=300)
+    selected_options: list[SelectedOptionRequest] = Field(default_factory=list, max_length=30)
 
 
 class QuickSaleCreate(BaseModel):

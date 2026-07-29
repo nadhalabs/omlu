@@ -14,15 +14,19 @@ test("Quick Sale appears in the required admin navigation and dashboard actions"
 test("Quick Sale page exposes both workflows and operational lists", () => {
   const client = read("app/admin/quick-sale/QuickSaleClient.tsx");
   for (const copy of ["Takeaway Order", "Late Entry", "Active Takeaway Orders", "Completed Quick Sales Today", "Send to Kitchen", "Record Completed Sale"]) assert.ok(client.includes(copy));
-  assert.match(client, /disabled=\{saving \|\| !Object\.keys\(cart\)\.length\}/);
+  assert.match(client, /disabled=\{saving \|\| !cart\.length\}/);
   assert.match(client, /Could not load Quick Sale|Quick Sale request failed/);
 });
 
-test("Quick Sale visibly blocks configurable items instead of using base price", () => {
+test("Quick Sale opens specifications and preserves configuration-aware lines", () => {
   const client = read("app/admin/quick-sale/QuickSaleClient.tsx");
   assert.match(client, /has_options/);
-  assert.match(client, /Use assisted ordering to choose specifications/);
-  assert.match(client, /disabled=\{item\.has_options\}/);
+  assert.match(client, /Choose options/);
+  assert.match(client, /selected_options/);
+  assert.match(client, /Edit specifications/);
+  assert.match(client, /optionSignature/);
+  assert.match(client, /idempotencyKey\.current/);
+  assert.doesNotMatch(client, /Use assisted ordering to choose specifications/);
 });
 
 test("Late Entry and Takeaway payments invoke the shared OMLU confirmation modal", () => {

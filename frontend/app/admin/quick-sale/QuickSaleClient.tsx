@@ -1,13 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRealtime } from "@/lib/realtime";
 import { useOmluUi } from "@/components/OmluUiProvider";
+import { MenuOptionGroup, SelectedOptionRequest } from "@/lib/types";
 
 type SaleType = "takeaway" | "late_entry";
 type PaymentMethod = "cash" | "upi";
-type MenuItem = { id: number; name: string; price: string; has_options: boolean };
-type SaleItem = { menu_item_id: number; item_name: string; quantity: number; unit_price: string; total_price: string };
+type MenuItem = { id: number; name: string; price: string; has_options: boolean; option_groups: MenuOptionGroup[] };
+type CartLine = { menu_item_id: number; item_name: string; quantity: number; unit_price: string; selected_options: SelectedOptionRequest[] };
+type SaleItem = { menu_item_id: number; item_name: string; quantity: number; base_price: string; unit_price: string; total_price: string; item_note: string | null; selected_options: Array<{ option_name: string; group_name: string; price_delta: string; quantity: number }> };
 type QuickSale = { order_number: string; public_token: string; sale_type: SaleType; status: string; note: string | null; reason: string | null; total: string; payment_method: PaymentMethod | null; entered_by_name: string; entered_by_role: string; created_at: string; completed_at: string | null; items: SaleItem[] };
 type HomeData = { menu_items: MenuItem[]; active_takeaways: QuickSale[]; completed_today: QuickSale[] };
 
@@ -20,30 +22,102 @@ export default function QuickSaleClient() {
   const { confirm: confirmDialog, toast } = useOmluUi();
   const [data, setData] = useState<HomeData | null>(null);
   const [saleType, setSaleType] = useState<SaleType | null>(null);
-  const [cart, setCart] = useState<Record<number, number>>({});
+  const [cart, setCart] = useState<CartLine[]>([]);
   const [search, setSearch] = useState("");
   const [note, setNote] = useState("");
   const [payment, setPayment] = useState<PaymentMethod>("cash");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [customisingItem, setCustomisingItem] = useState<MenuItem | null>(null);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [draftOptions, setDraftOptions] = useState<Record<number, Record<number, number>>>({});
+  const [draftQuantity, setDraftQuantity] = useState(1);
+  const idempotencyKey = useRef(crypto.randomUUID());
 
   const load = useCallback(async () => {
     try { setData(await parseResponse<HomeData>(await fetch("/api/admin/quick-sales", { cache: "no-store" }))); setError(null); }
     catch (err) { setError(err instanceof Error ? err.message : "Could not load Quick Sale."); }
   }, []);
   useEffect(() => { const timeout = window.setTimeout(() => void load(), 0); return () => window.clearTimeout(timeout); }, [load]);
+  useEffect(() => {
+    if (!customisingItem) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setCustomisingItem(null);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [customisingItem]);
   useRealtime({ target: { kind: "staff", channel: "staff" }, onEvent: () => void load(), onReconnect: () => void load() });
 
   const visibleMenu = useMemo(() => (data?.menu_items || []).filter((item) => item.name.toLowerCase().includes(search.toLowerCase())), [data, search]);
-  const total = useMemo(() => (data?.menu_items || []).reduce((sum, item) => sum + Number(item.price) * (cart[item.id] || 0), 0), [data, cart]);
-  const quantity = (id: number, delta: number) => setCart((current) => { const next = Math.max(0, (current[id] || 0) + delta); const updated = { ...current, [id]: next }; if (!next) delete updated[id]; return updated; });
+  const total = useMemo(() => cart.reduce((sum, line) => sum + Number(line.unit_price) * line.quantity, 0), [cart]);
+
+  const optionSignature = (options: SelectedOptionRequest[]) =>
+    JSON.stringify(options.slice().sort((a, b) => a.group_id - b.group_id || a.option_id - b.option_id));
+  const selectedOptionsFromDraft = (): SelectedOptionRequest[] =>
+    Object.entries(draftOptions).flatMap(([groupId, options]) =>
+      Object.entries(options).filter(([, quantity]) => quantity > 0).map(([optionId, quantity]) => ({ group_id: Number(groupId), option_id: Number(optionId), quantity }))
+    );
+  const optionPrice = (item: MenuItem, selections: SelectedOptionRequest[]) => {
+    const variant = selections.map((selection) => {
+      const group = item.option_groups.find((candidate) => candidate.id === selection.group_id);
+      const option = group?.options.find((candidate) => candidate.id === selection.option_id);
+      return group?.type === "variant" ? option : undefined;
+    }).find(Boolean);
+    const addons = selections.reduce((sum, selection) => {
+      const group = item.option_groups.find((candidate) => candidate.id === selection.group_id);
+      const option = group?.options.find((candidate) => candidate.id === selection.option_id);
+      return group?.type === "addon" && option ? sum + Number(option.price_delta) * selection.quantity : sum;
+    }, 0);
+    return (variant ? Number(variant.price_delta) : Number(item.price)) + addons;
+  };
+  const requiredSelectionsComplete = (item: MenuItem, selections: SelectedOptionRequest[]) =>
+    item.option_groups.every((group) => {
+      const count = selections.filter((selection) => selection.group_id === group.id).reduce((sum, selection) => sum + selection.quantity, 0);
+      const minimum = Math.max(group.minimum_selections, group.required ? 1 : 0);
+      return count >= minimum && (!group.maximum_selections || count <= group.maximum_selections);
+    });
+  const optionLabels = (line: CartLine) => {
+    const item = data?.menu_items.find((candidate) => candidate.id === line.menu_item_id);
+    return line.selected_options.flatMap((selection) => {
+      const group = item?.option_groups.find((candidate) => candidate.id === selection.group_id);
+      const option = group?.options.find((candidate) => candidate.id === selection.option_id);
+      return option ? [`${option.name}${selection.quantity > 1 ? ` × ${selection.quantity}` : ""}`] : [];
+    });
+  };
+  const addSimpleItem = (item: MenuItem) => setCart((current) => {
+    const index = current.findIndex((line) => line.menu_item_id === item.id && line.selected_options.length === 0);
+    if (index < 0) return [...current, { menu_item_id: item.id, item_name: item.name, quantity: 1, unit_price: item.price, selected_options: [] }];
+    return current.map((line, lineIndex) => lineIndex === index ? { ...line, quantity: line.quantity + 1 } : line);
+  });
+  const openOptions = (item: MenuItem, index: number | null = null) => {
+    const line = index === null ? null : cart[index];
+    setCustomisingItem(item);
+    setEditingIndex(index);
+    setDraftQuantity(line?.quantity ?? 1);
+    setDraftOptions((line?.selected_options ?? []).reduce<Record<number, Record<number, number>>>((result, selection) => ({
+      ...result,
+      [selection.group_id]: { ...(result[selection.group_id] ?? {}), [selection.option_id]: selection.quantity },
+    }), {}));
+  };
+  const setLineQuantity = (index: number, next: number) => setCart((current) =>
+    next <= 0 ? current.filter((_, lineIndex) => lineIndex !== index) : current.map((line, lineIndex) => lineIndex === index ? { ...line, quantity: next } : line)
+  );
+  const toggleDraftOption = (groupId: number, optionId: number, multi: boolean) => setDraftOptions((current) => {
+    const group = current[groupId] ?? {};
+    if (!multi) return { ...current, [groupId]: group[optionId] ? {} : { [optionId]: 1 } };
+    const next = { ...group };
+    if (next[optionId]) delete next[optionId]; else next[optionId] = 1;
+    return { ...current, [groupId]: next };
+  });
 
   const submit = async () => {
-    if (!saleType || saving || Object.keys(cart).length === 0) return;
+    if (!saleType || saving || cart.length === 0) return;
     const isLate = saleType === "late_entry";
     await confirmDialog({ title: isLate ? (payment === "upi" ? "Confirm UPI payment" : "Record late entry") : "Send takeaway to Kitchen?", message: isLate ? (payment === "upi" ? "Confirm that the payment has been received in the restaurant’s UPI account." : "This sale will be recorded as paid and included in today’s revenue.") : "Kitchen will receive this order immediately for preparation.", details: [`Total: ₹${total.toFixed(2)}`, ...(isLate && payment === "cash" ? ["Payment method: Cash"] : [])], confirmLabel: isLate ? (payment === "upi" ? "Payment received" : "Confirm payment") : "Send to Kitchen", onConfirm: async () => {
       setSaving(true); setError(null);
-      try { await parseResponse(await fetch("/api/admin/quick-sales", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sale_type: saleType, items: Object.entries(cart).map(([menu_item_id, itemQuantity]) => ({ menu_item_id: Number(menu_item_id), quantity: itemQuantity })), note: note || null, payment_method: isLate ? payment : null, idempotency_key: crypto.randomUUID() }) })); setCart({}); setNote(""); setSaleType(null); await load(); toast(isLate ? "Late Entry recorded." : "Takeaway sent to Kitchen.", "success"); }
+      try { await parseResponse(await fetch("/api/admin/quick-sales", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sale_type: saleType, items: cart.map((line) => ({ menu_item_id: line.menu_item_id, quantity: line.quantity, selected_options: line.selected_options })), note: note || null, payment_method: isLate ? payment : null, idempotency_key: idempotencyKey.current }) })); setCart([]); setNote(""); setSaleType(null); idempotencyKey.current = crypto.randomUUID(); await load(); toast(isLate ? "Late Entry recorded." : "Takeaway sent to Kitchen.", "success"); }
+      catch (err) { const message = err instanceof Error ? err.message : "Could not save Quick Sale."; setError(message); toast(message, "error"); }
       finally { setSaving(false); }
     }});
   };
@@ -63,14 +137,59 @@ export default function QuickSaleClient() {
     </div></section>
 
     {saleType && <section className="grid gap-5 lg:grid-cols-[1.4fr_0.6fr]">
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5"><div className="flex items-center justify-between gap-3"><h2 className="font-black text-white">Add menu items</h2><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search menu" className="h-10 rounded-lg border border-zinc-700 bg-zinc-950 px-3 text-sm" /></div><div className="mt-4 grid gap-2 sm:grid-cols-2">{visibleMenu.map((item) => <div key={item.id} className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950 p-3"><div><div className="font-bold text-white">{item.name}</div><div className="text-xs text-zinc-500">₹{item.price}</div>{item.has_options && <div className="mt-1 text-xs font-bold text-amber-400">Use assisted ordering to choose specifications</div>}</div><div className="flex items-center gap-2"><button aria-label={`Remove ${item.name}`} disabled={item.has_options} onClick={() => quantity(item.id, -1)} className="h-9 w-9 rounded-lg bg-zinc-800 text-white disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400">−</button><span className="w-5 text-center font-black">{cart[item.id] || 0}</span><button aria-label={`Add ${item.name}`} disabled={item.has_options} onClick={() => quantity(item.id, 1)} className="h-9 w-9 rounded-lg bg-orange-600 font-black text-white disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400">+</button></div></div>)}</div></div>
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5"><h2 className="font-black text-white">Review</h2><div className="mt-4 space-y-2 text-sm">{Object.entries(cart).map(([id, qty]) => { const item = data?.menu_items.find((entry) => entry.id === Number(id)); return item ? <div key={id} className="flex justify-between text-zinc-300"><span>{qty} × {item.name}</span><span>₹{(Number(item.price) * qty).toFixed(2)}</span></div> : null; })}</div><div className="mt-4 flex justify-between border-t border-zinc-800 pt-4 text-lg font-black"><span>Total</span><span>₹{total.toFixed(2)}</span></div><label className="mt-5 block text-xs font-bold text-zinc-400">Optional note<textarea value={note} onChange={(e) => setNote(e.target.value)} maxLength={1024} className="mt-2 min-h-20 w-full rounded-lg border border-zinc-700 bg-zinc-950 p-3 text-sm text-white" /></label>{saleType === "late_entry" && <fieldset className="mt-4"><legend className="text-xs font-bold text-zinc-400">Payment received</legend><div className="mt-2 flex gap-2">{(["cash", "upi"] as PaymentMethod[]).map((method) => <button type="button" key={method} onClick={() => setPayment(method)} className={`rounded-lg px-4 py-2 text-sm font-black uppercase ${payment === method ? "bg-orange-600 text-white" : "bg-zinc-800 text-zinc-300"}`}>{method}</button>)}</div></fieldset>}<button disabled={saving || !Object.keys(cart).length} onClick={submit} className="mt-6 min-h-12 w-full rounded-xl bg-orange-600 font-black text-white disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-600">{saving ? "Saving…" : saleType === "takeaway" ? "Send to Kitchen" : "Record Completed Sale"}</button></div>
+      <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
+        <div className="flex items-center justify-between gap-3"><h2 className="font-black text-white">Add menu items</h2><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search menu" className="h-10 rounded-lg border border-zinc-700 bg-zinc-950 px-3 text-sm" /></div>
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">{visibleMenu.map((item) => {
+          const itemQuantity = cart.filter((line) => line.menu_item_id === item.id).reduce((sum, line) => sum + line.quantity, 0);
+          return <div key={item.id} className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950 p-3">
+            <div><div className="font-bold text-white">{item.name}</div><div className="text-xs text-zinc-500">From ₹{item.price}</div>{item.has_options && <button type="button" onClick={() => openOptions(item)} className="mt-1 text-xs font-bold text-orange-400 underline decoration-orange-800 underline-offset-2">Choose options</button>}</div>
+            <div className="flex items-center gap-2">
+              {!item.has_options && <button aria-label={`Remove ${item.name}`} onClick={() => { const index = cart.findIndex((line) => line.menu_item_id === item.id); if (index >= 0) setLineQuantity(index, cart[index].quantity - 1); }} className="h-9 w-9 rounded-lg bg-zinc-800 text-white">−</button>}
+              <span className="w-5 text-center font-black">{itemQuantity}</span>
+              <button aria-label={item.has_options ? `Choose options for ${item.name}` : `Add ${item.name}`} onClick={() => item.has_options ? openOptions(item) : addSimpleItem(item)} className="h-9 w-9 rounded-lg bg-orange-600 font-black text-white">+</button>
+            </div>
+          </div>;
+        })}</div>
+      </div>
+      <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
+        <h2 className="font-black text-white">Review</h2>
+        <div className="mt-4 space-y-3 text-sm">{cart.map((line, index) => <div key={`${line.menu_item_id}-${optionSignature(line.selected_options)}-${index}`} className="rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-zinc-300">
+          <div className="flex justify-between gap-3"><div><span className="font-bold text-white">{line.item_name}</span>{optionLabels(line).length > 0 && <p className="mt-1 text-xs text-zinc-400">{optionLabels(line).join(" · ")}</p>}</div><span>₹{(Number(line.unit_price) * line.quantity).toFixed(2)}</span></div>
+          <div className="mt-3 flex items-center justify-between"><div className="flex items-center gap-2"><button type="button" aria-label={`Decrease ${line.item_name}`} onClick={() => setLineQuantity(index, line.quantity - 1)} className="h-8 w-8 rounded-lg bg-zinc-800">−</button><span className="w-6 text-center font-bold">{line.quantity}</span><button type="button" aria-label={`Increase ${line.item_name}`} onClick={() => setLineQuantity(index, line.quantity + 1)} className="h-8 w-8 rounded-lg bg-zinc-800">+</button></div>{line.selected_options.length > 0 && <button type="button" onClick={() => { const item = data?.menu_items.find((candidate) => candidate.id === line.menu_item_id); if (item) openOptions(item, index); }} className="text-xs font-bold text-orange-400">Edit specifications</button>}</div>
+        </div>)}</div>
+        <div className="mt-4 flex justify-between border-t border-zinc-800 pt-4 text-lg font-black"><span>Total</span><span>₹{total.toFixed(2)}</span></div>
+        <label className="mt-5 block text-xs font-bold text-zinc-400">Optional note<textarea value={note} onChange={(e) => setNote(e.target.value)} maxLength={1024} className="mt-2 min-h-20 w-full rounded-lg border border-zinc-700 bg-zinc-950 p-3 text-sm text-white" /></label>
+        {saleType === "late_entry" && <fieldset className="mt-4"><legend className="text-xs font-bold text-zinc-400">Payment received</legend><div className="mt-2 flex gap-2">{(["cash", "upi"] as PaymentMethod[]).map((method) => <button type="button" key={method} onClick={() => setPayment(method)} className={`rounded-lg px-4 py-2 text-sm font-black uppercase ${payment === method ? "bg-orange-600 text-white" : "bg-zinc-800 text-zinc-300"}`}>{method}</button>)}</div></fieldset>}
+        <button disabled={saving || !cart.length} onClick={submit} className="mt-6 min-h-12 w-full rounded-xl bg-orange-600 font-black text-white disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-600">{saving ? "Saving…" : saleType === "takeaway" ? "Send to Kitchen" : "Record Completed Sale"}</button>
+      </div>
     </section>}
+
+    {customisingItem && <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/65 p-4 sm:items-center">
+      <div role="dialog" aria-modal="true" aria-labelledby="quick-sale-options-title" className="max-h-[90vh] w-full max-w-md overflow-hidden rounded-3xl border border-zinc-700 bg-zinc-950">
+        <div className="flex items-start justify-between border-b border-zinc-800 p-5"><div><h2 id="quick-sale-options-title" className="text-xl font-black text-white">{customisingItem.name}</h2><p className="mt-1 text-sm text-zinc-400">Choose specifications</p></div><button type="button" aria-label="Close specifications" onClick={() => setCustomisingItem(null)} className="h-10 w-10 rounded-full bg-zinc-800 text-xl">×</button></div>
+        <div className="max-h-[58vh] overflow-y-auto p-5">{customisingItem.option_groups.map((group) => {
+          const selectedCount = Object.values(draftOptions[group.id] ?? {}).reduce((sum, quantity) => sum + quantity, 0);
+          const minimum = Math.max(group.minimum_selections, group.required ? 1 : 0);
+          const multi = group.type === "addon" && group.maximum_selections !== 1;
+          return <section key={group.id} className="mb-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-4"><div className="flex justify-between gap-3"><div><h3 className="font-black text-white">{group.name}</h3><p className="text-xs text-zinc-400">{minimum ? `Choose ${minimum}` : "Optional"}{group.maximum_selections ? ` · up to ${group.maximum_selections}` : ""}</p></div>{selectedCount < minimum && <span className="text-xs font-bold text-red-400">Required</span>}</div><div className="mt-3 grid gap-2">{group.options.map((option) => {
+            const checked = Boolean(draftOptions[group.id]?.[option.id]);
+            const disabled = !option.available || (!checked && Boolean(group.maximum_selections) && selectedCount >= group.maximum_selections);
+            return <button key={option.id} type="button" disabled={disabled} onClick={() => toggleDraftOption(group.id, option.id, multi)} className={`flex min-h-12 justify-between rounded-xl border px-4 py-3 text-left text-sm font-bold disabled:cursor-not-allowed disabled:border-zinc-800 disabled:bg-zinc-900 disabled:text-zinc-500 ${checked ? "border-orange-500 bg-orange-950/30 text-orange-100" : "border-zinc-700 bg-zinc-950 text-zinc-300"}`}><span>{option.name}</span><span>{group.type === "variant" ? `₹${Number(option.price_delta).toFixed(2)}` : `+₹${Number(option.price_delta).toFixed(2)}`}</span></button>;
+          })}</div></section>;
+        })}</div>
+        <div className="border-t border-zinc-800 p-5"><div className="mb-4 flex items-center justify-between"><span className="text-sm font-bold text-zinc-300">Quantity</span><div className="flex items-center gap-3"><button type="button" disabled={draftQuantity <= 1} onClick={() => setDraftQuantity((value) => Math.max(1, value - 1))} className="h-9 w-9 rounded-lg bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-900 disabled:text-zinc-600">−</button><span className="w-6 text-center font-black">{draftQuantity}</span><button type="button" disabled={draftQuantity >= 50} onClick={() => setDraftQuantity((value) => Math.min(50, value + 1))} className="h-9 w-9 rounded-lg bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-900 disabled:text-zinc-600">+</button></div></div><button type="button" disabled={!requiredSelectionsComplete(customisingItem, selectedOptionsFromDraft())} onClick={() => {
+          const selections = selectedOptionsFromDraft();
+          const nextLine = { menu_item_id: customisingItem.id, item_name: customisingItem.name, quantity: draftQuantity, unit_price: optionPrice(customisingItem, selections).toFixed(2), selected_options: selections };
+          setCart((current) => editingIndex === null ? [...current, nextLine] : current.map((line, index) => index === editingIndex ? nextLine : line));
+          setCustomisingItem(null); setEditingIndex(null); setDraftOptions({});
+        }} className="h-12 w-full rounded-xl bg-orange-600 font-black text-white disabled:bg-zinc-700 disabled:text-zinc-400">{editingIndex === null ? "Add configured item" : "Update specifications"} · ₹{(optionPrice(customisingItem, selectedOptionsFromDraft()) * draftQuantity).toFixed(2)}</button></div>
+      </div>
+    </div>}
 
     <section className="grid gap-5 lg:grid-cols-2"><SaleList title="Active Takeaway Orders" sales={data?.active_takeaways || []} payment={confirmPayment} saving={saving} /><SaleList title="Completed Quick Sales Today" sales={data?.completed_today || []} saving={saving} /></section>
   </div>;
 }
 
 function SaleList({ title, sales, payment, saving }: { title: string; sales: QuickSale[]; payment?: (sale: QuickSale, method: PaymentMethod) => void; saving: boolean }) {
-  return <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5"><h2 className="font-black text-white">{title}</h2>{sales.length === 0 ? <p className="mt-4 text-sm text-zinc-500">Nothing to show.</p> : <div className="mt-4 space-y-3">{sales.map((sale) => <article key={sale.public_token} className="rounded-xl border border-zinc-800 bg-zinc-950 p-4"><div className="flex justify-between gap-3"><div><div className="font-black text-white">{sale.sale_type === "takeaway" ? "Takeaway" : "Late Entry"} {sale.order_number}</div><div className="mt-1 text-xs text-zinc-500">{sale.items.map((item) => `${item.quantity}× ${item.item_name}`).join(" · ")}</div></div><div className="text-right"><div className="font-black text-white">₹{sale.total}</div><div className="text-xs font-bold uppercase text-orange-500">{sale.status}</div></div></div><div className="mt-3 text-xs text-zinc-500">Entered by {sale.entered_by_name} · {sale.entered_by_role} · {new Date(sale.completed_at || sale.created_at).toLocaleTimeString()}{sale.payment_method ? ` · ${sale.payment_method.toUpperCase()}` : ""}</div>{payment && (sale.status === "ready" || sale.status === "served") && <div className="mt-3 flex gap-2"><button disabled={saving} onClick={() => payment(sale, "cash")} className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-black text-white">Confirm Cash Payment</button><button disabled={saving} onClick={() => payment(sale, "upi")} className="rounded-lg bg-indigo-700 px-3 py-2 text-xs font-black text-white">Confirm UPI Payment</button></div>}</article>)}</div>}</section>;
+  return <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5"><h2 className="font-black text-white">{title}</h2>{sales.length === 0 ? <p className="mt-4 text-sm text-zinc-500">Nothing to show.</p> : <div className="mt-4 space-y-3">{sales.map((sale) => <article key={sale.public_token} className="rounded-xl border border-zinc-800 bg-zinc-950 p-4"><div className="flex justify-between gap-3"><div><div className="font-black text-white">{sale.sale_type === "takeaway" ? "Takeaway" : "Late Entry"} {sale.order_number}</div><div className="mt-1 space-y-1 text-xs text-zinc-500">{sale.items.map((item, index) => <div key={`${item.menu_item_id}-${index}`}>{item.quantity}× {item.item_name}{item.selected_options.length > 0 && <span className="block pl-3 text-zinc-600">{item.selected_options.map((option) => option.option_name).join(" · ")}</span>}</div>)}</div></div><div className="text-right"><div className="font-black text-white">₹{sale.total}</div><div className="text-xs font-bold uppercase text-orange-500">{sale.status}</div></div></div><div className="mt-3 text-xs text-zinc-500">Entered by {sale.entered_by_name} · {sale.entered_by_role} · {new Date(sale.completed_at || sale.created_at).toLocaleTimeString()}{sale.payment_method ? ` · ${sale.payment_method.toUpperCase()}` : ""}</div>{payment && (sale.status === "ready" || sale.status === "served") && <div className="mt-3 flex gap-2"><button disabled={saving} onClick={() => payment(sale, "cash")} className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-black text-white">Confirm Cash Payment</button><button disabled={saving} onClick={() => payment(sale, "upi")} className="rounded-lg bg-indigo-700 px-3 py-2 text-xs font-black text-white">Confirm UPI Payment</button></div>}</article>)}</div>}</section>;
 }

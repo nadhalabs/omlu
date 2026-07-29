@@ -7,7 +7,7 @@ from app.database import get_db
 from app.models.restaurant import Restaurant
 from app.models.order import Order, OrderItem, OrderStatusHistory
 from app.models.staff_user import StaffUser
-from app.models.quick_sale import QuickSale
+from app.models.quick_sale import QuickSale, QuickSaleItem
 from app.schemas.kitchen import KitchenOrderResponse, KitchenStatusUpdateRequest
 from app.utils.auth import get_current_staff_user, RoleChecker
 from app.services.realtime import EVENT_ORDER_STATUS_CHANGED, order_channel, publish_event, restaurant_channel, session_channel, table_channel
@@ -19,6 +19,24 @@ kitchen_access_dependency = RoleChecker(["owner", "admin", "kitchen"])
 
 ALLOWED_STATUSES = {"pending", "accepted", "preparing", "ready", "served", "rejected"}
 DEFAULT_ACTIVE_STATUSES = ["pending", "accepted", "preparing", "ready"]
+
+
+def _quick_sale_items(sale: QuickSale) -> list[dict]:
+    return [{
+        "item_name": item.item_name,
+        "quantity": item.quantity,
+        "unit_price": item.unit_price,
+        "total_price": item.total_price,
+        "item_note": item.item_note,
+        "selected_options": [{
+            "option_name": option.option_name,
+            "kitchen_display_name": option.kitchen_display_name,
+            "group_name": option.group_name,
+            "option_type": option.option_type,
+            "price_delta": option.price_delta,
+            "quantity": option.quantity,
+        } for option in item.selected_options],
+    } for item in sale.items]
 
 @router.get(
     "/kitchen/restaurants/{restaurant_slug}/orders",
@@ -87,7 +105,9 @@ def get_kitchen_orders(
 
     # Sort oldest first (created_at ascending)
     orders = query.order_by(Order.created_at.asc()).limit(limit).all()
-    takeaways = db.query(QuickSale).options(selectinload(QuickSale.items)).filter(
+    takeaways = db.query(QuickSale).options(
+        selectinload(QuickSale.items).selectinload(QuickSaleItem.selected_options)
+    ).filter(
         QuickSale.restaurant_id == restaurant.id,
         QuickSale.sale_type == "takeaway",
         QuickSale.status.in_(status_list),
@@ -117,7 +137,7 @@ def get_kitchen_orders(
             "order_number": sale.order_number, "public_token": sale.public_token, "table_number": "Takeaway",
             "status": sale.status, "subtotal": sale.subtotal, "customer_note": sale.note, "created_at": sale.created_at,
             "status_history": [], "source": "takeaway",
-            "items": [{"item_name": item.item_name, "quantity": item.quantity, "unit_price": item.unit_price, "total_price": item.total_price, "item_note": None, "selected_options": []} for item in sale.items],
+            "items": _quick_sale_items(sale),
         })
 
     return response
@@ -158,7 +178,9 @@ def update_kitchen_order_status(
     }
 
     if public_token.startswith("qs_"):
-        sale = db.query(QuickSale).options(selectinload(QuickSale.items)).filter(QuickSale.restaurant_id == restaurant.id, QuickSale.public_token == public_token, QuickSale.sale_type == "takeaway").with_for_update().first()
+        sale = db.query(QuickSale).options(
+            selectinload(QuickSale.items).selectinload(QuickSaleItem.selected_options)
+        ).filter(QuickSale.restaurant_id == restaurant.id, QuickSale.public_token == public_token, QuickSale.sale_type == "takeaway").with_for_update().first()
         if not sale: raise HTTPException(status_code=fastapi_status.HTTP_404_NOT_FOUND, detail="Takeaway not found")
         transitions = {
             "pending": {"accepted"},
@@ -170,7 +192,7 @@ def update_kitchen_order_status(
             raise HTTPException(status_code=fastapi_status.HTTP_409_CONFLICT, detail=f"Invalid transition from '{sale.status}' to '{update_req.status}'.")
         sale.status = update_req.status; db.commit(); db.refresh(sale)
         publish_event(EVENT_ORDER_STATUS_CHANGED, restaurant_id=restaurant.id, channels=[restaurant_channel(restaurant.id, "operations"), restaurant_channel(restaurant.id, "kitchen")], resource_id=sale.id, state={"order_number": sale.order_number, "status": sale.status, "source": "takeaway"})
-        return {"order_number": sale.order_number, "public_token": sale.public_token, "table_number": "Takeaway", "status": sale.status, "subtotal": sale.subtotal, "customer_note": sale.note, "created_at": sale.created_at, "status_history": [], "items": [{"item_name": item.item_name, "quantity": item.quantity, "unit_price": item.unit_price, "total_price": item.total_price, "item_note": None, "selected_options": []} for item in sale.items]}
+        return {"order_number": sale.order_number, "public_token": sale.public_token, "table_number": "Takeaway", "status": sale.status, "subtotal": sale.subtotal, "customer_note": sale.note, "created_at": sale.created_at, "status_history": [], "items": _quick_sale_items(sale)}
 
     try:
         # Start of Row Lock / Update transaction block
