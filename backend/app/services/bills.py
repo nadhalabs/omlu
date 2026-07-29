@@ -1,4 +1,5 @@
 import datetime
+import secrets
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -268,6 +269,7 @@ def create_or_refresh_bill_for_session(
         restaurant_id=locked_session.restaurant_id,
         dining_session_id=locked_session.id,
         bill_number=generate_bill_number(db, locked_session.restaurant_id),
+        receipt_token=secrets.token_urlsafe(48),
         status="draft",
         currency=getattr(locked_session.restaurant, "currency", None) or "INR",
         generated_by_staff_id=generated_by_staff_id,
@@ -471,6 +473,7 @@ def build_bill_response(db: Session, bill: Bill):
     )
     return {
         "bill_number": bill.bill_number,
+        "receipt_token": bill.receipt_token,
         "restaurant_name": bill.restaurant.name,
         "restaurant_slug": bill.restaurant.slug,
         "table_number": bill.dining_session.table.table_number,

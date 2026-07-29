@@ -42,6 +42,7 @@ class BillOrderResponse(BaseModel):
 
 class BillResponse(BaseModel):
     bill_number: str
+    receipt_token: str
     restaurant_name: str
     restaurant_slug: str
     table_number: str

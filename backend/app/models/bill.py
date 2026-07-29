@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
+import secrets
 from typing import Optional
 
 from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, UniqueConstraint, func
@@ -71,6 +72,9 @@ class Bill(Base):
         index=True,
     )
     bill_number: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    receipt_token: Mapped[str] = mapped_column(
+        String(128), nullable=False, unique=True, index=True, default=lambda: secrets.token_urlsafe(48)
+    )
     invoice_number: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     invoice_date: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[str] = mapped_column(String(50), default="draft", server_default="draft", nullable=False, index=True)

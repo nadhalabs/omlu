@@ -18,16 +18,20 @@ import {
 
 interface BillClientProps {
   sessionToken: string;
+  receiptToken?: string;
 }
 
-export default function BillClient({ sessionToken }: BillClientProps) {
+export default function BillClient({ sessionToken, receiptToken = "" }: BillClientProps) {
   const router = useRouter();
   const [bill, setBill] = useState<BillResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [language, setLanguage] = useState<"en" | "ml">("en");
   const [showPaymentSuccess, setShowPaymentSuccess] = useState<boolean>(false);
-  const [participantToken] = useState<string | null>(() => readSessionParticipantToken(sessionToken));
+  const [participantToken, setParticipantToken] = useState<string | null>(
+    () => readSessionParticipantToken(sessionToken)
+  );
+  const [receiptAccessToken, setReceiptAccessToken] = useState(receiptToken);
   const hasLoadedBillRef = useRef(false);
   const paidStatusRef = useRef<string | null>(null);
   const labels = {
@@ -58,7 +62,7 @@ export default function BillClient({ sessionToken }: BillClientProps) {
       paymentMethod: "Payment method",
       paidAt: "Paid at",
       back: "Back to table bill",
-      paymentReceived: "Payment received",
+      paymentReceived: "Payment successful",
       receiptAction: "View receipt",
       paidAmount: "Paid amount",
       sessionComplete: "Your dining session is complete. Scan the table QR again to start a new order.",
@@ -177,6 +181,11 @@ export default function BillClient({ sessionToken }: BillClientProps) {
       setBill(data);
       setError(null);
       paidStatusRef.current = data.status;
+      if (data.status !== "draft" && data.receipt_token) {
+        setReceiptAccessToken(data.receipt_token);
+        const receiptUrl = `/bill/${encodeURIComponent(data.session_token)}?receipt=${encodeURIComponent(data.receipt_token)}`;
+        window.history.replaceState(window.history.state, "", receiptUrl);
+      }
 
       if (!isPaid) {
         setShowPaymentSuccess(false);
@@ -188,6 +197,7 @@ export default function BillClient({ sessionToken }: BillClientProps) {
       clearParticipantToken(data.restaurant_slug, data.table_code);
       clearLegacyPublicReceiptToken(data.restaurant_slug, data.table_code);
       clearSessionParticipantToken(sessionToken);
+      setParticipantToken(null);
 
       if (!hasLoadedBillRef.current && source === "initial") {
         markPaymentSuccessSeen(sessionToken, billKey);
@@ -216,9 +226,11 @@ export default function BillClient({ sessionToken }: BillClientProps) {
     ) => {
       if (showLoading) setLoading(true);
       try {
-        const authority = readSessionParticipantToken(sessionToken);
-        if (!authority) throw new ApiError(401, "Your access to this table has ended.");
-        const data = await getPublicBill(sessionToken, authority);
+        const authority = readSessionParticipantToken(sessionToken) || "";
+        if (!authority && !receiptAccessToken) {
+          throw new ApiError(401, "Your access to this table has ended.");
+        }
+        const data = await getPublicBill(sessionToken, authority, receiptAccessToken);
         applyFetchedBill(data, source);
       } catch (err) {
         if (err instanceof ApiError) {
@@ -230,7 +242,7 @@ export default function BillClient({ sessionToken }: BillClientProps) {
         if (showLoading) setLoading(false);
       }
     },
-    [applyFetchedBill, sessionToken, t.notFound]
+    [applyFetchedBill, receiptAccessToken, sessionToken, t.notFound]
   );
 
   useEffect(() => {
@@ -265,7 +277,7 @@ export default function BillClient({ sessionToken }: BillClientProps) {
   const billUrl =
     typeof window === "undefined"
       ? ""
-      : `${window.location.origin}/bill/${encodeURIComponent(sessionToken)}`;
+      : `${window.location.origin}/bill/${encodeURIComponent(sessionToken)}?receipt=${encodeURIComponent(receiptAccessToken)}`;
 
   if (loading && !bill) {
     return (

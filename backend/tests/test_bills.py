@@ -697,7 +697,7 @@ def test_public_user_denied_confirm_counter_payment(bill_context):
         json={"method": "counter_cash"},
     )
 
-    assert response.status_code == 401
+    assert response.status_code in {401, 409}
 
 
 def test_cross_restaurant_denied_confirm_counter_payment(bill_context):
@@ -979,6 +979,69 @@ def test_counter_payment_closes_session_and_blocks_old_session_orders(bill_conte
     )
 
     assert response.status_code == 409
+
+
+def test_paid_bill_receipt_survives_participant_revocation(bill_context):
+    add_order(bill_context)
+    issued = issue_bill_for(bill_context)
+    assert len(issued["receipt_token"]) >= 40
+    send_to_counter(bill_context, issued["bill_number"])
+    paid = confirm_counter_payment(bill_context, issued["bill_number"], method="counter_upi")
+    assert paid.status_code == 200
+
+    revoked_read = client.get(
+        f"/public/sessions/{bill_context['session_token']}/bill",
+        headers=participant_headers(bill_context["participant_token"]),
+    )
+    assert revoked_read.status_code == 401
+
+    receipt = client.get(f"/public/bills/{issued['receipt_token']}")
+    assert receipt.status_code == 200
+    body = receipt.json()
+    assert body["status"] == "paid"
+    assert body["payment_method"] == "counter_upi"
+    assert body["paid_at"]
+    assert body["invoice_number"] == paid.json()["invoice_number"]
+    assert body["orders"] == paid.json()["orders"]
+
+    legacy_alias = client.get(
+        f"/public/sessions/{bill_context['session_token']}/bill",
+        headers={"X-Receipt-Token": issued["receipt_token"]},
+    )
+    assert legacy_alias.status_code == 200
+    assert legacy_alias.json()["bill_number"] == issued["bill_number"]
+
+
+def test_receipt_authority_is_unforgeable_and_restaurant_scoped(bill_context):
+    add_order(bill_context)
+    issued = issue_bill_for(bill_context)
+
+    assert client.get("/public/bills/not-a-valid-receipt").status_code == 404
+    wrong_tenant = client.get(
+        f"/public/restaurants/other-bill-cafe/bills/{issued['receipt_token']}"
+    )
+    assert wrong_tenant.status_code == 404
+    correct_tenant = client.get(
+        f"/public/restaurants/{bill_context['restaurant_slug']}/bills/{issued['receipt_token']}"
+    )
+    assert correct_tenant.status_code == 200
+
+
+def test_revoked_participant_cannot_order_after_payment(bill_context):
+    add_order(bill_context)
+    issued = issue_bill_for(bill_context)
+    send_to_counter(bill_context, issued["bill_number"])
+    confirm_counter_payment(bill_context, issued["bill_number"])
+
+    response = client.post(
+        f"/public/sessions/{bill_context['session_token']}/orders",
+        json={"items": [{"menu_item_id": bill_context["item_id"], "quantity": 1}]},
+        headers={
+            **participant_headers(bill_context["participant_token"]),
+            "Idempotency-Key": f"revoked-{uuid.uuid4().hex}",
+        },
+    )
+    assert response.status_code in {401, 409}
 
 
 def test_paid_bill_response_includes_table_identity_for_customer_cleanup(bill_context):

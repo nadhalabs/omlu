@@ -671,6 +671,7 @@ def test_public_session_websocket_receives_bill_payment_and_close_events(realtim
         )
         assert sent_response.status_code == 200
         pending_event = receive_event(ws, realtime.EVENT_BILL_PAYMENT_PENDING)
+        receive_event(ws, realtime.EVENT_TABLE_STATUS_CHANGED)
 
         paid_response = client.post(
             f"/staff/bills/{bill_number}/confirm-counter-payment",
@@ -678,18 +679,12 @@ def test_public_session_websocket_receives_bill_payment_and_close_events(realtim
             json={"method": "counter_cash"},
         )
         assert paid_response.status_code == 200
-        try:
-            trailing = ws.receive_json()
-        except WebSocketDisconnect:
-            trailing = None
-        if trailing is not None:
-            assert trailing["type"] not in {
-                realtime.EVENT_BILL_PAYMENT_RECORDED,
-                realtime.EVENT_BILL_PAID,
-                realtime.EVENT_SESSION_CLOSED,
-            }
-            with pytest.raises(WebSocketDisconnect):
-                ws.receive_json()
+        terminal = ws.receive_json()
+        assert terminal["type"] == realtime.EVENT_BILL_PAID
+        assert terminal["state"]["status"] == "paid"
+        assert terminal["state"]["receipt_token"] == paid_response.json()["receipt_token"]
+        with pytest.raises(WebSocketDisconnect):
+            ws.receive_json()
 
     assert "restaurant_id" not in bill_event
     assert bill_event["state"]["bill_number"] == bill_number
@@ -825,8 +820,39 @@ def test_staff_websocket_receives_session_bill_and_payment_events(realtime_conte
     assert pending_event["state"]["table_id"] == realtime_context["table_id"]
     assert payment_event["state"] == {"bill_number": bill_number, "status": "paid"}
     assert paid_event["state"]["status"] == "paid"
-    assert "payment_method" not in paid_event["state"]
+    assert paid_event["state"]["payment_method"] == "counter_cash"
     assert closed_event["state"]["status"] == "closed"
+
+
+def test_revoked_participant_gets_terminal_payment_once_and_no_queued_updates(realtime_context):
+    session = start_session(realtime_context).json()
+    authority = participant_for_session(realtime_context, session["session_token"])
+    assert create_staff_order(realtime_context).status_code == 201
+    bill = client.post(
+        f"/staff/tables/{realtime_context['table_id']}/bill",
+        headers=auth(realtime_context),
+        json={},
+    ).json()
+    client.post(f"/staff/bills/{bill['bill_number']}/issue", headers=auth(realtime_context))
+    client.post(f"/staff/bills/{bill['bill_number']}/send-to-counter", headers=auth(realtime_context))
+
+    with client.websocket_connect(
+        f"/ws/public/sessions/{session['session_token']}?participant_token={authority['participant_token']}"
+    ) as ws:
+        assert ws.receive_json()["type"] == "connection.ready"
+        paid = client.post(
+            f"/staff/bills/{bill['bill_number']}/confirm-counter-payment",
+            headers=auth(realtime_context, "owner_token"),
+            json={"method": "counter_cash"},
+        )
+        assert paid.status_code == 200
+        terminal = ws.receive_json()
+        assert terminal["type"] == realtime.EVENT_BILL_PAID
+        assert terminal["state"]["status"] == "paid"
+        assert terminal["state"]["receipt_token"] == paid.json()["receipt_token"]
+        close = ws.receive()
+        assert close["type"] == "websocket.close"
+        assert close["code"] == 1000
 
 
 def test_availability_websocket_receives_item_update(realtime_context):

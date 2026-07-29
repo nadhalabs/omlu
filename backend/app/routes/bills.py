@@ -1,6 +1,6 @@
 import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
@@ -153,7 +153,8 @@ def create_staff_session_bill(
 )
 def get_public_session_bill(
     session_token: str,
-    participant_token: str = Depends(participant_token_header),
+    participant_token: str | None = Header(None, alias="X-Participant-Token"),
+    receipt_token: str | None = Header(None, alias="X-Receipt-Token"),
     db: Session = Depends(get_db),
 ):
     dining_session = db.query(DiningSession).filter(
@@ -162,12 +163,52 @@ def get_public_session_bill(
 
     if not dining_session:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dining session not found")
-    load_participant(db, participant_token, session_token=session_token)
-
     bill = db.query(Bill).filter(Bill.dining_session_id == dining_session.id).first()
     if not bill:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
+    if receipt_token:
+        if bill.receipt_token != receipt_token:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
+    elif participant_token:
+        load_participant(db, participant_token, session_token=session_token)
+    else:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Bill access token is required")
 
+    return build_bill_response(db, bill)
+
+
+def _load_public_receipt(db: Session, receipt_token: str, restaurant_slug: str | None = None) -> Bill:
+    query = (
+        db.query(Bill)
+        .join(DiningSession, DiningSession.id == Bill.dining_session_id)
+        .filter(
+            Bill.receipt_token == receipt_token,
+            Bill.restaurant_id == DiningSession.restaurant_id,
+            Bill.status.in_(["issued", "payment_pending", "paid"]),
+        )
+    )
+    if restaurant_slug is not None:
+        query = query.filter(Bill.restaurant.has(slug=restaurant_slug))
+    bill = query.first()
+    if not bill:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
+    return bill
+
+
+@router.get("/public/bills/{receipt_token}", response_model=BillResponse)
+def get_public_bill_receipt(receipt_token: str, db: Session = Depends(get_db)):
+    """Read-only bill access, independent of active dining-session authority."""
+    bill = _load_public_receipt(db, receipt_token)
+    return build_bill_response(db, bill)
+
+
+@router.get("/public/restaurants/{restaurant_slug}/bills/{receipt_token}", response_model=BillResponse)
+def get_restaurant_public_bill_receipt(
+    restaurant_slug: str,
+    receipt_token: str,
+    db: Session = Depends(get_db),
+):
+    bill = _load_public_receipt(db, receipt_token, restaurant_slug)
     return build_bill_response(db, bill)
 
 
@@ -330,26 +371,32 @@ def confirm_staff_counter_payment(
         new_value=f'{{"count": {invalidated}, "reason": "payment_completed"}}',
     ))
     db.commit()
-    event_channels = [
+    staff_event_channels = [
         restaurant_channel(current_user.restaurant_id, "operations"),
         restaurant_channel(current_user.restaurant_id, "staff"),
         restaurant_channel(current_user.restaurant_id, "admin"),
-        session_channel(paid.dining_session.public_token),
         table_channel(current_user.restaurant_id, paid.dining_session.table_id),
     ]
     publish_event(
         EVENT_BILL_PAYMENT_RECORDED,
         restaurant_id=current_user.restaurant_id,
-        channels=event_channels,
+        channels=staff_event_channels,
         resource_id=paid.id,
         state={"bill_number": paid.bill_number, "status": paid.status},
     )
     publish_event(
         EVENT_BILL_PAID,
         restaurant_id=current_user.restaurant_id,
-        channels=event_channels,
+        channels=[*staff_event_channels, session_channel(paid.dining_session.public_token)],
         resource_id=paid.id,
-        state={"bill_number": paid.bill_number, "status": paid.status},
+        state={
+            "bill_number": paid.bill_number,
+            "status": paid.status,
+            "session_token": paid.dining_session.public_token,
+            "receipt_token": paid.receipt_token,
+            "payment_method": paid.payment_method,
+            "paid_at": paid.paid_at.isoformat() if paid.paid_at else None,
+        },
     )
     publish_event(
         EVENT_SESSION_CLOSED,
@@ -366,7 +413,7 @@ def confirm_staff_counter_payment(
     publish_event(
         EVENT_TABLE_STATUS_CHANGED,
         restaurant_id=current_user.restaurant_id,
-        channels=event_channels,
+        channels=staff_event_channels,
         resource_id=paid.dining_session.table_id,
         state={"status": "free"},
     )

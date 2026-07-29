@@ -386,16 +386,22 @@ export async function createOrRefreshStaffSessionBill(sessionToken: string): Pro
 
 export async function getPublicBill(
   sessionToken: string,
-  participantToken = ""
+  participantToken = "",
+  receiptToken = ""
 ): Promise<BillResponse> {
   const baseUrl = publicBackendBaseUrl();
-  const url = `${baseUrl}/public/sessions/${encodeURIComponent(sessionToken)}/bill`;
+  const url = receiptToken
+    ? `${baseUrl}/public/bills/${encodeURIComponent(receiptToken)}`
+    : `${baseUrl}/public/sessions/${encodeURIComponent(sessionToken)}/bill`;
 
   try {
     const response = await fetch(url, {
       method: "GET",
       cache: "no-store",
-      headers: { "Content-Type": "application/json", "X-Participant-Token": participantToken },
+      headers: {
+        "Content-Type": "application/json",
+        ...(participantToken ? { "X-Participant-Token": participantToken } : {}),
+      },
     });
 
     if (!response.ok) {

@@ -196,6 +196,7 @@ export interface BillOrder {
 
 export interface BillResponse {
   bill_number: string;
+  receipt_token: string;
   restaurant_name: string;
   restaurant_slug: string;
   table_number: string;

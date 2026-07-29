@@ -16,6 +16,7 @@ from app.models.restaurant import Restaurant
 from app.models.restaurant_table import RestaurantTable
 from app.services.realtime import (
     AuthorityRevocation,
+    EVENT_BILL_PAID,
     authority_actor_channel,
     authority_restaurant_channel,
     authority_session_channel,
@@ -206,15 +207,6 @@ async def _event_loop(
     try:
         await websocket.send_json({"type": "connection.ready"})
         while True:
-            if participant_token and participant_session_token:
-                authority_db = SessionLocal()
-                try:
-                    load_participant(authority_db, participant_token, session_token=participant_session_token)
-                except HTTPException:
-                    await websocket.close(code=1008)
-                    break
-                finally:
-                    authority_db.close()
             event_task = asyncio.create_task(queue.get())
             done, pending = await asyncio.wait(
                 {event_task, client_reader},
@@ -242,21 +234,33 @@ async def _event_loop(
                 ):
                     await websocket.close(code=1008)
                     break
+                participant_is_current = True
                 if participant_token and participant_session_token:
                     authority_db = SessionLocal()
                     try:
                         load_participant(authority_db, participant_token, session_token=participant_session_token)
                     except HTTPException:
-                        await websocket.close(code=1008)
-                        break
+                        participant_is_current = False
                     finally:
                         authority_db.close()
+                terminal_payment = (
+                    not participant_is_current
+                    and event.type == EVENT_BILL_PAID
+                    and event.state.get("session_token") == participant_session_token
+                )
+                if not participant_is_current and not terminal_payment:
+                    # Revocation blocks already-queued active-session events, but
+                    # the payment terminal is allowed to cross this boundary once.
+                    continue
                 try:
                     await websocket.send_json(event.public_payload(include_restaurant_id=include_restaurant_id))
                     record_delivery(event, success=True)
                 except Exception:
                     record_delivery(event, success=False)
                     raise
+                if terminal_payment:
+                    await websocket.close(code=1000)
+                    break
             else:
                 if staff_authority and (
                     not staff_token

@@ -4,9 +4,11 @@ type Params = Promise<{ sessionToken: string }>;
 
 interface PageProps {
   params: Params;
+  searchParams: Promise<{ receipt?: string }>;
 }
 
-export default async function BillPage({ params }: PageProps) {
+export default async function BillPage({ params, searchParams }: PageProps) {
   const { sessionToken } = await params;
-  return <BillClient sessionToken={sessionToken} />;
+  const { receipt } = await searchParams;
+  return <BillClient sessionToken={sessionToken} receiptToken={receipt} />;
 }
