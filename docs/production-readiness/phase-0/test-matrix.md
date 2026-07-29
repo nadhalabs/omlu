@@ -17,6 +17,10 @@ All tests run against an Alembic-built PostgreSQL database, real Next.js route h
 | TSW-09 | Global and individual lock | writes blocked; termination occurs where policy says; owner recovery remains |
 | TSW-10 | Admin self-role/status mutation and last-owner attempt | controlled teardown; unsafe last-owner change rejected atomically |
 
+### P1.2 web coverage
+
+The web runtime suite covers TSW-01 and TSW-06 at the client authority boundary: complete-scope cache isolation, cleanup-before-redirect, teardown-before-account-B activation, stale-response rejection after generation or epoch changes, identity-storage removal with preference preservation, authenticated `401` teardown, and ordinary `403` preservation. Focused backend tests verify the `/me` scope contract and that the external epoch does not reveal the raw session JTI. Full browser/database deployment scenarios and non-web clients remain required by this matrix.
+
 ## Realtime and recovery
 
 | ID | Scenario | Required result |

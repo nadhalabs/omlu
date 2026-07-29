@@ -1,5 +1,6 @@
 import KitchenDashboardClient from "./KitchenDashboardClient";
 import { requireStaffRole } from "@/lib/serverAuth";
+import { WebAuthScope } from "@/components/WebAuthScope";
 
 type Params = Promise<{ restaurantSlug: string }>;
 
@@ -9,6 +10,6 @@ interface PageProps {
 
 export default async function KitchenPage({ params }: PageProps) {
   const { restaurantSlug } = await params;
-  await requireStaffRole(["owner", "admin", "kitchen"]);
-  return <KitchenDashboardClient restaurantSlug={restaurantSlug} />;
+  const staff = await requireStaffRole(["owner", "admin", "kitchen"]);
+  return <WebAuthScope scope={staff.scope}><KitchenDashboardClient restaurantSlug={restaurantSlug} /></WebAuthScope>;
 }

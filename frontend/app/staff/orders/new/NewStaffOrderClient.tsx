@@ -13,6 +13,7 @@ import {
 } from "@/lib/staffTables";
 import { MenuOptionGroup, SelectedOptionRequest } from "@/lib/types";
 import { useRealtime } from "@/lib/realtime";
+import { authenticatedCacheKey } from "@/lib/authRuntime.mjs";
 
 type CartLine = {
   menu_item_id: number;
@@ -33,7 +34,7 @@ type StaffMenuItem = {
 };
 
 function cartKey(tableId: number | null) {
-  return tableId ? `staff-order-cart-${tableId}` : "staff-order-cart";
+  return `omlu:auth:${authenticatedCacheKey("staff-order-cart", { tableId })}`;
 }
 
 function currency(value: number) {

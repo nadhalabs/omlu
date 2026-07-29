@@ -12,12 +12,20 @@ Authenticated HTTP requests now resolve through `AuthenticatedContext` in `backe
 
 P1.1 does not scope client storage, perform account teardown, change WebView behavior, or change WebSocket authentication. Operations locks and restaurant `open|closing|closed` remain write-policy checks rather than identity fields; their redesign/revocation behavior remains P1.3/P1.5.
 
+### P1.2 web implementation record
+
+The authenticated web `/me` contract now includes `{restaurant_id, actor_id, role, authority_epoch}` under `scope`. The external epoch is a deterministic HMAC-derived opaque value and does not expose the active session JTI. `frontend/lib/authRuntime.mjs` is the sole browser authority coordinator: it owns activation, generation changes, account-switch ordering, identity-storage deletion, server logout, and final history-replacing navigation.
+
+Authenticated browser cache and staff-cart keys are built centrally from the complete scope plus feature and normalized filters. Query responses capture their authority generation and fingerprint and are rejected if teardown or an epoch change occurs before completion. Explicit logout and an authenticated HTTP `401` join the same idempotent teardown; an ordinary `403` leaves the session active. Authenticated polling, focus/visibility refreshes, query state, and staff WebSocket reconnects register cleanup callbacks that finish before a new login is permitted.
+
+P1.2 is web-only. Flutter, Android WebView state, server WebSocket authority/revocation, Redis, database migrations, and authority-invalidating `403` error codes remain assigned to later tasks.
+
 ## Scope propagation contract
 
 | Location | Required namespace/validation |
 |---|---|
 | Backend query/mutation | Authenticated `restaurant_id`; actor and role from current DB row; conflicting client scope rejected |
-| Browser query cache | `restaurant_id:actor_id:authority_epoch:resource:parameters` |
+| Browser query cache | `restaurant_id:actor_id:role:opaque_authority_epoch:feature:normalized_filters` |
 | Flutter cache | Same scope; no global `tables_all`; purge scope on termination |
 | Staff cart/draft | Tenant+actor+authority+table ID+intent key |
 | Public cart/session | Restaurant ID/slug route validated to restaurant, table ID/code, session capability |
@@ -43,7 +51,7 @@ Slug MAY appear in a route or display label, but canonical records MUST carry re
 8. Reset identity and navigate to login with history replacement.
 9. Permit new authentication only after completion.
 
-`401` always terminates. `403` terminates only for authority-invalidating codes (password change, suspension/removal, revoked role/restaurant, lock policy); ordinary permission denial remains in-session. Clients MUST use error codes, not message text, to distinguish them.
+An authenticated browser `401` always terminates. P1.2 preserves the session for every `403`; authority-invalidating `403` codes and their teardown policy remain future work. Clients MUST use error codes, not message text, when that distinction is introduced.
 
 ## WebSocket contract
 

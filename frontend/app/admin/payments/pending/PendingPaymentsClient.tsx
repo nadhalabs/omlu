@@ -7,6 +7,7 @@ import { ApiError, confirmPendingPayment, getPendingPayments, issueStaffBill } f
 import { PendingPaymentItem } from "@/lib/types";
 import { useRealtime } from "@/lib/realtime";
 import { useOmluUi } from "@/components/OmluUiProvider";
+import { registerAuthenticatedCleanup } from "@/lib/authRuntime.mjs";
 
 function money(value: string) { return `₹${Number(value).toFixed(2)}`; }
 function dateTime(value: string) { return new Date(value).toLocaleString(); }
@@ -38,7 +39,11 @@ export default function PendingPaymentsClient() {
 
   useEffect(() => {
     const timeout = window.setTimeout(() => void refresh(true), 0);
-    return () => window.clearTimeout(timeout);
+    const unregister = registerAuthenticatedCleanup(() => window.clearTimeout(timeout));
+    return () => {
+      unregister();
+      window.clearTimeout(timeout);
+    };
   }, [refresh]);
   useEffect(() => {
     if (!selectedBill || loading) return;
@@ -48,7 +53,12 @@ export default function PendingPaymentsClient() {
     const visible = () => document.visibilityState === "visible" && void refresh();
     document.addEventListener("visibilitychange", visible);
     window.addEventListener("focus", visible);
+    const unregister = registerAuthenticatedCleanup(() => {
+      document.removeEventListener("visibilitychange", visible);
+      window.removeEventListener("focus", visible);
+    });
     return () => {
+      unregister();
       document.removeEventListener("visibilitychange", visible);
       window.removeEventListener("focus", visible);
     };

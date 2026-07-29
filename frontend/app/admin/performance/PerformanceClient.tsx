@@ -8,7 +8,7 @@ import {
   HistoryFilters,
   PerformanceSummary,
 } from "@/lib/adminHistory";
-import { useCachedQuery } from "@/lib/queryCache";
+import { queryKeys, useCachedQuery } from "@/lib/queryCache";
 import { useRealtime } from "@/lib/realtime";
 import { formatCurrency, formatAverageOrderValue, formatDurationMinutes } from "./performanceFormatters";
 import { TrendChart, HourBarChart, RankedList, ChartEmptyState, ChartSkeleton } from "./PerformanceCharts";
@@ -206,7 +206,7 @@ export default function PerformanceClient({ initialState }: { initialState: Perf
     return fetchHistory<PerformanceSummary>("performance", filters, controller.signal);
   }, [filterKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const { data, error, isLoading, isRefreshing, refetch } = useCachedQuery<PerformanceSummary>(
-    `analytics:performance:${filterKey}`,
+    queryKeys.analytics("performance", filters),
     queryFn,
     { staleTime: 30_000 },
   );

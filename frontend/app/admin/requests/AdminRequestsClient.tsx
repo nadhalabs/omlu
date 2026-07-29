@@ -14,6 +14,7 @@ import {
 } from "@/lib/api";
 import { CounterPaymentMethod, CurrentStaffResponse, StaffServiceRequestResponse } from "@/lib/types";
 import { useRealtime } from "@/lib/realtime";
+import { registerAuthenticatedCleanup } from "@/lib/authRuntime.mjs";
 
 const REQUEST_TYPE_LABELS: Record<string, string> = {
   waiter: "🙋 Waiter",
@@ -86,7 +87,12 @@ export default function AdminRequestsClient() {
   useEffect(() => {
     const timeout = window.setTimeout(() => fetchRequests(true), 0);
     const interval = setInterval(() => fetchRequests(false), 5_000);
+    const unregister = registerAuthenticatedCleanup(() => {
+      window.clearTimeout(timeout);
+      clearInterval(interval);
+    });
     return () => {
+      unregister();
       window.clearTimeout(timeout);
       clearInterval(interval);
     };

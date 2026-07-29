@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FormToast } from "@/components/FormToast";
 import { PasswordInput } from "@/components/PasswordInput";
@@ -10,6 +10,10 @@ import { FieldErrors, firstError, focusField, validateLogin } from "@/lib/formVa
 import { roleHomePath } from "@/lib/roleRoutes";
 import { StaffLoginRequest } from "@/lib/types";
 import { AndroidDownloadCard } from "@/components/AndroidDownloadCard";
+import {
+  getActiveWebTenantScope,
+  terminateWebAuthentication,
+} from "@/lib/authRuntime.mjs";
 
 const fieldOrder: (keyof StaffLoginRequest)[] = ["restaurant_slug", "login", "password"];
 
@@ -22,6 +26,16 @@ export default function LoginClient() {
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors<keyof StaffLoginRequest>>({});
+
+  useEffect(() => {
+    if (getActiveWebTenantScope()) {
+      void terminateWebAuthentication({
+        reason: "login_route",
+        clearServerSession: true,
+        redirectTo: null,
+      });
+    }
+  }, []);
 
   const setFieldError = useCallback((field: keyof StaffLoginRequest, message?: string) => {
     setFieldErrors((current) => ({ ...current, [field]: message }));

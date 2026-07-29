@@ -15,6 +15,14 @@ class StaffSummaryResponse(BaseModel):
     restaurant_name: str
     restaurant_slug: str
 
+
+class WebTenantScopeResponse(BaseModel):
+    restaurant_id: int
+    actor_id: int
+    role: str
+    authority_epoch: str
+
+
 class StaffLoginResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -39,3 +47,4 @@ class CurrentStaffResponse(BaseModel):
     must_change_password: bool = False
     restaurant_name: str
     restaurant_slug: str
+    scope: WebTenantScopeResponse

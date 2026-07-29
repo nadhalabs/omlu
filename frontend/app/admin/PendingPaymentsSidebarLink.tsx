@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { useRealtime, RealtimeEvent } from "@/lib/realtime";
+import { registerAuthenticatedCleanup } from "@/lib/authRuntime.mjs";
 
 export default function PendingPaymentsSidebarLink({ initialCount }: { initialCount: number }) {
   const pathname = usePathname();
@@ -35,7 +36,13 @@ export default function PendingPaymentsSidebarLink({ initialCount }: { initialCo
     window.addEventListener("focus", sync);
     window.addEventListener("pending-payments-changed", sync);
     document.addEventListener("visibilitychange", visible);
+    const unregister = registerAuthenticatedCleanup(() => {
+      window.removeEventListener("focus", sync);
+      window.removeEventListener("pending-payments-changed", sync);
+      document.removeEventListener("visibilitychange", visible);
+    });
     return () => {
+      unregister();
       window.removeEventListener("focus", sync);
       window.removeEventListener("pending-payments-changed", sync);
       document.removeEventListener("visibilitychange", visible);

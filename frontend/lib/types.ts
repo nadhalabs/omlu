@@ -320,6 +320,12 @@ export interface CurrentStaffResponse {
   must_change_password: boolean;
   restaurant_name: string;
   restaurant_slug: string;
+  scope: {
+    restaurant_id: number;
+    actor_id: number;
+    role: string;
+    authority_epoch: string;
+  };
 }
 
 export interface AdminCategoryResponse {

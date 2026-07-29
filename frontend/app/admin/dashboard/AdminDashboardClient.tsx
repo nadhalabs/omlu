@@ -9,6 +9,7 @@ import { DashboardSummaryResponse } from "@/lib/types";
 import { useRealtime } from "@/lib/realtime";
 import { queryKeys, useCachedQuery } from "@/lib/queryCache";
 import { buildHourlyChart } from "@/lib/dashboardHourly";
+import { registerAuthenticatedCleanup } from "@/lib/authRuntime.mjs";
 
 function StatCard({
   label,
@@ -56,7 +57,7 @@ export default function AdminDashboardClient() {
     isLoading: loading,
     isRefreshing,
     refetch,
-  } = useCachedQuery<DashboardSummaryResponse>(queryKeys.dashboard, queryFn, {
+  } = useCachedQuery<DashboardSummaryResponse>(queryKeys.dashboard(), queryFn, {
     staleTime: 30_000,
   });
   const error = queryError
@@ -71,7 +72,9 @@ export default function AdminDashboardClient() {
   useEffect(() => {
     // Refresh every 30 seconds automatically
     const interval = setInterval(() => void fetchDashboard(), 30_000);
+    const unregister = registerAuthenticatedCleanup(() => clearInterval(interval));
     return () => {
+      unregister();
       clearInterval(interval);
     };
   }, [fetchDashboard]);

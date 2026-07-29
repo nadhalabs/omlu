@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { registerAuthenticatedCleanup } from "./authRuntime.mjs";
 
 export type RealtimeStatus = "connecting" | "live" | "reconnecting" | "offline";
 
@@ -111,6 +112,16 @@ export function useRealtime({
     }
 
     let active = true;
+    const unregisterTeardown =
+      target.kind === "staff"
+        ? registerAuthenticatedCleanup(() => {
+            active = false;
+            clearReconnectTimer();
+            socketRef.current?.close();
+            socketRef.current = null;
+            setStatus("offline");
+          })
+        : () => undefined;
 
     const connect = async () => {
       clearReconnectTimer();
@@ -181,13 +192,14 @@ export function useRealtime({
     void connect();
 
     return () => {
+      unregisterTeardown();
       active = false;
       clearReconnectTimer();
       socketRef.current?.close();
       socketRef.current = null;
       setStatus("offline");
     };
-  }, [clearReconnectTimer, enabled, targetKey]);
+  }, [clearReconnectTimer, enabled, target.kind, targetKey]);
 
   return status;
 }

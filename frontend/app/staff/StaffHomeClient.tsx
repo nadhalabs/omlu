@@ -6,6 +6,7 @@ import { ApiError, getStaffServiceRequests, getStaffSessions } from "@/lib/api";
 import { StaffServiceRequestResponse, StaffSessionListItem } from "@/lib/types";
 import { useRealtime } from "@/lib/realtime";
 import { AndroidDownloadCard } from "@/components/AndroidDownloadCard";
+import { registerAuthenticatedCleanup } from "@/lib/authRuntime.mjs";
 
 export default function StaffHomeClient() {
   const [sessions, setSessions] = useState<StaffSessionListItem[]>([]);
@@ -33,7 +34,12 @@ export default function StaffHomeClient() {
   useEffect(() => {
     const timeout = window.setTimeout(() => load(), 0);
     const interval = setInterval(load, 15_000);
+    const unregister = registerAuthenticatedCleanup(() => {
+      window.clearTimeout(timeout);
+      clearInterval(interval);
+    });
     return () => {
+      unregister();
       window.clearTimeout(timeout);
       clearInterval(interval);
     };

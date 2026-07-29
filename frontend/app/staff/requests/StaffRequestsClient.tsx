@@ -5,6 +5,7 @@ import { StaffBottomNav } from "@/components/staff/StaffBottomNav";
 import { ApiError, getStaffServiceRequests, resolveStaffServiceRequest } from "@/lib/api";
 import { useRealtime } from "@/lib/realtime";
 import { StaffServiceRequestResponse } from "@/lib/types";
+import { registerAuthenticatedCleanup } from "@/lib/authRuntime.mjs";
 
 const requestLabels: Record<string, string> = {
   waiter: "Waiter",
@@ -54,7 +55,12 @@ export default function StaffRequestsClient() {
   useEffect(() => {
     const timeout = window.setTimeout(() => void fetchRequests(true), 0);
     const interval = window.setInterval(() => void fetchRequests(false), 15_000);
+    const unregister = registerAuthenticatedCleanup(() => {
+      window.clearTimeout(timeout);
+      window.clearInterval(interval);
+    });
     return () => {
+      unregister();
       window.clearTimeout(timeout);
       window.clearInterval(interval);
     };

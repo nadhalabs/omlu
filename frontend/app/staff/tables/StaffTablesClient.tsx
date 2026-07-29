@@ -55,11 +55,11 @@ export default function StaffTablesClient() {
     isLoading: loading,
     isRefreshing: refreshing,
     refetch: load,
-  } = useCachedQuery<StaffTableSummary[]>(queryKeys.tables, tablesQuery, {
+  } = useCachedQuery<StaffTableSummary[]>(queryKeys.tables({ filter: "all" }), tablesQuery, {
     staleTime: 15_000,
   });
   const { data: staffInfo } = useCachedQuery<CurrentStaffResponse>(
-    queryKeys.staffMe,
+    queryKeys.staffMe(),
     staffQuery,
     { staleTime: 5 * 60_000 },
   );

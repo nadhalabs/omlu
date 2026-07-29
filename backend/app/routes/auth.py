@@ -20,7 +20,8 @@ from app.utils.auth import (
     hash_password,
     verify_password,
     create_access_token,
-    get_current_staff_user,
+    external_authority_epoch,
+    get_authenticated_context_for_password_change,
     get_current_staff_user_for_password_change,
     security_scheme,
 )
@@ -205,9 +206,18 @@ def staff_login(
 
 @router.get("/me", response_model=CurrentStaffResponse)
 def get_me(
-    current_user: StaffUser = Depends(get_current_staff_user_for_password_change)
+    context=Depends(get_authenticated_context_for_password_change),
 ):
-    return _staff_payload(current_user, current_user.restaurant)
+    current_user = context.actor
+    return {
+        **_staff_payload(current_user, current_user.restaurant),
+        "scope": {
+            "restaurant_id": context.scope.restaurant_id,
+            "actor_id": context.scope.actor_id,
+            "role": context.scope.role,
+            "authority_epoch": external_authority_epoch(context.scope),
+        },
+    }
 
 
 @router.post("/change-password", response_model=StaffPasswordChangeResponse)

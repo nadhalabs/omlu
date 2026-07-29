@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { getKitchenOrders, updateKitchenOrderStatus, getStaffMe, ApiError } from "@/lib/api";
 import { KitchenOrderResponse, CurrentStaffResponse } from "@/lib/types";
 import { useRealtime } from "@/lib/realtime";
+import { registerAuthenticatedCleanup } from "@/lib/authRuntime.mjs";
 import { useOmluUi } from "@/components/OmluUiProvider";
 import { useConfirmedSignOut } from "@/components/useConfirmedSignOut";
 
@@ -62,7 +63,11 @@ export default function KitchenDashboardClient({
     const interval = setInterval(() => {
       setTick((t) => t + 1);
     }, 10000);
-    return () => clearInterval(interval);
+    const unregister = registerAuthenticatedCleanup(() => clearInterval(interval));
+    return () => {
+      unregister();
+      clearInterval(interval);
+    };
   }, []);
 
   // Web Audio synth beep
@@ -228,8 +233,13 @@ export default function KitchenDashboardClient({
         fetchOrders(false);
       }
     }, 5000);
+    const unregister = registerAuthenticatedCleanup(() => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      clearInterval(interval);
+    });
 
     return () => {
+      unregister();
       document.removeEventListener("visibilitychange", handleVisibility);
       clearInterval(interval);
     };

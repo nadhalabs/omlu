@@ -11,7 +11,6 @@ import {
   StaffLoginRequest,
   RestaurantRegistrationRequest,
   RestaurantRegistrationResponse,
-  StaffSummaryResponse,
   CurrentStaffResponse,
   AdminCategoryResponse,
   AdminMenuItemResponse,
@@ -30,6 +29,12 @@ import {
   MenuImportResponse,
   MenuImportDraftItem,
 } from "./types";
+import {
+  activateWebTenantScope,
+  handleAuthenticationStatus,
+  prepareForAuthentication,
+  terminateWebAuthentication,
+} from "./authRuntime.mjs";
 
 export class ApiError extends Error {
   status: number;
@@ -39,6 +44,7 @@ export class ApiError extends Error {
     this.status = status;
     this.field = field;
     this.name = "ApiError";
+    handleAuthenticationStatus(status);
   }
 }
 
@@ -530,8 +536,9 @@ export async function updateKitchenOrderStatus(
 
 export async function staffLogin(
   body: StaffLoginRequest
-): Promise<{ staff: StaffSummaryResponse }> {
+): Promise<{ staff: CurrentStaffResponse }> {
   try {
+    await prepareForAuthentication();
     const response = await fetch("/api/auth/login", {
       method: "POST",
       headers: {
@@ -549,7 +556,10 @@ export async function staffLogin(
       throw new ApiError(response.status, parsed.message, parsed.field);
     }
 
-    return await response.json();
+    await response.json();
+    const staff = await getStaffMe();
+    activateWebTenantScope(staff.scope);
+    return { staff };
   } catch (error) {
     if (error instanceof ApiError) {
       throw error;
@@ -589,29 +599,17 @@ export async function registerRestaurant(
 }
 
 export async function staffLogout(): Promise<void> {
-  try {
-    const response = await fetch("/api/auth/logout", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
-
-    if (!response.ok) {
-      throw new ApiError(response.status, "Logout failed.");
-    }
-  } catch (error) {
-    if (error instanceof ApiError) {
-      throw error;
-    }
-    throw new ApiError(500, "Could not connect to the Next.js API server.");
-  }
+  await terminateWebAuthentication({
+    reason: "explicit_logout",
+    clearServerSession: true,
+    redirectTo: "/login",
+  });
 }
 
 export async function changeStaffPassword(body: {
   current_password: string;
   new_password: string;
-}): Promise<{ staff: StaffSummaryResponse }> {
+}): Promise<{ staff: CurrentStaffResponse }> {
   try {
     const response = await fetch("/api/auth/change-password", {
       method: "POST",
@@ -630,7 +628,15 @@ export async function changeStaffPassword(body: {
       throw new ApiError(response.status, parsed.message, parsed.field);
     }
 
-    return await response.json();
+    await response.json();
+    await terminateWebAuthentication({
+      reason: "authority_epoch_changed",
+      clearServerSession: false,
+      redirectTo: null,
+    });
+    const staff = await getStaffMe();
+    activateWebTenantScope(staff.scope);
+    return { staff };
   } catch (error) {
     if (error instanceof ApiError) throw error;
     throw new ApiError(500, "Could not connect to the Next.js API server.");
@@ -657,7 +663,18 @@ export async function getStaffMe(): Promise<CurrentStaffResponse> {
       throw new ApiError(response.status, message);
     }
 
-    return await response.json();
+    const staff = (await response.json()) as CurrentStaffResponse;
+    try {
+      activateWebTenantScope(staff.scope);
+    } catch {
+      await terminateWebAuthentication({
+        reason: "authority_scope_mismatch",
+        clearServerSession: true,
+        redirectTo: "/login",
+      });
+      throw new ApiError(401, "Authentication authority changed.");
+    }
+    return staff;
   } catch (error) {
     if (error instanceof ApiError) {
       throw error;

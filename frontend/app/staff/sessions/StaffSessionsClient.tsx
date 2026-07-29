@@ -5,6 +5,7 @@ import Link from "next/link";
 import { getStaffMe, getStaffSessions, closeEmptySession, ApiError } from "@/lib/api";
 import { CurrentStaffResponse, StaffSessionListItem } from "@/lib/types";
 import { useRealtime } from "@/lib/realtime";
+import { registerAuthenticatedCleanup } from "@/lib/authRuntime.mjs";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -92,7 +93,12 @@ export default function StaffSessionsClient() {
   useEffect(() => {
     const timeout = window.setTimeout(() => fetchSessions(true), 0);
     const interval = setInterval(() => fetchSessions(false), 5_000);
+    const unregister = registerAuthenticatedCleanup(() => {
+      window.clearTimeout(timeout);
+      clearInterval(interval);
+    });
     return () => {
+      unregister();
       window.clearTimeout(timeout);
       clearInterval(interval);
     };

@@ -1,5 +1,6 @@
 import StaffSessionsClient from "./StaffSessionsClient";
 import { requireStaffRole } from "@/lib/serverAuth";
+import { WebAuthScope } from "@/components/WebAuthScope";
 
 export const metadata = {
   title: "Active Tables — OMLU Staff",
@@ -7,6 +8,6 @@ export const metadata = {
 };
 
 export default async function StaffSessionsPage() {
-  await requireStaffRole(["owner", "admin", "staff"]);
-  return <StaffSessionsClient />;
+  const staff = await requireStaffRole(["owner", "admin", "staff"]);
+  return <WebAuthScope scope={staff.scope}><StaffSessionsClient /></WebAuthScope>;
 }

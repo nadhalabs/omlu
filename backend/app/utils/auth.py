@@ -1,5 +1,8 @@
 import jwt
 import datetime
+import base64
+import hashlib
+import hmac
 import uuid
 from dataclasses import dataclass
 from typing import Optional, Dict, Any, List
@@ -39,6 +42,16 @@ class AuthenticatedContext:
     actor: StaffUser
     session: StaffSession
     scope: TenantScope
+
+
+def external_authority_epoch(scope: TenantScope) -> str:
+    """Return a stable opaque browser epoch without exposing the session JTI."""
+    digest = hmac.new(
+        settings.jwt_secret_key.encode("utf-8"),
+        scope.authority_epoch.encode("utf-8"),
+        hashlib.sha256,
+    ).digest()
+    return "v1." + base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
 
 def normalize_email(email: str) -> str:
     return email.strip().lower()

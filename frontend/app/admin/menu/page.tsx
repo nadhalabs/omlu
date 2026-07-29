@@ -15,7 +15,7 @@ import {
   updateAdminMenuItemAvailability,
 } from "@/lib/api";
 import { AdminCategoryResponse, AdminMenuItemResponse } from "@/lib/types";
-import { invalidateQueries } from "@/lib/queryCache";
+import { invalidateQueries, queryKeys } from "@/lib/queryCache";
 import { useModalScrollLock } from "@/components/useModalScrollLock";
 import MenuImportFlow from "./MenuImportFlow";
 import MenuOptionEditor from "./MenuOptionEditor";
@@ -355,7 +355,7 @@ export default function AdminMenuPage() {
 
     try {
       await updateAdminMenuItemAvailability(item.id, nextAvail);
-      invalidateQueries("menu");
+      invalidateQueries(queryKeys.menu());
     } catch (err) {
       setItems(previousItems);
       toast(`Availability restored. ${getErrorMessage(err, "Update failed.")} Tap to retry.`, "error");

@@ -305,3 +305,18 @@ def test_existing_me_endpoint_uses_compatibility_dependency(
     )
     assert response.status_code == 200
     assert response.json()["role"] == expected_role
+    scope = response.json()["scope"]
+    assert scope["restaurant_id"] in {
+        scope_data["first_id"],
+        scope_data["second_id"],
+    }
+    assert scope["actor_id"] in {
+        scope_data["owner_id"],
+        scope_data["kitchen_id"],
+    }
+    assert scope["role"] == expected_role
+    assert scope["authority_epoch"].startswith("v1.")
+    token_payload = jwt.decode(
+        token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm]
+    )
+    assert token_payload["jti"] not in scope["authority_epoch"]

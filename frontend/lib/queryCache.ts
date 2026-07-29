@@ -1,6 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useSyncExternalStore } from "react";
+import {
+  authenticatedCacheKey,
+  getAuthorityGeneration,
+  isAuthorityGenerationCurrent,
+  registerAuthenticatedCleanup,
+  scopeFingerprint,
+} from "./authRuntime.mjs";
 
 type CacheEntry<T> = {
   data?: T;
@@ -16,6 +23,13 @@ type QueryOptions = {
 };
 
 const cache = new Map<string, CacheEntry<unknown>>();
+
+export class StaleAuthorityResponseError extends Error {
+  constructor() {
+    super("Response belongs to a terminated authentication authority.");
+    this.name = "StaleAuthorityResponseError";
+  }
+}
 
 function entryFor<T>(key: string): CacheEntry<T> {
   let entry = cache.get(key) as CacheEntry<T> | undefined;
@@ -39,8 +53,13 @@ async function runQuery<T>(
   if (entry.promise) return entry.promise;
   if (!force && entry.data !== undefined) return entry.data;
 
+  const requestGeneration = getAuthorityGeneration();
+  const requestScope = scopeFingerprint();
   entry.promise = queryFn()
     .then((data) => {
+      if (!isAuthorityGenerationCurrent(requestGeneration, requestScope)) {
+        throw new StaleAuthorityResponseError();
+      }
       entry.data = data;
       entry.error = undefined;
       entry.updatedAt = Date.now();
@@ -126,12 +145,28 @@ export function invalidateQueries(prefix: string) {
   }
 }
 
+export function clearAuthenticatedQueryCache() {
+  for (const entry of cache.values()) {
+    entry.data = undefined;
+    entry.error = undefined;
+    entry.updatedAt = 0;
+    entry.promise = undefined;
+    notify(entry);
+  }
+  cache.clear();
+}
+
+registerAuthenticatedCleanup(() => clearAuthenticatedQueryCache());
+
 export const queryKeys = {
-  dashboard: "dashboard",
-  staffMe: "staff-me",
-  staff: "staff",
-  tables: "tables",
-  menu: "menu",
-  categories: "categories",
-  kitchenOrders: (restaurantSlug: string) => `orders:kitchen:${restaurantSlug}`,
+  dashboard: () => authenticatedCacheKey("dashboard"),
+  staffMe: () => authenticatedCacheKey("staff-me"),
+  staff: (filters?: unknown) => authenticatedCacheKey("staff", filters),
+  tables: (filters?: unknown) => authenticatedCacheKey("tables", filters),
+  menu: (filters?: unknown) => authenticatedCacheKey("menu", filters),
+  categories: (filters?: unknown) => authenticatedCacheKey("categories", filters),
+  analytics: (feature: string, filters?: unknown) =>
+    authenticatedCacheKey(`analytics:${feature}`, filters),
+  kitchenOrders: (filters?: unknown) =>
+    authenticatedCacheKey("orders:kitchen", filters),
 };

@@ -5,6 +5,7 @@ import AdminSidebarLink from "./AdminSidebarLink";
 import AdminLogoutButton from "./AdminLogoutButton";
 import { backendUrl } from "@/lib/backendUrl";
 import PendingPaymentsSidebarLink from "./PendingPaymentsSidebarLink";
+import { WebAuthScope } from "@/components/WebAuthScope";
 
 export default async function AdminLayout({
   children,
@@ -80,6 +81,7 @@ export default async function AdminLayout({
   }
 
   return (
+    <WebAuthScope scope={staffInfo.scope}>
     <div className="omlu-light-shell flex min-h-screen min-w-0 flex-col lg:flex-row">
       {/* Sidebar Navigation */}
       <aside className="sticky top-0 z-30 flex w-full shrink-0 flex-col justify-between border-b border-zinc-850 bg-zinc-950 p-4 shadow-sm lg:static lg:w-64 lg:border-b-0 lg:border-r lg:p-6 lg:shadow-none print:hidden">
@@ -130,5 +132,6 @@ export default async function AdminLayout({
         {children}
       </main>
     </div>
+    </WebAuthScope>
   );
 }
