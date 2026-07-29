@@ -83,6 +83,20 @@ def test_first_device_secure_authority_and_raw_secrets_not_persisted(participant
     assert db.query(AuditLog).filter(AuditLog.action == "table_session_created", AuditLog.target_id == str(session.id)).count() == 1
     db.close()
 
+    menu = client.get(
+        f"/public/restaurants/{participant_context['slug']}/tables/{participant_context['table_code']}/menu"
+    )
+    assert menu.status_code == 200
+    assert "join_code" not in str(menu.json())
+
+    assert client.get(f"/public/sessions/{body['session']['public_id']}/participant").status_code == 401
+    authorized = client.get(
+        f"/public/sessions/{body['session']['public_id']}/participant",
+        headers={"X-Participant-Token": body["participant_token"]},
+    )
+    assert authorized.status_code == 200
+    assert authorized.json()["join_code"] == body["join_code"]
+
 
 def test_qr_only_is_menu_only_and_joined_participant_can_order_and_request_service(participant_context):
     authority = start(participant_context).json()
@@ -127,6 +141,17 @@ def test_second_device_join_scope_rotation_and_revocation(participant_context):
     )
     assert old.status_code == 401
     assert client.get(f"/public/sessions/{session_token}", headers={"X-Participant-Token": first["participant_token"]}).status_code == 200
+    refreshed = client.get(
+        f"/public/sessions/{session_token}/participant",
+        headers={"X-Participant-Token": first["participant_token"]},
+    )
+    assert refreshed.status_code == 200
+    assert refreshed.json()["join_code"] == rotated.json()["join_code"]
+    newly_joined = client.post(
+        f"/public/restaurants/{participant_context['slug']}/tables/{participant_context['table_code']}/join",
+        json={"code": rotated.json()["join_code"], "device_id": "third-new-code"},
+    )
+    assert newly_joined.status_code == 200
 
     revoked = client.post(
         f"/staff/table-sessions/{session_token}/participants/{joined.json()['participant']['public_id']}/revoke",

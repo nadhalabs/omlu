@@ -82,6 +82,7 @@ export default function MenuClient({
   const [joinError, setJoinError] = useState<string | null>(null);
   const [joining, setJoining] = useState(false);
   const [visibleJoinCode, setVisibleJoinCode] = useState<string | null>(null);
+  const [joinCodeCopied, setJoinCodeCopied] = useState(false);
   const [participantCount, setParticipantCount] = useState(0);
 
   // Fetch menu data
@@ -271,6 +272,7 @@ export default function MenuClient({
     try {
       const authority = await getTableParticipantAuthority(currentSession.public_token, participantToken);
       setVisibleJoinCode(authority.join_code);
+      setJoinCodeCopied(false);
       setParticipantCount(authority.participant_count);
       await validateSavedSession();
     } catch (err) {
@@ -284,6 +286,12 @@ export default function MenuClient({
       }
     }
   }, [clearOrderingState, currentSession, participantToken, restaurantSlug, tableCode, validateSavedSession]);
+
+  const copyVisibleJoinCode = useCallback(async () => {
+    if (!visibleJoinCode) return;
+    await navigator.clipboard.writeText(visibleJoinCode);
+    setJoinCodeCopied(true);
+  }, [visibleJoinCode]);
 
   useRealtime({
     enabled: Boolean(participantToken && currentSession),
@@ -827,10 +835,19 @@ export default function MenuClient({
           )}
 
           {participantToken && visibleJoinCode && (
-            <section className="rounded-2xl border border-zinc-200 bg-zinc-100 px-4 py-3 text-sm dark:border-zinc-800 dark:bg-zinc-900">
-              <p className="text-xs font-bold text-zinc-500">Table access</p>
-              <p className="mt-1 font-black">Join code: <span className="tracking-[0.2em]">{visibleJoinCode}</span></p>
-              <p className="text-xs text-zinc-500">{participantCount} device{participantCount === 1 ? "" : "s"} joined · Only share this code with people sitting at your table.</p>
+            <section className="rounded-2xl border border-orange-200 bg-orange-50 px-4 py-4 dark:border-orange-900/50 dark:bg-orange-950/20" aria-labelledby="invite-table-title">
+              <h2 id="invite-table-title" className="font-black text-zinc-950 dark:text-white">Invite people at your table</h2>
+              <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-300">Other people at this table can scan the same QR and enter this code.</p>
+              <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-orange-200 bg-white px-4 py-3 dark:border-orange-900/60 dark:bg-zinc-950">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">Four-digit join code</p>
+                  <p className="mt-1 text-2xl font-black tracking-[0.3em] text-zinc-950 dark:text-white">{visibleJoinCode}</p>
+                </div>
+                <button type="button" onClick={() => void copyVisibleJoinCode()} className="min-h-11 rounded-xl bg-orange-600 px-4 py-2 text-sm font-black text-white">
+                  {joinCodeCopied ? "Copied" : "Copy"}
+                </button>
+              </div>
+              <p className="mt-2 text-xs text-zinc-500">{participantCount} device{participantCount === 1 ? "" : "s"} joined · Only share this code with people sitting at your table.</p>
             </section>
           )}
 

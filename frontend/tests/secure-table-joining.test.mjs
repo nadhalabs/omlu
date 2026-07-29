@@ -33,6 +33,15 @@ test("authorized participants receive code updates and revoked access is cleared
   assert.match(realtime, /participant_token/);
 });
 
+test("only authorized participants see and can copy the table invitation code", () => {
+  assert.match(menu, /participantToken && visibleJoinCode/);
+  assert.match(menu, /Invite people at your table/);
+  assert.match(menu, /Other people at this table can scan the same QR and enter this code\./);
+  assert.match(menu, /navigator\.clipboard\.writeText\(visibleJoinCode\)/);
+  assert.match(menu, /joinCodeCopied \? "Copied" : "Copy"/);
+  assert.doesNotMatch(menu, /[?&]join_code=/);
+});
+
 test("staff can manage participants only through confirmed actions", () => {
   assert.match(staff, /Customer devices:/);
   assert.match(staff, /Current join code:/);
