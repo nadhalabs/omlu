@@ -18,7 +18,8 @@ from app.models.restaurant_table import RestaurantTable
 from app.models.service_request import ServiceRequest
 from app.models.staff_user import StaffUser
 from app.services.bills import calculate_gst_totals, generate_invoice_number, indian_financial_year
-from app.utils.auth import create_access_token, hash_password
+from app.utils.auth import hash_password
+from tests.auth_helpers import create_session_access_token as create_access_token
 
 
 client = TestClient(app)

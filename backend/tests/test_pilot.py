@@ -35,7 +35,8 @@ from app.models.bill import Bill
 from app.models.dining_session import DiningSession
 from app.models.quick_sale import QuickSale
 from app.models.service_request import ServiceRequest
-from app.utils.auth import hash_password, create_access_token
+from app.utils.auth import hash_password
+from tests.auth_helpers import create_session_access_token as create_access_token
 
 # ────────────────────────────────────────────────────────────
 # Test database setup (temporary SQLite file for test run isolation)
@@ -202,21 +203,21 @@ def kitchen_user(db, restaurant):
 
 
 @pytest.fixture
-def owner_token(owner_user, restaurant):
+def owner_token(owner_user, restaurant, db):
     return create_access_token({
         "sub": str(owner_user.id),
         "restaurant_id": restaurant.id,
         "role": "owner",
-    })
+    }, db=db)
 
 
 @pytest.fixture
-def kitchen_token(kitchen_user, restaurant):
+def kitchen_token(kitchen_user, restaurant, db):
     return create_access_token({
         "sub": str(kitchen_user.id),
         "restaurant_id": restaurant.id,
         "role": "kitchen",
-    })
+    }, db=db)
 
 
 @pytest.fixture

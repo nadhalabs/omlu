@@ -11,7 +11,8 @@ from app.models.menu import MenuCategory, MenuItem, MenuItemOptionGroup, MenuOpt
 from app.models.quick_sale import QuickSale
 from app.models.restaurant import Restaurant
 from app.models.staff_user import StaffUser
-from app.utils.auth import create_access_token, hash_password
+from app.utils.auth import hash_password
+from tests.auth_helpers import create_session_access_token as create_access_token
 
 client = TestClient(app)
 

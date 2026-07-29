@@ -2,9 +2,15 @@
 
 ## Current evidence and contradictions
 
-HTTP authority in `backend/app/utils/auth.py` checks staff/restaurant IDs, active status, security version, and (when claimed) active JTI. `backend/app/routes/realtime.py` checks only decoded IDs, active staff/restaurant, and role at connection; it does not validate JTI, security version, session, locks, or later revocation. Web query keys sometimes include slug (`frontend/lib/queryCache.ts`), while Flutter `OperationsDataCache` uses global keys such as `tables_all`. `tables_screen.dart` and `new_order_screen.dart` explicitly pass `table.tableNumber` to `CartNotifier.setTable(..., restaurantSlug)`. Flutter logout clears tokens but not that cache/cart or realtime as one atomic operation.
+Before P1.1, HTTP authority in `backend/app/utils/auth.py` checked staff/restaurant IDs, active status, security version, and only conditionally required an active JTI. `backend/app/routes/realtime.py` still checks only decoded IDs, active staff/restaurant, and role at connection; it does not validate JTI, security version, session, locks, or later revocation. Web query keys sometimes include slug (`frontend/lib/queryCache.ts`), while Flutter `OperationsDataCache` uses global keys such as `tables_all`. `tables_screen.dart` and `new_order_screen.dart` explicitly pass `table.tableNumber` to `CartNotifier.setTable(..., restaurantSlug)`. Flutter logout clears tokens but not that cache/cart or realtime as one atomic operation.
 
 The Android WebView remembers that an authenticated workspace existed and prevents later navigation to an authentication route by loading the remembered role home (`src/omlu_webview_app.dart`, `navigation_policy.dart`). This can reverse explicit logout or authentication-failure navigation. Web logout clears the cookie even when backend logout fails, but no single coordinator clears query cache, component state, reconnects, DOM storage, and WebView state.
+
+### P1.1 implementation record
+
+Authenticated HTTP requests now resolve through `AuthenticatedContext` in `backend/app/utils/auth.py`. Its frozen `TenantScope` is derived only after the token signature/expiry, actor, database restaurant relationship, database role, security version, and active `StaffSession` JTI are validated. `authority_epoch` is the deterministic string `<security_version>:<active_session_jti>`. `get_tenant_scope` exposes the scope directly; existing routes remain compatible through `get_current_staff_user`, which returns the actor from the same cached FastAPI dependency context. Legacy JWTs without a matching active session now fail closed.
+
+P1.1 does not scope client storage, perform account teardown, change WebView behavior, or change WebSocket authentication. Operations locks and restaurant `open|closing|closed` remain write-policy checks rather than identity fields; their redesign/revocation behavior remains P1.3/P1.5.
 
 ## Scope propagation contract
 

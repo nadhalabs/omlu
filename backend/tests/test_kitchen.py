@@ -8,7 +8,8 @@ from app.models.restaurant_table import RestaurantTable
 from app.models.menu import MenuCategory, MenuItem
 from app.models.order import Order, OrderStatusHistory
 from app.models.staff_user import StaffUser
-from app.utils.auth import hash_password, create_access_token
+from app.utils.auth import hash_password
+from tests.auth_helpers import create_session_access_token as create_access_token
 
 client = TestClient(app)
 
@@ -54,7 +55,7 @@ def setup_kitchen_test_data():
         is_active=True
     )
     db.add(staff)
-    db.flush()
+    db.commit()
 
     token = create_access_token(
         data={"sub": str(staff.id), "restaurant_id": restaurant.id, "role": "kitchen"}
