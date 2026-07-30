@@ -8,6 +8,7 @@ from app.models.bill import Bill
 from app.models.dining_session import DiningSession
 from app.models.empty_table_report import EmptyTableReport
 from app.models.staff_user import AuditLog, StaffUser
+from app.services.idempotency import request_hash, require_key
 from app.schemas.bill import BillResponse, CounterPaymentRequest
 from app.services.bills import (
     build_bill_response,
@@ -312,9 +313,11 @@ def get_staff_bill(
 )
 def issue_staff_bill(
     bill_number: str,
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     current_user: StaffUser = Depends(_bill_issue_roles),
     db: Session = Depends(get_db),
 ):
+    key = require_key(idempotency_key)
     bill = db.query(Bill).filter(
         Bill.restaurant_id == current_user.restaurant_id,
         Bill.bill_number == bill_number,
@@ -323,9 +326,18 @@ def issue_staff_bill(
     if not bill:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
 
+    if bill.issue_idempotency_key:
+        if bill.issue_idempotency_key != key:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Bill was already issued with a different Idempotency-Key.",
+            )
+        return build_bill_response(db, bill)
+
     if not bill.generated_by_staff_id:
         bill.generated_by_staff_id = current_user.id
     issued = issue_bill(db, bill)
+    issued.issue_idempotency_key = key
     db.commit()
     publish_event(
         EVENT_BILL_UPDATED,
@@ -349,9 +361,12 @@ def issue_staff_bill(
 def confirm_staff_counter_payment(
     bill_number: str,
     payload: CounterPaymentRequest,
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     current_user: StaffUser = Depends(_payment_record_roles),
     db: Session = Depends(get_db),
 ):
+    key = require_key(idempotency_key)
+    payload_hash = request_hash(payload.model_dump(mode="json"))
     bill = db.query(Bill).filter(
         Bill.restaurant_id == current_user.restaurant_id,
         Bill.bill_number == bill_number,
@@ -360,7 +375,9 @@ def confirm_staff_counter_payment(
     if not bill:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
 
-    paid = confirm_counter_payment(db, bill, current_user, payload.method)
+    paid, replayed = confirm_counter_payment(db, bill, current_user, payload.method, key, payload_hash)
+    if replayed:
+        return build_bill_response(db, paid)
     invalidated = invalidate_session_participants(db, paid.dining_session, "Session closed after payment")
     open_report = db.query(EmptyTableReport).filter(
         EmptyTableReport.restaurant_id == current_user.restaurant_id,

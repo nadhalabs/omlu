@@ -17,6 +17,8 @@ export async function proxyAdminRequest(
   const headers: HeadersInit = {
     "Authorization": `Bearer ${tokenCookie.value}`,
   };
+  const idempotencyKey = request.headers.get("Idempotency-Key");
+  if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
 
   const method = request.method;
   let body: string | undefined = undefined;

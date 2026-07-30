@@ -22,7 +22,11 @@ class PendingBillReviewScreen extends ConsumerWidget {
   ) async {
     await ref
         .read(operationsApiProvider)
-        .confirmCounterPayment(billNumber: billNumber, method: method);
+        .confirmCounterPayment(
+          billNumber: billNumber,
+          method: method,
+          idempotencyKey: 'bill-payment-$billNumber-$method-v1',
+        );
     ref.invalidate(pendingBillProvider(billNumber));
     await ref.read(pendingPaymentsProvider.notifier).fetch(silent: true);
   }

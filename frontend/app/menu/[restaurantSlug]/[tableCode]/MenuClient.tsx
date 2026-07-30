@@ -107,10 +107,13 @@ export default function MenuClient({
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       void fetchMenu(true);
-      setIdempotencyKey(crypto.randomUUID());
+      const storageKey = `omlu:order-draft:${restaurantSlug}:${tableCode}`;
+      const key = localStorage.getItem(storageKey) || crypto.randomUUID();
+      localStorage.setItem(storageKey, key);
+      setIdempotencyKey(key);
     }, 0);
     return () => window.clearTimeout(timeout);
-  }, [fetchMenu]);
+  }, [fetchMenu, restaurantSlug, tableCode]);
 
   useEffect(() => {
     const timeout = window.setTimeout(async () => {
@@ -522,6 +525,9 @@ export default function MenuClient({
       setCart({});
       setCustomerNote("");
       setIsCartOpen(false);
+      const nextKey = crypto.randomUUID();
+      localStorage.setItem(`omlu:order-draft:${restaurantSlug}:${tableCode}`, nextKey);
+      setIdempotencyKey(nextKey);
       
       router.push(`/session/${sessionToken}`);
     } catch (err) {

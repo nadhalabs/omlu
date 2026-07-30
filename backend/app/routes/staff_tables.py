@@ -554,7 +554,7 @@ def create_staff_table_order(
     current_user: StaffUser = Depends(_staff_write_roles),
     db: Session = Depends(get_db),
 ):
-    key_clean = validate_idempotency_key(idempotency_key or f"staff-{current_user.id}-{uuid.uuid4().hex[:24]}")
+    key_clean = validate_idempotency_key(idempotency_key)
     table = db.query(RestaurantTable).filter(
         RestaurantTable.id == table_id,
         RestaurantTable.restaurant_id == current_user.restaurant_id,

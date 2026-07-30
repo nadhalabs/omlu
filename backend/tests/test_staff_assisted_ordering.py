@@ -151,7 +151,10 @@ def staff_order_context():
 
 
 def auth(data, key="staff_token"):
-    return {"Authorization": f"Bearer {data[key]}"}
+    return {
+        "Authorization": f"Bearer {data[key]}",
+        "Idempotency-Key": f"test-{key}-phase1",
+    }
 
 
 def order_payload(data, item_key="item_id", quantity=2):

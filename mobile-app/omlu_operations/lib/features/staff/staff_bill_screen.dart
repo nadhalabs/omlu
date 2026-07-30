@@ -86,11 +86,16 @@ class _StaffBillScreenState extends ConsumerState<StaffBillScreen> {
       var latest = bill;
       final billNumber = _text(bill['bill_number']);
       if (_text(bill['status']) == 'draft') {
-        latest = await api.issueBill(billNumber);
+        latest = await api.issueBill(
+          billNumber,
+          idempotencyKey: 'bill-issue-$billNumber-v1',
+        );
       }
       final paid = await api.confirmCounterPayment(
         billNumber: _text(latest['bill_number']),
         method: method,
+        idempotencyKey:
+            'bill-payment-${_text(latest['bill_number'])}-$method-v1',
       );
       if (!mounted) return;
       setState(() => _confirmedBill = paid);

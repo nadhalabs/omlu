@@ -16,6 +16,9 @@ class QuickSale(Base):
     order_number: Mapped[str] = mapped_column(String(64), nullable=False)
     public_token: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
     idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    idempotency_request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    payment_idempotency_key: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    payment_request_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     sale_type: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
     source: Mapped[str] = mapped_column(String(20), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
@@ -38,6 +41,7 @@ class QuickSale(Base):
     __table_args__ = (
         UniqueConstraint("restaurant_id", "order_number", name="uq_quick_sale_restaurant_order_number"),
         UniqueConstraint("restaurant_id", "idempotency_key", name="uq_quick_sale_restaurant_idempotency"),
+        UniqueConstraint("restaurant_id", "payment_idempotency_key", name="uq_quick_sale_payment_idempotency"),
         CheckConstraint("sale_type IN ('takeaway', 'late_entry')", name="chk_quick_sale_type"),
         CheckConstraint("source IN ('takeaway', 'late_entry')", name="chk_quick_sale_source"),
         CheckConstraint("status IN ('pending', 'accepted', 'preparing', 'ready', 'served', 'completed')", name="chk_quick_sale_status"),

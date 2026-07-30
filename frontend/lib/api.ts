@@ -428,7 +428,10 @@ export async function issueStaffBill(
   try {
     const response = await fetch(
       `/api/staff/bills/${encodeURIComponent(billNumber)}/issue`,
-      { method: "POST" }
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": `bill-issue-${billNumber}-v1` },
+      }
     );
 
     if (!response.ok) {
@@ -458,7 +461,10 @@ export async function confirmStaffCounterPayment(
       `/api/staff/bills/${encodeURIComponent(billNumber)}/confirm-counter-payment`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": `bill-payment-${billNumber}-${method}-v1`,
+        },
         body: JSON.stringify({ method }),
       }
     );
@@ -1528,7 +1534,14 @@ export async function confirmPendingPayment(
 ): Promise<Record<string, unknown>> {
   const res = await fetch(
     `/api/staff/bills/${encodeURIComponent(billNumber)}/confirm-counter-payment`,
-    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ method }) },
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Idempotency-Key": `bill-payment-${billNumber}-${method}-v1`,
+      },
+      body: JSON.stringify({ method }),
+    },
   );
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));

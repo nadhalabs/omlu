@@ -20,6 +20,9 @@ export async function POST(
       method: "POST",
       headers: {
         Authorization: `Bearer ${tokenCookie.value}`,
+        ...(request.headers.get("Idempotency-Key")
+          ? { "Idempotency-Key": request.headers.get("Idempotency-Key")! }
+          : {}),
       },
     });
 

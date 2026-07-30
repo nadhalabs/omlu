@@ -24,6 +24,9 @@ export async function POST(
       headers: {
         Authorization: `Bearer ${tokenCookie.value}`,
         "Content-Type": "application/json",
+        ...(request.headers.get("Idempotency-Key")
+          ? { "Idempotency-Key": request.headers.get("Idempotency-Key")! }
+          : {}),
       },
       body: JSON.stringify(payload),
     });

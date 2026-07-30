@@ -16,7 +16,6 @@ class QuickSaleCreate(BaseModel):
     note: Optional[str] = Field(default=None, max_length=1024)
     reason: Optional[str] = Field(default=None, max_length=1024)
     payment_method: Optional[Literal["cash", "upi"]] = None
-    idempotency_key: str = Field(min_length=8, max_length=255)
 
 
 class QuickSalePayment(BaseModel):

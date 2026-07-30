@@ -62,6 +62,7 @@ class Order(Base):
         index=True,
     )
     idempotency_key: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    idempotency_request_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

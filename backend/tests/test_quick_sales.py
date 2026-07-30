@@ -14,7 +14,21 @@ from app.models.staff_user import StaffUser
 from app.utils.auth import hash_password
 from tests.auth_helpers import create_session_access_token as create_access_token
 
-client = TestClient(app)
+class PhaseOneClient(TestClient):
+    def post(self, url, **kwargs):
+        headers = dict(kwargs.pop("headers", {}) or {})
+        body = dict(kwargs.get("json") or {})
+        kwargs["json"] = body
+        if url == "/admin/quick-sales":
+            key = body.pop("idempotency_key", None)
+            if key:
+                headers["Idempotency-Key"] = key
+        elif "/admin/quick-sales/" in url and url.endswith("/payment"):
+            headers.setdefault("Idempotency-Key", f"payment-{url.rsplit('/', 2)[-2]}-phase1")
+        return super().post(url, headers=headers, **kwargs)
+
+
+client = PhaseOneClient(app)
 
 
 @pytest.fixture
@@ -105,16 +119,19 @@ def test_staff_kitchen_cannot_create(quick_sale_context, role, sale_type):
     assert client.post("/admin/quick-sales", headers=auth(quick_sale_context, role), json=payload(quick_sale_context, sale_type)).status_code == 403
 
 
-def test_takeaway_reaches_kitchen_and_owner_confirms_ready_payment(quick_sale_context):
+def test_takeaway_requires_served_before_owner_confirms_payment(quick_sale_context):
     sale = client.post("/admin/quick-sales", headers=auth(quick_sale_context, "owner"), json=payload(quick_sale_context)).json()
     kitchen = client.get(f"/kitchen/restaurants/{quick_sale_context['slug']}/orders", headers=auth(quick_sale_context, "kitchen"))
     assert any(item["order_number"] == sale["order_number"] and item["table_number"] == "Takeaway" for item in kitchen.json())
     for state in ("accepted", "preparing", "ready"):
         assert client.patch(f"/kitchen/restaurants/{quick_sale_context['slug']}/orders/{sale['public_token']}/status", headers=auth(quick_sale_context, "kitchen"), json={"status": state}).status_code == 200
     assert client.post(f"/admin/quick-sales/{sale['public_token']}/payment", headers=auth(quick_sale_context, "staff"), json={"method": "cash"}).status_code == 403
+    ready_payment = client.post(f"/admin/quick-sales/{sale['public_token']}/payment", headers=auth(quick_sale_context, "owner"), json={"method": "cash"})
+    assert ready_payment.status_code == 409
+    assert update_kitchen_status(quick_sale_context, sale["public_token"], "served").status_code == 200
     paid = client.post(f"/admin/quick-sales/{sale['public_token']}/payment", headers=auth(quick_sale_context, "owner"), json={"method": "cash"})
     assert paid.status_code == 200; assert paid.json()["status"] == "completed"; assert paid.json()["payment_method"] == "cash"; assert paid.json()["completed_at"] is not None
-    assert client.post(f"/admin/quick-sales/{sale['public_token']}/payment", headers=auth(quick_sale_context, "owner"), json={"method": "cash"}).status_code == 409
+    assert client.post(f"/admin/quick-sales/{sale['public_token']}/payment", headers=auth(quick_sale_context, "owner"), json={"method": "cash"}).status_code == 200
 
 
 @pytest.mark.parametrize(

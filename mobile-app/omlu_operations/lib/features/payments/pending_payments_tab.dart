@@ -131,7 +131,11 @@ class _PendingPaymentsTabState extends ConsumerState<PendingPaymentsTab> {
     try {
       await ref
           .read(operationsApiProvider)
-          .confirmCounterPayment(billNumber: billNumber, method: method);
+          .confirmCounterPayment(
+            billNumber: billNumber,
+            method: method,
+            idempotencyKey: 'bill-payment-$billNumber-$method-v1',
+          );
       await ref.read(pendingPaymentsProvider.notifier).fetch(silent: true);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

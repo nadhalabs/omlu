@@ -11,6 +11,7 @@ from app.models.quick_sale import QuickSale, QuickSaleItem, QuickSaleItemSelecte
 from app.models.menu_import import MenuImportJob, MenuImportDraftItem
 from app.models.table_session_participant import TableSessionCreationAttempt, TableSessionJoinAttempt, TableSessionParticipant
 from app.models.empty_table_report import EmptyTableReport
+from app.models.payment import Payment, RevenueEntry
 
 __all__ = [
     "Restaurant",
@@ -43,4 +44,6 @@ __all__ = [
     "TableSessionJoinAttempt",
     "TableSessionCreationAttempt",
     "EmptyTableReport",
+    "Payment",
+    "RevenueEntry",
 ]

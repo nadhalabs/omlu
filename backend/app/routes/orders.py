@@ -23,6 +23,7 @@ from app.services.dining_sessions import (
     get_or_create_open_session,
 )
 from app.services.order_pricing import validate_and_price_order_items
+from app.services.idempotency import ensure_same_request, request_hash
 from app.services.table_participants import enforce_session_action_rate, load_participant, participant_token_header
 from app.services.realtime import (
     EVENT_ORDER_CREATED,
@@ -204,6 +205,7 @@ def create_order_in_session(
     source: str = "customer_qr",
     created_by_participant_id: int | None = None,
 ) -> Order:
+    payload_hash = request_hash(order_req.model_dump(mode="json"))
     existing_order = db.query(Order).options(
             selectinload(Order.items).selectinload(OrderItem.selected_options),
         selectinload(Order.status_history),
@@ -216,6 +218,7 @@ def create_order_in_session(
     ).first()
 
     if existing_order:
+        ensure_same_request(existing_order.idempotency_request_hash, payload_hash)
         if existing_order.dining_session_id and existing_order.dining_session_id != dining_session.id:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -254,7 +257,8 @@ def create_order_in_session(
             source=source,
             created_by_staff_id=created_by_staff_id,
             created_by_participant_id=created_by_participant_id,
-            idempotency_key=key_clean
+            idempotency_key=key_clean,
+            idempotency_request_hash=payload_hash,
         )
         db.add(new_order)
         db.flush()
@@ -308,6 +312,7 @@ def create_order_in_session(
         ).first()
 
         if existing_order:
+            ensure_same_request(existing_order.idempotency_request_hash, payload_hash)
             return existing_order
 
         raise HTTPException(

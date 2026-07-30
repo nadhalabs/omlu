@@ -14,6 +14,8 @@ from app.models.order import Order, OrderItem
 from app.models.restaurant import Restaurant
 from app.models.service_request import ServiceRequest
 from app.models.staff_user import AuditLog, StaffUser
+from app.models.payment import Payment, RevenueEntry
+from app.services.idempotency import ensure_same_request
 
 
 COUNTER_PAYMENT_METHODS = {"counter_cash", "counter_upi"}
@@ -132,7 +134,7 @@ def get_billable_orders(db: Session, dining_session_id: int) -> list[Order]:
         .options(selectinload(Order.items).selectinload(OrderItem.selected_options))
         .filter(
             Order.dining_session_id == dining_session_id,
-            Order.status != "rejected",
+            Order.status.notin_(["rejected", "cancelled", "voided"]),
         )
         .order_by(Order.created_at.asc(), Order.id.asc())
         .all()
@@ -376,7 +378,9 @@ def confirm_counter_payment(
     bill: Bill,
     staff_user: StaffUser,
     method: str,
-) -> Bill:
+    idempotency_key: str,
+    payload_hash: str,
+) -> tuple[Bill, bool]:
     if method not in COUNTER_PAYMENT_METHODS:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -392,6 +396,10 @@ def confirm_counter_payment(
         or locked_bill.dining_session_id != locked_session.id
     ):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
+
+    if locked_bill.payment_idempotency_key == idempotency_key:
+        ensure_same_request(locked_bill.payment_request_hash, payload_hash)
+        return locked_bill, True
 
     if locked_bill.status == "paid":
         raise HTTPException(
@@ -425,6 +433,8 @@ def confirm_counter_payment(
     locked_bill.paid_at = now
     locked_bill.payment_method = method
     locked_bill.paid_by_staff_id = staff_user.id
+    locked_bill.payment_idempotency_key = idempotency_key
+    locked_bill.payment_request_hash = payload_hash
     locked_session.status = "closed"
     locked_session.paid_at = now
     locked_session.closed_at = now
@@ -439,8 +449,25 @@ def confirm_counter_payment(
         service_request.status = "resolved"
         service_request.resolved_at = now
         service_request.resolved_by_staff_id = staff_user.id
+    payment = Payment(
+        restaurant_id=staff_user.restaurant_id,
+        bill_id=locked_bill.id,
+        idempotency_key=idempotency_key,
+        method=method,
+        amount=locked_bill.total_amount,
+        recorded_by_staff_id=staff_user.id,
+    )
+    db.add(payment)
     db.flush()
-    return locked_bill
+    db.add(RevenueEntry(
+        restaurant_id=staff_user.restaurant_id,
+        payment_id=payment.id,
+        amount=locked_bill.total_amount,
+        currency=locked_bill.currency,
+        occurred_at=now,
+    ))
+    db.flush()
+    return locked_bill, False
 
 
 def load_bill_for_response(db: Session, bill_id: int) -> Bill:

@@ -99,6 +99,9 @@ class Bill(Base):
     paid_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     payment_method: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     payment_reference: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    issue_idempotency_key: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    payment_idempotency_key: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    payment_request_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     paid_by_staff_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("staff_users.id", ondelete="SET NULL"),
         nullable=True,
@@ -118,6 +121,8 @@ class Bill(Base):
     )
 
     __table_args__ = (
+        UniqueConstraint("restaurant_id", "issue_idempotency_key", name="uq_bill_issue_idempotency"),
+        UniqueConstraint("restaurant_id", "payment_idempotency_key", name="uq_bill_payment_idempotency"),
         UniqueConstraint("dining_session_id", name="uq_bills_dining_session_id"),
         UniqueConstraint("restaurant_id", "bill_number", name="uq_restaurant_bill_number"),
         UniqueConstraint("restaurant_id", "invoice_number", name="uq_bills_restaurant_invoice_number"),

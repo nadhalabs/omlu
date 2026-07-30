@@ -13,6 +13,7 @@ from app.models.bill import Bill
 from app.models.dining_session import DiningSession
 from app.models.menu import MenuCategory, MenuItem
 from app.models.order import Order, OrderItem, OrderStatusHistory
+from app.models.payment import Payment, RevenueEntry
 from app.models.restaurant import Restaurant
 from app.models.restaurant_table import RestaurantTable
 from app.models.service_request import ServiceRequest
@@ -23,7 +24,18 @@ from tests.auth_helpers import create_session_access_token as create_access_toke
 from tests.participant_helpers import ParticipantTestClient, authorize_existing_session, participant_headers
 
 
-client = ParticipantTestClient(app)
+class PhaseOneBillClient(ParticipantTestClient):
+    def post(self, url, **kwargs):
+        headers = dict(kwargs.pop("headers", {}) or {})
+        if url.endswith("/issue"):
+            headers.setdefault("Idempotency-Key", f"issue-{url.rsplit('/', 2)[-2]}-phase1")
+        elif url.endswith("/confirm-counter-payment"):
+            method = (kwargs.get("json") or {}).get("method", "counter_cash")
+            headers.setdefault("Idempotency-Key", f"payment-{url.rsplit('/', 2)[-2]}-{method}-phase1")
+        return super().post(url, headers=headers, **kwargs)
+
+
+client = PhaseOneBillClient(app)
 
 
 @pytest.fixture
@@ -220,7 +232,10 @@ def issue_bill_for(data, token_key="owner_token"):
     bill = create_bill(data).json()
     response = client.post(
         f"/staff/bills/{bill['bill_number']}/issue",
-        headers={"Authorization": f"Bearer {data[token_key]}"},
+        headers={
+            "Authorization": f"Bearer {data[token_key]}",
+            "Idempotency-Key": f"issue-{bill['bill_number']}-phase1",
+        },
     )
     assert response.status_code == 200
     return response.json()
@@ -237,7 +252,10 @@ def confirm_counter_payment(data, bill_number, token_key="owner_token", method="
     return client.post(
         f"/staff/bills/{bill_number}/confirm-counter-payment",
         json={"method": method},
-        headers={"Authorization": f"Bearer {data[token_key]}"},
+        headers={
+            "Authorization": f"Bearer {data[token_key]}",
+            "Idempotency-Key": f"payment-{bill_number}-{method}-phase1",
+        },
     )
 
 
@@ -371,7 +389,10 @@ def test_issuing_locks_ordering(bill_context):
     bill = create_bill(bill_context).json()
     issued = client.post(
         f"/staff/bills/{bill['bill_number']}/issue",
-        headers={"Authorization": f"Bearer {bill_context['owner_token']}"},
+        headers={
+            "Authorization": f"Bearer {bill_context['owner_token']}",
+            "Idempotency-Key": f"issue-{bill['bill_number']}-phase1",
+        },
     )
     assert issued.status_code == 200
 
@@ -800,7 +821,10 @@ def test_two_simultaneous_payment_confirmations_only_one_succeeds(bill_context):
         return local_client.post(
             f"/staff/bills/{issued['bill_number']}/confirm-counter-payment",
             json={"method": method},
-            headers={"Authorization": f"Bearer {bill_context['owner_token']}"},
+            headers={
+                "Authorization": f"Bearer {bill_context['owner_token']}",
+                "Idempotency-Key": f"concurrent-{issued['bill_number']}-{method}",
+            },
         )
 
     with ThreadPoolExecutor(max_workers=2) as executor:
@@ -812,6 +836,9 @@ def test_two_simultaneous_payment_confirmations_only_one_succeeds(bill_context):
     db = SessionLocal()
     bill = db.query(Bill).filter(Bill.restaurant_id == bill_context["restaurant_id"], Bill.bill_number == issued["bill_number"]).one()
     session = db.query(DiningSession).filter(DiningSession.id == bill_context["session_id"]).one()
+    assert db.query(Payment).filter(Payment.bill_id == bill.id).count() == 1
+    payment = db.query(Payment).filter(Payment.bill_id == bill.id).one()
+    assert db.query(RevenueEntry).filter(RevenueEntry.payment_id == payment.id).count() == 1
     db.close()
     assert bill.status == "paid"
     assert session.status == "closed"
@@ -828,7 +855,10 @@ def test_payment_confirmation_racing_with_session_closure_is_consistent(bill_con
         return local_client.post(
             f"/staff/bills/{issued['bill_number']}/confirm-counter-payment",
             json={"method": "counter_cash"},
-            headers={"Authorization": f"Bearer {bill_context['owner_token']}"},
+            headers={
+                "Authorization": f"Bearer {bill_context['owner_token']}",
+                "Idempotency-Key": f"race-payment-{issued['bill_number']}",
+            },
         )
 
     def close_session():

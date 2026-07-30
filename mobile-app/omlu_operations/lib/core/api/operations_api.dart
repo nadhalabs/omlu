@@ -114,8 +114,14 @@ class OperationsApi {
     return _client.postJson('/staff/tables/$tableId/bill');
   }
 
-  Future<Map<String, Object?>> issueBill(String billNumber) {
-    return _client.postJson('/staff/bills/$billNumber/issue');
+  Future<Map<String, Object?>> issueBill(
+    String billNumber, {
+    String? idempotencyKey,
+  }) {
+    return _client.postJson(
+      '/staff/bills/$billNumber/issue',
+      idempotencyKey: idempotencyKey ?? 'bill-issue-$billNumber-v1',
+    );
   }
 
   Future<Map<String, Object?>> sendBillToCounter(String billNumber) {
@@ -134,6 +140,7 @@ class OperationsApi {
   Future<Map<String, Object?>> confirmCounterPayment({
     required String billNumber,
     required String method,
+    String? idempotencyKey,
   }) {
     if (method != 'counter_cash' && method != 'counter_upi') {
       throw ArgumentError.value(
@@ -145,6 +152,8 @@ class OperationsApi {
     return _client.postJson(
       '/staff/bills/$billNumber/confirm-counter-payment',
       body: {'method': method},
+      idempotencyKey:
+          idempotencyKey ?? 'bill-payment-$billNumber-$method-v1',
     );
   }
 

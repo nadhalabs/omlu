@@ -79,13 +79,16 @@ export async function startStaffTableSession(tableId: number) {
 }
 
 export async function createStaffTableOrder(tableId: number, payload: ManualOrderPayload): Promise<PublicOrderResponse> {
-  const idempotencyKey = `staff-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const storageKey = `omlu:staff-order-key:${tableId}`;
+  const idempotencyKey = localStorage.getItem(storageKey) || crypto.randomUUID();
+  localStorage.setItem(storageKey, idempotencyKey);
   const res = await fetch(`/api/staff/tables/${tableId}/orders`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
     body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error(await parseError(res, "Could not submit order."));
+  localStorage.removeItem(storageKey);
   return res.json();
 }
 
