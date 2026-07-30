@@ -541,8 +541,8 @@ def performance_summary(
     low_items = [{"item_name": row[0], "quantity": int(row[1]), "revenue": _money(row[2])} for row in item_query.order_by(func.sum(OrderItem.quantity).asc()).limit(10).all()]
     quick_items = db.query(QuickSaleItem.item_name, func.sum(QuickSaleItem.quantity), func.sum(QuickSaleItem.total_price)).join(QuickSale).filter(QuickSale.id.in_([sale.id for sale in paid_quick_sales])).group_by(QuickSaleItem.item_name).all() if paid_quick_sales else []
     item_map = {row["item_name"]: [row["quantity"], Decimal(row["revenue"])] for row in top_items}
-    for name, qty, revenue in quick_items:
-        current = item_map.setdefault(name, [0, Decimal("0")]); current[0] += int(qty); current[1] += Decimal(str(revenue))
+    for name, qty, item_revenue in quick_items:
+        current = item_map.setdefault(name, [0, Decimal("0")]); current[0] += int(qty); current[1] += Decimal(str(item_revenue))
     merged_items = [{"item_name": name, "quantity": values[0], "revenue": _money(values[1])} for name, values in item_map.items()]
     top_items = sorted(merged_items, key=lambda row: row["quantity"], reverse=True)[:10]
     low_items = sorted(merged_items, key=lambda row: row["quantity"])[:10]
