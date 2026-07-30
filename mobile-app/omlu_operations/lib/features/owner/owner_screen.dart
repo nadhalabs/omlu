@@ -212,7 +212,10 @@ class _OwnerDashboardTab extends ConsumerWidget {
         onRefresh: () async => ref.refresh(dashboardSummaryProvider),
         child: dashboard.when(
           data: (data) {
-            final revenue = data['today_revenue']?.toString() ?? '0.00';
+            final revenue =
+                data['collected_revenue']?.toString() ??
+                data['today_revenue']?.toString() ??
+                '0.00';
             final orderCount = data['today_order_count']?.toString() ?? '0';
             final avgOrder = data['average_order_value']?.toString() ?? '0.00';
 

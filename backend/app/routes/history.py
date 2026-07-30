@@ -3,7 +3,7 @@ import io
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Iterable
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response, StreamingResponse
@@ -22,6 +22,11 @@ from app.models.quick_sale import QuickSale, QuickSaleItem
 from app.services.pdf_reports import build_performance_pdf
 from app.services.revenue import collected_revenue
 from app.utils.auth import RoleChecker
+from app.utils.business_date import (
+    local_date_bounds_utc,
+    restaurant_business_date,
+    restaurant_timezone,
+)
 
 
 router = APIRouter(prefix="/admin/history")
@@ -36,11 +41,7 @@ VALID_PAYMENT_METHODS = {"counter_cash", "counter_upi", "counter_card", "online"
 
 
 def _restaurant_timezone(staff: StaffUser) -> ZoneInfo:
-    name = staff.restaurant.timezone if staff.restaurant and staff.restaurant.timezone else "Asia/Kolkata"
-    try:
-        return ZoneInfo(name)
-    except ZoneInfoNotFoundError:
-        return ZoneInfo("Asia/Kolkata")
+    return restaurant_timezone(staff.restaurant)
 
 
 def _local_date_range(
@@ -50,8 +51,7 @@ def _local_date_range(
     start_date: date | None,
     end_date: date | None,
 ) -> tuple[date, date]:
-    tz = _restaurant_timezone(staff)
-    local_today = datetime.now(tz).date()
+    local_today = restaurant_business_date(staff.restaurant)
     normalized_preset = (preset or "today").strip().lower()
 
     if normalized_preset == "today":
@@ -92,12 +92,8 @@ def _utc_bounds(
     start_date: date | None,
     end_date: date | None,
 ) -> tuple[datetime, datetime]:
-    tz = _restaurant_timezone(staff)
     start_local, end_local = _local_date_range(staff=staff, preset=preset, start_date=start_date, end_date=end_date)
-
-    start_dt = datetime.combine(start_local, time.min, tzinfo=tz).astimezone(timezone.utc)
-    end_dt = datetime.combine(end_local + timedelta(days=1), time.min, tzinfo=tz).astimezone(timezone.utc)
-    return start_dt, end_dt
+    return local_date_bounds_utc(staff.restaurant, start_local, end_local)
 
 
 def _page_bounds(page: int, page_size: int) -> tuple[int, int]:
@@ -253,7 +249,10 @@ def _bills_query(
     payment_method: str | None,
     table_id: int | None,
 ):
-    query = db.query(Bill).join(DiningSession).filter(
+    query = db.query(Bill).join(
+        DiningSession,
+        Bill.dining_session_id == DiningSession.id,
+    ).filter(
         Bill.restaurant_id == staff.restaurant_id,
         Bill.generated_at >= start_utc,
         Bill.generated_at < end_utc,
@@ -427,7 +426,7 @@ def performance_summary(
     db: Session = Depends(get_db),
 ):
     start_utc, end_utc = _utc_bounds(staff=current_user, preset=preset, start_date=start_date, end_date=end_date)
-    tz_name = current_user.restaurant.timezone if current_user.restaurant and current_user.restaurant.timezone else "Asia/Kolkata"
+    tz_name = _restaurant_timezone(current_user).key
 
     order_metrics = db.query(
         func.count(Order.id),
@@ -527,7 +526,15 @@ def performance_summary(
             func.coalesce(func.sum(OrderItem.total_price), 0).label("revenue"),
         )
         .join(Order)
-        .filter(Order.restaurant_id == current_user.restaurant_id, Order.created_at >= start_utc, Order.created_at < end_utc, Order.status != "rejected")
+        .join(Bill, Bill.dining_session_id == Order.dining_session_id)
+        .filter(
+            Order.restaurant_id == current_user.restaurant_id,
+            Order.status.notin_(["rejected", "cancelled", "voided"]),
+            Bill.status == "paid",
+            Bill.paid_at.isnot(None),
+            Bill.paid_at >= start_utc,
+            Bill.paid_at < end_utc,
+        )
         .group_by(OrderItem.item_name)
     )
     top_items = [{"item_name": row[0], "quantity": int(row[1]), "revenue": _money(row[2])} for row in item_query.order_by(func.sum(OrderItem.quantity).desc()).limit(10).all()]
@@ -548,27 +555,52 @@ def performance_summary(
         )
         .select_from(OrderItem)
         .join(Order)
+        .join(Bill, Bill.dining_session_id == Order.dining_session_id)
         .outerjoin(MenuItem, MenuItem.id == OrderItem.menu_item_id)
         .outerjoin(MenuCategory, MenuCategory.id == MenuItem.category_id)
-        .filter(Order.restaurant_id == current_user.restaurant_id, Order.created_at >= start_utc, Order.created_at < end_utc, Order.status != "rejected")
+        .filter(
+            Order.restaurant_id == current_user.restaurant_id,
+            Order.status.notin_(["rejected", "cancelled", "voided"]),
+            Bill.status == "paid",
+            Bill.paid_at.isnot(None),
+            Bill.paid_at >= start_utc,
+            Bill.paid_at < end_utc,
+        )
         .group_by(MenuCategory.name_en)
         .order_by(func.sum(OrderItem.total_price).desc())
         .limit(10)
         .all()
     ]
+    paid_table_revenue = {
+        row[0]: Decimal(str(row[1] or 0))
+        for row in db.query(
+            DiningSession.table_id,
+            func.coalesce(func.sum(Bill.total_amount), 0),
+        )
+        .join(Bill, Bill.dining_session_id == DiningSession.id)
+        .filter(
+            Bill.restaurant_id == current_user.restaurant_id,
+            Bill.status == "paid",
+            Bill.paid_at.isnot(None),
+            Bill.paid_at >= start_utc,
+            Bill.paid_at < end_utc,
+        )
+        .group_by(DiningSession.table_id)
+        .all()
+    }
     table_usage = [
-        {"table_number": row[0], "sessions": int(row[1]), "orders": int(row[2]), "revenue": _money(row[3])}
+        {"table_number": row[0], "sessions": int(row[1]), "orders": int(row[2]), "revenue": _money(paid_table_revenue.get(row[3], Decimal("0")))}
         for row in db.query(
             RestaurantTable.table_number,
             func.count(distinct(DiningSession.id)),
             func.count(distinct(Order.id)),
-            func.coalesce(func.sum(Order.subtotal), 0),
+            RestaurantTable.id,
         )
         .select_from(RestaurantTable)
         .join(DiningSession, DiningSession.table_id == RestaurantTable.id)
         .outerjoin(Order, Order.dining_session_id == DiningSession.id)
         .filter(RestaurantTable.restaurant_id == current_user.restaurant_id, DiningSession.opened_at >= start_utc, DiningSession.opened_at < end_utc)
-        .group_by(RestaurantTable.table_number)
+        .group_by(RestaurantTable.id, RestaurantTable.table_number)
         .order_by(func.count(distinct(DiningSession.id)).desc())
         .limit(10)
         .all()
@@ -593,11 +625,14 @@ def performance_summary(
     return {
         "metrics": {
             "total_revenue": _money(total_revenue),
+            "collected_revenue": _money(revenue.collected_revenue),
+            "pending_collection": _money(revenue.pending_collection),
+            "completed_quick_sale_revenue": _money(revenue.completed_quick_sale_revenue),
             "total_orders": total_orders,
-            "average_order_value": _money((total_revenue / total_orders) if total_orders else Decimal("0.00")),
+            "average_order_value": _money((total_revenue / revenue.transaction_count) if revenue.transaction_count else Decimal("0.00")),
             "total_bills": int(bill_metrics[0] or 0) + len(paid_quick_sales),
-            "paid_bills": int(bill_metrics[1] or 0),
-            "unpaid_bills": int(bill_metrics[2] or 0),
+            "paid_bills": revenue.paid_bill_count,
+            "unpaid_bills": revenue.pending_bill_count,
             "cancelled_orders": 0,
             "rejected_orders": int(order_metrics[2] or 0),
             "payment_failures": 0,
@@ -836,7 +871,7 @@ def _performance_pdf_context(
         "restaurant": {
             "name": current_user.restaurant.name if current_user.restaurant else "Restaurant",
             "logo_url": current_user.restaurant.logo_url if current_user.restaurant else None,
-            "timezone": current_user.restaurant.timezone if current_user.restaurant and current_user.restaurant.timezone else "Asia/Kolkata",
+            "timezone": _restaurant_timezone(current_user).key,
         },
         "report": {
             "type": _report_type(preset, start_local, end_local),

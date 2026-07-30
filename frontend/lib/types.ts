@@ -440,6 +440,9 @@ export interface DashboardSummaryResponse {
   restaurant_slug: string;
   today_order_count: number;
   today_revenue: string;
+  collected_revenue: string;
+  pending_collection: string;
+  completed_quick_sale_revenue: string;
   average_order_value: string;
   pending_order_count: number;
   accepted_order_count: number;

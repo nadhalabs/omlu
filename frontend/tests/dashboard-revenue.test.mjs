@@ -21,6 +21,13 @@ test("dashboard describes revenue as collected payments", () => {
   assert.doesNotMatch(dashboard, /From served orders/);
 });
 
+test("admin dashboard warns when backend health or realtime is unavailable", () => {
+  assert.match(dashboard, /backendHealthUnavailable/);
+  assert.match(dashboard, /Some backend services are unavailable/);
+  assert.match(dashboard, /Real-time updates are reconnecting/);
+  assert.match(dashboard, /\/api\/health\/ready/);
+});
+
 test("dashboard refetches in realtime and payment events reach its admin channel", () => {
   assert.match(dashboard, /onEvent:\s*\(\)\s*=>\s*void fetchDashboard\(\)/);
   assert.match(billsRoute, /restaurant_channel\(current_user\.restaurant_id, "admin"\)/);

@@ -633,6 +633,7 @@ class TestDashboardSummary:
             order_number="REV-QS",
             public_token=uuid.uuid4().hex,
             idempotency_key=uuid.uuid4().hex,
+            idempotency_request_hash=uuid.uuid4().hex * 2,
             sale_type="late_entry",
             source="late_entry",
             status="completed",
@@ -651,6 +652,7 @@ class TestDashboardSummary:
             order_number="REV-QS-TOMORROW",
             public_token=uuid.uuid4().hex,
             idempotency_key=uuid.uuid4().hex,
+            idempotency_request_hash=uuid.uuid4().hex * 2,
             sale_type="late_entry",
             source="late_entry",
             status="completed",
@@ -678,6 +680,7 @@ class TestDashboardSummary:
             order_number="REV-OTHER",
             public_token=uuid.uuid4().hex,
             idempotency_key=uuid.uuid4().hex,
+            idempotency_request_hash=uuid.uuid4().hex * 2,
             sale_type="late_entry",
             source="late_entry",
             status="completed",
@@ -698,6 +701,9 @@ class TestDashboardSummary:
         )
         assert response.status_code == 200
         assert response.json()["today_revenue"] == "150.00"
+        assert response.json()["collected_revenue"] == "150.00"
+        assert response.json()["pending_collection"] == "700.00"
+        assert response.json()["completed_quick_sale_revenue"] == "50.00"
         assert response.json()["average_order_value"] == "75.00"
 
 

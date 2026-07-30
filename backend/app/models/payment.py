@@ -1,7 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Numeric, String, UniqueConstraint, func
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, ForeignKeyConstraint, Numeric, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -28,6 +28,19 @@ class Payment(Base):
         UniqueConstraint("bill_id", name="uq_payment_bill"),
         UniqueConstraint("quick_sale_id", name="uq_payment_quick_sale"),
         UniqueConstraint("restaurant_id", "idempotency_key", name="uq_payment_restaurant_idempotency"),
+        UniqueConstraint("restaurant_id", "id", name="uq_payments_restaurant_id_id"),
+        ForeignKeyConstraint(
+            ["restaurant_id", "bill_id"],
+            ["bills.restaurant_id", "bills.id"],
+            name="fk_payments_restaurant_bill",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["restaurant_id", "quick_sale_id"],
+            ["quick_sales.restaurant_id", "quick_sales.id"],
+            name="fk_payments_restaurant_quick_sale",
+            ondelete="CASCADE",
+        ),
     )
 
 
@@ -44,4 +57,10 @@ class RevenueEntry(Base):
     __table_args__ = (
         CheckConstraint("amount >= 0", name="ck_revenue_entry_amount_nonnegative"),
         UniqueConstraint("payment_id", name="uq_revenue_entry_payment"),
+        ForeignKeyConstraint(
+            ["restaurant_id", "payment_id"],
+            ["payments.restaurant_id", "payments.id"],
+            name="fk_revenue_entries_restaurant_payment",
+            ondelete="CASCADE",
+        ),
     )

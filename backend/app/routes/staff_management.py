@@ -227,8 +227,15 @@ def lock_staff(staff_id: int, body: StaffLockRequest, request: Request, current_
     target = db.query(StaffUser).filter(StaffUser.id == staff_id, StaffUser.restaurant_id == current_user.restaurant_id, StaffUser.role == "staff").first()
     if not target: raise HTTPException(status_code=404, detail="Staff account not found")
     now = datetime.datetime.now(datetime.timezone.utc); target.operations_locked = True; target.operations_locked_at = now; target.operations_locked_by_id = current_user.id; target.operations_lock_reason = body.reason
+    target.security_version = (target.security_version or 0) + 1
+    _revoke_sessions(db, target, current_user)
     _audit(db, current_user, request, "staff_account_locked", target, new_value={"reason": body.reason}); db.commit(); db.refresh(target)
     publish_event(EVENT_STAFF_LOCKED, restaurant_id=current_user.restaurant_id, channels=[restaurant_channel(current_user.restaurant_id, "staff")], resource_id=target.id, state={"staff_id": target.id, "locked_by": current_user.name, "locked_at": now.isoformat(), "reason": body.reason})
+    publish_authority_revocation(
+        actor_id=target.id,
+        restaurant_id=target.restaurant_id,
+        reason="staff_account_locked",
+    )
     return _serialize_staff(target, locker_name=current_user.name)
 
 

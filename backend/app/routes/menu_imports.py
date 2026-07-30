@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import logging
 from decimal import Decimal
 from typing import Annotated
 from uuid import UUID
@@ -15,6 +16,7 @@ from app.services.menu_extraction import extract_menu
 from app.utils.auth import RoleChecker, get_current_staff_user
 
 router = APIRouter(prefix="/admin/menu-imports")
+logger = logging.getLogger(__name__)
 admin_access = Depends(RoleChecker(["owner", "admin"]))
 ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp"}
 MAX_IMAGES = 5
@@ -112,9 +114,10 @@ async def create_menu_import(
         failed_job = db.query(MenuImportJob).filter(MenuImportJob.id == job.id).first()
         if failed_job:
             failed_job.status = "failed"
-            failed_job.error_message = str(exc)[:2000]
+            failed_job.error_message = "Menu scan failed. Please try again."
             db.commit()
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Menu scan failed: {exc}") from exc
+        logger.exception("event=menu_scan_failure job_id=%s error_type=%s", job.id, exc.__class__.__name__)
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "Menu scan failed. Please try again.") from exc
 
 
 @router.post(

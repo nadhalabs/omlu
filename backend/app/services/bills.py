@@ -2,7 +2,6 @@ import datetime
 import secrets
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import HTTPException, status
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -16,6 +15,7 @@ from app.models.service_request import ServiceRequest
 from app.models.staff_user import AuditLog, StaffUser
 from app.models.payment import Payment, RevenueEntry
 from app.services.idempotency import ensure_same_request
+from app.utils.business_date import restaurant_business_date, restaurant_local_now
 
 
 COUNTER_PAYMENT_METHODS = {"counter_cash", "counter_upi"}
@@ -87,12 +87,7 @@ def indian_financial_year(local_date: datetime.date) -> str:
 
 
 def _restaurant_now(restaurant: Restaurant, now: datetime.datetime | None = None) -> datetime.datetime:
-    current = now or datetime.datetime.now(datetime.timezone.utc)
-    try:
-        timezone = ZoneInfo(restaurant.timezone or "Asia/Kolkata")
-    except ZoneInfoNotFoundError:
-        timezone = ZoneInfo("Asia/Kolkata")
-    return current.astimezone(timezone)
+    return restaurant_local_now(restaurant, now=now)
 
 
 def _lock_session(db: Session, session_id: int) -> DiningSession:
@@ -146,10 +141,10 @@ def calculate_bill_subtotal(db: Session, dining_session_id: int) -> Decimal:
     return sum((order.subtotal for order in orders), Decimal("0.00"))
 
 
-def generate_bill_number(db: Session, restaurant_id: int) -> str:
-    today = datetime.date.today()
+def generate_bill_number(db: Session, restaurant: Restaurant) -> str:
+    today = restaurant_business_date(restaurant)
     stmt = pg_insert(RestaurantBillDailySequence).values(
-        restaurant_id=restaurant_id,
+        restaurant_id=restaurant.id,
         sequence_date=today,
         last_value=1,
     ).on_conflict_do_update(
@@ -270,7 +265,7 @@ def create_or_refresh_bill_for_session(
     bill = Bill(
         restaurant_id=locked_session.restaurant_id,
         dining_session_id=locked_session.id,
-        bill_number=generate_bill_number(db, locked_session.restaurant_id),
+        bill_number=generate_bill_number(db, locked_session.restaurant),
         receipt_token=secrets.token_urlsafe(48),
         status="draft",
         currency=getattr(locked_session.restaurant, "currency", None) or "INR",

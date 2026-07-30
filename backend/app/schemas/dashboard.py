@@ -48,6 +48,9 @@ class DashboardSummaryResponse(BaseModel):
     restaurant_slug: str
     today_order_count: int
     today_revenue: str  # Decimal formatted as string
+    collected_revenue: str
+    pending_collection: str
+    completed_quick_sale_revenue: str
     average_order_value: str  # Decimal formatted as string
     pending_order_count: int
     accepted_order_count: int = 0

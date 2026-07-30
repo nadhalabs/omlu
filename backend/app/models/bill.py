@@ -3,7 +3,7 @@ from decimal import Decimal
 import secrets
 from typing import Optional
 
-from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, UniqueConstraint, func
+from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, ForeignKeyConstraint, Index, Integer, Numeric, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -126,6 +126,13 @@ class Bill(Base):
         UniqueConstraint("dining_session_id", name="uq_bills_dining_session_id"),
         UniqueConstraint("restaurant_id", "bill_number", name="uq_restaurant_bill_number"),
         UniqueConstraint("restaurant_id", "invoice_number", name="uq_bills_restaurant_invoice_number"),
+        UniqueConstraint("restaurant_id", "id", name="uq_bills_restaurant_id_id"),
+        ForeignKeyConstraint(
+            ["restaurant_id", "dining_session_id"],
+            ["dining_sessions.restaurant_id", "dining_sessions.id"],
+            name="fk_bills_restaurant_session",
+            ondelete="CASCADE",
+        ),
         CheckConstraint(
             "status IN ('draft', 'issued', 'payment_pending', 'paid', 'cancelled')",
             name="chk_bill_status_valid",
@@ -140,10 +147,17 @@ class Bill(Base):
         CheckConstraint("total_amount >= 0", name="chk_bill_total_amount_non_negative"),
         Index("ix_bills_restaurant_status", "restaurant_id", "status"),
         Index("ix_bills_restaurant_bill_number", "restaurant_id", "bill_number"),
+        Index("ix_bills_restaurant_generated_at", "restaurant_id", "generated_at"),
+        Index("ix_bills_restaurant_status_generated_at", "restaurant_id", "status", "generated_at"),
     )
 
-    restaurant: Mapped["Restaurant"] = relationship("Restaurant", back_populates="bills")
-    dining_session: Mapped["DiningSession"] = relationship("DiningSession", back_populates="bill")
+    restaurant: Mapped["Restaurant"] = relationship("Restaurant", back_populates="bills", overlaps="bill")
+    dining_session: Mapped["DiningSession"] = relationship(
+        "DiningSession",
+        back_populates="bill",
+        foreign_keys=[dining_session_id],
+        overlaps="bills,restaurant",
+    )
     paid_by_staff: Mapped[Optional["StaffUser"]] = relationship(
         "StaffUser",
         foreign_keys=[paid_by_staff_id],

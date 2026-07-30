@@ -1,4 +1,5 @@
 import json
+import logging
 import secrets
 import qrcode
 from io import BytesIO
@@ -6,6 +7,7 @@ from typing import List, Optional
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status as fastapi_status, Query
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.exc import IntegrityError
 from app.database import get_db
 from app.config import settings
 from app.models.staff_user import AuditLog, StaffUser
@@ -28,6 +30,7 @@ from app.schemas.admin import (
 )
 
 router = APIRouter(prefix="/admin")
+logger = logging.getLogger(__name__)
 
 # Protect all admin routes for owners and admins only
 admin_access_dependency = Depends(RoleChecker(["owner", "admin"]))
@@ -559,7 +562,14 @@ def create_table(
         is_active=True
     )
     db.add(table)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_409_CONFLICT,
+            detail=f"Table number '{table_num}' is already active in this restaurant.",
+        )
     db.refresh(table)
 
     frontend_base = settings.public_frontend_url.rstrip("/")
@@ -631,7 +641,14 @@ def update_table(
                 )
         table.is_active = table_req.is_active
 
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_409_CONFLICT,
+            detail=f"Table number '{table.table_number}' is already active in this restaurant.",
+        )
     db.refresh(table)
 
     frontend_base = settings.public_frontend_url.rstrip("/")
@@ -708,9 +725,10 @@ def regenerate_table_code(
         raise
     except Exception as e:
         db.rollback()
+        logger.exception("event=table_code_regeneration_failure error_type=%s", e.__class__.__name__)
         raise HTTPException(
             status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Table code regeneration failed: {str(e)}"
+            detail="Could not regenerate the table code. Please try again."
         )
 
 

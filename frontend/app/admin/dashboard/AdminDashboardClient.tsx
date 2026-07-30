@@ -45,6 +45,7 @@ function StatCard({
 
 export default function AdminDashboardClient() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [backendHealthUnavailable, setBackendHealthUnavailable] = useState(false);
 
   const queryFn = useCallback(async () => {
     const summary = await getAdminDashboardSummary();
@@ -78,6 +79,24 @@ export default function AdminDashboardClient() {
       clearInterval(interval);
     };
   }, [fetchDashboard]);
+
+  useEffect(() => {
+    let active = true;
+    const checkHealth = async () => {
+      try {
+        const response = await fetch("/api/health/ready", { cache: "no-store" });
+        if (active) setBackendHealthUnavailable(!response.ok);
+      } catch {
+        if (active) setBackendHealthUnavailable(true);
+      }
+    };
+    void checkHealth();
+    const interval = window.setInterval(() => void checkHealth(), 30_000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, []);
 
   const realtimeStatus = useRealtime({
     target: { kind: "staff", channel: "admin" },
@@ -124,6 +143,13 @@ export default function AdminDashboardClient() {
 
   return (
     <div className="flex flex-col gap-8">
+      {(backendHealthUnavailable || realtimeStatus === "offline" || realtimeStatus === "reconnecting") && (
+        <div role="status" className="rounded-xl border border-amber-500/40 bg-amber-950/30 px-4 py-3 text-sm font-semibold text-amber-200">
+          {backendHealthUnavailable
+            ? "Some backend services are unavailable. Live data may be delayed; retry before recording critical actions."
+            : "Real-time updates are reconnecting. Refresh before acting on time-sensitive information."}
+        </div>
+      )}
       {/* Header */}
       <div className="flex items-start justify-between flex-wrap gap-4">
         <div>
@@ -198,11 +224,17 @@ export default function AdminDashboardClient() {
           accent={data.active_service_request_count > 0 ? "border-orange-600/50" : ""}
         />
         <StatCard
-          label="Today's Revenue"
-          value={`${currency}${data.today_revenue}`}
+          label="Collected Revenue"
+          value={`${currency}${data.collected_revenue}`}
           sub="Collected from paid bills and quick sales"
           icon="₹"
           accent="border-orange-700/30"
+        />
+        <StatCard
+          label="Pending Collection"
+          value={`${currency}${data.pending_collection}`}
+          sub="Issued and payment-pending bills"
+          icon="₹"
         />
       </div>
 

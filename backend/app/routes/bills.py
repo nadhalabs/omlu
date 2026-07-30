@@ -144,7 +144,19 @@ def create_staff_session_bill(
     ).first()
     if not dining_session:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dining session not found")
-    bill = create_or_refresh_bill_for_session(db, dining_session)
+    bill = create_or_refresh_bill_for_session(
+        db,
+        dining_session,
+        generated_by_staff_id=current_user.id,
+    )
+    db.add(AuditLog(
+        restaurant_id=current_user.restaurant_id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role,
+        target_type="bill",
+        target_id=str(bill.id),
+        action="staff_bill_generated",
+    ))
     db.commit()
     return build_bill_response(db, bill)
 
@@ -397,6 +409,18 @@ def confirm_staff_counter_payment(
         target_id=str(paid.dining_session_id),
         action="table_participants_invalidated",
         new_value=f'{{"count": {invalidated}, "reason": "payment_completed"}}',
+    ))
+    db.add(AuditLog(
+        restaurant_id=current_user.restaurant_id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role,
+        target_type="bill",
+        target_id=str(paid.id),
+        action="counter_payment_recorded",
+        new_value=(
+            f'{{"bill_number": "{paid.bill_number}", '
+            f'"method": "{paid.payment_method}", "amount": "{paid.total_amount}"}}'
+        ),
     ))
     db.commit()
     staff_event_channels = [

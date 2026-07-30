@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
 from decimal import Decimal
-from sqlalchemy import DateTime, String, Boolean, Integer, Numeric, CheckConstraint, func
+from sqlalchemy import DateTime, String, Boolean, Integer, Numeric, CheckConstraint, Index, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
@@ -85,6 +85,7 @@ class Restaurant(Base):
     )
 
     __table_args__ = (
+        Index("uq_restaurants_slug_lower", func.lower(slug), unique=True),
         CheckConstraint("operating_status IN ('open', 'closing', 'closed')", name="chk_restaurant_operating_status"),
         CheckConstraint("tax_mode IN ('inclusive', 'exclusive')", name="chk_restaurants_tax_mode"),
         CheckConstraint("default_gst_rate >= 0 AND default_gst_rate <= 100", name="chk_restaurants_gst_rate"),

@@ -42,6 +42,7 @@ class QuickSale(Base):
         UniqueConstraint("restaurant_id", "order_number", name="uq_quick_sale_restaurant_order_number"),
         UniqueConstraint("restaurant_id", "idempotency_key", name="uq_quick_sale_restaurant_idempotency"),
         UniqueConstraint("restaurant_id", "payment_idempotency_key", name="uq_quick_sale_payment_idempotency"),
+        UniqueConstraint("restaurant_id", "id", name="uq_quick_sales_restaurant_id_id"),
         CheckConstraint("sale_type IN ('takeaway', 'late_entry')", name="chk_quick_sale_type"),
         CheckConstraint("source IN ('takeaway', 'late_entry')", name="chk_quick_sale_source"),
         CheckConstraint("status IN ('pending', 'accepted', 'preparing', 'ready', 'served', 'completed')", name="chk_quick_sale_status"),

@@ -570,7 +570,7 @@ def test_restaurant_reassignment_revalidation_ends_old_socket(realtime_context):
         assert_authority_close(ws)
 
 
-def test_operations_lock_preserves_socket_for_lock_event(realtime_context):
+def test_operations_lock_revokes_live_socket(realtime_context):
     with client.websocket_connect(
         f"/ws/staff?channel=staff&token={realtime_context['staff_token']}"
     ) as ws:
@@ -581,8 +581,15 @@ def test_operations_lock_preserves_socket_for_lock_event(realtime_context):
             json={"reason": "pause operations", "confirm_active_operations": True},
         )
         assert response.status_code == 200
-        event = receive_event(ws, realtime.EVENT_STAFF_LOCKED)
-        assert event["state"]["staff_id"] == realtime_context["staff_id"]
+        assert_authority_close(ws)
+
+
+def test_production_broker_cannot_use_in_memory_fallback(monkeypatch):
+    monkeypatch.setattr(realtime.settings, "redis_url", None)
+    monkeypatch.setattr(realtime.settings, "app_environment", "production")
+
+    with pytest.raises(RuntimeError, match="Redis/Valkey is required"):
+        realtime._create_broker()
 
 
 def test_staff_websocket_receives_order_created_after_commit(realtime_context):
@@ -661,7 +668,7 @@ def test_public_session_websocket_receives_bill_payment_and_close_events(realtim
 
         issue_response = client.post(
             f"/staff/bills/{bill_number}/issue",
-            headers=auth(realtime_context),
+            headers={**auth(realtime_context), "Idempotency-Key": f"issue-{uuid.uuid4().hex}"},
         )
         assert issue_response.status_code == 200
         issue_event = receive_event(ws, realtime.EVENT_BILL_UPDATED)
@@ -675,7 +682,7 @@ def test_public_session_websocket_receives_bill_payment_and_close_events(realtim
 
         paid_response = client.post(
             f"/staff/bills/{bill_number}/confirm-counter-payment",
-            headers=auth(realtime_context, "owner_token"),
+            headers={**auth(realtime_context, "owner_token"), "Idempotency-Key": f"pay-{uuid.uuid4().hex}"},
             json={"method": "counter_cash"},
         )
         assert paid_response.status_code == 200
@@ -791,7 +798,7 @@ def test_staff_websocket_receives_session_bill_and_payment_events(realtime_conte
 
         issue_response = client.post(
             f"/staff/bills/{bill_number}/issue",
-            headers=auth(realtime_context),
+            headers={**auth(realtime_context), "Idempotency-Key": f"issue-{uuid.uuid4().hex}"},
         )
         assert issue_response.status_code == 200
         receive_event(ws, realtime.EVENT_BILL_UPDATED)
@@ -804,7 +811,7 @@ def test_staff_websocket_receives_session_bill_and_payment_events(realtime_conte
 
         paid_response = client.post(
             f"/staff/bills/{bill_number}/confirm-counter-payment",
-            headers=auth(realtime_context, "owner_token"),
+            headers={**auth(realtime_context, "owner_token"), "Idempotency-Key": f"pay-{uuid.uuid4().hex}"},
             json={"method": "counter_cash"},
         )
         assert paid_response.status_code == 200
@@ -833,7 +840,7 @@ def test_revoked_participant_gets_terminal_payment_once_and_no_queued_updates(re
         headers=auth(realtime_context),
         json={},
     ).json()
-    client.post(f"/staff/bills/{bill['bill_number']}/issue", headers=auth(realtime_context))
+    client.post(f"/staff/bills/{bill['bill_number']}/issue", headers={**auth(realtime_context), "Idempotency-Key": f"issue-{uuid.uuid4().hex}"})
     client.post(f"/staff/bills/{bill['bill_number']}/send-to-counter", headers=auth(realtime_context))
 
     with client.websocket_connect(
@@ -842,7 +849,7 @@ def test_revoked_participant_gets_terminal_payment_once_and_no_queued_updates(re
         assert ws.receive_json()["type"] == "connection.ready"
         paid = client.post(
             f"/staff/bills/{bill['bill_number']}/confirm-counter-payment",
-            headers=auth(realtime_context, "owner_token"),
+            headers={**auth(realtime_context, "owner_token"), "Idempotency-Key": f"pay-{uuid.uuid4().hex}"},
             json={"method": "counter_cash"},
         )
         assert paid.status_code == 200
@@ -985,12 +992,12 @@ def test_closed_session_websocket_rejected(realtime_context):
     assert bill_resp.status_code == 201
     bill_number = bill_resp.json()["bill_number"]
 
-    client.post(f"/staff/bills/{bill_number}/issue", headers=auth(realtime_context))
+    client.post(f"/staff/bills/{bill_number}/issue", headers={**auth(realtime_context), "Idempotency-Key": f"issue-{uuid.uuid4().hex}"})
     client.post(f"/staff/bills/{bill_number}/send-to-counter", headers=auth(realtime_context))
 
     pay_resp = client.post(
         f"/staff/bills/{bill_number}/confirm-counter-payment",
-        headers=auth(realtime_context, "owner_token"),
+        headers={**auth(realtime_context, "owner_token"), "Idempotency-Key": f"pay-{uuid.uuid4().hex}"},
         json={"method": "counter_cash"},
     )
     assert pay_resp.status_code == 200
@@ -1040,11 +1047,11 @@ def test_old_session_token_cannot_receive_new_session_events(realtime_context):
     )
     assert bill_resp.status_code == 201
     bill_number = bill_resp.json()["bill_number"]
-    client.post(f"/staff/bills/{bill_number}/issue", headers=auth(realtime_context))
+    client.post(f"/staff/bills/{bill_number}/issue", headers={**auth(realtime_context), "Idempotency-Key": f"issue-{uuid.uuid4().hex}"})
     client.post(f"/staff/bills/{bill_number}/send-to-counter", headers=auth(realtime_context))
     pay_resp = client.post(
         f"/staff/bills/{bill_number}/confirm-counter-payment",
-        headers=auth(realtime_context, "owner_token"),
+        headers={**auth(realtime_context, "owner_token"), "Idempotency-Key": f"pay-{uuid.uuid4().hex}"},
         json={"method": "counter_cash"},
     )
     assert pay_resp.status_code == 200

@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional
-from sqlalchemy import DateTime, String, Boolean, ForeignKey, UniqueConstraint, CheckConstraint, Integer, func
+from sqlalchemy import DateTime, String, Boolean, ForeignKey, UniqueConstraint, CheckConstraint, Index, Integer, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
@@ -56,6 +56,25 @@ class StaffUser(Base):
     __table_args__ = (
         UniqueConstraint("restaurant_id", "email", name="uq_staff_user_restaurant_email"),
         UniqueConstraint("restaurant_id", "username", name="uq_staff_user_restaurant_username"),
+        Index(
+            "uq_staff_users_restaurant_username_lower",
+            "restaurant_id",
+            func.lower(username),
+            unique=True,
+            postgresql_where=username.is_not(None),
+        ),
+        Index(
+            "uq_staff_users_restaurant_email_lower",
+            "restaurant_id",
+            func.lower(email),
+            unique=True,
+        ),
+        Index(
+            "uq_staff_users_one_owner_per_restaurant",
+            "restaurant_id",
+            unique=True,
+            postgresql_where=(role == "owner") & (status != "removed"),
+        ),
         CheckConstraint("role IN ('owner', 'admin', 'staff', 'kitchen')", name="chk_staff_user_role"),
         CheckConstraint("status IN ('invited', 'pending', 'active', 'suspended', 'removed')", name="chk_staff_user_status"),
     )
@@ -87,6 +106,7 @@ class StaffSession(Base):
     staff_user: Mapped["StaffUser"] = relationship("StaffUser")
 
     __table_args__ = (
+        UniqueConstraint("token_jti", name="staff_sessions_token_jti_key"),
         CheckConstraint("status IN ('active', 'revoked')", name="chk_staff_session_status"),
     )
 

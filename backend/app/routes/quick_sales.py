@@ -1,15 +1,16 @@
 import datetime
 import json
 import secrets
-from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
 from app.models.menu import MenuItem, MenuItemOptionGroup, MenuOptionGroup
 from app.models.quick_sale import QuickSale, QuickSaleItem, QuickSaleItemSelectedOption
+from app.models.order import RestaurantDailySequence
 from app.models.staff_user import AuditLog, StaffUser
 from app.models.payment import Payment, RevenueEntry
 from app.schemas.order import PublicOrderCreateRequest
@@ -19,6 +20,7 @@ from app.services.order_pricing import validate_and_price_order_items
 from app.services.idempotency import ensure_same_request, request_hash, require_key
 from app.services.realtime import EVENT_ORDER_CREATED, EVENT_QUICK_SALE_COMPLETED, publish_event, restaurant_channel
 from app.utils.auth import RoleChecker
+from app.utils.business_date import current_business_day_bounds_utc, restaurant_business_date
 
 router = APIRouter(prefix="/admin/quick-sales")
 _owner_admin = RoleChecker(["owner", "admin"])
@@ -69,10 +71,7 @@ def _audit(db: Session, actor: StaffUser, sale: QuickSale, action: str, details:
 
 @router.get("")
 def quick_sale_home(current_user: StaffUser = Depends(_owner_admin), db: Session = Depends(get_db)):
-    tz = ZoneInfo(current_user.restaurant.timezone or "Asia/Kolkata")
-    now = datetime.datetime.now(tz)
-    start = now.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(datetime.timezone.utc)
-    end = (now.replace(hour=0, minute=0, second=0, microsecond=0) + datetime.timedelta(days=1)).astimezone(datetime.timezone.utc)
+    start, end, _ = current_business_day_bounds_utc(current_user.restaurant)
     menu = db.query(MenuItem).options(
         selectinload(MenuItem.option_group_links)
         .selectinload(MenuItemOptionGroup.group)
@@ -135,7 +134,22 @@ def create_quick_sale(
         paid_by_role=current_user.role if body.sale_type == "late_entry" else None,
         completed_at=now if body.sale_type == "late_entry" else None,
     )
-    db.add(sale); db.flush(); sale.order_number = f"QS-{sale.id:06d}"
+    business_date = restaurant_business_date(current_user.restaurant, now=now)
+    sequence = db.execute(
+        pg_insert(RestaurantDailySequence)
+        .values(
+            restaurant_id=current_user.restaurant_id,
+            sequence_date=business_date,
+            last_value=1,
+        )
+        .on_conflict_do_update(
+            constraint="uq_restaurant_daily_sequence_date",
+            set_={"last_value": RestaurantDailySequence.last_value + 1},
+        )
+        .returning(RestaurantDailySequence.last_value)
+    ).scalar_one()
+    sale.order_number = f"QS-{business_date:%Y%m%d}-{sequence:04d}"
+    db.add(sale); db.flush()
     for priced in priced_items:
         sale_item = QuickSaleItem(
             menu_item_id=priced.menu_item_id,

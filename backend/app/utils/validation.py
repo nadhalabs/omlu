@@ -27,7 +27,7 @@ def structured_validation_error(error: ValueError) -> HTTPException:
         )
     return HTTPException(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        detail={"field": "form", "message": str(error)},
+        detail={"field": "form", "message": "Please check the submitted information and try again."},
     )
 
 

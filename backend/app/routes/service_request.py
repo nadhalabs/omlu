@@ -4,6 +4,7 @@ from collections import defaultdict
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from app.database import get_db
 from app.models.restaurant import Restaurant
@@ -155,44 +156,51 @@ def create_public_service_request(
     # 7. Cooldown check: use a SELECT FOR UPDATE within a transaction to prevent races
     # Rule: a table cannot have another PENDING request of the same type
     # Additionally enforce 2-minute cooldown after creation for just-resolved requests
-    with db.begin_nested():
-        # Lock check: find existing pending request of same type for this table
-        existing_pending = db.query(ServiceRequest).filter(
-            ServiceRequest.table_id == table.id,
-            ServiceRequest.request_type == req_body.request_type,
-            ServiceRequest.status == "pending"
-        ).with_for_update().first()
+    try:
+        with db.begin_nested():
+            # Lock check: find existing pending request of same type for this table
+            existing_pending = db.query(ServiceRequest).filter(
+                ServiceRequest.table_id == table.id,
+                ServiceRequest.request_type == req_body.request_type,
+                ServiceRequest.status == "pending"
+            ).with_for_update().first()
 
-        if existing_pending:
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail=f"A {req_body.request_type} request is already pending for this table."
+            if existing_pending:
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail=f"A {req_body.request_type} request is already pending for this table."
+                )
+
+            # Also check 2-minute cooldown for recently resolved/created requests
+            two_minutes_ago = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=2)
+            recent_request = db.query(ServiceRequest).filter(
+                ServiceRequest.table_id == table.id,
+                ServiceRequest.request_type == req_body.request_type,
+                ServiceRequest.created_at >= two_minutes_ago
+            ).first()
+            if recent_request:
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail="Please wait before sending this request again."
+                )
+
+            # 8. Create the service request
+            new_request = ServiceRequest(
+                restaurant_id=restaurant.id,
+                table_id=table.id,
+                order_id=order_id,
+                dining_session_id=dining_session_id,
+                request_type=req_body.request_type,
+                status="pending"
             )
-
-        # Also check 2-minute cooldown for recently resolved/created requests
-        two_minutes_ago = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=2)
-        recent_request = db.query(ServiceRequest).filter(
-            ServiceRequest.table_id == table.id,
-            ServiceRequest.request_type == req_body.request_type,
-            ServiceRequest.created_at >= two_minutes_ago
-        ).first()
-        if recent_request:
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="Please wait before sending this request again."
-            )
-
-        # 8. Create the service request
-        new_request = ServiceRequest(
-            restaurant_id=restaurant.id,
-            table_id=table.id,
-            order_id=order_id,
-            dining_session_id=dining_session_id,
-            request_type=req_body.request_type,
-            status="pending"
+            db.add(new_request)
+            db.flush()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"A {req_body.request_type} request is already pending for this table session.",
         )
-        db.add(new_request)
-        db.flush()
 
     db.commit()
     db.refresh(new_request)

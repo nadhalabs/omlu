@@ -165,7 +165,7 @@ def test_performance_revenue_and_top_selling(history_data):
     body = response.json()
     assert body["metrics"]["total_revenue"] == "300.00"
     assert body["metrics"]["total_orders"] == 2
-    assert body["metrics"]["average_order_value"] == "150.00"
+    assert body["metrics"]["average_order_value"] == "300.00"
     assert body["top_selling_items"][0]["item_name"] == "Dosa"
 
 

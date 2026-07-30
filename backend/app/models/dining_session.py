@@ -2,7 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import List, Optional
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Integer, String, func
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, ForeignKeyConstraint, Index, Integer, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -63,8 +63,17 @@ class DiningSession(Base):
             "status IN ('open', 'payment_requested', 'payment_pending', 'paid', 'closed', 'cancelled')",
             name="chk_dining_session_status_valid",
         ),
+        UniqueConstraint("restaurant_id", "id", name="uq_dining_sessions_restaurant_id_id"),
+        ForeignKeyConstraint(
+            ["restaurant_id", "table_id"],
+            ["restaurant_tables.restaurant_id", "restaurant_tables.id"],
+            name="fk_dining_sessions_restaurant_table",
+            ondelete="CASCADE",
+        ),
         Index("ix_dining_sessions_restaurant_status", "restaurant_id", "status"),
         Index("ix_dining_sessions_table_status", "table_id", "status"),
+        Index("ix_dining_sessions_restaurant_opened_at", "restaurant_id", "opened_at"),
+        Index("ix_dining_sessions_restaurant_status_opened_at", "restaurant_id", "status", "opened_at"),
         Index(
             "uq_dining_sessions_one_active_per_table",
             "table_id",
@@ -81,19 +90,26 @@ class DiningSession(Base):
     restaurant: Mapped["Restaurant"] = relationship(
         "Restaurant",
         back_populates="dining_sessions",
+        overlaps="dining_sessions",
     )
     table: Mapped["RestaurantTable"] = relationship(
         "RestaurantTable",
         back_populates="dining_sessions",
+        foreign_keys=[table_id],
+        overlaps="dining_sessions,restaurant",
     )
     orders: Mapped[List["Order"]] = relationship(
         "Order",
         back_populates="dining_session",
+        foreign_keys="Order.dining_session_id",
+        overlaps="orders,restaurant,table",
     )
     bill: Mapped[Optional["Bill"]] = relationship(
         "Bill",
         back_populates="dining_session",
+        foreign_keys="Bill.dining_session_id",
         uselist=False,
+        overlaps="bills",
     )
     participants: Mapped[List["TableSessionParticipant"]] = relationship(
         "TableSessionParticipant",

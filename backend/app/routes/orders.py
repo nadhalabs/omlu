@@ -24,6 +24,7 @@ from app.services.dining_sessions import (
 )
 from app.services.order_pricing import validate_and_price_order_items
 from app.services.idempotency import ensure_same_request, request_hash
+from app.utils.business_date import restaurant_business_date
 from app.services.table_participants import enforce_session_action_rate, load_participant, participant_token_header
 from app.services.realtime import (
     EVENT_ORDER_CREATED,
@@ -231,7 +232,7 @@ def create_order_in_session(
     try:
         locked_session = lock_open_session(db, dining_session)
 
-        today = datetime.date.today()
+        today = restaurant_business_date(restaurant)
         stmt = pg_insert(RestaurantDailySequence).values(
             restaurant_id=restaurant.id,
             sequence_date=today,

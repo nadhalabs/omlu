@@ -521,7 +521,12 @@ def test_concurrent_first_orders_create_one_session(setup_test_data):
 
     db = SessionLocal()
     session_count = db.query(DiningSession).filter(DiningSession.table_id == table_id).count()
-    order_count = db.query(Order).join(DiningSession).filter(DiningSession.table_id == table_id).count()
+    order_count = (
+        db.query(Order)
+        .join(DiningSession, Order.dining_session_id == DiningSession.id)
+        .filter(DiningSession.table_id == table_id)
+        .count()
+    )
     db.close()
 
     assert session_count == 1

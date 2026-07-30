@@ -49,8 +49,47 @@ async def request_logging_middleware(request: Request, call_next):
         duration_ms,
         request_id
     )
+    path = request.url.path
+    if response.status_code >= 400:
+        event = None
+        if request.method == "POST" and "/orders" in path:
+            event = "order_creation_failure"
+        elif "confirm-counter-payment" in path or "/payment" in path:
+            event = "unauthorized_payment_attempt" if response.status_code in {401, 403} else "payment_failure"
+        elif request.method == "POST" and ("close-empty" in path or path.endswith("/close")):
+            event = "session_closure_failure"
+        if response.status_code == 409 and request.headers.get("Idempotency-Key"):
+            logger.warning(
+                "event=duplicate_idempotency_conflict method=%s path=%s status=%d request_id=%s",
+                request.method, path, response.status_code, request_id,
+            )
+        if event:
+            logger.warning(
+                "event=%s method=%s path=%s status=%d request_id=%s",
+                event, request.method, path, response.status_code, request_id,
+            )
     response.headers["X-Request-ID"] = request_id
     return response
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    request_id = getattr(request.state, "request_id", "unknown")
+    logger.exception(
+        "event=unhandled_api_failure method=%s path=%s request_id=%s error_type=%s",
+        request.method,
+        request.url.path,
+        request_id,
+        exc.__class__.__name__,
+    )
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": "Something went wrong while processing the request. Please try again.",
+            "request_id": request_id,
+        },
+        headers={"X-Request-ID": request_id},
+    )
 
 
 from app.routes import (

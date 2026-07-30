@@ -1,4 +1,4 @@
-from sqlalchemy import ForeignKey, String, Boolean, UniqueConstraint
+from sqlalchemy import ForeignKey, String, Boolean, Index, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
@@ -17,6 +17,15 @@ class RestaurantTable(Base):
     # Composite Unique Constraint
     __table_args__ = (
         UniqueConstraint("restaurant_id", "table_code", name="uq_restaurant_table_code"),
+        UniqueConstraint("restaurant_id", "id", name="uq_restaurant_tables_restaurant_id_id"),
+        Index(
+            "uq_restaurant_tables_active_number",
+            "restaurant_id",
+            "table_number",
+            unique=True,
+            postgresql_where=(is_active.is_(True)),
+            sqlite_where=(is_active.is_(True)),
+        ),
     )
 
     # Relationships
@@ -27,10 +36,14 @@ class RestaurantTable(Base):
     orders: Mapped[list["Order"]] = relationship(
         "Order",
         back_populates="table",
-        cascade="all, delete-orphan"
+        foreign_keys="Order.table_id",
+        cascade="all, delete-orphan",
+        overlaps="orders",
     )
     dining_sessions: Mapped[list["DiningSession"]] = relationship(
         "DiningSession",
         back_populates="table",
-        cascade="all, delete-orphan"
+        foreign_keys="DiningSession.table_id",
+        cascade="all, delete-orphan",
+        overlaps="dining_sessions",
     )

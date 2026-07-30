@@ -25,6 +25,7 @@ from app.models.staff_user import StaffUser
 from app.models.quick_sale import QuickSale, QuickSaleItem
 from app.models.bill import Bill
 from app.services.revenue import collected_revenue
+from app.utils.business_date import current_business_day_bounds_utc
 
 router = APIRouter(prefix="/admin/dashboard")
 
@@ -203,7 +204,7 @@ def _recent_dashboard_activity(db: Session, restaurant_id: int) -> list[Dashboar
 
 
 def _get_local_day_bounds_utc(
-    timezone_str: str,
+    timezone_str: str | None,
     *,
     now: datetime.datetime | None = None,
 ):
@@ -212,23 +213,7 @@ def _get_local_day_bounds_utc(
     Uses the restaurant's configured timezone (default: Asia/Kolkata).
     Returns (day_start_utc, day_end_utc).
     """
-    try:
-        tz = ZoneInfo(timezone_str)
-    except Exception:
-        tz = ZoneInfo("Asia/Kolkata")
-
-    # Current local time in restaurant's timezone
-    now_local = (now or datetime.datetime.now(datetime.timezone.utc)).astimezone(tz)
-    # Start of today in that timezone (midnight)
-    day_start_local = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
-    # End of today (just before midnight of next day)
-    day_end_local = day_start_local + datetime.timedelta(days=1)
-
-    # Convert to UTC for database filtering
-    day_start_utc = day_start_local.astimezone(datetime.timezone.utc)
-    day_end_utc = day_end_local.astimezone(datetime.timezone.utc)
-
-    return day_start_utc, day_end_utc, tz
+    return current_business_day_bounds_utc(timezone_str, now=now)
 
 
 def _orders_by_local_hour(orders, quick_sales, tz: ZoneInfo) -> list[OrdersByHour]:
@@ -259,9 +244,10 @@ def get_dashboard_summary(
     - orders_by_hour: Orders created today grouped by local hour
     """
     restaurant_id = current_user.restaurant_id
-    timezone_str = current_user.restaurant.timezone if current_user.restaurant.timezone else "Asia/Kolkata"
+    timezone_str = current_user.restaurant.timezone
 
     day_start_utc, day_end_utc, tz = _get_local_day_bounds_utc(timezone_str)
+    timezone_str = tz.key
 
     # 1. Today's total order count (all statuses)
     today_order_count = db.query(func.count(Order.id)).filter(
@@ -482,6 +468,9 @@ def get_dashboard_summary(
         restaurant_slug=current_user.restaurant.slug,
         today_order_count=today_order_count,
         today_revenue=f"{today_revenue:.2f}",
+        collected_revenue=f"{revenue.collected_revenue:.2f}",
+        pending_collection=f"{revenue.pending_collection:.2f}",
+        completed_quick_sale_revenue=f"{revenue.completed_quick_sale_revenue:.2f}",
         average_order_value=f"{average_order_value:.2f}",
         pending_order_count=pending_order_count,
         accepted_order_count=accepted_order_count,

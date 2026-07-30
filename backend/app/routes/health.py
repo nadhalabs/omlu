@@ -6,14 +6,15 @@ from sqlalchemy import text
 from app.database import get_db
 from app.services.push_notifications import push_health
 from app.services.realtime import broker, realtime_metrics_snapshot
+from app.config import settings
 
 router = APIRouter()
 
 
 @router.get("/health")
 def health_check():
-    """Lightweight health check. Does not require database access."""
-    return {"status": "healthy"}
+    """Process liveness only; dependency readiness is reported separately."""
+    return {"status": "healthy", "checks": {"api": "healthy"}}
 
 
 @router.get("/health/database")
@@ -53,17 +54,19 @@ async def realtime_health_check():
 
 @router.get("/health/ready")
 async def readiness_check(db: Session = Depends(get_db)):
-    checks = {}
+    checks = {"api": "healthy"}
     try:
         db.execute(text("SELECT 1"))
         checks["database"] = "healthy"
     except Exception:
         checks["database"] = "unavailable"
     broker_status = await broker.health()
-    checks["realtime_broker"] = broker_status.get("status", "unavailable")
+    checks["postgresql"] = checks.pop("database")
+    checks["realtime"] = broker_status.get("status", "unavailable")
     checks["redis"] = broker_status.get("redis", "not_configured")
     checks["push"] = push_health()["status"]
-    status_code = 200 if checks["database"] == "healthy" and checks["realtime_broker"] == "healthy" else 503
+    required_redis_ready = checks["redis"] == "available" if settings.app_environment == "production" or settings.require_redis else True
+    status_code = 200 if checks["postgresql"] == "healthy" and checks["realtime"] == "healthy" and required_redis_ready else 503
     return JSONResponse(status_code=status_code, content={"status": "healthy" if status_code == 200 else "unavailable", "checks": checks})
 
 

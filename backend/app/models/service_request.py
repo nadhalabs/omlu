@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional
-from sqlalchemy import ForeignKey, String, Integer, DateTime, CheckConstraint, Index, func
+from sqlalchemy import ForeignKey, String, Integer, DateTime, CheckConstraint, ForeignKeyConstraint, Index, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
@@ -15,7 +15,7 @@ class ServiceRequest(Base):
     )
     table_id: Mapped[int] = mapped_column(
         ForeignKey("restaurant_tables.id", ondelete="CASCADE"),
-        nullable=False
+        nullable=False,
     )
     order_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("orders.id", ondelete="SET NULL"),
@@ -24,7 +24,7 @@ class ServiceRequest(Base):
     dining_session_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("dining_sessions.id", ondelete="SET NULL"),
         nullable=True,
-        index=True
+        index=True,
     )
     request_type: Mapped[str] = mapped_column(
         String(50),
@@ -59,6 +59,27 @@ class ServiceRequest(Base):
         Index("ix_service_requests_restaurant_status", "restaurant_id", "status"),
         Index("ix_service_requests_table_type_status", "table_id", "request_type", "status"),
         Index("ix_service_requests_restaurant_created", "restaurant_id", "status", "created_at"),
+        Index(
+            "uq_service_requests_pending_session_table_type",
+            "restaurant_id",
+            "table_id",
+            "request_type",
+            func.coalesce(dining_session_id, 0),
+            unique=True,
+            postgresql_where=(status == "pending"),
+            sqlite_where=(status == "pending"),
+        ),
+        ForeignKeyConstraint(
+            ["restaurant_id", "table_id"],
+            ["restaurant_tables.restaurant_id", "restaurant_tables.id"],
+            name="fk_service_requests_restaurant_table",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["restaurant_id", "dining_session_id"],
+            ["dining_sessions.restaurant_id", "dining_sessions.id"],
+            name="fk_service_requests_restaurant_session",
+        ),
     )
 
     # Relationships
@@ -66,9 +87,17 @@ class ServiceRequest(Base):
         "Restaurant",
         back_populates="service_requests"
     )
-    table: Mapped["RestaurantTable"] = relationship("RestaurantTable")
+    table: Mapped["RestaurantTable"] = relationship(
+        "RestaurantTable",
+        foreign_keys=[table_id],
+        overlaps="restaurant,service_requests",
+    )
     order: Mapped[Optional["Order"]] = relationship("Order")
-    dining_session: Mapped[Optional["DiningSession"]] = relationship("DiningSession")
+    dining_session: Mapped[Optional["DiningSession"]] = relationship(
+        "DiningSession",
+        foreign_keys=[dining_session_id],
+        overlaps="restaurant,service_requests,table",
+    )
     resolver: Mapped[Optional["StaffUser"]] = relationship(
         "StaffUser",
         foreign_keys=[resolved_by_staff_id]

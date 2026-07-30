@@ -402,6 +402,16 @@ def test_create_table(setup_admin_test_data):
     assert response.json()["table_code"].startswith("T6-")
 
 
+def test_duplicate_active_table_returns_conflict(setup_admin_test_data):
+    data = setup_admin_test_data
+    headers = {"Authorization": f"Bearer {data['owner_token']}"}
+    first = client.post("/admin/tables", headers=headers, json={"table_number": "7"})
+    second = client.post("/admin/tables", headers=headers, json={"table_number": "7"})
+    assert first.status_code == 201
+    assert second.status_code == 409
+    assert "already active" in second.json()["detail"]
+
+
 def test_blank_table_number_rejected(setup_admin_test_data):
     data = setup_admin_test_data
     response = client.post(

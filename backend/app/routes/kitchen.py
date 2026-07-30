@@ -1,3 +1,4 @@
+import logging
 import secrets
 from datetime import datetime
 from typing import List, Optional
@@ -13,6 +14,7 @@ from app.utils.auth import get_current_staff_user, RoleChecker
 from app.services.realtime import EVENT_ORDER_STATUS_CHANGED, order_channel, publish_event, restaurant_channel, session_channel, table_channel
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 # Setup Role Checking dependency for kitchen actions
 kitchen_access_dependency = RoleChecker(["owner", "admin", "kitchen"])
@@ -279,7 +281,8 @@ def update_kitchen_order_status(
         raise
     except Exception as e:
         db.rollback()
+        logger.exception("event=order_status_update_failure error_type=%s", e.__class__.__name__)
         raise HTTPException(
             status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Internal database update failure: {str(e)}"
+            detail="Could not update the order. Please try again."
         )

@@ -546,6 +546,10 @@ def _create_broker() -> RealtimeBroker:
     if settings.redis_url:
         logger.info("realtime.broker=redis")
         return RedisRealtimeBroker(settings.redis_url)
+    if settings.app_environment == "production" or settings.require_redis:
+        raise RuntimeError(
+            "Redis/Valkey is required for production distributed realtime and authority events."
+        )
     logger.info("realtime.broker=in_memory")
     return InMemoryRealtimeBroker()
 

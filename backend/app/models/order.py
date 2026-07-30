@@ -1,7 +1,7 @@
 from datetime import datetime, date
 from decimal import Decimal
 from typing import List, Optional
-from sqlalchemy import ForeignKey, String, Numeric, CheckConstraint, UniqueConstraint, DateTime, Integer, Date, func
+from sqlalchemy import ForeignKey, ForeignKeyConstraint, String, Numeric, CheckConstraint, UniqueConstraint, DateTime, Index, Integer, Date, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
@@ -31,12 +31,12 @@ class Order(Base):
     )
     table_id: Mapped[int] = mapped_column(
         ForeignKey("restaurant_tables.id", ondelete="CASCADE"),
-        index=True
+        index=True,
     )
     dining_session_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("dining_sessions.id", ondelete="SET NULL"),
         nullable=True,
-        index=True
+        index=True,
     )
     order_number: Mapped[str] = mapped_column(String(50))
     public_token: Mapped[str] = mapped_column(String(255), unique=True, index=True)
@@ -73,20 +73,40 @@ class Order(Base):
     __table_args__ = (
         UniqueConstraint("restaurant_id", "order_number", name="uq_restaurant_order_number"),
         UniqueConstraint("restaurant_id", "idempotency_key", name="uq_restaurant_id_idempotency_key"),
+        UniqueConstraint("restaurant_id", "id", name="uq_orders_restaurant_id_id"),
+        ForeignKeyConstraint(
+            ["restaurant_id", "table_id"],
+            ["restaurant_tables.restaurant_id", "restaurant_tables.id"],
+            name="fk_orders_restaurant_table",
+            ondelete="CASCADE",
+        ),
+        Index("ix_orders_restaurant_created_at", "restaurant_id", "created_at"),
+        Index("ix_orders_restaurant_status", "restaurant_id", "status"),
+        Index("ix_orders_restaurant_status_created_at", "restaurant_id", "status", "created_at"),
+        ForeignKeyConstraint(
+            ["restaurant_id", "dining_session_id"],
+            ["dining_sessions.restaurant_id", "dining_sessions.id"],
+            name="fk_orders_restaurant_session",
+        ),
     )
 
     # Relationships
     restaurant: Mapped["Restaurant"] = relationship(
         "Restaurant",
-        back_populates="orders"
+        back_populates="orders",
+        overlaps="orders",
     )
     table: Mapped["RestaurantTable"] = relationship(
         "RestaurantTable",
-        back_populates="orders"
+        back_populates="orders",
+        foreign_keys=[table_id],
+        overlaps="orders,restaurant",
     )
     dining_session: Mapped[Optional["DiningSession"]] = relationship(
         "DiningSession",
-        back_populates="orders"
+        back_populates="orders",
+        foreign_keys=[dining_session_id],
+        overlaps="orders,restaurant,table",
     )
     items: Mapped[List["OrderItem"]] = relationship(
         "OrderItem",
@@ -204,4 +224,9 @@ class OrderStatusHistory(Base):
     order: Mapped["Order"] = relationship(
         "Order",
         back_populates="status_history"
+    )
+
+    __table_args__ = (
+        Index("ix_order_status_history_changed_by", "changed_by_staff_id"),
+        Index("ix_order_status_history_order_status_time", "order_id", "new_status", "changed_at"),
     )

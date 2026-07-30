@@ -43,15 +43,25 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_production(self):
         if self.app_environment == "production":
+            if not self.database_url.startswith(("postgresql://", "postgresql+psycopg2://")):
+                raise ValueError("DATABASE_URL must use PostgreSQL in production")
             if len(self.jwt_secret_key) < 32:
                 raise ValueError("JWT_SECRET_KEY must be at least 32 characters in production")
+            if self.jwt_secret_key.lower() in {"secret", "changeme", "change-me", "development"}:
+                raise ValueError("JWT_SECRET_KEY cannot use an unsafe default in production")
+            if len(self.kitchen_api_key) < 24 or self.kitchen_api_key.lower() in {"secret", "changeme", "change-me"}:
+                raise ValueError("KITCHEN_API_KEY must be a non-default value of at least 24 characters in production")
+            if not self.participant_hmac_secret or len(self.participant_hmac_secret) < 32:
+                raise ValueError("PARTICIPANT_HMAC_SECRET must be at least 32 characters in production")
             if "*" in self.allowed_origins or any("localhost" in origin for origin in self.allowed_origins):
                 raise ValueError("FRONTEND_URLS must contain only explicit production origins")
+            if not self.frontend_url.startswith("https://"):
+                raise ValueError("FRONTEND_URL must use HTTPS in production")
             if not self.public_frontend_url.startswith("https://"):
                 raise ValueError("PUBLIC_FRONTEND_URL must use HTTPS in production")
-            if not self.redis_url:
+            if not self.redis_url or not self.redis_url.startswith(("redis://", "rediss://")):
                 raise ValueError(
-                    "REDIS_URL is required in production for distributed realtime authority revocation"
+                    "REDIS_URL must use redis:// or rediss:// in production"
                 )
         return self
 

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { backendUrl, getBackendBaseUrl } from "./backendUrl";
+import { backendUrl } from "./backendUrl";
 
 export async function proxyAdminRequest(
   request: NextRequest,
@@ -73,11 +73,10 @@ export async function proxyAdminRequest(
 
     const data = await res.json();
     return NextResponse.json(data);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown connection error";
+  } catch {
     return NextResponse.json(
-      { detail: `Could not connect to the backend server at ${getBackendBaseUrl()}. ${message}` },
-      { status: 500 }
+      { detail: "The service is temporarily unavailable. Please try again." },
+      { status: 503 }
     );
   }
 }
