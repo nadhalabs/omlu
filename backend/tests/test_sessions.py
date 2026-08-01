@@ -225,6 +225,37 @@ def _add_paid_bill(data):
     db.close()
 
 
+@pytest.mark.parametrize("role", ["owner", "admin"])
+def test_management_can_prepare_and_issue_bill_from_active_session(sess_ctx, role):
+    _add_order(sess_ctx, status="served", subtotal=Decimal("50.00"))
+    headers = {"Authorization": f"Bearer {sess_ctx[f'{role}_token']}"}
+
+    active = client.get("/staff/sessions", headers=headers)
+    assert active.status_code == 200
+    card = next(item for item in active.json() if item["session_token"] == sess_ctx["session_token"])
+    assert card["billable_order_count"] == 1
+    assert card["bill_number"] is None
+
+    prepared = client.post(f"/staff/sessions/{sess_ctx['session_token']}/bill", headers=headers)
+    assert prepared.status_code == 201
+    bill_number = prepared.json()["bill_number"]
+    issue_headers = {**headers, "Idempotency-Key": f"admin-active-table-{role}"}
+    issued = client.post(f"/staff/bills/{bill_number}/issue", headers=issue_headers)
+    assert issued.status_code == 200
+    assert issued.json()["status"] == "issued"
+    assert issued.json()["total_amount"] == "50.00"
+
+    duplicate = client.post(f"/staff/bills/{bill_number}/issue", headers=issue_headers)
+    assert duplicate.status_code == 200
+    assert duplicate.json()["bill_number"] == bill_number
+
+    refreshed = client.get("/staff/sessions", headers=headers).json()
+    updated = next(item for item in refreshed if item["session_token"] == sess_ctx["session_token"])
+    assert updated["bill_number"] == bill_number
+    assert updated["bill_status"] == "issued"
+    assert updated["bill_total"] == "50.00"
+
+
 # ── LIST tests ────────────────────────────────────────────────────────────────
 
 def test_owner_can_list_sessions(sess_ctx):

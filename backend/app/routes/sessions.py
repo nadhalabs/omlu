@@ -64,6 +64,10 @@ def _latest_order_status(session: DiningSession) -> str | None:
 
 def _build_list_item(session: DiningSession) -> StaffSessionListItem:
     order_count = len(session.orders)
+    billable_order_count = sum(
+        order.status not in {"rejected", "cancelled", "voided"}
+        for order in session.orders
+    )
     subtotal = sum(o.subtotal for o in session.orders)
     return StaffSessionListItem(
         session_token=session.public_token,
@@ -72,10 +76,13 @@ def _build_list_item(session: DiningSession) -> StaffSessionListItem:
         opened_at=session.opened_at,
         last_activity_at=_session_last_activity(session),
         order_count=order_count,
+        billable_order_count=billable_order_count,
         combined_subtotal=subtotal,
         latest_order_status=_latest_order_status(session),
         bill_id=session.bill.id if session.bill else None,
         bill_number=session.bill.bill_number if session.bill else None,
+        bill_status=session.bill.status if session.bill else None,
+        bill_total=session.bill.total_amount if session.bill else None,
     )
 
 

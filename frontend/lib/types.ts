@@ -590,10 +590,13 @@ export interface StaffSessionListItem {
   opened_at: string;
   last_activity_at: string;
   order_count: number;
+  billable_order_count: number;
   combined_subtotal: string;
   latest_order_status: string | null;
   bill_id: number | null;
   bill_number: string | null;
+  bill_status: BillStatus | null;
+  bill_total: string | null;
 }
 
 export interface PendingPaymentItem {

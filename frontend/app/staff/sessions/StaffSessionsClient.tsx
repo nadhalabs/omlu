@@ -2,10 +2,11 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
-import { getStaffMe, getStaffSessions, closeEmptySession, ApiError } from "@/lib/api";
+import { getStaffMe, getStaffSessions, closeEmptySession, createOrRefreshStaffSessionBill, issueStaffBill, ApiError } from "@/lib/api";
 import { CurrentStaffResponse, StaffSessionListItem } from "@/lib/types";
 import { useRealtime } from "@/lib/realtime";
 import { registerAuthenticatedCleanup } from "@/lib/authRuntime.mjs";
+import { useOmluUi } from "@/components/OmluUiProvider";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -62,6 +63,7 @@ const ORDER_STATUS_LABEL: Record<string, string> = {
 // ── component ─────────────────────────────────────────────────────────────────
 
 export default function StaffSessionsClient() {
+  const { confirm: confirmDialog, toast } = useOmluUi();
   const [sessions, setSessions] = useState<StaffSessionListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -71,9 +73,11 @@ export default function StaffSessionsClient() {
   // Close state
   const [confirmToken, setConfirmToken] = useState<string | null>(null);
   const [closingToken, setClosingToken] = useState<string | null>(null);
+  const [issuingTokens, setIssuingTokens] = useState<Set<string>>(() => new Set());
   const [closeError, setCloseError] = useState<Record<string, string>>({});
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingIssueTokens = useRef(new Set<string>());
 
   const fetchSessions = useCallback(async (showLoading = true) => {
     if (showLoading) setLoading(true);
@@ -145,6 +149,48 @@ export default function StaffSessionsClient() {
     } finally {
       setClosingToken(null);
     }
+  };
+
+  const handleIssueBill = async (session: StaffSessionListItem) => {
+    if (pendingIssueTokens.current.has(session.session_token) || session.bill_number) return;
+    await confirmDialog({
+      title: `Issue bill for Table ${session.table_number}?`,
+      message: "This will generate the bill for all currently billable orders in this table session.",
+      confirmLabel: "Issue Bill",
+      onConfirm: async () => {
+        if (pendingIssueTokens.current.has(session.session_token)) return;
+        pendingIssueTokens.current.add(session.session_token);
+        setIssuingTokens((previous) => new Set(previous).add(session.session_token));
+        setCloseError((previous) => {
+          const next = { ...previous };
+          delete next[session.session_token];
+          return next;
+        });
+        try {
+          const prepared = await createOrRefreshStaffSessionBill(session.session_token);
+          const issued = await issueStaffBill(prepared.bill_number);
+          setSessions((previous) => previous.map((item) => item.session_token === session.session_token ? {
+            ...item,
+            status: "payment_requested",
+            bill_number: issued.bill_number,
+            bill_status: issued.status,
+            bill_total: issued.total_amount,
+          } : item));
+          window.dispatchEvent(new Event("pending-payments-changed"));
+          toast("Bill issued.", "success");
+        } catch (err) {
+          const message = err instanceof ApiError ? err.message : "Failed to issue bill.";
+          setCloseError((previous) => ({ ...previous, [session.session_token]: message }));
+        } finally {
+          pendingIssueTokens.current.delete(session.session_token);
+          setIssuingTokens((previous) => {
+            const next = new Set(previous);
+            next.delete(session.session_token);
+            return next;
+          });
+        }
+      },
+    });
   };
 
   // ── render ─────────────────────────────────────────────────────────────────
@@ -250,6 +296,7 @@ export default function StaffSessionsClient() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {sessions.map((s) => {
               const isClosing = closingToken === s.session_token;
+              const isIssuing = issuingTokens.has(s.session_token);
               const isConfirming = confirmToken === s.session_token;
               const cardError = closeError[s.session_token];
               const orderDot =
@@ -358,8 +405,27 @@ export default function StaffSessionsClient() {
                       </p>
                     </div>
                   )}
+                  {canCloseSession && s.bill_number && s.status !== "payment_pending" && (
+                    <div className="mt-auto flex flex-col gap-2">
+                      <div className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs">
+                        <span className="font-bold text-zinc-400">{s.bill_status === "issued" ? "Bill issued" : `Bill ${s.bill_status || "created"}`}</span>
+                        {s.bill_total && <span className="font-black text-orange-400">₹{s.bill_total}</span>}
+                      </div>
+                      <Link href={`/bill/${encodeURIComponent(s.session_token)}`} className="rounded-xl bg-zinc-800 px-4 py-2 text-center text-xs font-black text-white hover:bg-zinc-700">View Bill</Link>
+                    </div>
+                  )}
+                  {canCloseSession && s.billable_order_count > 0 && !s.bill_number && (
+                    <button
+                      type="button"
+                      disabled={isIssuing}
+                      onClick={() => void handleIssueBill(s)}
+                      className="mt-auto rounded-xl bg-orange-600 px-4 py-3 text-sm font-black text-white hover:bg-orange-500 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {isIssuing ? "Issuing bill…" : "Issue Bill"}
+                    </button>
+                  )}
                   {/* Close action */}
-                  {canCloseSession && s.status !== "payment_pending" && (!isConfirming ? (
+                  {canCloseSession && s.order_count === 0 && !s.bill_number && s.status !== "payment_pending" && (!isConfirming ? (
                     <button
                       id={`close-btn-${s.session_token}`}
                       disabled={isClosing}
