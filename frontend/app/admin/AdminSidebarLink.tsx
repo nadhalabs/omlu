@@ -11,7 +11,8 @@ export default function AdminSidebarLink({
   label: string;
 }) {
   const pathname = usePathname();
-  const isActive = pathname === href || pathname?.startsWith(href + "/");
+  const hrefPathname = href.split("?", 1)[0];
+  const isActive = pathname === hrefPathname || pathname?.startsWith(hrefPathname + "/");
 
   return (
     <Link

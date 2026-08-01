@@ -1,5 +1,5 @@
-import BillHistoryClient from "./BillHistoryClient";
+import { redirect } from "next/navigation";
 
 export default function BillHistoryPage() {
-  return <BillHistoryClient />;
+  redirect("/admin/history?view=bills");
 }

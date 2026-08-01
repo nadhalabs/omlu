@@ -301,7 +301,7 @@ export default function AdminDashboardClient() {
             <h2 className="text-sm font-black text-zinc-400 uppercase tracking-wider">
               Recent Activity
             </h2>
-            <a href="/admin/orders/history" className="text-xs font-bold text-orange-400 hover:text-orange-300">
+            <a href="/admin/history?view=orders" className="text-xs font-bold text-orange-400 hover:text-orange-300">
               View all activity
             </a>
           </div>

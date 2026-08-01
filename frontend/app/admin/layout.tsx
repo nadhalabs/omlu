@@ -105,9 +105,7 @@ export default async function AdminLayout({
             <PendingPaymentsSidebarLink initialCount={pendingPaymentCount} />
             <AdminSidebarLink href="/admin/quick-sale" label="🧾 Quick Sale" />
             <AdminSidebarLink href={`/kitchen/${staffInfo.restaurant_slug}`} label="🧑‍🍳 Kitchen Dashboard" />
-            <AdminSidebarLink href="/admin/orders/history" label="Order History" />
-            <AdminSidebarLink href="/admin/bills/history" label="Bill History" />
-            <AdminSidebarLink href="/admin/sessions/history" label="Session History" />
+            <AdminSidebarLink href="/admin/history?view=orders" label="History" />
             <AdminSidebarLink href="/admin/menu" label="🍔 Menu Items" />
             <AdminSidebarLink href="/admin/staff" label="👥 Staff Management" />
             <AdminSidebarLink href="/admin/performance" label="Performance" />

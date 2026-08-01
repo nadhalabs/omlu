@@ -37,7 +37,7 @@ test("dashboard refetches in realtime and payment events reach its admin channel
 test("dashboard recent activity uses stable grouped entries and links to full history", () => {
   assert.match(dashboard, /key=\{item\.id\}/);
   assert.match(dashboard, /View all activity/);
-  assert.match(dashboard, /\/admin\/orders\/history/);
+  assert.match(dashboard, /\/admin\/history\?view=orders/);
   assert.doesNotMatch(dashboard, /key=\{`\$\{item\.timestamp\}-\$\{idx\}`\}/);
 });
 

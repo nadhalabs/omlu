@@ -1,5 +1,5 @@
-import OrderHistoryClient from "./OrderHistoryClient";
+import { redirect } from "next/navigation";
 
 export default function OrderHistoryPage() {
-  return <OrderHistoryClient />;
+  redirect("/admin/history?view=orders");
 }

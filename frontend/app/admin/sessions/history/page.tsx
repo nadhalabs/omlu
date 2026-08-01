@@ -1,5 +1,5 @@
-import SessionHistoryClient from "./SessionHistoryClient";
+import { redirect } from "next/navigation";
 
 export default function SessionHistoryPage() {
-  return <SessionHistoryClient />;
+  redirect("/admin/history?view=sessions");
 }
