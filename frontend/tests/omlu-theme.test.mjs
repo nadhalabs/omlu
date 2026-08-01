@@ -43,8 +43,8 @@ test("active admin surfaces preserve readable dark and disabled controls", () =>
   assert.match(dashboard, /bg-zinc-950[^\n]*text-white/);
   assert.match(quickSale, /contrast-dark-card/);
   assert.match(quickSale, /bg-orange-600 font-black text-white/);
-  assert.match(staff, /contrast-dark-header bg-zinc-950 text-white/);
-  assert.match(staff, /contrast-dark-row/);
+  assert.match(staff, /bg-zinc-950[^\n]*text-white/);
+  assert.match(staff, /bg-white align-top text-zinc-900/);
   assert.doesNotMatch(`${quickSale}\n${staff}\n${tables}`, /disabled:opacity-/);
   assert.match(tables, /text-zinc-900 uppercase tracking-wider/);
 });
