@@ -382,29 +382,25 @@ export default function AdminMenuPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Top Title Block */}
-      <div>
-        <h1 className="text-3xl font-black tracking-tight text-white">
-          Menu Management
-        </h1>
-        <p className="text-zinc-500 text-xs mt-1.5 font-bold">
-          Organize categories and configure menu dishes served to tables
-        </p>
-      </div>
+      <header className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+        <div><h1 className="text-3xl font-black tracking-tight text-zinc-950">Menu Management</h1><p className="mt-1.5 text-sm font-medium text-zinc-600">Organize categories and configure dishes served to customers.</p></div>
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+          <button onClick={() => openItemModal("create")} disabled={categories.length === 0} className="min-h-11 rounded-xl bg-orange-600 px-5 py-2.5 text-sm font-black text-white transition hover:bg-orange-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-600">Add item</button>
+          <button onClick={() => setImportMenuOpen(true)} className="min-h-11 rounded-xl border border-zinc-300 bg-white px-5 py-2.5 text-sm font-bold text-zinc-800 transition hover:bg-zinc-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500">Import menu</button>
+        </div>
+      </header>
 
       {/* Grid Layout for Categories and Menu Items */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
         {/* LEFT COLUMN: Categories list */}
-        <div className="lg:col-span-1 bg-zinc-950/40 border border-zinc-850 rounded-3xl p-5 flex flex-col gap-4">
-          <div className="flex items-center justify-between border-b border-zinc-850 pb-3">
-            <h2 className="text-sm font-black text-orange-500 uppercase tracking-wider">
-              Categories
-            </h2>
+        <section className="flex flex-col gap-4 rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm lg:col-span-1">
+          <div className="flex items-center justify-between border-b border-zinc-200 pb-3">
+            <div><h2 className="text-lg font-black text-zinc-950">Categories</h2><p className="text-xs font-medium text-zinc-600">{categories.length} {categories.length === 1 ? "category" : "categories"}</p></div>
             <button
               onClick={() => openCategoryModal("create")}
-              className="px-3 py-1.5 bg-orange-600 hover:bg-orange-700 active:bg-orange-800 text-xs font-bold text-white rounded-xl transition cursor-pointer"
+              className="min-h-11 rounded-xl border border-zinc-300 bg-white px-4 py-2 text-sm font-bold text-zinc-800 transition hover:bg-zinc-50 focus-visible:outline-2 focus-visible:outline-orange-500"
             >
-              + Add
+              Add category
             </button>
           </div>
 
@@ -423,78 +419,40 @@ export default function AdminMenuPage() {
               {categories.map((cat) => (
                 <div
                   key={cat.id}
-                  className="bg-zinc-900 border border-zinc-800 rounded-xl p-3.5 flex items-center justify-between gap-4"
+                  className="flex items-center justify-between gap-4 rounded-xl border border-zinc-200 bg-zinc-50 p-4"
                 >
                   <div className="truncate">
                     <div className="flex items-center gap-2">
-                      <span className="font-extrabold text-sm text-zinc-200 truncate">
+                      <span className="truncate text-sm font-extrabold text-zinc-950">
                         {cat.name_en}
                       </span>
                       {!cat.is_active && (
-                        <span className="text-[8px] bg-red-950/40 border border-red-900/50 text-red-400 font-bold px-1.5 py-0.5 rounded uppercase">
+                        <span className="whitespace-nowrap rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 text-[10px] font-black uppercase text-amber-900">
                           Inactive
                         </span>
                       )}
                     </div>
                     {cat.name_ml && (
-                      <span className="text-[10px] text-zinc-500 font-medium block mt-0.5">
+                      <span className="mt-0.5 block text-xs font-medium text-zinc-600">
                         {cat.name_ml}
                       </span>
                     )}
-                    <span className="text-[9px] text-zinc-500 font-bold block mt-1">
-                      Order: {cat.display_order} • {cat.item_count} items
+                    <span className="mt-1 block text-xs font-bold text-zinc-600">
+                      {cat.item_count} {cat.item_count === 1 ? "menu item" : "menu items"} · Sort order {cat.display_order}
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button
-                      onClick={() => openCategoryModal("edit", cat)}
-                      className="p-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-[10px] font-bold text-zinc-300 transition cursor-pointer"
-                      title="Edit"
-                    >
-                      ✏️
-                    </button>
-                    <button
-                      onClick={() => handleDeleteCategory(cat.id)}
-                      className="p-1.5 bg-zinc-800 hover:bg-red-950/20 rounded-lg text-[10px] font-bold text-red-400 hover:text-red-300 transition cursor-pointer"
-                      title="Delete"
-                    >
-                      ✕
-                    </button>
-                  </div>
+                  <details className="relative shrink-0"><summary aria-label={`More actions for ${cat.name_en}`} className="flex min-h-11 min-w-11 cursor-pointer list-none items-center justify-center rounded-xl border border-zinc-300 bg-white text-xl font-black text-zinc-800 hover:bg-zinc-100 focus-visible:outline-2 focus-visible:outline-orange-500">⋮</summary><div className="absolute right-0 z-20 mt-2 w-48 rounded-xl border border-zinc-200 bg-white p-1.5 shadow-xl"><button onClick={() => openCategoryModal("edit", cat)} className="min-h-10 w-full rounded-lg px-3 text-left text-sm font-bold text-zinc-800 hover:bg-zinc-100">Edit category</button><button onClick={() => handleDeleteCategory(cat.id)} className="min-h-10 w-full rounded-lg px-3 text-left text-sm font-bold text-red-700 hover:bg-red-50">Delete category</button></div></details>
                 </div>
               ))}
             </div>
           )}
-        </div>
+        </section>
 
         {/* RIGHT COLUMN: Menu items list with Search/Filters */}
-        <div className="lg:col-span-2 bg-zinc-950/40 border border-zinc-850 rounded-3xl p-5 flex flex-col gap-4">
+        <section className="flex flex-col gap-4 rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm lg:col-span-2">
           {/* Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-850 pb-3">
-            <h2 className="text-sm font-black text-orange-500 uppercase tracking-wider">
-              Dishes & Menu Items
-            </h2>
-            <div className="flex gap-2">
-              <button
-                onClick={() => openItemModal("create")}
-                disabled={categories.length === 0}
-                className={`px-4 py-2 text-xs font-bold text-white rounded-xl transition ${
-                  categories.length === 0
-                    ? "bg-zinc-800 text-zinc-500 cursor-not-allowed border border-zinc-800"
-                    : "bg-orange-600 hover:bg-orange-700 active:bg-orange-800 cursor-pointer"
-                }`}
-              >
-                + Add Item
-              </button>
-              <button
-                onClick={() => setImportMenuOpen(true)}
-                className="rounded-xl border border-orange-700 bg-orange-950/30 px-4 py-2 text-xs font-bold text-orange-300 transition hover:bg-orange-950/60"
-              >
-                Import Menu
-              </button>
-            </div>
-          </div>
+          <div className="border-b border-zinc-200 pb-3"><h2 className="text-lg font-black text-zinc-950">Menu items</h2><p className="text-xs font-medium text-zinc-600">Showing {filteredItems.length} of {items.length} items</p></div>
 
           {/* Filters Panel */}
           <div className="flex flex-col sm:flex-row gap-3">
@@ -503,7 +461,7 @@ export default function AdminMenuPage() {
               <select
                 value={selectedCategoryId}
                 onChange={(e) => setSelectedCategoryId(e.target.value)}
-                className="w-full px-3 py-2.5 bg-zinc-900 border border-zinc-800 focus:border-orange-600 rounded-xl text-xs outline-none transition text-white"
+                aria-label="Filter by category" className="min-h-11 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2.5 text-sm text-zinc-900 outline-none focus-visible:outline-2 focus-visible:outline-orange-500"
               >
                 <option value="all">All Categories</option>
                 {categories.map((c) => (
@@ -521,7 +479,7 @@ export default function AdminMenuPage() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search dish by English or Malayalam name..."
-                className="w-full px-4 py-2.5 bg-zinc-900 border border-zinc-800 focus:border-orange-600 rounded-xl text-xs outline-none transition text-white placeholder-zinc-600"
+                aria-label="Search menu items" className="min-h-11 w-full rounded-xl border border-zinc-300 bg-white px-4 py-2.5 text-sm text-zinc-900 outline-none focus-visible:outline-2 focus-visible:outline-orange-500"
               />
             </div>
           </div>
@@ -539,11 +497,11 @@ export default function AdminMenuPage() {
               <p className="text-xs font-bold">No dishes found matching search parameters.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
               {filteredItems.map((item) => (
                 <div
                   key={item.id}
-                  className="bg-zinc-900 border border-zinc-800 hover:border-zinc-750 transition rounded-2xl p-4 flex flex-col justify-between gap-4"
+                  className="flex min-h-48 flex-col justify-between gap-4 rounded-2xl border border-zinc-200 bg-zinc-50 p-4 transition hover:border-zinc-300"
                 >
                   <div className="flex gap-3">
                     {/* Item Image Preview or Placeholder */}
@@ -564,7 +522,7 @@ export default function AdminMenuPage() {
 
                     <div className="truncate flex-1">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="font-extrabold text-sm text-zinc-200 truncate">
+                        <span className="truncate text-sm font-extrabold text-zinc-950">
                           {item.name_en}
                         </span>
                         {!item.is_available && (
@@ -574,7 +532,7 @@ export default function AdminMenuPage() {
                         )}
                       </div>
                       {item.name_ml && (
-                        <span className="text-[10px] text-zinc-500 font-medium block mt-0.5">
+                        <span className="mt-0.5 block text-xs font-medium text-zinc-600">
                           {item.name_ml}
                         </span>
                       )}
@@ -585,22 +543,22 @@ export default function AdminMenuPage() {
                   </div>
 
                   {/* Pricing and Details */}
-                  <div className="flex items-center justify-between border-t border-zinc-850 pt-3">
+                  <div className="flex flex-col justify-between gap-3 border-t border-zinc-200 pt-3 sm:flex-row sm:items-center">
                     <div>
                       <span className="text-[10px] text-zinc-500 font-semibold block uppercase">
                         Price
                       </span>
-                      <span className="text-sm font-black text-white">
+                      <span className="text-sm font-black text-zinc-950">
                         ₹{Number(item.price).toFixed(2)}
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       {/* Availability Quick Toggle */}
                       <button
                         onClick={() => handleToggleAvailability(item)}
                         disabled={updatingAvail[item.id]}
-                        className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition cursor-pointer select-none ${
+                        className={`min-h-11 rounded-lg px-3 py-2 text-xs font-bold transition focus-visible:outline-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-600 ${
                           item.is_available
                             ? "border border-green-300 bg-green-100 text-green-700"
                             : "border border-red-300 bg-red-100 text-red-700"
@@ -612,27 +570,18 @@ export default function AdminMenuPage() {
                       {/* Edit */}
                       <button
                         onClick={() => openItemModal("edit", item)}
-                        className="p-1.5 bg-zinc-800 hover:bg-zinc-750 rounded-lg text-xs font-bold text-zinc-300 transition cursor-pointer"
-                        title="Edit Item"
+                        className="min-h-11 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-xs font-bold text-zinc-800 transition hover:bg-zinc-100 focus-visible:outline-2 focus-visible:outline-orange-500"
                       >
-                        ✏️
+                        Edit
                       </button>
-
-                      {/* Delete */}
-                      <button
-                        onClick={() => handleDeleteItem(item.id)}
-                        className="p-1.5 bg-zinc-800 hover:bg-red-950/20 rounded-lg text-xs font-bold text-red-400 hover:text-red-300 transition cursor-pointer"
-                        title="Delete Item"
-                      >
-                        ✕
-                      </button>
+                      <details className="relative"><summary aria-label={`More actions for ${item.name_en}`} className="flex min-h-11 min-w-11 cursor-pointer list-none items-center justify-center rounded-lg border border-zinc-300 bg-white text-xl font-black text-zinc-800 hover:bg-zinc-100 focus-visible:outline-2 focus-visible:outline-orange-500">⋮</summary><div className="absolute right-0 z-20 mt-2 w-48 rounded-xl border border-zinc-200 bg-white p-1.5 shadow-xl"><button onClick={() => handleDeleteItem(item.id)} className="min-h-10 w-full rounded-lg px-3 text-left text-sm font-bold text-red-700 hover:bg-red-50">Delete menu item</button></div></details>
                     </div>
                   </div>
                 </div>
               ))}
             </div>
           )}
-        </div>
+        </section>
       </div>
 
       {importMenuOpen && (

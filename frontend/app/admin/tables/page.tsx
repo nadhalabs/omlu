@@ -230,29 +230,29 @@ export default function AdminTablesPage() {
         {/* Header Title Block */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-black tracking-tight text-white">
+            <h1 className="text-3xl font-black tracking-tight text-zinc-950">
               Tables Management
             </h1>
-            <p className="text-zinc-500 text-xs mt-1.5 font-bold">
-              Register table mapping numbers, print QR codes, and configure active session codes
+            <p className="mt-1.5 text-sm font-medium text-zinc-600">
+              Create tables, manage public access, and print QR codes.
             </p>
           </div>
 
           <button
             onClick={handlePrint}
             disabled={activeTables.length === 0}
-            className="px-5 py-2.5 bg-orange-600 hover:bg-orange-700 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-600 text-sm font-bold text-white rounded-xl transition cursor-pointer flex items-center gap-2 select-none"
+            className="flex min-h-11 items-center gap-2 rounded-xl border border-zinc-300 bg-white px-5 py-2.5 text-sm font-bold text-zinc-800 transition hover:bg-zinc-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-500"
           >
-            🖨️ Print All QRs ({activeTables.length})
+            <span aria-hidden="true">⎙</span> Print all QR codes ({activeTables.length})
           </button>
         </div>
 
         {/* Form and List Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
           {/* Add Table Column Form */}
-          <div className="lg:col-span-1 bg-zinc-950/40 border border-zinc-850 rounded-3xl p-5 flex flex-col gap-4">
-            <h2 className="text-sm font-black text-zinc-900 uppercase tracking-wider border-b border-zinc-850 pb-3">
-              Add New Table
+          <section className="flex flex-col gap-4 rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm lg:col-span-1">
+            <h2 className="border-b border-zinc-200 pb-3 text-lg font-black text-zinc-950">
+              Add new table
             </h2>
 
             {formError && (
@@ -263,32 +263,34 @@ export default function AdminTablesPage() {
 
             <form onSubmit={handleCreateTable} className="flex flex-col gap-4">
               <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] font-black text-zinc-400 uppercase tracking-wider">
-                  Table Number / Identifier *
+                <label htmlFor="new-table-number" className="text-sm font-bold text-zinc-800">
+                  Table number or identifier
                 </label>
                 <input
+                  id="new-table-number"
                   type="text"
                   value={tableNumber}
                   onChange={(e) => setTableNumber(e.target.value)}
                   placeholder="e.g. 6 or T6"
-                  className="w-full px-4 py-2.5 bg-zinc-905 border border-zinc-800 focus:border-orange-600 rounded-xl text-sm outline-none transition text-white placeholder-zinc-700"
+                  aria-describedby="new-table-help" className="min-h-11 w-full rounded-xl border border-zinc-300 bg-white px-4 py-2.5 text-sm text-zinc-900 outline-none focus-visible:outline-2 focus-visible:outline-orange-500"
                 />
+                <p id="new-table-help" className="text-xs font-medium text-zinc-600">Use the label guests and staff recognize, such as 6 or T6.</p>
               </div>
 
               <button
                 type="submit"
                 disabled={saving}
-                className="w-full py-2.5 bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold rounded-xl transition cursor-pointer disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-600"
+                className="min-h-11 self-start rounded-xl bg-orange-600 px-5 py-2.5 text-sm font-black text-white transition hover:bg-orange-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-600 sm:w-auto"
               >
-                {saving ? "Creating..." : "Create Table Mapping"}
+                {saving ? "Creating..." : "Create Table"}
               </button>
             </form>
-          </div>
+          </section>
 
           {/* Tables Mappings List */}
-          <div className="lg:col-span-2 bg-zinc-950/40 border border-zinc-850 rounded-3xl p-5 flex flex-col gap-4">
-            <h2 className="text-sm font-black text-zinc-900 uppercase tracking-wider border-b border-zinc-850 pb-3">
-              Registered Tables Mapping ({tables.length})
+          <section className="flex flex-col gap-4 rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm lg:col-span-2">
+            <h2 className="border-b border-zinc-200 pb-3 text-lg font-black text-zinc-950">
+              Registered tables <span className="text-sm font-bold text-zinc-600">({tables.length})</span>
             </h2>
 
             {loading ? (
@@ -303,49 +305,31 @@ export default function AdminTablesPage() {
                 <p className="text-xs font-bold">No tables registered yet.</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
                 {tables.map((t) => (
                   <div
                     key={t.id}
-                    className="bg-zinc-900 border border-zinc-800 hover:border-zinc-750 transition rounded-2xl p-4 flex flex-col gap-4 shadow-sm"
+                    className="flex flex-col gap-4 rounded-2xl border border-zinc-200 bg-zinc-50 p-4 shadow-sm transition hover:border-zinc-300"
                   >
                     {/* Header */}
-                    <div className="flex items-start justify-between gap-2 border-b border-zinc-850 pb-2">
+                    <div className="flex items-start justify-between gap-2 border-b border-zinc-200 pb-3">
                       <div>
                         <div className="flex items-center gap-2">
-                          <h3 className="font-extrabold text-sm text-white">
+                          <h3 className="text-base font-extrabold text-zinc-950">
                             Table {t.table_number}
                           </h3>
                           {!t.is_active && (
-                            <span className="text-[8px] bg-red-950/40 border border-red-900/50 text-red-400 font-bold px-1.5 py-0.5 rounded uppercase">
+                            <span className="whitespace-nowrap rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 text-[10px] font-black uppercase text-amber-900">
                               Inactive
                             </span>
                           )}
                         </div>
-                        <span className="text-zinc-500 text-[10px] font-mono mt-0.5 block">
-                          Code: {t.table_code}
+                        <span className="mt-1 block break-all font-mono text-xs font-semibold text-zinc-600" title={t.table_code}>
+                          Public code: {t.table_code}
                         </span>
                       </div>
 
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => startEditing(t)}
-                          className="p-1 bg-zinc-800 hover:bg-zinc-750 rounded text-[10px] font-bold text-zinc-300 cursor-pointer"
-                          title="Rename Table"
-                        >
-                          ✏️
-                        </button>
-                        <button
-                          onClick={() => handleToggleActive(t)}
-                          className={`px-2 py-1 rounded text-[10px] font-bold transition cursor-pointer select-none ${
-                            t.is_active
-                              ? "bg-green-950/40 border border-green-900/40 text-green-400"
-                              : "bg-zinc-800 hover:bg-zinc-700 text-zinc-400"
-                          }`}
-                        >
-                          {t.is_active ? "Active" : "Inactive"}
-                        </button>
-                      </div>
+                      <span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-black ${t.is_active ? "border border-green-300 bg-green-100 text-green-800" : "border border-zinc-300 bg-zinc-200 text-zinc-700"}`}>{t.is_active ? "Active" : "Inactive"}</span>
                     </div>
 
                     {/* QR Code and Actions */}
@@ -365,37 +349,30 @@ export default function AdminTablesPage() {
                         {/* Download link through binary proxy route */}
                         <a
                           href={`/api/admin/tables/${t.id}/qr`}
-                          className="text-[10px] text-orange-500 hover:text-orange-400 font-bold underline select-none"
+                          download className="min-h-11 rounded-xl border border-zinc-300 bg-white px-4 py-3 text-center text-xs font-bold text-zinc-800 transition hover:bg-zinc-100 focus-visible:outline-2 focus-visible:outline-orange-500"
                         >
-                          Download QR PNG
+                          Download QR
                         </a>
                       </div>
 
                       {/* Code Actions Panel */}
-                      <div className="flex flex-col gap-2 w-full sm:w-auto items-stretch sm:items-end">
+                      <div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:items-end">
                         <a
                           href={t.public_menu_url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="py-1.5 px-3 bg-zinc-800 hover:bg-zinc-750 text-zinc-300 font-bold rounded-xl text-center text-[10px] transition cursor-pointer select-none"
+                          className="min-h-11 rounded-xl bg-orange-600 px-4 py-3 text-center text-xs font-black text-white transition hover:bg-orange-700 focus-visible:outline-2 focus-visible:outline-orange-500"
                         >
-                          🔗 Open Public Menu
+                          Open public menu
                         </a>
-
-                        <button
-                          onClick={() => handleRegenerateCode(t)}
-                          disabled={updatingIds[t.id]}
-                          className="py-1.5 px-3 bg-red-650/20 hover:bg-red-650/30 border border-red-900/40 text-red-400 font-bold rounded-xl text-[10px] transition cursor-pointer disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-600 select-none"
-                        >
-                          🔄 Regenerate Code
-                        </button>
+                        <details className="relative"><summary aria-label={`More actions for Table ${t.table_number}`} className="flex min-h-11 cursor-pointer list-none items-center justify-center rounded-xl border border-zinc-300 bg-white px-4 text-xs font-bold text-zinc-800 hover:bg-zinc-100 focus-visible:outline-2 focus-visible:outline-orange-500">More actions</summary><div className="absolute right-0 z-20 mt-2 w-52 rounded-xl border border-zinc-200 bg-white p-1.5 shadow-xl"><button onClick={() => startEditing(t)} className="min-h-10 w-full rounded-lg px-3 text-left text-sm font-bold text-zinc-800 hover:bg-zinc-100">Edit table</button><button onClick={() => handleToggleActive(t)} disabled={updatingIds[t.id]} className="min-h-10 w-full rounded-lg px-3 text-left text-sm font-bold text-zinc-800 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-500">{t.is_active ? "Deactivate table" : "Activate table"}</button><button onClick={() => handleRegenerateCode(t)} disabled={updatingIds[t.id]} className="min-h-10 w-full rounded-lg px-3 text-left text-sm font-bold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-500">Regenerate code</button></div></details>
                       </div>
                     </div>
                   </div>
                 ))}
               </div>
             )}
-          </div>
+          </section>
         </div>
       </div>
 

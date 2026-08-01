@@ -46,7 +46,7 @@ test("active admin surfaces preserve readable dark and disabled controls", () =>
   assert.match(staff, /bg-zinc-950[^\n]*text-white/);
   assert.match(staff, /bg-white align-top text-zinc-900/);
   assert.doesNotMatch(`${quickSale}\n${staff}\n${tables}`, /disabled:opacity-/);
-  assert.match(tables, /text-zinc-900 uppercase tracking-wider/);
+  assert.match(tables, /text-zinc-950/);
 });
 
 test("availability states use green and red semantic badges", () => {
