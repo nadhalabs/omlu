@@ -31,13 +31,34 @@ test("Quick Sale opens specifications and preserves configuration-aware lines", 
 
 test("Quick Sale presents a responsive POS picker and sticky operational summary", () => {
   const client = read("app/admin/quick-sale/QuickSaleClient.tsx");
-  for (const copy of ["Choose sale type", "Add items", "Review order", "Select payment", "No items added yet", "Add items from the menu to start this sale."]) assert.ok(client.includes(copy));
+  for (const copy of ["Sale type", "Choose type", "Add items", "Review", "Confirm", "No items added yet", "Add items from the menu to start this sale."]) assert.ok(client.includes(copy));
   assert.match(client, /aria-label="Sale type"/);
   assert.match(client, /aria-pressed=\{active\}/);
+  assert.match(client, /active \? "border-orange-500 bg-orange-50/);
+  assert.match(client, /Food still needs preparation/);
+  assert.match(client, /Food was already served or handed over/);
+  assert.match(client, /setSaleType\(mode\.value\)/);
   assert.match(client, /lg:grid-cols-\[minmax\(0,1\.35fr\)_minmax\(320px,0\.65fr\)\]/);
   assert.match(client, /lg:sticky lg:top-6/);
   assert.match(client, /Search menu items/);
   assert.match(client, /bg-white/);
+});
+
+test("Quick Sale specification dialog exposes required radio choices and an explained action", () => {
+  const client = read("app/admin/quick-sale/QuickSaleClient.tsx");
+  assert.match(client, /Select the required options/);
+  assert.match(client, /role=\{multi \? "group" : "radiogroup"\}/);
+  assert.match(client, /role=\{multi \? undefined : "radio"\}/);
+  assert.match(client, /aria-checked=\{multi \? undefined : checked\}/);
+  assert.match(client, /checked \? "border-orange-500 bg-orange-50 text-zinc-950"/);
+  assert.match(client, /Select all required options to continue\./);
+  assert.match(client, /disabled=\{!requiredSelectionsComplete\(customisingItem, selectedOptionsFromDraft\(\)\)\}/);
+  assert.match(client, /Add to order["'] : ["']Update order/);
+  assert.match(client, /optionPrice\(customisingItem, selectedOptionsFromDraft\(\)\) \* draftQuantity/);
+  assert.match(client, /aria-label="Decrease quantity"/);
+  assert.match(client, /aria-label="Increase quantity"/);
+  assert.match(client, /event\.key !== "Tab"/);
+  assert.match(client, /max-h-\[calc\(100dvh-1\.5rem\)\]/);
 });
 
 test("Late Entry and Takeaway payments invoke the shared OMLU confirmation modal", () => {

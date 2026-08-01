@@ -38,6 +38,7 @@ export default function QuickSaleClient() {
   const [draftQuantity, setDraftQuantity] = useState(1);
   const idempotencyKey = useRef("");
   const previewRequest = useRef(0);
+  const optionsDialogRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     idempotencyKey.current = localStorage.getItem("omlu:quick-sale:draft-key") || crypto.randomUUID();
     localStorage.setItem("omlu:quick-sale:draft-key", idempotencyKey.current);
@@ -50,11 +51,20 @@ export default function QuickSaleClient() {
   useEffect(() => { const timeout = window.setTimeout(() => void load(), 0); return () => window.clearTimeout(timeout); }, [load]);
   useEffect(() => {
     if (!customisingItem) return;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const timeout = window.setTimeout(() => optionsDialogRef.current?.focus(), 0);
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") setCustomisingItem(null);
+      if (event.key !== "Tab" || !optionsDialogRef.current) return;
+      const focusable = Array.from(optionsDialogRef.current.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'));
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
     };
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    return () => { window.clearTimeout(timeout); window.removeEventListener("keydown", onKeyDown); previousFocus?.focus(); };
   }, [customisingItem]);
   useRealtime({ target: { kind: "staff", channel: "staff" }, onEvent: () => void load(), onReconnect: () => void load() });
 
@@ -192,18 +202,16 @@ export default function QuickSaleClient() {
     <header>
       <h1 className="text-3xl font-black tracking-tight text-white">Quick Sale</h1>
       <p className="mt-1 text-sm text-zinc-400">Counter takeaway and unrecorded completed sales—without a table or dining session.</p>
-      <ol className="mt-4 flex flex-wrap gap-2 text-[11px] font-bold uppercase tracking-wide text-zinc-400" aria-label="Quick Sale steps">
-        {["Choose sale type", "Add items", "Review order", "Select payment", "Confirm"].map((step, index) => <li key={step} className="flex items-center gap-2 rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1.5"><span className="text-orange-400">{index + 1}</span>{step}</li>)}
-      </ol>
+      <p className="mt-3 text-xs font-semibold text-zinc-500" aria-label="Quick Sale steps">Choose type <span aria-hidden="true">→</span> Add items <span aria-hidden="true">→</span> Review <span aria-hidden="true">→</span> Confirm</p>
     </header>
     {error && <div className="rounded-xl border border-red-900/50 bg-red-950/30 p-4 text-sm font-bold text-red-300">{error} <button onClick={load} className="ml-2 underline">Retry</button></div>}
 
-    <section className="rounded-2xl border border-zinc-200 bg-white p-2 shadow-sm" aria-labelledby="sale-type-heading">
-      <h2 id="sale-type-heading" className="sr-only">Choose sale type</h2>
+    <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm" aria-labelledby="sale-type-heading">
+      <h2 id="sale-type-heading" className="mb-3 text-sm font-black text-zinc-950">Sale type</h2>
       <div className="grid grid-cols-2 gap-2" role="group" aria-label="Sale type">
-        {([{"value": "takeaway", "label": "Takeaway", "helper": "Prepare and send to Kitchen"}, {"value": "late_entry", "label": "Late Entry", "helper": "Already served or handed over"}] as const).map((mode) => {
+        {([{"value": "takeaway", "label": "Takeaway", "helper": "Food still needs preparation"}, {"value": "late_entry", "label": "Late Entry", "helper": "Food was already served or handed over"}] as const).map((mode) => {
           const active = saleType === mode.value;
-          return <button key={mode.value} type="button" aria-pressed={active} onClick={() => setSaleType(mode.value)} className={`min-h-16 rounded-xl border px-3 py-2 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 ${active ? "border-orange-500 bg-orange-50 text-orange-950 shadow-sm" : "border-transparent bg-zinc-50 text-zinc-700 hover:border-zinc-300 hover:bg-zinc-100"}`}><span className="block text-sm font-black sm:text-base">{mode.label}</span><span className={`mt-0.5 block text-[11px] sm:text-xs ${active ? "text-orange-700" : "text-zinc-500"}`}>{mode.helper}</span></button>;
+          return <button key={mode.value} type="button" aria-pressed={active} onClick={() => setSaleType(mode.value)} className={`relative min-h-20 rounded-xl border-2 px-3 py-3 pr-10 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 ${active ? "border-orange-500 bg-orange-50 text-orange-950 shadow-sm" : "border-zinc-200 bg-white text-zinc-800 hover:border-orange-300 hover:bg-orange-50/40"}`}><span className="block text-sm font-black sm:text-base">{mode.label}</span><span className={`mt-1 block text-[11px] leading-4 sm:text-xs ${active ? "text-orange-800" : "text-zinc-500"}`}>{mode.helper}</span><span aria-hidden="true" className={`absolute right-3 top-3 flex h-6 w-6 items-center justify-center rounded-full border text-xs font-black ${active ? "border-orange-500 bg-orange-600 text-white" : "border-zinc-300 bg-white text-transparent"}`}>✓</span></button>;
         })}
       </div>
     </section>
@@ -257,25 +265,25 @@ export default function QuickSaleClient() {
       </aside>
     </section>}
 
-    {customisingItem && <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/65 p-4 sm:items-center">
-      <div role="dialog" aria-modal="true" aria-labelledby="quick-sale-options-title" className="max-h-[90vh] w-full max-w-md overflow-hidden rounded-3xl border border-zinc-700 bg-zinc-950">
-        <div className="flex items-start justify-between border-b border-zinc-800 p-5"><div><h2 id="quick-sale-options-title" className="text-xl font-black text-white">{customisingItem.name}</h2><p className="mt-1 text-sm text-zinc-400">Choose specifications</p></div><button type="button" aria-label="Close specifications" onClick={() => setCustomisingItem(null)} className="h-10 w-10 rounded-full bg-zinc-800 text-xl">×</button></div>
-        <div className="max-h-[58vh] overflow-y-auto p-5">{customisingItem.option_groups.map((group) => {
+    {customisingItem && <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/65 p-3 sm:items-center sm:p-4">
+      <div ref={optionsDialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="quick-sale-options-title" aria-describedby="quick-sale-options-instruction" className="max-h-[calc(100dvh-1.5rem)] w-full max-w-md overflow-hidden rounded-2xl border border-zinc-200 bg-white text-zinc-950 shadow-2xl outline-none sm:max-h-[90vh]">
+        <div className="flex items-start justify-between px-5 pb-3 pt-5"><div><h2 id="quick-sale-options-title" className="text-xl font-black text-zinc-950">{customisingItem.name}</h2><p id="quick-sale-options-instruction" className="mt-1 text-sm text-zinc-600">Select the required options</p></div><button type="button" aria-label="Close specifications" onClick={() => setCustomisingItem(null)} className="flex h-10 w-10 items-center justify-center rounded-lg text-xl text-zinc-500 hover:bg-zinc-100 hover:text-zinc-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500">×</button></div>
+        <div className="max-h-[55vh] overflow-y-auto px-5 pb-2">{customisingItem.option_groups.map((group) => {
           const selectedCount = Object.values(draftOptions[group.id] ?? {}).reduce((sum, quantity) => sum + quantity, 0);
           const minimum = Math.max(group.minimum_selections, group.required ? 1 : 0);
           const multi = group.type === "addon" && group.maximum_selections !== 1;
-          return <section key={group.id} className="mb-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-4"><div className="flex justify-between gap-3"><div><h3 className="font-black text-white">{group.name}</h3><p className="text-xs text-zinc-400">{minimum ? `Choose ${minimum}` : "Optional"}{group.maximum_selections ? ` · up to ${group.maximum_selections}` : ""}</p></div>{selectedCount < minimum && <span className="text-xs font-bold text-red-400">Required</span>}</div><div className="mt-3 grid gap-2">{group.options.map((option) => {
+          return <section key={group.id} className="mb-4"><div className="flex justify-between gap-3"><div><h3 className="font-black text-zinc-950">{group.name}</h3><p className="mt-0.5 text-xs text-zinc-500">{minimum ? `Choose ${minimum}` : "Optional"}{group.maximum_selections && group.maximum_selections !== minimum ? ` · up to ${group.maximum_selections}` : ""}</p></div>{minimum > 0 && <span className={`h-fit rounded-full px-2 py-1 text-[11px] font-black ${selectedCount < minimum ? "bg-orange-100 text-orange-800" : "bg-zinc-100 text-zinc-600"}`}>{selectedCount < minimum ? "Required" : "Complete"}</span>}</div><div className="mt-3 grid gap-2" role={multi ? "group" : "radiogroup"} aria-label={group.name}>{group.options.map((option) => {
             const checked = Boolean(draftOptions[group.id]?.[option.id]);
             const disabled = !option.available || (!checked && Boolean(group.maximum_selections) && selectedCount >= group.maximum_selections);
-            return <button key={option.id} type="button" disabled={disabled} onClick={() => toggleDraftOption(group.id, option.id, multi)} className={`flex min-h-12 justify-between rounded-xl border px-4 py-3 text-left text-sm font-bold disabled:cursor-not-allowed disabled:border-zinc-800 disabled:bg-zinc-900 disabled:text-zinc-500 ${checked ? "border-orange-500 bg-orange-950/30 text-orange-100" : "border-zinc-700 bg-zinc-950 text-zinc-300"}`}><span>{option.name}</span><span>{group.type === "variant" ? `₹${Number(option.price_delta).toFixed(2)}` : `+₹${Number(option.price_delta).toFixed(2)}`}</span></button>;
+            return <button key={option.id} type="button" role={multi ? undefined : "radio"} aria-checked={multi ? undefined : checked} aria-pressed={multi ? checked : undefined} disabled={disabled} onClick={() => toggleDraftOption(group.id, option.id, multi)} className={`flex min-h-12 items-center justify-between gap-3 rounded-xl border-2 px-3 py-3 text-left text-sm font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:border-zinc-200 disabled:bg-zinc-100 disabled:text-zinc-500 ${checked ? "border-orange-500 bg-orange-50 text-zinc-950" : "border-zinc-200 bg-white text-zinc-800 hover:border-orange-300"}`}><span className="flex min-w-0 items-center gap-3"><span aria-hidden="true" className={`flex h-5 w-5 shrink-0 items-center justify-center ${multi ? "rounded-md" : "rounded-full"} border-2 ${checked ? "border-orange-600 bg-orange-600 text-[10px] text-white" : "border-zinc-400 bg-white text-transparent"}`}>✓</span><span>{option.name}</span></span><span className="shrink-0 text-zinc-700">{group.type === "variant" ? `₹${Number(option.price_delta).toFixed(2)}` : `+₹${Number(option.price_delta).toFixed(2)}`}</span></button>;
           })}</div></section>;
         })}</div>
-        <div className="border-t border-zinc-800 p-5"><div className="mb-4 flex items-center justify-between"><span className="text-sm font-bold text-zinc-300">Quantity</span><div className="flex items-center gap-3"><button type="button" disabled={draftQuantity <= 1} onClick={() => setDraftQuantity((value) => Math.max(1, value - 1))} className="h-9 w-9 rounded-lg bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-900 disabled:text-zinc-600">−</button><span className="w-6 text-center font-black">{draftQuantity}</span><button type="button" disabled={draftQuantity >= 50} onClick={() => setDraftQuantity((value) => Math.min(50, value + 1))} className="h-9 w-9 rounded-lg bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-900 disabled:text-zinc-600">+</button></div></div><button type="button" disabled={!requiredSelectionsComplete(customisingItem, selectedOptionsFromDraft())} onClick={() => {
+        <div className="border-t border-zinc-200 bg-zinc-50 p-5"><div className="mb-4 flex items-center justify-between"><span className="text-sm font-black text-zinc-800">Quantity</span><div className="flex items-center rounded-xl border border-zinc-300 bg-white p-1"><button type="button" aria-label="Decrease quantity" disabled={draftQuantity <= 1} onClick={() => setDraftQuantity((value) => Math.max(1, value - 1))} className="h-10 w-10 rounded-lg text-lg font-black text-zinc-700 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:text-zinc-300">−</button><span className="w-10 text-center font-black text-zinc-950" aria-live="polite">{draftQuantity}</span><button type="button" aria-label="Increase quantity" disabled={draftQuantity >= 50} onClick={() => setDraftQuantity((value) => Math.min(50, value + 1))} className="h-10 w-10 rounded-lg text-lg font-black text-zinc-700 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:text-zinc-300">+</button></div></div>{!requiredSelectionsComplete(customisingItem, selectedOptionsFromDraft()) && <p className="mb-2 text-sm font-bold text-orange-800">Select all required options to continue.</p>}<button type="button" disabled={!requiredSelectionsComplete(customisingItem, selectedOptionsFromDraft())} onClick={() => {
           const selections = selectedOptionsFromDraft();
           const nextLine = { menu_item_id: customisingItem.id, item_name: customisingItem.name, quantity: draftQuantity, unit_price: optionPrice(customisingItem, selections).toFixed(2), selected_options: selections };
           setCart((current) => editingIndex === null ? [...current, nextLine] : current.map((line, index) => index === editingIndex ? nextLine : line));
           setCustomisingItem(null); setEditingIndex(null); setDraftOptions({});
-        }} className="h-12 w-full rounded-xl bg-orange-600 font-black text-white disabled:bg-zinc-700 disabled:text-zinc-400">{editingIndex === null ? "Add configured item" : "Update specifications"} · ₹{(optionPrice(customisingItem, selectedOptionsFromDraft()) * draftQuantity).toFixed(2)}</button></div>
+        }} className="h-12 w-full rounded-xl bg-orange-600 font-black text-white hover:bg-orange-500 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-500">{editingIndex === null ? "Add to order" : "Update order"} — ₹{(optionPrice(customisingItem, selectedOptionsFromDraft()) * draftQuantity).toFixed(2)}</button></div>
       </div>
     </div>}
 

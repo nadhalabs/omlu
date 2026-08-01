@@ -31,7 +31,7 @@ export function KitchenAvailabilityDialog({
   const [items, setItems] = useState<AvailabilityItem[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
-  const [pendingId, setPendingId] = useState<number | null>(null);
+  const [pendingIds, setPendingIds] = useState<Record<number, boolean>>({});
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -87,9 +87,9 @@ export function KitchenAvailabilityDialog({
   }, [filtered]);
 
   const update = async (item: AvailabilityItem) => {
-    if (pendingId !== null) return;
+    if (pendingIds[item.id]) return;
     const next = !item.is_available;
-    setPendingId(item.id);
+    setPendingIds((current) => ({ ...current, [item.id]: true }));
     setError(null);
     setMessage(null);
     setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, is_available: next } : entry));
@@ -107,7 +107,7 @@ export function KitchenAvailabilityDialog({
       setError(errorMessage(value, "Could not update availability. The previous setting was restored."));
       await load();
     } finally {
-      setPendingId(null);
+      setPendingIds((current) => { const nextPending = { ...current }; delete nextPending[item.id]; return nextPending; });
     }
   };
 
@@ -139,24 +139,29 @@ export function KitchenAvailabilityDialog({
           {grouped.map(([category, categoryItems]) => (
             <section key={category} className="py-3">
               <h3 className="mb-1 text-xs font-medium uppercase tracking-wide text-zinc-500">{category}</h3>
-              {categoryItems.map((item) => (
-                <div key={item.id} className="flex items-center justify-between gap-4 border-b border-zinc-900 py-3">
+              <div className="space-y-2">{categoryItems.map((item) => {
+                const pending = Boolean(pendingIds[item.id]);
+                return (
+                <div key={item.id} aria-busy={pending} className="rounded-xl border border-zinc-800/80 bg-zinc-900/50 p-4">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-zinc-100">{item.name_en}</p>
-                    <p className={`mt-0.5 text-xs ${item.is_available ? "text-green-400" : "text-red-400"}`}>{item.is_available ? "Available" : "Sold out"}</p>
+                    <p className="truncate text-sm font-bold text-zinc-100">{item.name_en}</p>
+                    <p className="mt-0.5 truncate text-xs text-zinc-500">{item.category_name}</p>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <span className={`inline-flex min-h-7 items-center rounded-full border px-2.5 text-xs font-black ${item.is_available ? "border-green-700 bg-green-950/50 text-green-300" : "border-red-800 bg-red-950/40 text-red-300"}`}>{item.is_available ? "Available" : "Unavailable"}</span>
                   </div>
                   <button
-                    role="switch"
-                    aria-checked={item.is_available}
-                    aria-label={`${item.name_en}: ${item.is_available ? "Available" : "Sold out"}`}
-                    disabled={pendingId !== null}
+                    aria-label={`${item.is_available ? "Mark unavailable" : "Mark available"}: ${item.name_en}`}
+                    disabled={pending}
                     onClick={() => void update(item)}
-                    className={`relative h-7 w-12 shrink-0 rounded-full transition disabled:cursor-wait disabled:opacity-50 ${item.is_available ? "bg-green-600" : "bg-zinc-700"}`}
+                    className="min-h-11 shrink-0 rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-xs font-black text-zinc-100 hover:border-orange-500 hover:text-orange-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 disabled:cursor-wait disabled:text-zinc-500"
                   >
-                    <span className={`absolute top-1 h-5 w-5 rounded-full bg-white transition ${item.is_available ? "left-6" : "left-1"}`} />
+                    {pending ? "Updating…" : item.is_available ? "Mark unavailable" : "Mark available"}
                   </button>
+                  </div>
                 </div>
-              ))}
+              );})}</div>
             </section>
           ))}
         </div>
