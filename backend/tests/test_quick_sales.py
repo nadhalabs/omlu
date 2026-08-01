@@ -9,6 +9,7 @@ from app.main import app
 from app.models.dining_session import DiningSession
 from app.models.menu import MenuCategory, MenuItem, MenuItemOptionGroup, MenuOption, MenuOptionGroup
 from app.models.quick_sale import QuickSale, QuickSaleItem, QuickSaleItemSelectedOption
+from app.models.payment import Payment, RevenueEntry
 from app.models.restaurant import Restaurant
 from app.models.staff_user import StaffUser
 from app.utils.auth import hash_password
@@ -104,6 +105,137 @@ def update_kitchen_status(ctx, public_token, status, role="kitchen"):
         headers=auth(ctx, role),
         json={"status": status},
     )
+
+
+def enable_gst(ctx, *, rate="5.00", mode="exclusive"):
+    db = SessionLocal()
+    restaurant = db.query(Restaurant).filter(Restaurant.id == ctx["restaurant_id"]).one()
+    restaurant.gst_enabled = True
+    restaurant.gstin = "32ABCDE1234F1Z5"
+    restaurant.legal_business_name = "Quick Sale Cafe Private Limited"
+    restaurant.registered_billing_address = "MG Road, Kochi, Kerala"
+    restaurant.gst_state_name = "Kerala"
+    restaurant.gst_state_code = "32"
+    restaurant.default_gst_rate = Decimal(rate)
+    restaurant.tax_mode = mode
+    db.commit()
+    db.close()
+
+
+@pytest.mark.parametrize("sale_type", ["takeaway", "late_entry"])
+def test_quick_sale_gst_snapshot_is_authoritative_and_immutable(quick_sale_context, sale_type):
+    enable_gst(quick_sale_context, rate="5.00", mode="exclusive")
+    key = uuid.uuid4().hex
+    response = client.post(
+        "/admin/quick-sales",
+        headers=auth(quick_sale_context, "owner"),
+        json=payload(quick_sale_context, sale_type, key=key),
+    )
+    assert response.status_code == 201
+    sale = response.json()
+    assert sale["subtotal"] == "160.00"
+    assert sale["discount_amount"] == "0.00"
+    assert sale["taxable_amount"] == "160.00"
+    assert sale["gst_enabled"] is True
+    assert sale["gst_rate"] == "5.00"
+    assert sale["cgst_amount"] == "4.00"
+    assert sale["sgst_amount"] == "4.00"
+    assert sale["igst_amount"] == "0.00"
+    assert sale["tax_amount"] == "8.00"
+    assert sale["total"] == sale["grand_total"] == "168.00"
+    assert Decimal(sale["subtotal"]) - Decimal(sale["discount_amount"]) + Decimal(sale["tax_amount"]) == Decimal(sale["grand_total"])
+
+    repeated = client.post(
+        "/admin/quick-sales",
+        headers=auth(quick_sale_context, "owner"),
+        json=payload(quick_sale_context, sale_type, key=key),
+    )
+    assert repeated.status_code == 201
+    assert repeated.json()["grand_total"] == "168.00"
+
+    db = SessionLocal()
+    persisted = db.query(QuickSale).filter(QuickSale.public_token == sale["public_token"]).one()
+    assert persisted.total_amount == Decimal("168.00")
+    assert persisted.tax_amount == Decimal("8.00")
+    assert persisted.gstin_snapshot == "32ABCDE1234F1Z5"
+    restaurant = db.query(Restaurant).filter(Restaurant.id == quick_sale_context["restaurant_id"]).one()
+    restaurant.default_gst_rate = Decimal("18.00")
+    restaurant.gstin = "29ABCDE1234F1Z7"
+    db.commit()
+    db.close()
+
+    home = client.get("/admin/quick-sales", headers=auth(quick_sale_context, "owner")).json()
+    returned = next(item for group in (home["active_takeaways"], home["completed_today"]) for item in group if item["public_token"] == sale["public_token"])
+    assert returned["gst_rate"] == "5.00"
+    assert returned["gstin"] == "32ABCDE1234F1Z5"
+    assert returned["grand_total"] == "168.00"
+
+
+def test_takeaway_payment_revenue_history_and_export_use_stored_gst_total(quick_sale_context):
+    enable_gst(quick_sale_context, rate="5.00", mode="exclusive")
+    sale = client.post("/admin/quick-sales", headers=auth(quick_sale_context, "owner"), json=payload(quick_sale_context)).json()
+    for state in ("accepted", "preparing", "ready", "served"):
+        assert update_kitchen_status(quick_sale_context, sale["public_token"], state).status_code == 200
+    paid = client.post(f"/admin/quick-sales/{sale['public_token']}/payment", headers=auth(quick_sale_context, "owner"), json={"method": "cash"})
+    assert paid.status_code == 200
+    assert paid.json()["grand_total"] == "168.00"
+
+    db = SessionLocal()
+    persisted = db.query(QuickSale).filter(QuickSale.public_token == sale["public_token"]).one()
+    payment = db.query(Payment).filter(Payment.quick_sale_id == persisted.id).one()
+    revenue = db.query(RevenueEntry).filter(RevenueEntry.payment_id == payment.id).one()
+    assert payment.amount == persisted.total_amount == Decimal("168.00")
+    assert revenue.amount == Decimal("168.00")
+    db.close()
+
+    history = client.get("/admin/history/bills?preset=today", headers=auth(quick_sale_context, "owner")).json()
+    row = next(item for item in history["items"] if item["bill_number"] == sale["order_number"])
+    assert row["tax_amount"] == "8.00"
+    assert row["grand_total"] == "168.00"
+    assert row["gst_enabled"] is True
+    exported = client.get("/admin/history/bills/export?preset=today", headers=auth(quick_sale_context, "owner"))
+    assert exported.status_code == 200
+    assert sale["order_number"] in exported.text
+    assert "168.00" in exported.text
+
+
+def test_gst_disabled_and_inclusive_rounding_preserve_financial_conventions(quick_sale_context):
+    disabled = client.post("/admin/quick-sales", headers=auth(quick_sale_context, "owner"), json=payload(quick_sale_context, "late_entry")).json()
+    assert disabled["gst_enabled"] is False
+    assert disabled["tax_amount"] == "0.00"
+    assert disabled["subtotal"] == disabled["grand_total"] == "160.00"
+
+    enable_gst(quick_sale_context, rate="5.00", mode="inclusive")
+    home = client.get("/admin/quick-sales", headers=auth(quick_sale_context, "owner")).json()
+    legacy = next(item for item in home["completed_today"] if item["public_token"] == disabled["public_token"])
+    assert legacy["gst_enabled"] is False
+    assert legacy["tax_amount"] == "0.00"
+    assert legacy["grand_total"] == "160.00"
+    inclusive = client.post("/admin/quick-sales", headers=auth(quick_sale_context, "owner"), json=configured_payload(quick_sale_context, "late_entry", quantity=2)).json()
+    assert inclusive["subtotal"] == inclusive["grand_total"] == "860.00"
+    assert inclusive["taxable_amount"] == "819.05"
+    assert inclusive["cgst_amount"] == "20.48"
+    assert inclusive["sgst_amount"] == "20.47"
+    assert inclusive["tax_amount"] == "40.95"
+
+
+def test_multiple_items_quantities_and_exclusive_gst_reconcile(quick_sale_context):
+    enable_gst(quick_sale_context, rate="5.00", mode="exclusive")
+    body = configured_payload(quick_sale_context, "late_entry", quantity=2)
+    body["items"].insert(0, {"menu_item_id": quick_sale_context["item_id"], "quantity": 3})
+    sale = client.post("/admin/quick-sales", headers=auth(quick_sale_context, "owner"), json=body).json()
+    assert sale["subtotal"] == "1100.00"
+    assert sale["taxable_amount"] == "1100.00"
+    assert sale["cgst_amount"] == sale["sgst_amount"] == "27.50"
+    assert sale["tax_amount"] == "55.00"
+    assert sale["grand_total"] == "1155.00"
+
+
+def test_cross_tenant_cannot_observe_gst_quick_sale_snapshot(quick_sale_context):
+    enable_gst(quick_sale_context)
+    sale = client.post("/admin/quick-sales", headers=auth(quick_sale_context, "owner"), json=payload(quick_sale_context)).json()
+    other_home = client.get("/admin/quick-sales", headers=auth(quick_sale_context, "other")).json()
+    assert all(item["public_token"] != sale["public_token"] for item in [*other_home["active_takeaways"], *other_home["completed_today"]])
 
 
 @pytest.mark.parametrize("role", ["owner", "admin"])

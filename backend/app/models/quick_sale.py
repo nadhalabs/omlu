@@ -2,7 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import List, Optional
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, Numeric, String, UniqueConstraint, func
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, Numeric, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -25,7 +25,21 @@ class QuickSale(Base):
     note: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
     reason: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
     subtotal: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    discount_amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False, default=Decimal("0.00"), server_default="0.00")
+    tax_amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False, default=Decimal("0.00"), server_default="0.00")
     total_amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    gst_enabled_snapshot: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    taxable_amount: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
+    gst_rate: Mapped[Optional[Decimal]] = mapped_column(Numeric(5, 2), nullable=True)
+    cgst_amount: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
+    sgst_amount: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
+    igst_amount: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
+    tax_mode_snapshot: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    gstin_snapshot: Mapped[Optional[str]] = mapped_column(String(15), nullable=True)
+    legal_business_name_snapshot: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    billing_address_snapshot: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    state_name_snapshot: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    state_code_snapshot: Mapped[Optional[str]] = mapped_column(String(2), nullable=True)
     payment_method: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     entered_by_staff_id: Mapped[int] = mapped_column(ForeignKey("staff_users.id", ondelete="RESTRICT"), nullable=False, index=True)
     entered_by_name: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -48,6 +62,8 @@ class QuickSale(Base):
         CheckConstraint("status IN ('pending', 'accepted', 'preparing', 'ready', 'served', 'completed')", name="chk_quick_sale_status"),
         CheckConstraint("payment_method IS NULL OR payment_method IN ('cash', 'upi')", name="chk_quick_sale_payment_method"),
         CheckConstraint("subtotal >= 0 AND total_amount >= 0", name="chk_quick_sale_amounts"),
+        CheckConstraint("discount_amount >= 0", name="chk_quick_sale_discount_nonnegative"),
+        CheckConstraint("tax_amount >= 0", name="chk_quick_sale_tax_nonnegative"),
     )
 
 

@@ -1,6 +1,7 @@
 import datetime
 import json
 import secrets
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy.exc import IntegrityError
@@ -18,6 +19,7 @@ from app.schemas.quick_sale import QuickSaleCreate, QuickSalePayment
 from app.services.menu_options import serialize_item_option_groups
 from app.services.order_pricing import validate_and_price_order_items
 from app.services.idempotency import ensure_same_request, request_hash, require_key
+from app.services.bills import calculate_gst_totals
 from app.services.realtime import EVENT_ORDER_CREATED, EVENT_QUICK_SALE_COMPLETED, publish_event, restaurant_channel
 from app.utils.auth import RoleChecker
 from app.utils.business_date import current_business_day_bounds_utc, restaurant_business_date
@@ -31,7 +33,18 @@ def _serialize(sale: QuickSale, *, financial: bool = True) -> dict:
         "id": sale.id, "order_number": sale.order_number, "public_token": sale.public_token,
         "sale_type": sale.sale_type, "source": sale.source, "status": sale.status,
         "note": sale.note, "reason": sale.reason, "subtotal": f"{sale.subtotal:.2f}",
-        "total": f"{sale.total_amount:.2f}", "entered_by_id": sale.entered_by_staff_id,
+        "discount_amount": f"{sale.discount_amount:.2f}",
+        "taxable_amount": f"{sale.taxable_amount:.2f}" if sale.taxable_amount is not None else None,
+        "gst_enabled": sale.gst_enabled_snapshot,
+        "gst_rate": f"{sale.gst_rate:.2f}" if sale.gst_rate is not None else None,
+        "cgst_amount": f"{sale.cgst_amount:.2f}" if sale.cgst_amount is not None else None,
+        "sgst_amount": f"{sale.sgst_amount:.2f}" if sale.sgst_amount is not None else None,
+        "igst_amount": f"{sale.igst_amount:.2f}" if sale.igst_amount is not None else None,
+        "tax_amount": f"{sale.tax_amount:.2f}", "tax_mode": sale.tax_mode_snapshot,
+        "gstin": sale.gstin_snapshot, "legal_business_name": sale.legal_business_name_snapshot,
+        "registered_billing_address": sale.billing_address_snapshot,
+        "state_name": sale.state_name_snapshot, "state_code": sale.state_code_snapshot,
+        "total": f"{sale.total_amount:.2f}", "grand_total": f"{sale.total_amount:.2f}", "entered_by_id": sale.entered_by_staff_id,
         "entered_by_name": sale.entered_by_name, "entered_by_role": sale.entered_by_role,
         "created_at": sale.created_at.isoformat(), "completed_at": sale.completed_at.isoformat() if sale.completed_at else None,
         "items": [{
@@ -121,13 +134,31 @@ def create_quick_sale(
             customer_note=body.note,
         ),
     )
+    restaurant = current_user.restaurant
+    totals = calculate_gst_totals(
+        subtotal=subtotal,
+        discount_amount=Decimal("0.00"),
+        gst_rate=restaurant.default_gst_rate if restaurant.gst_enabled else Decimal("0.00"),
+        tax_mode=restaurant.tax_mode,
+    )
     now = datetime.datetime.now(datetime.timezone.utc)
     sale = QuickSale(
         restaurant_id=current_user.restaurant_id, order_number="PENDING", public_token=f"qs_{secrets.token_urlsafe(24)}",
         idempotency_key=key, idempotency_request_hash=payload_hash, sale_type=body.sale_type, source=body.sale_type,
         status="completed" if body.sale_type == "late_entry" else "pending", note=body.note,
         reason=(body.reason or "Unrecorded verbal order") if body.sale_type == "late_entry" else None,
-        subtotal=subtotal, total_amount=subtotal, payment_method=body.payment_method,
+        subtotal=totals.subtotal, discount_amount=totals.discount_amount,
+        taxable_amount=totals.taxable_amount, tax_amount=totals.tax_amount,
+        gst_enabled_snapshot=restaurant.gst_enabled, gst_rate=totals.gst_rate,
+        cgst_amount=totals.cgst_amount, sgst_amount=totals.sgst_amount,
+        igst_amount=totals.igst_amount, total_amount=totals.total_amount,
+        tax_mode_snapshot=restaurant.tax_mode,
+        gstin_snapshot=restaurant.gstin if restaurant.gst_enabled else None,
+        legal_business_name_snapshot=restaurant.legal_business_name if restaurant.gst_enabled else None,
+        billing_address_snapshot=restaurant.registered_billing_address if restaurant.gst_enabled else None,
+        state_name_snapshot=restaurant.gst_state_name if restaurant.gst_enabled else None,
+        state_code_snapshot=restaurant.gst_state_code if restaurant.gst_enabled else None,
+        payment_method=body.payment_method,
         entered_by_staff_id=current_user.id, entered_by_name=current_user.name, entered_by_role=current_user.role,
         paid_by_staff_id=current_user.id if body.sale_type == "late_entry" else None,
         paid_by_name=current_user.name if body.sale_type == "late_entry" else None,
@@ -173,7 +204,7 @@ def create_quick_sale(
                 display_order=option.display_order,
             ))
         sale.items.append(sale_item)
-    _audit(db, current_user, sale, "quick_sale_created", {"type": sale.sale_type, "total": str(subtotal), "payment_method": body.payment_method})
+    _audit(db, current_user, sale, "quick_sale_created", {"type": sale.sale_type, "total": str(totals.total_amount), "payment_method": body.payment_method})
     if sale.status == "completed":
         payment = Payment(
             restaurant_id=current_user.restaurant_id,

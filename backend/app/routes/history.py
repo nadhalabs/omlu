@@ -290,6 +290,7 @@ def _bill_row(bill: Bill) -> dict:
         "payment_status": bill.status,
         "payment_method": bill.payment_method,
         "paid_at": _iso(bill.paid_at),
+        "source": "dining",
         "invoice_number": bill.invoice_number,
         "invoice_date": _iso(bill.invoice_date),
         "gst_enabled": bill.gst_enabled_snapshot,
@@ -299,6 +300,33 @@ def _bill_row(bill: Bill) -> dict:
         "sgst_amount": _money(bill.sgst_amount) if bill.sgst_amount is not None else None,
         "igst_amount": _money(bill.igst_amount) if bill.igst_amount is not None else None,
         "gstin": bill.gstin_snapshot,
+    }
+
+
+def _quick_sale_bill_row(sale: QuickSale) -> dict:
+    return {
+        "id": f"quick-{sale.id}",
+        "bill_number": sale.order_number,
+        "date": _iso(sale.completed_at),
+        "table_number": None,
+        "session_token": None,
+        "subtotal": _money(sale.subtotal),
+        "tax_amount": _money(sale.tax_amount),
+        "discount_amount": _money(sale.discount_amount),
+        "grand_total": _money(sale.total_amount),
+        "payment_status": "paid",
+        "payment_method": f"counter_{sale.payment_method}",
+        "paid_at": _iso(sale.completed_at),
+        "source": sale.source,
+        "invoice_number": None,
+        "invoice_date": None,
+        "gst_enabled": sale.gst_enabled_snapshot,
+        "taxable_amount": _money(sale.taxable_amount) if sale.taxable_amount is not None else None,
+        "gst_rate": _money(sale.gst_rate) if sale.gst_rate is not None else None,
+        "cgst_amount": _money(sale.cgst_amount) if sale.cgst_amount is not None else None,
+        "sgst_amount": _money(sale.sgst_amount) if sale.sgst_amount is not None else None,
+        "igst_amount": _money(sale.igst_amount) if sale.igst_amount is not None else None,
+        "gstin": sale.gstin_snapshot,
     }
 
 
@@ -333,7 +361,7 @@ def bill_history(
             mapped = {"counter_cash": "cash", "counter_upi": "upi"}.get(payment_method)
             quick_query = quick_query.filter(QuickSale.payment_method == mapped) if mapped else quick_query.filter(False)
         quick_sales = quick_query.all()
-        items.extend({"id": f"quick-{sale.id}", "bill_number": sale.order_number, "date": _iso(sale.completed_at), "table_number": None, "session_token": None, "subtotal": _money(sale.subtotal), "tax_amount": "0.00", "discount_amount": "0.00", "grand_total": _money(sale.total_amount), "payment_status": "paid", "payment_method": f"counter_{sale.payment_method}", "paid_at": _iso(sale.completed_at), "source": sale.source} for sale in quick_sales)
+        items.extend(_quick_sale_bill_row(sale) for sale in quick_sales)
         total += len(quick_sales); items.sort(key=lambda item: item["date"], reverse=True); items = items[:safe_size]
     return {"items": items, "page": safe_page, "page_size": safe_size, "total": total}
 
@@ -978,6 +1006,19 @@ def export_bills(
 ):
     start_utc, end_utc = _utc_bounds(staff=current_user, preset=preset, start_date=start_date, end_date=end_date)
     rows = [_bill_row(bill) for bill in _bills_query(db, current_user, start_utc, end_utc, status_filter, payment_method, table_id).options(joinedload(Bill.dining_session).joinedload(DiningSession.table)).order_by(Bill.generated_at.desc()).limit(5000).all()]
+    if not table_id and (not status_filter or status_filter == "paid"):
+        quick_query = db.query(QuickSale).filter(
+            QuickSale.restaurant_id == current_user.restaurant_id,
+            QuickSale.status == "completed",
+            QuickSale.completed_at >= start_utc,
+            QuickSale.completed_at < end_utc,
+        )
+        if payment_method:
+            mapped = {"counter_cash": "cash", "counter_upi": "upi"}.get(payment_method)
+            quick_query = quick_query.filter(QuickSale.payment_method == mapped) if mapped else quick_query.filter(False)
+        rows.extend(_quick_sale_bill_row(sale) for sale in quick_query.order_by(QuickSale.completed_at.desc()).limit(5000).all())
+        rows.sort(key=lambda row: row["date"] or "", reverse=True)
+        rows = rows[:5000]
     return _csv_response("bills-history.csv", rows)
 
 

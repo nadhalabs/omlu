@@ -39,6 +39,16 @@ test("Late Entry and Takeaway payments invoke the shared OMLU confirmation modal
   assert.doesNotMatch(client, /(?:window|globalThis|self)\.(?:confirm|alert|prompt)/);
 });
 
+test("Quick Sale displays backend-authoritative GST snapshots and totals", () => {
+  const quickSale = read("app/admin/quick-sale/QuickSaleClient.tsx");
+  assert.match(quickSale, /gst_enabled/);
+  assert.match(quickSale, /tax_amount/);
+  assert.match(quickSale, /grand_total/);
+  assert.match(quickSale, /Includes GST/);
+  assert.match(quickSale, /authoritative GST total/);
+  assert.doesNotMatch(quickSale, /subtotal\s*\*\s*.*gst|gst.*\/\s*100/i);
+});
+
 test("Only served Takeaways expose Cash and UPI payment actions", () => {
   const client = read("app/admin/quick-sale/QuickSaleClient.tsx");
   assert.match(client, /sale\.status === "served"/);
