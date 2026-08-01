@@ -4,12 +4,16 @@ import test from "node:test";
 
 const dialog = readFileSync(new URL("../app/kitchen/[restaurantSlug]/KitchenAvailabilityDialog.tsx", import.meta.url), "utf8");
 
-test("Kitchen availability rows separate current status from the labelled action", () => {
-  for (const copy of ["Available", "Unavailable", "Mark unavailable", "Mark available", "Updating…"]) {
+test("Kitchen availability rows use accessible state-labelled buttons", () => {
+  for (const copy of ["Available", "Unavailable", "Updating…", "Current state"]) {
     assert.ok(dialog.includes(copy), copy);
   }
   assert.match(dialog, /item\.category_name/);
-  assert.match(dialog, /aria-label=\{`\$\{item\.is_available \? "Mark unavailable" : "Mark available"\}: \$\{item\.name_en\}`\}/);
+  assert.match(dialog, /aria-pressed=\{item\.is_available\}/);
+  assert.match(dialog, /aria-label=\{`\$\{item\.name_en\}: \$\{item\.is_available \? "Available" : "Unavailable"\}`\}/);
+  assert.match(dialog, /item\.is_available \? "border-green-700 bg-green-950\/50 text-green-300/);
+  assert.match(dialog, /"border-red-800 bg-red-950\/40 text-red-300/);
+  assert.doesNotMatch(dialog, /Mark unavailable|Mark available/);
   assert.doesNotMatch(dialog, /role="switch"/);
 });
 

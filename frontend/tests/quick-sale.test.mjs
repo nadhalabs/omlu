@@ -41,6 +41,11 @@ test("Quick Sale presents a responsive POS picker and sticky operational summary
   assert.match(client, /lg:grid-cols-\[minmax\(0,1\.35fr\)_minmax\(320px,0\.65fr\)\]/);
   assert.match(client, /lg:sticky lg:top-6/);
   assert.match(client, /Search menu items/);
+  assert.match(client, /aria-label="Search menu items"/);
+  assert.match(client, /pointer-events-none absolute left-4 top-1\/2/);
+  assert.match(client, /h-12 w-full rounded-xl border border-zinc-300/);
+  assert.match(client, /pl-11/);
+  assert.doesNotMatch(client, /focus-within:border-orange-500/);
   assert.match(client, /bg-white/);
 });
 

@@ -148,16 +148,15 @@ export function KitchenAvailabilityDialog({
                     <p className="mt-0.5 truncate text-xs text-zinc-500">{item.category_name}</p>
                   </div>
                   <div className="mt-3 flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <span className={`inline-flex min-h-7 items-center rounded-full border px-2.5 text-xs font-black ${item.is_available ? "border-green-700 bg-green-950/50 text-green-300" : "border-red-800 bg-red-950/40 text-red-300"}`}>{item.is_available ? "Available" : "Unavailable"}</span>
-                  </div>
+                  <span className="text-xs font-medium text-zinc-500">Current state</span>
                   <button
-                    aria-label={`${item.is_available ? "Mark unavailable" : "Mark available"}: ${item.name_en}`}
+                    aria-pressed={item.is_available}
+                    aria-label={`${item.name_en}: ${item.is_available ? "Available" : "Unavailable"}`}
                     disabled={pending}
                     onClick={() => void update(item)}
-                    className="min-h-11 shrink-0 rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-xs font-black text-zinc-100 hover:border-orange-500 hover:text-orange-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 disabled:cursor-wait disabled:text-zinc-500"
+                    className={`min-h-11 min-w-28 shrink-0 rounded-xl border px-3 text-xs font-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 disabled:cursor-wait disabled:border-zinc-700 disabled:bg-zinc-800 disabled:text-zinc-400 ${item.is_available ? "border-green-700 bg-green-950/50 text-green-300 hover:bg-green-900/60" : "border-red-800 bg-red-950/40 text-red-300 hover:bg-red-900/50"}`}
                   >
-                    {pending ? "Updating…" : item.is_available ? "Mark unavailable" : "Mark available"}
+                    {pending ? "Updating…" : item.is_available ? "Available" : "Unavailable"}
                   </button>
                   </div>
                 </div>
