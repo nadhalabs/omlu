@@ -12,6 +12,7 @@ import {
   removeStaffAccess,
   resetStaffPassword,
   revokeStaffSessions,
+  staffLogout,
   updateStaffAccount,
   setAllStaffLocked,
   setStaffLocked,
@@ -28,6 +29,7 @@ import {
 import { StaffAccountCreateRequest, StaffAccountResponse, StaffOperationsResponse } from "@/lib/types";
 import { useOmluUi } from "@/components/OmluUiProvider";
 import { useModalScrollLock } from "@/components/useModalScrollLock";
+import { getActiveWebTenantScope } from "@/lib/authRuntime.mjs";
 
 const EMPTY_FORM: StaffAccountCreateRequest = {
   name: "",
@@ -74,6 +76,8 @@ export default function StaffManagementClient() {
   const [busyMemberId, setBusyMemberId] = useState<number | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
+  const [selfSessionRevoked, setSelfSessionRevoked] = useState(false);
+  const pendingSessionRevocationsRef = useRef<Set<number>>(new Set());
   const createFieldOrder: (keyof StaffAccountCreateRequest)[] = ["name", "username", "role", "email", "temporary_password", "pin", "confirm_pin"];
 
   useModalScrollLock(Boolean(resetTarget), () => {
@@ -208,10 +212,33 @@ export default function StaffManagementClient() {
   };
 
   const signOutAll = async (member: StaffAccountResponse) => {
-    if (!await confirmDialog({ title: `Sign out ${member.name}?`, message: "All active sessions for this account will be revoked immediately.", confirmLabel: "Sign out sessions", tone: "destructive" })) return;
-    setBusyMemberId(member.id); setBusyAction("Signing out...");
-    try { replaceStaff(await revokeStaffSessions(member.id)); }
-    finally { setBusyMemberId(null); setBusyAction(null); }
+    if (pendingSessionRevocationsRef.current.has(member.id)) return;
+    pendingSessionRevocationsRef.current.add(member.id);
+    let selfRevocationSucceeded = false;
+    try {
+      if (!await confirmDialog({ title: `Sign out ${member.name}?`, message: "All active sessions for this account will be revoked immediately.", confirmLabel: "Sign out sessions", tone: "destructive" })) return;
+      setBusyMemberId(member.id); setBusyAction("Signing out...");
+      const updated = await revokeStaffSessions(member.id);
+      const isCurrentAccount = getActiveWebTenantScope()?.actor_id === member.id;
+      if (isCurrentAccount) {
+        selfRevocationSucceeded = true;
+        setSelfSessionRevoked(true);
+        await staffLogout();
+        return;
+      }
+      replaceStaff(updated);
+      setError(null);
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : "Could not sign out staff sessions.";
+      setError(message);
+      setToast(message);
+    } finally {
+      pendingSessionRevocationsRef.current.delete(member.id);
+      if (!selfRevocationSucceeded) {
+        setBusyMemberId(null);
+        setBusyAction(null);
+      }
+    }
   };
 
   const removeAccess = async (member: StaffAccountResponse) => {
@@ -252,6 +279,10 @@ export default function StaffManagementClient() {
     try { setOperations(await setRestaurantOperatingStatus(nextStatus)); uiToast(`Restaurant status changed to ${nextStatus}.`, "success"); }
     catch (err) { uiToast(err instanceof ApiError ? err.message : "Could not update restaurant status.", "error"); }
   };
+
+  if (selfSessionRevoked) {
+    return <div className="fixed inset-0 z-[100] flex items-center justify-center bg-zinc-950 p-6 text-center" role="status" aria-live="polite"><p className="text-sm font-bold text-white">Signing out securely...</p></div>;
+  }
 
   return (
     <div className="flex flex-col gap-6">
