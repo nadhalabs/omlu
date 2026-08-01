@@ -39,9 +39,10 @@ test("Flutter uses the same neutral and orange identity", () => {
   assert.doesNotMatch(flutterColors, /0xFFE91E63|0xFFC2185B|0xFFFFF2F2/);
 });
 
-test("active admin surfaces preserve readable dark and disabled controls", () => {
+test("active admin surfaces preserve readable surfaces and disabled controls", () => {
   assert.match(dashboard, /bg-zinc-950[^\n]*text-white/);
-  assert.match(quickSale, /contrast-dark-card/);
+  assert.match(quickSale, /border-zinc-200 bg-white/);
+  assert.match(quickSale, /text-zinc-950/);
   assert.match(quickSale, /bg-orange-600 font-black text-white/);
   assert.match(staff, /bg-zinc-950[^\n]*text-white/);
   assert.match(staff, /bg-white align-top text-zinc-900/);

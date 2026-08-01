@@ -13,7 +13,7 @@ test("Quick Sale appears in the required admin navigation and dashboard actions"
 
 test("Quick Sale page exposes both workflows and operational lists", () => {
   const client = read("app/admin/quick-sale/QuickSaleClient.tsx");
-  for (const copy of ["Takeaway Order", "Late Entry", "Active Takeaway Orders", "Completed Quick Sales Today", "Send to Kitchen", "Record Completed Sale"]) assert.ok(client.includes(copy));
+  for (const copy of ["Takeaway", "Late Entry", "Active Takeaway Orders", "Completed Quick Sales Today", "Send to Kitchen", "Record Completed Sale"]) assert.ok(client.includes(copy));
   assert.match(client, /disabled=\{saving \|\| previewLoading \|\| !preview \|\| !cart\.length\}/);
   assert.match(client, /Could not load Quick Sale|Quick Sale request failed/);
 });
@@ -21,12 +21,23 @@ test("Quick Sale page exposes both workflows and operational lists", () => {
 test("Quick Sale opens specifications and preserves configuration-aware lines", () => {
   const client = read("app/admin/quick-sale/QuickSaleClient.tsx");
   assert.match(client, /has_options/);
-  assert.match(client, /Choose options/);
+  assert.match(client, /Select options/);
   assert.match(client, /selected_options/);
-  assert.match(client, /Edit specifications/);
+  assert.match(client, /Edit options/);
   assert.match(client, /optionSignature/);
   assert.match(client, /idempotencyKey\.current/);
   assert.doesNotMatch(client, /Use assisted ordering to choose specifications/);
+});
+
+test("Quick Sale presents a responsive POS picker and sticky operational summary", () => {
+  const client = read("app/admin/quick-sale/QuickSaleClient.tsx");
+  for (const copy of ["Choose sale type", "Add items", "Review order", "Select payment", "No items added yet", "Add items from the menu to start this sale."]) assert.ok(client.includes(copy));
+  assert.match(client, /aria-label="Sale type"/);
+  assert.match(client, /aria-pressed=\{active\}/);
+  assert.match(client, /lg:grid-cols-\[minmax\(0,1\.35fr\)_minmax\(320px,0\.65fr\)\]/);
+  assert.match(client, /lg:sticky lg:top-6/);
+  assert.match(client, /Search menu items/);
+  assert.match(client, /bg-white/);
 });
 
 test("Late Entry and Takeaway payments invoke the shared OMLU confirmation modal", () => {
