@@ -6,19 +6,21 @@ from io import BytesIO
 from typing import List, Optional
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status as fastapi_status, Query
+from sqlalchemy import delete
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import IntegrityError
 from app.database import get_db
 from app.config import settings
 from app.models.staff_user import AuditLog, StaffUser
-from app.models.menu import MenuCategory, MenuItem
+from app.models.menu import MenuCategory, MenuItem, MenuItemOptionGroup, MenuOptionGroup
 from app.models.restaurant_table import RestaurantTable
-from app.models.order import OrderItem
 from app.utils.auth import get_current_staff_user, RoleChecker
 from app.services.realtime import EVENT_AVAILABILITY_UPDATED, publish_event, public_menu_channel, restaurant_channel
 from app.schemas.admin import (
     CategoryCreate,
     CategoryUpdate,
+    CategoryDeleteItemsRequest,
+    CategoryMoveItemsRequest,
     CategoryResponse,
     MenuItemCreate,
     MenuItemUpdate,
@@ -34,6 +36,44 @@ logger = logging.getLogger(__name__)
 
 # Protect all admin routes for owners and admins only
 admin_access_dependency = Depends(RoleChecker(["owner", "admin"]))
+
+
+def _menu_audit(db: Session, actor: StaffUser, *, action: str, target_type: str, target_id: int, details: dict) -> None:
+    db.add(AuditLog(
+        restaurant_id=actor.restaurant_id,
+        actor_user_id=actor.id,
+        actor_role=actor.role,
+        target_type=target_type,
+        target_id=str(target_id),
+        action=action,
+        new_value=json.dumps(details),
+    ))
+
+
+def _delete_orphan_option_groups(db: Session, group_ids: set[int]) -> None:
+    if not group_ids:
+        return
+    orphaned = (
+        db.query(MenuOptionGroup)
+        .filter(
+            MenuOptionGroup.id.in_(group_ids),
+            ~MenuOptionGroup.item_links.any(),
+        )
+        .with_for_update()
+        .all()
+    )
+    for group in orphaned:
+        db.delete(group)
+
+
+def _publish_menu_deleted(restaurant_id: int, state: dict) -> None:
+    publish_event(
+        EVENT_AVAILABILITY_UPDATED,
+        restaurant_id=restaurant_id,
+        channels=[public_menu_channel(restaurant_id), restaurant_channel(restaurant_id, "staff")],
+        resource_id=state.get("item_id") or state.get("category_id"),
+        state=state,
+    )
 
 def generate_table_code(table_number: str) -> str:
     # predictable URL-safe secure token format: T{table_number}-{random_token}
@@ -184,7 +224,101 @@ def delete_category(
         )
 
     db.delete(category)
+    _menu_audit(db, current_user, action="menu_category_deleted", target_type="menu_category", target_id=category.id, details={"name": category.name_en, "item_count": 0})
     db.commit()
+    _publish_menu_deleted(current_user.restaurant_id, {"kind": "category", "category_id": category_id, "deleted": True})
+    return Response(status_code=fastapi_status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    "/categories/{category_id}/delete-with-items",
+    status_code=fastapi_status.HTTP_204_NO_CONTENT,
+    dependencies=[admin_access_dependency],
+)
+def delete_category_with_items(
+    category_id: int,
+    payload: CategoryDeleteItemsRequest,
+    current_user: StaffUser = Depends(get_current_staff_user),
+    db: Session = Depends(get_db),
+):
+    category = (
+        db.query(MenuCategory)
+        .filter(MenuCategory.id == category_id, MenuCategory.restaurant_id == current_user.restaurant_id)
+        .with_for_update()
+        .first()
+    )
+    if not category:
+        raise HTTPException(status_code=fastapi_status.HTTP_404_NOT_FOUND, detail="Category not found")
+    if payload.confirmation_name.strip() != category.name_en:
+        raise HTTPException(status_code=fastapi_status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Type the category name exactly to confirm deletion")
+
+    items = db.query(MenuItem).filter(MenuItem.category_id == category.id).with_for_update().all()
+    item_ids = [item.id for item in items]
+    group_ids = {
+        group_id for (group_id,) in db.query(MenuItemOptionGroup.option_group_id).filter(MenuItemOptionGroup.menu_item_id.in_(item_ids)).all()
+    } if item_ids else set()
+    _menu_audit(
+        db,
+        current_user,
+        action="menu_category_deleted_with_items",
+        target_type="menu_category",
+        target_id=category.id,
+        details={"name": category.name_en, "item_count": len(items), "item_ids": item_ids},
+    )
+    db.execute(delete(MenuCategory).where(MenuCategory.id == category.id))
+    db.flush()
+    _delete_orphan_option_groups(db, group_ids)
+    db.commit()
+    _publish_menu_deleted(current_user.restaurant_id, {"kind": "category", "category_id": category_id, "deleted": True, "item_ids": item_ids})
+    return Response(status_code=fastapi_status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    "/categories/{category_id}/move-items-and-delete",
+    status_code=fastapi_status.HTTP_204_NO_CONTENT,
+    dependencies=[admin_access_dependency],
+)
+def move_category_items_and_delete(
+    category_id: int,
+    payload: CategoryMoveItemsRequest,
+    current_user: StaffUser = Depends(get_current_staff_user),
+    db: Session = Depends(get_db),
+):
+    if payload.destination_category_id == category_id:
+        raise HTTPException(status_code=fastapi_status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Destination category must be different")
+    categories = (
+        db.query(MenuCategory)
+        .filter(
+            MenuCategory.restaurant_id == current_user.restaurant_id,
+            MenuCategory.id.in_([category_id, payload.destination_category_id]),
+        )
+        .order_by(MenuCategory.id)
+        .with_for_update()
+        .all()
+    )
+    by_id = {category.id: category for category in categories}
+    source = by_id.get(category_id)
+    destination = by_id.get(payload.destination_category_id)
+    if not source:
+        raise HTTPException(status_code=fastapi_status.HTTP_404_NOT_FOUND, detail="Category not found")
+    if not destination:
+        raise HTTPException(status_code=fastapi_status.HTTP_404_NOT_FOUND, detail="Destination category not found")
+    items = db.query(MenuItem).filter(MenuItem.category_id == source.id).with_for_update().all()
+    item_ids = [item.id for item in items]
+    for item in items:
+        item.category_id = destination.id
+    _menu_audit(
+        db,
+        current_user,
+        action="menu_category_items_moved_and_deleted",
+        target_type="menu_category",
+        target_id=source.id,
+        details={"name": source.name_en, "destination_category_id": destination.id, "item_ids": item_ids},
+    )
+    db.flush()
+    db.delete(source)
+    db.commit()
+    _publish_menu_deleted(current_user.restaurant_id, {"kind": "category", "category_id": category_id, "deleted": True, "moved_item_ids": item_ids, "destination_category_id": destination.id})
     return Response(status_code=fastapi_status.HTTP_204_NO_CONTENT)
 
 
@@ -393,16 +527,16 @@ def delete_menu_item(
             detail="Menu item not found"
         )
 
-    # Check if the item is referenced by any historical order item
-    order_item_ref = db.query(OrderItem).filter(OrderItem.menu_item_id == item_id).count()
-    if order_item_ref > 0:
-        raise HTTPException(
-            status_code=fastapi_status.HTTP_409_CONFLICT,
-            detail="Item has order history. Mark it unavailable instead."
-        )
-
-    db.delete(item)
+    item = db.query(MenuItem).filter(MenuItem.id == item.id).with_for_update().one()
+    group_ids = {
+        group_id for (group_id,) in db.query(MenuItemOptionGroup.option_group_id).filter(MenuItemOptionGroup.menu_item_id == item.id).all()
+    }
+    _menu_audit(db, current_user, action="menu_item_deleted", target_type="menu_item", target_id=item.id, details={"name": item.name_en, "category_id": item.category_id})
+    db.execute(delete(MenuItem).where(MenuItem.id == item.id))
+    db.flush()
+    _delete_orphan_option_groups(db, group_ids)
     db.commit()
+    _publish_menu_deleted(current_user.restaurant_id, {"kind": "item", "item_id": item_id, "deleted": True})
     return Response(status_code=fastapi_status.HTTP_204_NO_CONTENT)
 
 

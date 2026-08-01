@@ -16,9 +16,12 @@ test("menu destructive actions live in accessible More actions menus", () => {
   assert.match(menu, /aria-label=\{`More actions for \$\{cat\.name_en\}`\}/);
   assert.match(menu, /Delete category/);
   assert.match(menu, /aria-label=\{`More actions for \$\{item\.name_en\}`\}/);
-  assert.match(menu, /Delete menu item/);
+  assert.match(menu, /Delete permanently/);
   assert.match(menu, /confirmDialog\(\{ title: "Delete category\?"/);
-  assert.match(menu, /confirmDialog\(\{ title: "Delete menu item\?"/);
+  assert.match(menu, /Delete “\$\{item\.name_en\}” permanently\?/);
+  assert.match(menu, /Move items and delete/);
+  assert.match(menu, /Delete category and items/);
+  assert.match(menu, /categoryDeleteText !== category\.name_en/);
 });
 
 test("Tables Management uses labelled creation, QR, and public-menu controls", () => {

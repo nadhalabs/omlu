@@ -211,9 +211,12 @@ def test_quick_sale_gst_snapshot_is_authoritative_and_immutable(quick_sale_conte
 
     db = SessionLocal()
     persisted = db.query(QuickSale).filter(QuickSale.public_token == sale["public_token"]).one()
+    persisted_line = db.query(QuickSaleItem).filter(QuickSaleItem.quick_sale_id == persisted.id).one()
     assert persisted.total_amount == Decimal("168.00")
     assert persisted.tax_amount == Decimal("8.00")
     assert persisted.gstin_snapshot == "32ABCDE1234F1Z5"
+    assert persisted_line.category_id_snapshot is not None
+    assert persisted_line.category_name_snapshot == "Counter"
     restaurant = db.query(Restaurant).filter(Restaurant.id == quick_sale_context["restaurant_id"]).one()
     restaurant.default_gst_rate = Decimal("18.00")
     restaurant.gstin = "29ABCDE1234F1Z7"
@@ -584,3 +587,63 @@ def test_snapshots_survive_menu_option_edits(quick_sale_context):
     assert half_snapshot.option_name == "Half"
     assert half_snapshot.price_delta == Decimal("400.00")
     db.close()
+
+
+def test_quick_sale_financial_and_option_snapshots_survive_menu_item_deletion(quick_sale_context):
+    enable_gst(quick_sale_context, rate="5.00", mode="exclusive")
+    body = configured_payload(quick_sale_context, sale_type="late_entry")
+    created = client.post("/admin/quick-sales", headers=auth(quick_sale_context, "owner"), json=body)
+    assert created.status_code == 201
+    sale = created.json()
+
+    db = SessionLocal()
+    persisted = db.query(QuickSale).filter(QuickSale.id == sale["id"]).one()
+    line = db.query(QuickSaleItem).filter(QuickSaleItem.quick_sale_id == persisted.id).one()
+    line_id = line.id
+    payment = db.query(Payment).filter(Payment.quick_sale_id == persisted.id).one()
+    revenue = db.query(RevenueEntry).filter(RevenueEntry.payment_id == payment.id).one()
+    financial_before = (persisted.subtotal, persisted.tax_amount, persisted.total_amount, payment.amount, revenue.amount)
+    option_snapshots_before = [
+        (option.option_name, option.group_name, option.price_delta)
+        for option in db.query(QuickSaleItemSelectedOption)
+        .filter(QuickSaleItemSelectedOption.quick_sale_item_id == line.id)
+        .order_by(QuickSaleItemSelectedOption.id)
+        .all()
+    ]
+    db.close()
+
+    deleted = client.delete(
+        f"/admin/menu-items/{quick_sale_context['configurable_id']}",
+        headers=auth(quick_sale_context, "owner"),
+    )
+    assert deleted.status_code == 204
+    assert client.delete(
+        f"/admin/menu-items/{quick_sale_context['configurable_id']}",
+        headers=auth(quick_sale_context, "owner"),
+    ).status_code == 404
+
+    db = SessionLocal()
+    persisted = db.query(QuickSale).filter(QuickSale.id == sale["id"]).one()
+    line = db.query(QuickSaleItem).filter(QuickSaleItem.id == line_id).one()
+    payment = db.query(Payment).filter(Payment.quick_sale_id == persisted.id).one()
+    revenue = db.query(RevenueEntry).filter(RevenueEntry.payment_id == payment.id).one()
+    assert line.menu_item_id is None
+    assert line.item_name == "Mandi"
+    assert line.category_name_snapshot == "Counter"
+    assert (persisted.subtotal, persisted.tax_amount, persisted.total_amount, payment.amount, revenue.amount) == financial_before
+    assert [
+        (option.option_name, option.group_name, option.price_delta)
+        for option in db.query(QuickSaleItemSelectedOption)
+        .filter(QuickSaleItemSelectedOption.quick_sale_item_id == line.id)
+        .order_by(QuickSaleItemSelectedOption.id)
+        .all()
+    ] == option_snapshots_before
+    db.close()
+
+    history = client.get("/admin/history/orders?preset=today", headers=auth(quick_sale_context, "owner"))
+    assert history.status_code == 200
+    assert any(row["order_number"] == sale["order_number"] for row in history.json()["items"])
+    stale_body = {**body, "idempotency_key": uuid.uuid4().hex}
+    stale = client.post("/admin/quick-sales", headers=auth(quick_sale_context, "owner"), json=stale_body)
+    assert stale.status_code == 404
+    assert "not found" in stale.json()["detail"].lower()

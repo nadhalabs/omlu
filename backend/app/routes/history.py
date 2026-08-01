@@ -13,7 +13,6 @@ from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
 from app.models.bill import Bill
 from app.models.dining_session import DiningSession
-from app.models.menu import MenuCategory, MenuItem
 from app.models.order import Order, OrderItem, OrderStatusHistory
 from app.models.restaurant_table import RestaurantTable
 from app.models.service_request import ServiceRequest
@@ -577,15 +576,13 @@ def performance_summary(
     category_performance = [
         {"category_name": row[0] or "Uncategorized", "quantity": int(row[1]), "revenue": _money(row[2])}
         for row in db.query(
-            MenuCategory.name_en,
+            OrderItem.category_name_snapshot,
             func.coalesce(func.sum(OrderItem.quantity), 0),
             func.coalesce(func.sum(OrderItem.total_price), 0),
         )
         .select_from(OrderItem)
         .join(Order)
         .join(Bill, Bill.dining_session_id == Order.dining_session_id)
-        .outerjoin(MenuItem, MenuItem.id == OrderItem.menu_item_id)
-        .outerjoin(MenuCategory, MenuCategory.id == MenuItem.category_id)
         .filter(
             Order.restaurant_id == current_user.restaurant_id,
             Order.status.notin_(["rejected", "cancelled", "voided"]),
@@ -594,7 +591,7 @@ def performance_summary(
             Bill.paid_at >= start_utc,
             Bill.paid_at < end_utc,
         )
-        .group_by(MenuCategory.name_en)
+        .group_by(OrderItem.category_name_snapshot)
         .order_by(func.sum(OrderItem.total_price).desc())
         .limit(10)
         .all()

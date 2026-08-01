@@ -268,6 +268,8 @@ def create_order_in_session(
             order_item = OrderItem(
                 order_id=new_order.id,
                 menu_item_id=item_data.menu_item_id,
+                category_id_snapshot=item_data.category_id_snapshot,
+                category_name_snapshot=item_data.category_name_snapshot,
                 item_name=item_data.item_name,
                 quantity=item_data.quantity,
                 unit_price=item_data.unit_price,

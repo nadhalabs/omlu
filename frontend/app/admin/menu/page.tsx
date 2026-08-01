@@ -8,6 +8,8 @@ import {
   createAdminCategory,
   updateAdminCategory,
   deleteAdminCategory,
+  deleteAdminCategoryWithItems,
+  moveAdminCategoryItemsAndDelete,
   getAdminMenuItems,
   createAdminMenuItem,
   updateAdminMenuItem,
@@ -77,12 +79,18 @@ export default function AdminMenuPage() {
   // Action status loading for simple buttons
   const [updatingAvail, setUpdatingAvail] = useState<Record<number, boolean>>({});
   const [importMenuOpen, setImportMenuOpen] = useState(false);
+  const [categoryDeleteModal, setCategoryDeleteModal] = useState<{ category: AdminCategoryResponse; mode: "delete_items" | "move_items" } | null>(null);
+  const [categoryDeleteText, setCategoryDeleteText] = useState("");
+  const [destinationCategoryId, setDestinationCategoryId] = useState("");
+  const [categoryDeleting, setCategoryDeleting] = useState(false);
+  const [categoryDeleteError, setCategoryDeleteError] = useState<string | null>(null);
 
-  useModalScrollLock(categoryModal.open || itemModal.open || importMenuOpen, () => {
-    if (catSaving || itemSaving) return;
+  useModalScrollLock(categoryModal.open || itemModal.open || importMenuOpen || Boolean(categoryDeleteModal), () => {
+    if (catSaving || itemSaving || categoryDeleting) return;
     setCategoryModal({ open: false, mode: "create" });
     setItemModal({ open: false, mode: "create" });
     setImportMenuOpen(false);
+    setCategoryDeleteModal(null);
   });
 
   // Initial load
@@ -220,6 +228,43 @@ export default function AdminMenuPage() {
       setCategories(catsData);
     } catch (err) {
       toast(`Delete rejected: ${getErrorMessage(err, "Delete failed.")}`, "error");
+    }
+  };
+
+  const openPopulatedCategoryDelete = (category: AdminCategoryResponse, mode: "delete_items" | "move_items") => {
+    setCategoryDeleteModal({ category, mode });
+    setCategoryDeleteText("");
+    setDestinationCategoryId("");
+    setCategoryDeleteError(null);
+  };
+
+  const handlePopulatedCategoryDelete = async () => {
+    if (!categoryDeleteModal || categoryDeleting) return;
+    const { category, mode } = categoryDeleteModal;
+    if (mode === "delete_items" && categoryDeleteText !== category.name_en) return;
+    if (mode === "move_items" && !destinationCategoryId) {
+      setCategoryDeleteError("Choose a destination category.");
+      return;
+    }
+    setCategoryDeleting(true);
+    setCategoryDeleteError(null);
+    try {
+      if (mode === "delete_items") await deleteAdminCategoryWithItems(category.id, categoryDeleteText);
+      else await moveAdminCategoryItemsAndDelete(category.id, Number(destinationCategoryId));
+      const [catsData, itemsData] = await Promise.all([getAdminCategories(), getAdminMenuItems()]);
+      setCategories(catsData);
+      setItems(itemsData);
+      if (selectedCategoryId === String(category.id)) setSelectedCategoryId("all");
+      setCategoryDeleteModal(null);
+      invalidateQueries(queryKeys.menu());
+      toast(mode === "delete_items" ? `Deleted ${category.item_count} menu items. Historical transactions were preserved.` : `Moved ${category.item_count} menu items and deleted the category.`, "success");
+    } catch (err) {
+      setCategoryDeleteError(getErrorMessage(err, "Category operation failed."));
+      const [catsData, itemsData] = await Promise.all([getAdminCategories(), getAdminMenuItems()]);
+      setCategories(catsData);
+      setItems(itemsData);
+    } finally {
+      setCategoryDeleting(false);
     }
   };
 
@@ -365,11 +410,11 @@ export default function AdminMenuPage() {
   };
 
   // Delete MenuItem
-  const handleDeleteItem = async (itemId: number) => {
-    if (!await confirmDialog({ title: "Delete menu item?", message: "This menu item will be permanently deleted and cannot be restored.", confirmLabel: "Delete menu item", cancelLabel: "Keep item", tone: "destructive" })) return;
+  const handleDeleteItem = async (item: AdminMenuItemResponse) => {
+    if (!await confirmDialog({ title: `Delete “${item.name_en}” permanently?`, message: "This item will be removed from the active menu. Historical orders, bills, Quick Sales, financial totals, and performance records will remain unchanged.", confirmLabel: "Delete permanently", cancelLabel: "Keep item", tone: "destructive" })) return;
 
     try {
-      await deleteAdminMenuItem(itemId);
+      await deleteAdminMenuItem(item.id);
       // Reload items and categories from backend
       const itemsData = await getAdminMenuItems();
       setItems(itemsData);
@@ -442,7 +487,7 @@ export default function AdminMenuPage() {
                     </span>
                   </div>
 
-                  <details className="relative shrink-0"><summary aria-label={`More actions for ${cat.name_en}`} className="flex min-h-11 min-w-11 cursor-pointer list-none items-center justify-center rounded-xl border border-zinc-300 bg-white text-xl font-black text-zinc-800 hover:bg-zinc-100 focus-visible:outline-2 focus-visible:outline-orange-500">⋮</summary><div className="absolute right-0 z-20 mt-2 w-48 rounded-xl border border-zinc-200 bg-white p-1.5 shadow-xl"><button onClick={() => openCategoryModal("edit", cat)} className="min-h-10 w-full rounded-lg px-3 text-left text-sm font-bold text-zinc-800 hover:bg-zinc-100">Edit category</button><button onClick={() => handleDeleteCategory(cat.id)} className="min-h-10 w-full rounded-lg px-3 text-left text-sm font-bold text-red-700 hover:bg-red-50">Delete category</button></div></details>
+                  <details className="relative shrink-0"><summary aria-label={`More actions for ${cat.name_en}`} className="flex min-h-11 min-w-11 cursor-pointer list-none items-center justify-center rounded-xl border border-zinc-300 bg-white text-xl font-black text-zinc-800 hover:bg-zinc-100 focus-visible:outline-2 focus-visible:outline-orange-500">⋮</summary><div className="absolute right-0 z-20 mt-2 w-56 rounded-xl border border-zinc-200 bg-white p-1.5 shadow-xl"><button onClick={() => openCategoryModal("edit", cat)} className="min-h-10 w-full rounded-lg px-3 text-left text-sm font-bold text-zinc-800 hover:bg-zinc-100">Edit category</button>{cat.item_count === 0 ? <button onClick={() => handleDeleteCategory(cat.id)} className="min-h-10 w-full rounded-lg px-3 text-left text-sm font-bold text-red-700 hover:bg-red-50">Delete category</button> : <><button onClick={() => openPopulatedCategoryDelete(cat, "move_items")} className="min-h-10 w-full rounded-lg px-3 text-left text-sm font-bold text-zinc-800 hover:bg-zinc-100">Move items and delete</button><button onClick={() => openPopulatedCategoryDelete(cat, "delete_items")} className="min-h-10 w-full rounded-lg px-3 text-left text-sm font-bold text-red-700 hover:bg-red-50">Delete category and items</button></>}</div></details>
                 </div>
               ))}
             </div>
@@ -574,7 +619,7 @@ export default function AdminMenuPage() {
                       >
                         Edit
                       </button>
-                      <details className="relative"><summary aria-label={`More actions for ${item.name_en}`} className="flex min-h-11 min-w-11 cursor-pointer list-none items-center justify-center rounded-lg border border-zinc-300 bg-white text-xl font-black text-zinc-800 hover:bg-zinc-100 focus-visible:outline-2 focus-visible:outline-orange-500">⋮</summary><div className="absolute right-0 z-20 mt-2 w-48 rounded-xl border border-zinc-200 bg-white p-1.5 shadow-xl"><button onClick={() => handleDeleteItem(item.id)} className="min-h-10 w-full rounded-lg px-3 text-left text-sm font-bold text-red-700 hover:bg-red-50">Delete menu item</button></div></details>
+                      <details className="relative"><summary aria-label={`More actions for ${item.name_en}`} className="flex min-h-11 min-w-11 cursor-pointer list-none items-center justify-center rounded-lg border border-zinc-300 bg-white text-xl font-black text-zinc-800 hover:bg-zinc-100 focus-visible:outline-2 focus-visible:outline-orange-500">⋮</summary><div className="absolute right-0 z-20 mt-2 w-48 rounded-xl border border-zinc-200 bg-white p-1.5 shadow-xl"><button onClick={() => handleDeleteItem(item)} className="min-h-10 w-full rounded-lg px-3 text-left text-sm font-bold text-red-700 hover:bg-red-50">Delete permanently</button></div></details>
                     </div>
                   </div>
                 </div>
@@ -601,6 +646,18 @@ export default function AdminMenuPage() {
             );
           }}
         />
+      )}
+
+      {categoryDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center overscroll-contain bg-black/75 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-lg rounded-3xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="category-delete-title">
+            <h3 id="category-delete-title" className="text-xl font-black text-white">{categoryDeleteModal.mode === "delete_items" ? `Delete “${categoryDeleteModal.category.name_en}” and ${categoryDeleteModal.category.item_count} menu items?` : `Move ${categoryDeleteModal.category.item_count} items and delete “${categoryDeleteModal.category.name_en}”?`}</h3>
+            <p className="mt-3 text-sm leading-6 text-zinc-300">{categoryDeleteModal.mode === "delete_items" ? "These items will be permanently removed from the active menu. Historical orders, bills, Quick Sales, financial totals, and performance records will remain unchanged." : "All current items will move to the selected category. Their pricing, availability, options, and historical category snapshots will remain unchanged."}</p>
+            {categoryDeleteError && <div className="mt-4 rounded-xl border border-red-900 bg-red-950/40 p-3 text-sm font-bold text-red-300">{categoryDeleteError}</div>}
+            {categoryDeleteModal.mode === "delete_items" ? <label className="mt-5 block text-xs font-bold text-zinc-300">Type <span className="text-white">{categoryDeleteModal.category.name_en}</span> to confirm<input value={categoryDeleteText} onChange={(event) => setCategoryDeleteText(event.target.value)} autoComplete="off" className="mt-2 min-h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-sm text-white outline-none focus:border-red-500" /></label> : <label className="mt-5 block text-xs font-bold text-zinc-300">Destination category<select value={destinationCategoryId} onChange={(event) => setDestinationCategoryId(event.target.value)} className="mt-2 min-h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-sm text-white"><option value="">Choose category…</option>{categories.filter((category) => category.id !== categoryDeleteModal.category.id).map((category) => <option key={category.id} value={category.id}>{category.name_en}</option>)}</select></label>}
+            <div className="mt-6 flex gap-3"><button type="button" disabled={categoryDeleting} onClick={() => setCategoryDeleteModal(null)} className="min-h-11 flex-1 rounded-xl bg-zinc-800 px-4 text-sm font-bold text-zinc-200">Cancel</button><button type="button" disabled={categoryDeleting || (categoryDeleteModal.mode === "delete_items" ? categoryDeleteText !== categoryDeleteModal.category.name_en : !destinationCategoryId)} onClick={() => void handlePopulatedCategoryDelete()} className="min-h-11 flex-1 rounded-xl bg-red-700 px-4 text-sm font-black text-white disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400">{categoryDeleting ? "Working…" : categoryDeleteModal.mode === "delete_items" ? "Delete category and items" : "Move items and delete"}</button></div>
+          </div>
+        </div>
       )}
 
       {/* CATEGORY FORM MODAL */}

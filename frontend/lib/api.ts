@@ -877,6 +877,26 @@ export async function deleteAdminCategory(categoryId: number): Promise<void> {
   }
 }
 
+export async function deleteAdminCategoryWithItems(categoryId: number, confirmationName: string): Promise<void> {
+  const response = await fetch(`/api/admin/categories/${categoryId}/delete-with-items`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ confirmation_name: confirmationName }),
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) throw new ApiError(response.status, body?.detail || "Failed to delete category and items.");
+}
+
+export async function moveAdminCategoryItemsAndDelete(categoryId: number, destinationCategoryId: number): Promise<void> {
+  const response = await fetch(`/api/admin/categories/${categoryId}/move-items-and-delete`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ destination_category_id: destinationCategoryId }),
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) throw new ApiError(response.status, body?.detail || "Failed to move items and delete category.");
+}
+
 export async function getAdminMenuItems(filters?: {
   category_id?: number;
   is_available?: boolean;

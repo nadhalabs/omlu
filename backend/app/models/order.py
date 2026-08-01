@@ -131,6 +131,8 @@ class OrderItem(Base):
         ForeignKey("menu_items.id", ondelete="SET NULL"),
         nullable=True
     )
+    category_id_snapshot: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    category_name_snapshot: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     item_name: Mapped[str] = mapped_column(String(255))
     quantity: Mapped[int] = mapped_column(
         CheckConstraint("quantity > 0", name="chk_order_item_quantity_positive")

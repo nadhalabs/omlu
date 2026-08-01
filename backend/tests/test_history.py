@@ -79,7 +79,12 @@ def history_data():
         )
         db.add(order)
         db.flush()
-        db.add(OrderItem(order_id=order.id, menu_item_id=item.id, item_name="Dosa", quantity=index, unit_price=Decimal("100.00"), total_price=Decimal("100.00") * index))
+        db.add(OrderItem(
+            order_id=order.id, menu_item_id=item.id,
+            category_id_snapshot=category.id, category_name_snapshot=category.name_en,
+            item_name="Dosa", quantity=index, unit_price=Decimal("100.00"),
+            total_price=Decimal("100.00") * index,
+        ))
         db.add(OrderStatusHistory(order_id=order.id, old_status="pending", new_status="accepted", changed_at=created_at + datetime.timedelta(minutes=1), changed_by_staff_id=staff.id))
         db.add(OrderStatusHistory(order_id=order.id, old_status="ready", new_status=order.status, changed_at=created_at + datetime.timedelta(minutes=5), changed_by_staff_id=staff.id))
         orders.append(order)
@@ -214,6 +219,7 @@ def history_data():
         "other_token": create_access_token({"sub": str(other_owner.id), "restaurant_id": other.id, "role": "owner"}),
         "staff_id": staff.id,
         "table_id": table.id,
+        "item_id": item.id,
     }
     yield data
 
@@ -273,6 +279,7 @@ def test_performance_revenue_and_top_selling(history_data):
     assert body["metrics"]["average_order_value"] == "175.00"
     assert body["top_selling_items"][0]["item_name"] == "Dosa"
     assert {row["item_name"] for row in body["top_selling_items"]} == {"Dosa", "Tea"}
+    assert body["category_performance"] == [{"category_name": "Main", "quantity": 3, "revenue": "300.00"}]
     assert {row["table_number"] for row in body["table_usage"]} == {"1", "2"}
     assert next(row for row in body["table_usage"] if row["table_number"] == "1")["revenue"] == "300.00"
     assert next(row for row in body["table_usage"] if row["table_number"] == "2")["revenue"] == "0.00"
@@ -409,3 +416,21 @@ def test_performance_csv_export_still_unchanged(history_data):
     assert "text/csv" in response.headers["content-type"]
     assert response.headers["content-disposition"] == 'attachment; filename="performance-summary.csv"'
     assert "total_revenue,350.00" in response.text
+
+
+def test_category_performance_and_order_history_survive_menu_item_deletion(history_data):
+    headers = _auth(history_data["owner_token"])
+    before = client.get("/admin/history/performance?preset=today", headers=headers).json()
+    before_category = before["category_performance"]
+
+    deleted = client.delete(f"/admin/menu-items/{history_data['item_id']}", headers=headers)
+    assert deleted.status_code == 204
+
+    orders = client.get("/admin/history/orders?preset=today", headers=headers)
+    after = client.get("/admin/history/performance?preset=today", headers=headers)
+    assert orders.status_code == 200
+    assert orders.json()["total"] == 3
+    assert {order["order_number"] for order in orders.json()["items"]} >= {"H-1", "H-2"}
+    assert after.status_code == 200
+    assert after.json()["category_performance"] == before_category
+    assert after.json()["metrics"] == before["metrics"]

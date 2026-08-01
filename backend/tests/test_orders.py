@@ -9,7 +9,7 @@ from app.models.bill import Bill
 from app.models.restaurant import Restaurant
 from app.models.restaurant_table import RestaurantTable
 from app.models.menu import MenuCategory, MenuItem
-from app.models.order import Order, OrderStatusHistory, RestaurantDailySequence
+from app.models.order import Order, OrderItem, OrderStatusHistory, RestaurantDailySequence
 from app.models.service_request import ServiceRequest
 
 from tests.participant_helpers import ParticipantTestClient
@@ -108,6 +108,16 @@ def test_valid_order_creation(setup_test_data):
     assert res_data["session_subtotal"] == "200.00"
     assert res_data["session_order_count"] >= 1
     assert res_data["can_order_more"] is True
+    db = SessionLocal()
+    persisted = (
+        db.query(OrderItem)
+        .join(Order, Order.id == OrderItem.order_id)
+        .filter(Order.public_token == res_data["public_token"])
+        .one()
+    )
+    assert persisted.category_name_snapshot == "Category 1"
+    assert persisted.category_id_snapshot is not None
+    db.close()
 
 
 def create_order_payload(item_id, quantity=1):

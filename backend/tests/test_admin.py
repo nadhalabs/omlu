@@ -131,6 +131,8 @@ def setup_admin_test_data():
     order_item = OrderItem(
         order_id=order.id,
         menu_item_id=item_with_history.id,
+        category_id_snapshot=cat1.id,
+        category_name_snapshot=cat1.name_en,
         item_name="Samosas",
         quantity=1,
         unit_price=Decimal("90.00"),
@@ -260,6 +262,21 @@ def test_delete_category_blocked_when_items_exist(setup_admin_test_data):
     assert "contains menu items" in response.json()["detail"]
 
 
+def test_empty_category_can_be_deleted(setup_admin_test_data):
+    data = setup_admin_test_data
+    created = client.post(
+        "/admin/categories",
+        headers={"Authorization": f"Bearer {data['owner_token']}"},
+        json={"name_en": "Temporary Empty", "display_order": 99, "is_active": True},
+    )
+    assert created.status_code == 201
+    response = client.delete(
+        f"/admin/categories/{created.json()['id']}",
+        headers={"Authorization": f"Bearer {data['owner_token']}"},
+    )
+    assert response.status_code == 204
+
+
 # --- Menu Item Endpoints ---
 
 def test_create_menu_item(setup_admin_test_data):
@@ -378,14 +395,180 @@ def test_item_with_no_history_can_be_deleted(setup_admin_test_data):
     assert response.status_code == 204
 
 
-def test_item_with_history_cannot_be_deleted(setup_admin_test_data):
+def test_item_with_history_can_be_deleted_and_snapshot_survives(setup_admin_test_data):
     data = setup_admin_test_data
+    db = SessionLocal()
+    category = MenuCategory(
+        restaurant_id=data["restaurant_id"], name_en="Historical", display_order=20, is_active=True
+    )
+    db.add(category)
+    db.flush()
+    item = MenuItem(
+        restaurant_id=data["restaurant_id"], category_id=category.id,
+        name_en="Archived Curry", price=Decimal("145.00"), is_available=True,
+    )
+    db.add(item)
+    db.flush()
+    order = Order(
+        restaurant_id=data["restaurant_id"], table_id=data["table_id"],
+        order_number=f"NS-DELETE-{uuid.uuid4().hex[:8]}", public_token=uuid.uuid4().hex,
+        status="served", subtotal=Decimal("145.00"),
+    )
+    db.add(order)
+    db.flush()
+    line = OrderItem(
+        order_id=order.id, menu_item_id=item.id,
+        category_id_snapshot=category.id, category_name_snapshot="Historical",
+        item_name="Archived Curry", quantity=1,
+        unit_price=Decimal("145.00"), total_price=Decimal("145.00"),
+    )
+    db.add(line)
+    db.commit()
+    category_id, item_id, line_id = category.id, item.id, line.id
+    db.close()
+
     response = client.delete(
-        f"/admin/menu-items/{data['item_with_history_id']}",
+        f"/admin/menu-items/{item_id}",
         headers={"Authorization": f"Bearer {data['owner_token']}"}
     )
-    assert response.status_code == 409
-    assert "has order history" in response.json()["detail"]
+    assert response.status_code == 204
+
+    db = SessionLocal()
+    persisted = db.query(OrderItem).filter(OrderItem.id == line_id).one()
+    assert persisted.menu_item_id is None
+    assert persisted.item_name == "Archived Curry"
+    assert persisted.category_id_snapshot == category_id
+    assert persisted.category_name_snapshot == "Historical"
+    assert persisted.total_price == Decimal("145.00")
+    db.close()
+
+
+def test_populated_category_delete_requires_exact_name_and_preserves_history(setup_admin_test_data):
+    data = setup_admin_test_data
+    db = SessionLocal()
+    category = MenuCategory(
+        restaurant_id=data["restaurant_id"], name_en="Delete This Category", display_order=21, is_active=True
+    )
+    db.add(category)
+    db.flush()
+    item = MenuItem(
+        restaurant_id=data["restaurant_id"], category_id=category.id,
+        name_en="Delete This Item", price=Decimal("75.00"), is_available=True,
+    )
+    db.add(item)
+    db.flush()
+    order = Order(
+        restaurant_id=data["restaurant_id"], table_id=data["table_id"],
+        order_number=f"NS-CATEGORY-{uuid.uuid4().hex[:8]}", public_token=uuid.uuid4().hex,
+        status="served", subtotal=Decimal("75.00"),
+    )
+    db.add(order)
+    db.flush()
+    line = OrderItem(
+        order_id=order.id, menu_item_id=item.id,
+        category_id_snapshot=category.id, category_name_snapshot=category.name_en,
+        item_name=item.name_en, quantity=1, unit_price=item.price, total_price=item.price,
+    )
+    db.add(line)
+    db.commit()
+    category_id, item_id, line_id = category.id, item.id, line.id
+    db.close()
+    headers = {"Authorization": f"Bearer {data['owner_token']}"}
+
+    unauthorized = client.post(
+        f"/admin/categories/{category_id}/delete-with-items",
+        headers={"Authorization": f"Bearer {data['kitchen_token']}"},
+        json={"confirmation_name": "Delete This Category"},
+    )
+    assert unauthorized.status_code == 403
+
+    rejected = client.post(
+        f"/admin/categories/{category_id}/delete-with-items", headers=headers,
+        json={"confirmation_name": "wrong name"},
+    )
+    assert rejected.status_code == 422
+    db = SessionLocal()
+    assert db.query(MenuCategory).filter(MenuCategory.id == category_id).count() == 1
+    assert db.query(MenuItem).filter(MenuItem.id == item_id).count() == 1
+    db.close()
+
+    deleted = client.post(
+        f"/admin/categories/{category_id}/delete-with-items", headers=headers,
+        json={"confirmation_name": "Delete This Category"},
+    )
+    assert deleted.status_code == 204
+    db = SessionLocal()
+    assert db.query(MenuCategory).filter(MenuCategory.id == category_id).count() == 0
+    assert db.query(MenuItem).filter(MenuItem.id == item_id).count() == 0
+    persisted = db.query(OrderItem).filter(OrderItem.id == line_id).one()
+    assert persisted.menu_item_id is None
+    assert persisted.category_name_snapshot == "Delete This Category"
+    assert persisted.total_price == Decimal("75.00")
+    db.close()
+
+
+def test_move_items_then_delete_is_tenant_scoped_and_atomic(setup_admin_test_data):
+    data = setup_admin_test_data
+    db = SessionLocal()
+    source = MenuCategory(
+        restaurant_id=data["restaurant_id"], name_en="Move Source", display_order=22, is_active=True
+    )
+    destination = MenuCategory(
+        restaurant_id=data["restaurant_id"], name_en="Move Destination", display_order=23, is_active=True
+    )
+    db.add_all([source, destination])
+    db.flush()
+    item = MenuItem(
+        restaurant_id=data["restaurant_id"], category_id=source.id,
+        name_en="Movable Item", price=Decimal("40.00"), is_available=True,
+    )
+    db.add(item)
+    db.flush()
+    order = Order(
+        restaurant_id=data["restaurant_id"], table_id=data["table_id"],
+        order_number=f"NS-MOVE-{uuid.uuid4().hex[:8]}", public_token=uuid.uuid4().hex,
+        status="served", subtotal=Decimal("40.00"),
+    )
+    db.add(order)
+    db.flush()
+    line = OrderItem(
+        order_id=order.id, menu_item_id=item.id,
+        category_id_snapshot=source.id, category_name_snapshot=source.name_en,
+        item_name=item.name_en, quantity=1, unit_price=item.price, total_price=item.price,
+    )
+    db.add(line)
+    db.commit()
+    source_id, destination_id, item_id, line_id = source.id, destination.id, item.id, line.id
+    db.close()
+    headers = {"Authorization": f"Bearer {data['owner_token']}"}
+
+    cross_tenant = client.post(
+        f"/admin/categories/{source_id}/move-items-and-delete", headers=headers,
+        json={"destination_category_id": data["other_category_id"]},
+    )
+    assert cross_tenant.status_code == 404
+    same_category = client.post(
+        f"/admin/categories/{source_id}/move-items-and-delete", headers=headers,
+        json={"destination_category_id": source_id},
+    )
+    assert same_category.status_code == 422
+    db = SessionLocal()
+    assert db.query(MenuCategory).filter(MenuCategory.id == source_id).count() == 1
+    assert db.query(MenuItem).filter(MenuItem.id == item_id).one().category_id == source_id
+    db.close()
+
+    moved = client.post(
+        f"/admin/categories/{source_id}/move-items-and-delete", headers=headers,
+        json={"destination_category_id": destination_id},
+    )
+    assert moved.status_code == 204
+    db = SessionLocal()
+    assert db.query(MenuCategory).filter(MenuCategory.id == source_id).count() == 0
+    assert db.query(MenuItem).filter(MenuItem.id == item_id).one().category_id == destination_id
+    persisted = db.query(OrderItem).filter(OrderItem.id == line_id).one()
+    assert persisted.category_id_snapshot == source_id
+    assert persisted.category_name_snapshot == "Move Source"
+    db.close()
 
 
 # --- Table Endpoints ---

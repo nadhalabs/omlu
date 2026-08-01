@@ -73,6 +73,8 @@ class QuickSaleItem(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     quick_sale_id: Mapped[int] = mapped_column(ForeignKey("quick_sales.id", ondelete="CASCADE"), nullable=False, index=True)
     menu_item_id: Mapped[Optional[int]] = mapped_column(ForeignKey("menu_items.id", ondelete="SET NULL"), nullable=True)
+    category_id_snapshot: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    category_name_snapshot: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     item_name: Mapped[str] = mapped_column(String(255), nullable=False)
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
     base_price: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)

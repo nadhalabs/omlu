@@ -16,6 +16,14 @@ class CategoryUpdate(BaseModel):
     display_order: Optional[int] = Field(None, ge=0)
     is_active: Optional[bool] = None
 
+
+class CategoryDeleteItemsRequest(BaseModel):
+    confirmation_name: str = Field(..., min_length=1, max_length=120)
+
+
+class CategoryMoveItemsRequest(BaseModel):
+    destination_category_id: int = Field(..., gt=0)
+
 class CategoryResponse(BaseModel):
     id: int
     name_en: str

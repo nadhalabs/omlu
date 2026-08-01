@@ -225,6 +225,8 @@ def create_quick_sale(
     for priced in priced_items:
         sale_item = QuickSaleItem(
             menu_item_id=priced.menu_item_id,
+            category_id_snapshot=priced.category_id_snapshot,
+            category_name_snapshot=priced.category_name_snapshot,
             item_name=priced.item_name,
             quantity=priced.quantity,
             base_price=priced.base_price,

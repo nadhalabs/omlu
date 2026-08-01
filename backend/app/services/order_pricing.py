@@ -26,6 +26,8 @@ class PricedSelectedOption:
 @dataclass(frozen=True)
 class PricedOrderItem:
     menu_item_id: int
+    category_id_snapshot: int
+    category_name_snapshot: str
     item_name: str
     quantity: int
     base_price: Decimal
@@ -47,6 +49,7 @@ def _load_menu_items(db: Session, menu_item_ids: list[int]) -> dict[int, MenuIte
     items = (
         db.query(MenuItem)
         .options(
+            selectinload(MenuItem.category),
             selectinload(MenuItem.option_group_links)
             .selectinload(MenuItemOptionGroup.group)
             .selectinload(MenuOptionGroup.options)
@@ -112,6 +115,8 @@ def validate_and_price_order_items(
         priced_items.append(
             PricedOrderItem(
                 menu_item_id=menu_item.id,
+                category_id_snapshot=menu_item.category_id,
+                category_name_snapshot=menu_item.category.name_en,
                 item_name=menu_item.name_en,
                 quantity=quantity,
                 base_price=menu_item.price,
