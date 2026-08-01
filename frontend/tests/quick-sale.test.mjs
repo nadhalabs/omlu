@@ -14,7 +14,7 @@ test("Quick Sale appears in the required admin navigation and dashboard actions"
 test("Quick Sale page exposes both workflows and operational lists", () => {
   const client = read("app/admin/quick-sale/QuickSaleClient.tsx");
   for (const copy of ["Takeaway Order", "Late Entry", "Active Takeaway Orders", "Completed Quick Sales Today", "Send to Kitchen", "Record Completed Sale"]) assert.ok(client.includes(copy));
-  assert.match(client, /disabled=\{saving \|\| !cart\.length\}/);
+  assert.match(client, /disabled=\{saving \|\| previewLoading \|\| !preview \|\| !cart\.length\}/);
   assert.match(client, /Could not load Quick Sale|Quick Sale request failed/);
 });
 
@@ -45,7 +45,15 @@ test("Quick Sale displays backend-authoritative GST snapshots and totals", () =>
   assert.match(quickSale, /tax_amount/);
   assert.match(quickSale, /grand_total/);
   assert.match(quickSale, /Includes GST/);
-  assert.match(quickSale, /authoritative GST total/);
+  assert.match(quickSale, /\/api\/admin\/quick-sales\/preview/);
+  assert.match(quickSale, /new AbortController\(\)/);
+  assert.match(quickSale, /requestId === previewRequest\.current/);
+  assert.match(quickSale, /CGST \{preview\.cgst_rate\}%/);
+  assert.match(quickSale, /SGST \{preview\.sgst_rate\}%/);
+  assert.match(quickSale, /IGST \{preview\.igst_rate\}%/);
+  assert.match(quickSale, /Grand total/);
+  const previewProxy = read("app/api/admin/quick-sales/preview/route.ts");
+  assert.match(previewProxy, /proxyAdminRequest\(request, "\/quick-sales\/preview"\)/);
   assert.doesNotMatch(quickSale, /subtotal\s*\*\s*.*gst|gst.*\/\s*100/i);
 });
 

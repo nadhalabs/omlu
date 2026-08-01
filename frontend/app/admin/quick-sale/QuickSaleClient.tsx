@@ -11,6 +11,7 @@ type MenuItem = { id: number; name: string; price: string; has_options: boolean;
 type CartLine = { menu_item_id: number; item_name: string; quantity: number; unit_price: string; selected_options: SelectedOptionRequest[] };
 type SaleItem = { menu_item_id: number; item_name: string; quantity: number; base_price: string; unit_price: string; total_price: string; item_note: string | null; selected_options: Array<{ option_name: string; group_name: string; price_delta: string; quantity: number }> };
 type QuickSale = { order_number: string; public_token: string; sale_type: SaleType; status: string; note: string | null; reason: string | null; subtotal: string; discount_amount: string; taxable_amount: string | null; gst_enabled: boolean; gst_rate: string | null; cgst_amount: string | null; sgst_amount: string | null; igst_amount: string | null; tax_amount: string; total: string; grand_total: string; payment_method: PaymentMethod | null; entered_by_name: string; entered_by_role: string; created_at: string; completed_at: string | null; items: SaleItem[] };
+type QuickSalePreview = { subtotal: string; discount_amount: string; taxable_amount: string; gst_enabled: boolean; gst_rate: string; cgst_rate: string; sgst_rate: string; igst_rate: string; cgst_amount: string; sgst_amount: string; igst_amount: string; tax_amount: string; tax_mode: "inclusive" | "exclusive"; grand_total: string };
 type HomeData = { menu_items: MenuItem[]; active_takeaways: QuickSale[]; completed_today: QuickSale[] };
 
 async function parseResponse<T>(response: Response): Promise<T> {
@@ -27,12 +28,16 @@ export default function QuickSaleClient() {
   const [note, setNote] = useState("");
   const [payment, setPayment] = useState<PaymentMethod>("cash");
   const [saving, setSaving] = useState(false);
+  const [preview, setPreview] = useState<QuickSalePreview | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [customisingItem, setCustomisingItem] = useState<MenuItem | null>(null);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [draftOptions, setDraftOptions] = useState<Record<number, Record<number, number>>>({});
   const [draftQuantity, setDraftQuantity] = useState(1);
   const idempotencyKey = useRef("");
+  const previewRequest = useRef(0);
   useEffect(() => {
     idempotencyKey.current = localStorage.getItem("omlu:quick-sale:draft-key") || crypto.randomUUID();
     localStorage.setItem("omlu:quick-sale:draft-key", idempotencyKey.current);
@@ -54,7 +59,55 @@ export default function QuickSaleClient() {
   useRealtime({ target: { kind: "staff", channel: "staff" }, onEvent: () => void load(), onReconnect: () => void load() });
 
   const visibleMenu = useMemo(() => (data?.menu_items || []).filter((item) => item.name.toLowerCase().includes(search.toLowerCase())), [data, search]);
-  const total = useMemo(() => cart.reduce((sum, line) => sum + Number(line.unit_price) * line.quantity, 0), [cart]);
+  useEffect(() => {
+    const requestId = ++previewRequest.current;
+    let controller: AbortController | null = null;
+    const timeout = window.setTimeout(() => {
+      if (!saleType || cart.length === 0) {
+        setPreview(null);
+        setPreviewError(null);
+        setPreviewLoading(false);
+        return;
+      }
+      controller = new AbortController();
+      setPreview(null);
+      setPreviewError(null);
+      setPreviewLoading(true);
+      void fetch("/api/admin/quick-sales/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify({
+          sale_type: saleType,
+          items: cart.map((line) => ({ menu_item_id: line.menu_item_id, quantity: line.quantity, selected_options: line.selected_options })),
+          payment_method: saleType === "late_entry" ? payment : null,
+        }),
+      }).then((response) => parseResponse<QuickSalePreview>(response)).then((result) => {
+        if (requestId === previewRequest.current) setPreview(result);
+      }).catch((err) => {
+        if (controller?.signal.aborted || requestId !== previewRequest.current) return;
+        setPreviewError(err instanceof Error ? err.message : "Could not calculate the Quick Sale total.");
+      }).finally(() => {
+        if (requestId === previewRequest.current) setPreviewLoading(false);
+      });
+    }, 0);
+    return () => { window.clearTimeout(timeout); controller?.abort(); };
+  }, [cart, payment, saleType]);
+
+  const previewDetails = (value: QuickSalePreview) => {
+    const details = [`Subtotal: ₹${value.subtotal}`];
+    if (Number(value.discount_amount) !== 0) details.push(`Discount: −₹${value.discount_amount}`);
+    if (value.gst_enabled) {
+      if (value.tax_mode === "inclusive") details.push(`Includes GST: ₹${value.tax_amount}`);
+      if (Number(value.igst_amount) !== 0) details.push(`IGST ${value.igst_rate}%: ₹${value.igst_amount}`);
+      else {
+        details.push(`CGST ${value.cgst_rate}%: ₹${value.cgst_amount}`);
+        details.push(`SGST ${value.sgst_rate}%: ₹${value.sgst_amount}`);
+      }
+    }
+    details.push(`Grand total: ₹${value.grand_total}`);
+    return details;
+  };
 
   const optionSignature = (options: SelectedOptionRequest[]) =>
     JSON.stringify(options.slice().sort((a, b) => a.group_id - b.group_id || a.option_id - b.option_id));
@@ -116,9 +169,10 @@ export default function QuickSaleClient() {
   });
 
   const submit = async () => {
-    if (!saleType || saving || cart.length === 0) return;
+    if (!saleType || saving || previewLoading || !preview || cart.length === 0) return;
     const isLate = saleType === "late_entry";
-    await confirmDialog({ title: isLate ? (payment === "upi" ? "Confirm UPI payment" : "Record late entry") : "Send takeaway to Kitchen?", message: isLate ? (payment === "upi" ? "Confirm that the payment has been received in the restaurant’s UPI account. The authoritative GST total will be recorded from restaurant settings." : "This sale will be recorded as paid and included in today’s revenue using the authoritative GST total.") : "Kitchen will receive this order immediately for preparation. GST is calculated by the server from restaurant settings.", details: [`Items subtotal: ₹${total.toFixed(2)}`, ...(isLate && payment === "cash" ? ["Payment method: Cash"] : [])], confirmLabel: isLate ? (payment === "upi" ? "Payment received" : "Confirm payment") : "Send to Kitchen", onConfirm: async () => {
+    const confirmedPreview = preview;
+    await confirmDialog({ title: isLate ? (payment === "upi" ? "Confirm UPI payment" : "Record late entry") : "Send takeaway to Kitchen?", message: isLate ? (payment === "upi" ? "Confirm that the payment has been received in the restaurant’s UPI account." : "This sale will be recorded as paid and included in today’s revenue.") : "Kitchen will receive this order immediately for preparation.", details: [...previewDetails(confirmedPreview), ...(isLate && payment === "cash" ? ["Payment method: Cash"] : [])], confirmLabel: `${isLate ? (payment === "upi" ? "Payment received" : "Confirm payment") : "Send to Kitchen"} — ₹${confirmedPreview.grand_total}`, onConfirm: async () => {
       setSaving(true); setError(null);
       try { const created = await parseResponse<QuickSale>(await fetch("/api/admin/quick-sales", { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey.current }, body: JSON.stringify({ sale_type: saleType, items: cart.map((line) => ({ menu_item_id: line.menu_item_id, quantity: line.quantity, selected_options: line.selected_options })), note: note || null, payment_method: isLate ? payment : null }) })); setCart([]); setNote(""); setSaleType(null); idempotencyKey.current = crypto.randomUUID(); localStorage.setItem("omlu:quick-sale:draft-key", idempotencyKey.current); await load(); toast(isLate ? `Late Entry recorded. Total ₹${created.total}.` : "Takeaway sent to Kitchen.", "success"); }
       catch (err) { const message = err instanceof Error ? err.message : "Could not save Quick Sale."; setError(message); toast(message, "error"); }
@@ -164,10 +218,24 @@ export default function QuickSaleClient() {
           <div className="flex justify-between gap-3"><div><span className="font-bold text-white">{line.item_name}</span>{optionLabels(line).length > 0 && <p className="mt-1 text-xs text-zinc-400">{optionLabels(line).join(" · ")}</p>}</div><span>₹{(Number(line.unit_price) * line.quantity).toFixed(2)}</span></div>
           <div className="mt-3 flex items-center justify-between"><div className="flex items-center gap-2"><button type="button" aria-label={`Decrease ${line.item_name}`} onClick={() => setLineQuantity(index, line.quantity - 1)} className="h-8 w-8 rounded-lg bg-zinc-800">−</button><span className="w-6 text-center font-bold">{line.quantity}</span><button type="button" aria-label={`Increase ${line.item_name}`} onClick={() => setLineQuantity(index, line.quantity + 1)} className="h-8 w-8 rounded-lg bg-zinc-800">+</button></div>{line.selected_options.length > 0 && <button type="button" onClick={() => { const item = data?.menu_items.find((candidate) => candidate.id === line.menu_item_id); if (item) openOptions(item, index); }} className="text-xs font-bold text-orange-400">Edit specifications</button>}</div>
         </div>)}</div>
-        <div className="mt-4 flex justify-between border-t border-zinc-800 pt-4 text-lg font-black"><span>Total</span><span>₹{total.toFixed(2)}</span></div>
+        <div className="mt-4 space-y-2 border-t border-zinc-800 pt-4 text-sm">
+          {previewLoading && <div className="text-zinc-400" role="status">Calculating authoritative total…</div>}
+          {previewError && <div className="text-red-300" role="alert">{previewError}</div>}
+          {preview && <>
+            <div className="flex justify-between text-zinc-300"><span>Subtotal</span><span>₹{preview.subtotal}</span></div>
+            {Number(preview.discount_amount) !== 0 && <div className="flex justify-between text-zinc-300"><span>Discount</span><span>−₹{preview.discount_amount}</span></div>}
+            {preview.gst_enabled && preview.tax_mode === "inclusive" && <div className="flex justify-between text-zinc-400"><span>Includes GST</span><span>₹{preview.tax_amount}</span></div>}
+            {preview.gst_enabled && Number(preview.igst_amount) !== 0 && <div className="flex justify-between text-zinc-300"><span>IGST {preview.igst_rate}%</span><span>₹{preview.igst_amount}</span></div>}
+            {preview.gst_enabled && Number(preview.igst_amount) === 0 && <>
+              <div className="flex justify-between text-zinc-300"><span>CGST {preview.cgst_rate}%</span><span>₹{preview.cgst_amount}</span></div>
+              <div className="flex justify-between text-zinc-300"><span>SGST {preview.sgst_rate}%</span><span>₹{preview.sgst_amount}</span></div>
+            </>}
+            <div className="flex justify-between border-t border-zinc-800 pt-3 text-lg font-black text-white"><span>Grand total</span><span>₹{preview.grand_total}</span></div>
+          </>}
+        </div>
         <label className="mt-5 block text-xs font-bold text-zinc-400">Optional note<textarea value={note} onChange={(e) => setNote(e.target.value)} maxLength={1024} className="mt-2 min-h-20 w-full rounded-lg border border-zinc-700 bg-zinc-950 p-3 text-sm text-white" /></label>
         {saleType === "late_entry" && <fieldset className="mt-4"><legend className="text-xs font-bold text-zinc-400">Payment received</legend><div className="mt-2 flex gap-2">{(["cash", "upi"] as PaymentMethod[]).map((method) => <button type="button" key={method} onClick={() => setPayment(method)} className={`rounded-lg px-4 py-2 text-sm font-black uppercase ${payment === method ? "bg-orange-600 text-white" : "bg-zinc-800 text-zinc-300"}`}>{method}</button>)}</div></fieldset>}
-        <button disabled={saving || !cart.length} onClick={submit} className="mt-6 min-h-12 w-full rounded-xl bg-orange-600 font-black text-white disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-600">{saving ? "Saving…" : saleType === "takeaway" ? "Send to Kitchen" : "Record Completed Sale"}</button>
+        <button disabled={saving || previewLoading || !preview || !cart.length} onClick={submit} className="mt-6 min-h-12 w-full rounded-xl bg-orange-600 px-3 font-black text-white disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-600">{saving ? "Saving…" : previewLoading ? "Calculating total…" : preview ? `${saleType === "takeaway" ? "Send to Kitchen" : "Record Completed Sale"} — ₹${preview.grand_total}` : saleType === "takeaway" ? "Send to Kitchen" : "Record Completed Sale"}</button>
       </div>
     </section>}
 

@@ -82,6 +82,54 @@ def _audit(db: Session, actor: StaffUser, sale: QuickSale, action: str, details:
     db.add(AuditLog(restaurant_id=actor.restaurant_id, actor_user_id=actor.id, actor_role=actor.role, target_type="quick_sale", target_id=str(sale.id), action=action, new_value=json.dumps({**attribution, **details})))
 
 
+def _validate_workflow(body: QuickSaleCreate) -> None:
+    if body.sale_type == "late_entry" and not body.payment_method:
+        raise HTTPException(status_code=422, detail="Late Entry requires Cash or UPI payment confirmation")
+    if body.sale_type == "takeaway" and body.payment_method:
+        raise HTTPException(status_code=422, detail="Takeaway payment is confirmed only after the order is ready")
+
+
+def _price_quick_sale(body: QuickSaleCreate, current_user: StaffUser, db: Session):
+    _validate_workflow(body)
+    subtotal, priced_items = validate_and_price_order_items(
+        db,
+        current_user.restaurant_id,
+        PublicOrderCreateRequest(
+            items=[item.model_dump() for item in body.items],
+            customer_note=body.note,
+        ),
+    )
+    restaurant = current_user.restaurant
+    totals = calculate_gst_totals(
+        subtotal=subtotal,
+        discount_amount=Decimal("0.00"),
+        gst_rate=restaurant.default_gst_rate if restaurant.gst_enabled else Decimal("0.00"),
+        tax_mode=restaurant.tax_mode,
+    )
+    return totals, priced_items
+
+
+def _serialize_preview(totals, current_user: StaffUser) -> dict:
+    restaurant = current_user.restaurant
+    component_rate = totals.gst_rate / Decimal("2")
+    return {
+        "subtotal": f"{totals.subtotal:.2f}",
+        "discount_amount": f"{totals.discount_amount:.2f}",
+        "taxable_amount": f"{totals.taxable_amount:.2f}",
+        "gst_enabled": restaurant.gst_enabled,
+        "gst_rate": f"{totals.gst_rate:.2f}",
+        "cgst_rate": f"{component_rate:.2f}",
+        "sgst_rate": f"{component_rate:.2f}",
+        "igst_rate": f"{totals.gst_rate:.2f}",
+        "cgst_amount": f"{totals.cgst_amount:.2f}",
+        "sgst_amount": f"{totals.sgst_amount:.2f}",
+        "igst_amount": f"{totals.igst_amount:.2f}",
+        "tax_amount": f"{totals.tax_amount:.2f}",
+        "tax_mode": restaurant.tax_mode,
+        "grand_total": f"{totals.total_amount:.2f}",
+    }
+
+
 @router.get("")
 def quick_sale_home(current_user: StaffUser = Depends(_owner_admin), db: Session = Depends(get_db)):
     start, end, _ = current_business_day_bounds_utc(current_user.restaurant)
@@ -107,6 +155,16 @@ def quick_sale_home(current_user: StaffUser = Depends(_owner_admin), db: Session
     }
 
 
+@router.post("/preview")
+def preview_quick_sale(
+    body: QuickSaleCreate,
+    current_user: StaffUser = Depends(_owner_admin),
+    db: Session = Depends(get_db),
+):
+    totals, _ = _price_quick_sale(body, current_user, db)
+    return _serialize_preview(totals, current_user)
+
+
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_quick_sale(
     body: QuickSaleCreate,
@@ -122,25 +180,8 @@ def create_quick_sale(
     if existing:
         ensure_same_request(existing.idempotency_request_hash, payload_hash)
         return _serialize(existing)
-    if body.sale_type == "late_entry" and not body.payment_method:
-        raise HTTPException(status_code=422, detail="Late Entry requires Cash or UPI payment confirmation")
-    if body.sale_type == "takeaway" and body.payment_method:
-        raise HTTPException(status_code=422, detail="Takeaway payment is confirmed only after the order is ready")
-    subtotal, priced_items = validate_and_price_order_items(
-        db,
-        current_user.restaurant_id,
-        PublicOrderCreateRequest(
-            items=[item.model_dump() for item in body.items],
-            customer_note=body.note,
-        ),
-    )
+    totals, priced_items = _price_quick_sale(body, current_user, db)
     restaurant = current_user.restaurant
-    totals = calculate_gst_totals(
-        subtotal=subtotal,
-        discount_amount=Decimal("0.00"),
-        gst_rate=restaurant.default_gst_rate if restaurant.gst_enabled else Decimal("0.00"),
-        tax_mode=restaurant.tax_mode,
-    )
     now = datetime.datetime.now(datetime.timezone.utc)
     sale = QuickSale(
         restaurant_id=current_user.restaurant_id, order_number="PENDING", public_token=f"qs_{secrets.token_urlsafe(24)}",

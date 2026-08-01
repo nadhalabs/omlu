@@ -123,6 +123,62 @@ def enable_gst(ctx, *, rate="5.00", mode="exclusive"):
 
 
 @pytest.mark.parametrize("sale_type", ["takeaway", "late_entry"])
+def test_preview_uses_creation_pricing_without_persisting(quick_sale_context, sale_type):
+    enable_gst(quick_sale_context, rate="5.00", mode="exclusive")
+    body = configured_payload(quick_sale_context, sale_type, quantity=2)
+    db = SessionLocal()
+    count_before = db.query(QuickSale).filter(QuickSale.restaurant_id == quick_sale_context["restaurant_id"]).count()
+    db.close()
+
+    preview_response = client.post("/admin/quick-sales/preview", headers=auth(quick_sale_context, "owner"), json=body)
+    assert preview_response.status_code == 200
+    preview = preview_response.json()
+    assert preview == {
+        "subtotal": "860.00", "discount_amount": "0.00", "taxable_amount": "860.00",
+        "gst_enabled": True, "gst_rate": "5.00", "cgst_rate": "2.50", "sgst_rate": "2.50",
+        "igst_rate": "5.00", "cgst_amount": "21.50", "sgst_amount": "21.50",
+        "igst_amount": "0.00", "tax_amount": "43.00", "tax_mode": "exclusive",
+        "grand_total": "903.00",
+    }
+    db = SessionLocal()
+    assert db.query(QuickSale).filter(QuickSale.restaurant_id == quick_sale_context["restaurant_id"]).count() == count_before
+    db.close()
+
+    created = client.post("/admin/quick-sales", headers=auth(quick_sale_context, "owner"), json=body)
+    assert created.status_code == 201
+    assert created.json()["grand_total"] == preview["grand_total"]
+
+
+def test_preview_gst_disabled_and_inclusive_rounding(quick_sale_context):
+    disabled = client.post("/admin/quick-sales/preview", headers=auth(quick_sale_context, "owner"), json=payload(quick_sale_context, "late_entry")).json()
+    assert disabled["gst_enabled"] is False
+    assert disabled["tax_amount"] == "0.00"
+    assert disabled["subtotal"] == disabled["grand_total"] == "160.00"
+
+    enable_gst(quick_sale_context, rate="5.00", mode="inclusive")
+    inclusive = client.post("/admin/quick-sales/preview", headers=auth(quick_sale_context, "owner"), json=configured_payload(quick_sale_context, "late_entry", quantity=2)).json()
+    assert inclusive["subtotal"] == inclusive["grand_total"] == "860.00"
+    assert inclusive["taxable_amount"] == "819.05"
+    assert inclusive["cgst_amount"] == "20.48"
+    assert inclusive["sgst_amount"] == "20.47"
+    assert inclusive["tax_amount"] == "40.95"
+
+
+def test_preview_reprices_quantity_and_option_changes(quick_sale_context):
+    enable_gst(quick_sale_context, rate="5.00", mode="exclusive")
+    quarter = configured_payload(quick_sale_context, options=[
+        {"group_id": quick_sale_context["size_group_id"], "option_id": quick_sale_context["quarter_id"], "quantity": 1},
+    ])
+    half_with_addon = configured_payload(quick_sale_context, quantity=2)
+    first = client.post("/admin/quick-sales/preview", headers=auth(quick_sale_context, "owner"), json=quarter).json()
+    second = client.post("/admin/quick-sales/preview", headers=auth(quick_sale_context, "owner"), json=half_with_addon).json()
+    assert first["subtotal"] == "240.00"
+    assert first["grand_total"] == "252.00"
+    assert second["subtotal"] == "860.00"
+    assert second["grand_total"] == "903.00"
+
+
+@pytest.mark.parametrize("sale_type", ["takeaway", "late_entry"])
 def test_quick_sale_gst_snapshot_is_authoritative_and_immutable(quick_sale_context, sale_type):
     enable_gst(quick_sale_context, rate="5.00", mode="exclusive")
     key = uuid.uuid4().hex
