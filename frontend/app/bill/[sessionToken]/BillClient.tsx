@@ -6,6 +6,7 @@ import { PublicThemeControl } from "@/components/PublicThemeControl";
 import { ApiError, getPublicBill } from "@/lib/api";
 import { BillResponse } from "@/lib/types";
 import { buildWhatsAppBillShareUrl } from "@/lib/billShare";
+import { clearCustomerCartState, completionPath, markCompletedSession, readCompletedSession } from "@/lib/customerCompletion";
 import { useRealtime } from "@/lib/realtime";
 import {
   clearLegacyPublicReceiptToken,
@@ -35,6 +36,14 @@ export default function BillClient({ sessionToken, receiptToken = "" }: BillClie
   const [receiptAccessToken, setReceiptAccessToken] = useState(receiptToken);
   const hasLoadedBillRef = useRef(false);
   const paidStatusRef = useRef<string | null>(null);
+  useEffect(() => {
+    const enforce = () => { if (!receiptToken && readCompletedSession(sessionToken)) router.replace(completionPath(sessionToken)); };
+    enforce();
+    window.addEventListener("pageshow", enforce);
+    window.addEventListener("popstate", enforce);
+    window.addEventListener("focus", enforce);
+    return () => { window.removeEventListener("pageshow", enforce); window.removeEventListener("popstate", enforce); window.removeEventListener("focus", enforce); };
+  }, [receiptToken, router, sessionToken]);
   const labels = {
     en: {
       title: "Table Bill",
@@ -198,7 +207,18 @@ export default function BillClient({ sessionToken, receiptToken = "" }: BillClie
       clearParticipantToken(data.restaurant_slug, data.table_code);
       clearLegacyPublicReceiptToken(data.restaurant_slug, data.table_code);
       clearSessionParticipantToken(sessionToken);
+      clearCustomerCartState(data.restaurant_slug, data.table_code, sessionToken);
       setParticipantToken(null);
+      if (!receiptToken) {
+        markCompletedSession({
+          sessionToken,
+          restaurantSlug: data.restaurant_slug,
+          restaurantName: data.restaurant_name,
+          tableCode: data.table_code,
+          receiptToken: data.receipt_token || receiptAccessToken || undefined,
+        });
+        router.replace(completionPath(sessionToken));
+      }
 
       if (!hasLoadedBillRef.current && source === "initial") {
         markPaymentSuccessSeen(sessionToken, billKey);
@@ -217,7 +237,7 @@ export default function BillClient({ sessionToken, receiptToken = "" }: BillClie
 
       hasLoadedBillRef.current = true;
     },
-    [celebratePayment, sessionToken]
+    [celebratePayment, receiptAccessToken, receiptToken, router, sessionToken]
   );
 
   const fetchBill = useCallback(

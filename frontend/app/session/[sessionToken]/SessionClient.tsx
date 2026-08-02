@@ -14,11 +14,13 @@ import {
 import { PublicDiningSessionResponse } from "@/lib/types";
 import {
   clearLegacyPublicReceiptToken,
+  clearParticipantToken,
   clearPublicSessionToken,
   savePublicSessionToken,
   readSessionParticipantToken,
   clearSessionParticipantToken,
 } from "@/lib/publicSessionStorage";
+import { clearCustomerCartState, completionPath, markCompletedSession, readCompletedSession } from "@/lib/customerCompletion";
 import { useRealtime } from "@/lib/realtime";
 import { customerPushSupported, enableCustomerPush } from "@/lib/customerPush";
 
@@ -50,6 +52,14 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
   const [expandedOrders, setExpandedOrders] = useState<Record<string, boolean>>({});
   const [animatedStages, setAnimatedStages] = useState<Record<string, string>>({});
   const prevStatusesRef = useRef<Record<string, string>>({});
+  useEffect(() => {
+    const enforce = () => { if (readCompletedSession(sessionToken)) router.replace(completionPath(sessionToken)); };
+    enforce();
+    window.addEventListener("pageshow", enforce);
+    window.addEventListener("popstate", enforce);
+    window.addEventListener("focus", enforce);
+    return () => { window.removeEventListener("pageshow", enforce); window.removeEventListener("popstate", enforce); window.removeEventListener("focus", enforce); };
+  }, [router, sessionToken]);
   useEffect(() => {
     if (!session || !session.orders) return;
     const newAnimatedStages: Record<string, string> = {};
@@ -251,9 +261,14 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
             if (["closed", "cancelled"].includes(data.status)) {
               setVisibleJoinCode(null);
               clearPublicSessionToken(data.restaurant_slug, data.table_code);
+              clearParticipantToken(data.restaurant_slug, data.table_code);
               clearLegacyPublicReceiptToken(data.restaurant_slug, data.table_code);
               clearSessionParticipantToken(sessionToken);
+              clearCustomerCartState(data.restaurant_slug, data.table_code, sessionToken);
               setParticipantToken(null);
+              markCompletedSession({ sessionToken, restaurantSlug: data.restaurant_slug, restaurantName: data.restaurant_name, tableCode: data.table_code });
+              router.replace(completionPath(sessionToken));
+              return;
             } else {
               const participantAuthority = await getTableParticipantAuthority(sessionToken, authority);
               setVisibleJoinCode(participantAuthority.join_code);
@@ -280,7 +295,7 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
         fetchInFlightRef.current = false;
       }
     },
-    [sessionToken, t.connectionError, t.notFound]
+    [router, sessionToken, t.connectionError, t.notFound]
   );
 
   const copyJoinCode = useCallback(async () => {

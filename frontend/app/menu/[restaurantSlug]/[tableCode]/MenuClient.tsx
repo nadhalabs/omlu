@@ -31,6 +31,7 @@ import {
   savePublicSessionToken,
 } from "@/lib/publicSessionStorage";
 import { useRealtime } from "@/lib/realtime";
+import { completionPath, readCompletedTable } from "@/lib/customerCompletion";
 
 interface MenuClientProps {
   restaurantSlug: string;
@@ -287,6 +288,26 @@ export default function MenuClient({
     window.addEventListener("pageshow", handlePageShow);
     return () => window.removeEventListener("pageshow", handlePageShow);
   }, [validateSavedSession]);
+
+  useEffect(() => {
+    const enforceCompletedHistory = () => {
+      const completed = readCompletedTable(restaurantSlug, tableCode);
+      if (!completed) return;
+      clearOrderingState();
+      setParticipantToken(null);
+      router.replace(completionPath(completed.sessionToken));
+    };
+    enforceCompletedHistory();
+    const handlePageShow = (event: PageTransitionEvent) => { if (event.persisted) enforceCompletedHistory(); };
+    window.addEventListener("pageshow", handlePageShow);
+    window.addEventListener("popstate", enforceCompletedHistory);
+    window.addEventListener("focus", enforceCompletedHistory);
+    return () => {
+      window.removeEventListener("pageshow", handlePageShow);
+      window.removeEventListener("popstate", enforceCompletedHistory);
+      window.removeEventListener("focus", enforceCompletedHistory);
+    };
+  }, [clearOrderingState, restaurantSlug, router, tableCode]);
 
   // Local translations for UI labels
   const translations = {
