@@ -321,6 +321,17 @@ export default function MenuClient({
       clearSearch: "Clear search",
       unavailable: "Unavailable",
       choose: "Choose",
+      chooseOptions: "Choose options",
+      from: "From",
+      closeOptions: "Close options",
+      required: "Required",
+      optional: "Optional",
+      chooseOne: "Choose one",
+      chooseMultiple: "Choose multiple",
+      included: "Included",
+      total: "Total",
+      selectToContinue: "Select the required choices to continue.",
+      chooseYour: "Choose your",
     },
     ml: {
       searchPlaceholder: "വിഭവങ്ങൾ തിരയുക...",
@@ -353,6 +364,17 @@ export default function MenuClient({
       clearSearch: "തിരച്ചിൽ മായ്ക്കുക",
       unavailable: "ലഭ്യമല്ല",
       choose: "തിരഞ്ഞെടുക്കുക",
+      chooseOptions: "ഓപ്ഷനുകൾ തിരഞ്ഞെടുക്കുക",
+      from: "മുതൽ",
+      closeOptions: "ഓപ്ഷനുകൾ അടയ്ക്കുക",
+      required: "നിർബന്ധം",
+      optional: "ഐച്ഛികം",
+      chooseOne: "ഒന്ന് തിരഞ്ഞെടുക്കുക",
+      chooseMultiple: "ഒന്നിലധികം തിരഞ്ഞെടുക്കുക",
+      included: "വിലയിൽ ഉൾപ്പെടുന്നു",
+      total: "ആകെ",
+      selectToContinue: "തുടരാൻ ആവശ്യമായ ഓപ്ഷനുകൾ തിരഞ്ഞെടുക്കുക.",
+      chooseYour: "തിരഞ്ഞെടുക്കുക:",
     },
   };
 
@@ -568,26 +590,6 @@ export default function MenuClient({
     }
   };
 
-  const handleStartOrdering = async () => {
-    if (joining) return;
-    setJoining(true);
-    setJoinError(null);
-    try {
-      const authority = await startSecureTableSession(restaurantSlug, tableCode);
-      saveParticipantToken(restaurantSlug, tableCode, authority.participant_token);
-      savePublicSessionToken(restaurantSlug, tableCode, authority.session.public_id);
-      saveSessionParticipantToken(authority.session.public_id, authority.participant_token);
-      setParticipantToken(authority.participant_token);
-      setCurrentSession(await getPublicDiningSession(authority.session.public_id, authority.participant_token));
-      setTableOccupied(true);
-    } catch (err) {
-      setTableOccupied(err instanceof ApiError && err.status === 409);
-      setJoinError(err instanceof ApiError ? err.message : "Could not start ordering.");
-    } finally {
-      setJoining(false);
-    }
-  };
-
   // Render Loading State
   if (loading && !menuData) {
     return (
@@ -644,6 +646,9 @@ export default function MenuClient({
       };
     })
     .filter((category) => category.items.length > 0);
+  const visibleCategories = searchQuery.trim()
+    ? displayCategories
+    : displayCategories.filter((category) => category.id === activeCategory);
 
   // Cart total calculations
   const allItemsMap: Record<number, MenuItem> = {};
@@ -669,6 +674,17 @@ export default function MenuClient({
     return (variant ? Number(variant.price_delta) : Number(item.price)) + addons;
   };
 
+  const menuPriceLabel = (item: MenuItem) => {
+    const requiredVariantPrices = (item.option_groups || [])
+      .filter((group) => group.type === "variant" && group.required)
+      .flatMap((group) => group.options.filter((option) => option.available).map((option) => Number(option.price_delta)))
+      .filter((price) => Number.isFinite(price));
+    if (requiredVariantPrices.length > 0) {
+      return `${t.from} ₹${Math.min(...requiredVariantPrices).toFixed(2)}`;
+    }
+    return `₹${Number(item.price).toFixed(2)}`;
+  };
+
   const selectedOptionLabels = (item: MenuItem, selectedOptions: SelectedOptionRequest[]) => {
     const groups = item.option_groups || [];
     return selectedOptions.flatMap((selection) => {
@@ -689,6 +705,15 @@ export default function MenuClient({
   };
 
   const draftSelectedOptions = selectedOptionsFromDraft();
+  const customisationComplete = customisingItem
+    ? hasRequiredSelections(customisingItem, draftSelectedOptions)
+    : false;
+  const missingRequiredGroup = customisingItem?.option_groups?.find((group) => {
+    const selected = draftSelectedOptions
+      .filter((option) => option.group_id === group.id)
+      .reduce((sum, option) => sum + option.quantity, 0);
+    return selected < Math.max(group.minimum_selections, group.required ? 1 : 0);
+  });
   const orderingDisabled = Boolean(sessionCompleteNotice || expiredSessionNotice || (tableOccupied && !participantToken));
 
   Object.values(cart).forEach((line) => {
@@ -703,13 +728,6 @@ export default function MenuClient({
     style: "currency",
     currency: "INR",
   }).format(subtotal);
-
-  const combinedSubtotal = currentSession
-    ? new Intl.NumberFormat("en-IN", {
-        style: "currency",
-        currency: "INR",
-      }).format(Number(currentSession.combined_subtotal))
-    : null;
 
   // Scroll to Category Header
   const scrollToCategory = (categoryId: number) => {
@@ -739,7 +757,15 @@ export default function MenuClient({
               {t.table} {table.table_number}
             </p>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setIsCartOpen(true)}
+            aria-label={`${t.cart}: ${totalQty} ${t.items}`}
+            className="relative min-h-11 rounded-full border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] px-3 text-xs font-bold"
+          >
+            {t.cart}<span className="ml-1 tabular-nums">{totalQty}</span>
+          </button>
           <PublicThemeControl />
           {/* Language Selector */}
           <button
@@ -760,30 +786,6 @@ export default function MenuClient({
           {sessionLoading && (
             <div className="text-xs font-semibold text-orange-700 dark:text-orange-500 bg-orange-50 dark:bg-orange-950/20 border border-orange-100 dark:border-orange-900/40 rounded-xl px-3 py-2">
               {t.checkingSession}
-            </div>
-          )}
-
-          {currentSession && (
-            <div className="flex items-center justify-between gap-3 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/40 rounded-2xl px-4 py-3">
-              <div>
-                <p className="text-xs font-black uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
-                  {t.currentBill}
-                </p>
-                <p className="text-xs text-emerald-700/80 dark:text-emerald-300/80 font-semibold">
-                  {currentSession.order_count} {t.previousOrders}
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="text-lg font-black text-emerald-700 dark:text-emerald-400">
-                  {combinedSubtotal}
-                </p>
-                <button
-                  onClick={() => router.push(`/session/${currentSession.public_token}`)}
-                  className="text-[11px] font-bold underline text-emerald-700 dark:text-emerald-300 min-h-8"
-                >
-                  {t.viewFullBill}
-                </button>
-              </div>
             </div>
           )}
 
@@ -808,20 +810,13 @@ export default function MenuClient({
             </section>
           )}
 
-          {!tableOccupied && !participantToken && (
-            <section className="flex items-center justify-between gap-4 rounded-2xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-4 dark:border-[var(--omlu-border)] dark:bg-[var(--omlu-primary-surface)]">
-              <div><p className="font-black">Ready to order?</p><p className="text-xs text-[var(--omlu-text-secondary)]">Start secure ordering for this table.</p></div>
-              <button disabled={joining} onClick={handleStartOrdering} className="shrink-0 rounded-xl bg-orange-600 px-5 py-3 text-sm font-black text-[var(--omlu-primary-action-text)] disabled:cursor-not-allowed disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)]">{joining ? "Starting…" : "Start ordering"}</button>
-            </section>
-          )}
-
           {sessionNotice && (
             <div className="text-xs font-semibold text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-900/40 rounded-xl px-3 py-2">
               {language === "en" ? sessionNotice : t.billLocked}
             </div>
           )}
 
-          {!orderingDisabled && (
+          {!sessionCompleteNotice && !expiredSessionNotice && (
             <div className="relative">
               <label htmlFor="menu-search" className="sr-only">{t.searchPlaceholder}</label>
               <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--omlu-text-secondary)]"><circle cx="11" cy="11" r="7" strokeWidth="2"/><path d="m16 16 4 4" strokeWidth="2" strokeLinecap="round"/></svg>
@@ -838,7 +833,7 @@ export default function MenuClient({
           )}
 
           {/* Category Tabs */}
-          {displayCategories.length > 0 && !orderingDisabled && (
+          {displayCategories.length > 0 && !sessionCompleteNotice && !expiredSessionNotice && (
             <div className="flex gap-2 overflow-x-auto no-scrollbar py-1">
               {displayCategories.map((category) => (
                 <button
@@ -890,13 +885,13 @@ export default function MenuClient({
           </div>
         ) : (
           <div className="flex flex-col gap-8">
-            {displayCategories.map((category) => (
+            {visibleCategories.map((category) => (
               <section
                 key={category.id}
                 id={`category-${category.id}`}
                 className="scroll-mt-36"
               >
-                <h2 className="mb-3 text-lg font-extrabold text-[var(--omlu-text-primary)]">
+                <h2 className="sr-only">
                   {getLocalizedText(category.name_en, category.name_ml)}
                 </h2>
 
@@ -926,7 +921,7 @@ export default function MenuClient({
                           </div>
                           <div className="mt-3 flex items-center justify-between">
                             <span className="font-extrabold tabular-nums text-[var(--omlu-text-primary)] text-sm">
-                              ₹{Number(item.price).toFixed(2)}
+                              {menuPriceLabel(item)}
                             </span>
                             {orderingDisabled ? null : !item.is_available ? (
                               <span className="rounded-md border border-red-300 bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-700">
@@ -937,7 +932,7 @@ export default function MenuClient({
                                 onClick={() => addToCart(item)}
                                 className="min-h-11 rounded-xl bg-orange-600 px-4 text-xs font-bold text-white hover:bg-orange-700"
                               >
-                                {isConfigurable ? t.choose : t.add}
+                                {isConfigurable ? t.chooseOptions : t.add}
                               </button>
                             ) : (
                               <div className="flex items-center border border-orange-600 rounded-lg overflow-hidden bg-orange-50/50 dark:bg-orange-950/10">
@@ -1004,41 +999,44 @@ export default function MenuClient({
       )}
 
       {customisingItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center overscroll-contain bg-black/60 p-4 backdrop-blur-xs">
-          <div className="max-h-[85vh] w-full max-w-lg overflow-hidden rounded-3xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] shadow-2xl dark:border-[var(--omlu-border)] dark:bg-[var(--omlu-primary-surface)]" role="dialog" aria-modal="true" aria-labelledby="menu-options-title">
-            <div className="flex items-start justify-between gap-4 border-b border-[var(--omlu-border-strong)] px-6 py-4 dark:border-[var(--omlu-border)]">
+        <div className="fixed inset-0 z-50 flex items-end justify-center overscroll-contain bg-black/60 sm:items-center sm:p-4">
+          <div className="flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl bg-[var(--omlu-primary-surface)] shadow-2xl sm:max-h-[85vh] sm:rounded-3xl sm:border sm:border-[var(--omlu-border)]" role="dialog" aria-modal="true" aria-labelledby="menu-options-title" aria-describedby="menu-options-description">
+            <div className="flex items-start justify-between gap-4 border-b border-[var(--omlu-border)] px-5 py-4 sm:px-6">
               <div>
-                <h2 id="menu-options-title" className="break-words text-lg font-black text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-primary)]">
+                <h2 id="menu-options-title" className="break-words text-xl font-black text-[var(--omlu-text-primary)]">
                   {getLocalizedText(customisingItem.name_en, customisingItem.name_ml)}
                 </h2>
-                <p className="mt-1 text-xs font-semibold text-[var(--omlu-text-secondary)]">
-                  Choose required options before adding this item.
+                <p id="menu-options-description" className="mt-1 text-sm text-[var(--omlu-text-secondary)]">
+                  {language === "en"
+                    ? `${t.chooseYour} ${(customisingItem.option_groups?.[0]?.name || "preferences").toLowerCase()}.`
+                    : `${t.chooseYour} ${customisingItem.option_groups?.[0]?.name || "ഓപ്ഷനുകൾ"}.`}
                 </p>
               </div>
               <button
+                type="button"
                 onClick={() => setCustomisingItem(null)}
-                className="text-sm font-bold text-[var(--omlu-text-secondary)] hover:text-[var(--omlu-text-primary)] dark:hover:text-[var(--omlu-text-secondary)]"
+                aria-label={t.closeOptions}
+                className="grid min-h-11 min-w-11 place-items-center rounded-full bg-[var(--omlu-muted-surface)] text-xl font-bold text-[var(--omlu-text-secondary)]"
               >
-                Close
+                ×
               </button>
             </div>
-            <div className="flex max-h-[56vh] flex-col gap-5 overflow-y-auto px-6 py-4">
+            <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-5 py-4 sm:px-6">
               {(customisingItem.option_groups || []).map((group) => {
                 const selectedCount = Object.values(draftOptions[group.id] || {}).reduce((sum, quantity) => sum + quantity, 0);
                 const min = Math.max(group.minimum_selections, group.required ? 1 : 0);
                 const max = group.maximum_selections;
                 const multi = group.type === "addon" && max !== 1;
                 return (
-                  <section key={group.id} className="rounded-2xl border border-[var(--omlu-border-strong)] p-4 dark:border-[var(--omlu-border)]">
+                  <fieldset key={group.id} className="min-w-0">
+                    <legend className="sr-only">{group.name}</legend>
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <h3 className="text-sm font-black text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-secondary)]">{group.name}</h3>
-                        <p className="text-xs text-[var(--omlu-text-secondary)]">
-                          {min > 0 ? `Choose at least ${min}` : "Optional"}
-                          {max ? ` · up to ${max}` : ""}
+                        <h3 className="text-base font-black text-[var(--omlu-text-primary)]">{group.name}</h3>
+                        <p className="mt-0.5 text-xs font-semibold text-[var(--omlu-text-secondary)]">
+                          {multi ? t.chooseMultiple : t.chooseOne} · {min > 0 ? t.required : t.optional}
                         </p>
                       </div>
-                      {selectedCount < min && <span className="text-xs font-bold text-red-500">Required</span>}
                     </div>
                     <div className="mt-3 grid gap-2">
                       {group.options.map((option) => {
@@ -1049,37 +1047,49 @@ export default function MenuClient({
                             key={option.id}
                             disabled={disabled}
                             onClick={() => toggleDraftOption(group.id, option.id, multi)}
-                            className={`flex items-center justify-between rounded-xl border px-3 py-3 text-left text-sm transition disabled:opacity-40 ${
+                            aria-pressed={checked}
+                            className={`flex min-h-12 items-center justify-between rounded-xl border px-4 py-3 text-left text-sm transition disabled:opacity-40 ${
                               checked
                                 ? "border-orange-600 bg-orange-50 text-[var(--omlu-text-primary)] dark:bg-orange-950/20 dark:text-[var(--omlu-text-primary)]"
                                 : "border-[var(--omlu-border-strong)] bg-[var(--omlu-muted-surface)] text-[var(--omlu-text-primary)] dark:border-[var(--omlu-border)] dark:bg-[var(--omlu-page-background)] dark:text-[var(--omlu-text-secondary)]"
                             }`}
                           >
                             <span className="font-bold">{option.name}</span>
-                            <span className="text-xs font-black text-orange-600">₹{Number(option.price_delta).toFixed(2)}</span>
+                            <span className="shrink-0 text-xs font-black text-[var(--omlu-text-primary)]">
+                              {group.type === "variant"
+                                ? `₹${Number(option.price_delta).toFixed(2)}`
+                                : Number(option.price_delta) === 0
+                                  ? t.included
+                                  : `+₹${Number(option.price_delta).toFixed(2)}`}
+                            </span>
                           </button>
                         );
                       })}
                     </div>
-                  </section>
+                  </fieldset>
                 );
               })}
             </div>
-            <div className="border-t border-[var(--omlu-border-strong)] px-6 py-4 dark:border-[var(--omlu-border)]">
+            <div className="sticky bottom-0 border-t border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] px-5 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-4 sm:px-6">
+              {!customisationComplete && missingRequiredGroup && (
+                <p role="status" className="mb-3 text-sm font-semibold text-red-600 dark:text-red-400">
+                  {language === "en" ? `Select a ${missingRequiredGroup.name.toLowerCase()} to continue.` : t.selectToContinue}
+                </p>
+              )}
               <div className="mb-3 flex items-center justify-between">
-                <span className="text-sm font-bold text-[var(--omlu-text-secondary)]">Item price</span>
-                <span className="text-lg font-black text-orange-600">
-                  ₹{optionPrice(customisingItem, draftSelectedOptions).toFixed(2)}
+                <span className="text-sm font-bold text-[var(--omlu-text-primary)]">{t.total}</span>
+                <span className="text-xl font-black tabular-nums text-[var(--omlu-text-primary)]">
+                  {customisationComplete ? `₹${optionPrice(customisingItem, draftSelectedOptions).toFixed(2)}` : "—"}
                 </span>
               </div>
               <button
-                disabled={!hasRequiredSelections(customisingItem, draftSelectedOptions)}
+                disabled={!customisationComplete}
                 onClick={() => {
                   addLineToCart(customisingItem, draftSelectedOptions);
                   setCustomisingItem(null);
                   setDraftOptions({});
                 }}
-                className="w-full rounded-2xl bg-orange-600 px-5 py-3.5 text-sm font-black text-[var(--omlu-primary-action-text)] disabled:cursor-not-allowed disabled:opacity-50"
+                className="min-h-14 w-full rounded-2xl bg-orange-600 px-5 py-3.5 text-base font-black text-white shadow-md disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Add to cart
               </button>
