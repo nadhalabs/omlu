@@ -791,39 +791,47 @@ export default function MenuClient({
         behavior: "smooth",
       });
     }
+    const tab = document.getElementById(`cat-tab-${categoryId}`);
+    if (tab) {
+      tab.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+    }
   };
 
   return (
     <div className="flex min-h-screen flex-1 flex-col bg-[var(--omlu-page-background)] pb-[calc(6.5rem+env(safe-area-inset-bottom))] text-[var(--omlu-text-primary)]">
       {/* Sticky Top Header */}
-      <header className="sticky top-0 z-40 border-b border-[var(--omlu-border)] bg-[color:var(--omlu-primary-surface)]/95 px-4 py-2.5 backdrop-blur-md sm:px-6">
-        <div className="max-w-3xl mx-auto flex items-center justify-between gap-4">
-          <div className="min-w-0">
-            <h1 className="break-words text-base font-extrabold leading-tight text-[var(--omlu-text-primary)] sm:text-lg">
+      <header className="sticky top-0 z-40 border-b border-[var(--omlu-border)] bg-[color:var(--omlu-primary-surface)]/95 px-3 py-2 backdrop-blur-md sm:px-6">
+        <div className="mx-auto flex max-w-3xl items-center justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate text-sm font-black leading-tight text-[var(--omlu-text-primary)] sm:text-base">
               {restaurant.name}
             </h1>
-            <p className="text-xs text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)] font-medium">
+            <p className="truncate text-[11px] font-bold text-[var(--omlu-text-secondary)] sm:text-xs">
               {t.table} {table.table_number}
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
-          <button
-            type="button"
-            onClick={() => setIsCartOpen(true)}
-            aria-label={`${t.cart}: ${totalQty} ${t.items}`}
-            className="relative min-h-11 rounded-full border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] px-3 text-xs font-bold"
-          >
-            {t.cart}<span className="ml-1 tabular-nums">{totalQty}</span>
-          </button>
-          <PublicThemeControl />
-          {/* Language Selector */}
-          <button
-            onClick={() => setLanguage(language === "en" ? "ml" : "en")}
-            aria-label={language === "en" ? "Switch to Malayalam" : "Switch to English"}
-            className="min-h-11 rounded-full border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] px-3 text-xs font-bold"
-          >
-            {language === "en" ? "മലയാളം" : "English"}
-          </button>
+            <button
+              type="button"
+              onClick={() => setIsCartOpen(true)}
+              aria-label={`${t.cart}: ${totalQty} ${t.items}`}
+              className="relative flex min-h-9 items-center gap-1.5 rounded-full border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] px-2.5 py-1 text-xs font-bold text-[var(--omlu-text-primary)]"
+            >
+              <span>{t.cart}</span>
+              {totalQty > 0 && (
+                <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-orange-600 px-1 text-[10px] font-black text-white">
+                  {totalQty}
+                </span>
+              )}
+            </button>
+            <PublicThemeControl />
+            <button
+              onClick={() => setLanguage(language === "en" ? "ml" : "en")}
+              aria-label={language === "en" ? "Switch to Malayalam" : "Switch to English"}
+              className="flex min-h-9 items-center rounded-full border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] px-2.5 py-1 text-xs font-bold text-[var(--omlu-text-primary)]"
+            >
+              {language === "en" ? "മലയാളം" : "English"}
+            </button>
           </div>
         </div>
       </header>
@@ -875,23 +883,24 @@ export default function MenuClient({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={t.searchPlaceholder}
-                className="w-full rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-input-background)] py-2.5 pl-10 pr-11 text-sm outline-none focus:ring-2 focus:ring-orange-600"
+                className="h-11 w-full rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-input-background)] py-2 pl-9 pr-9 text-xs sm:text-sm outline-none focus:ring-2 focus:ring-orange-600"
               />
-              {searchQuery && <button type="button" onClick={() => setSearchQuery("")} aria-label={t.clearSearch} className="absolute right-0 top-0 min-h-11 w-11 text-lg text-[var(--omlu-text-secondary)]">×</button>}
+              {searchQuery && <button type="button" onClick={() => setSearchQuery("")} aria-label={t.clearSearch} className="absolute right-0 top-0 flex h-11 w-9 items-center justify-center text-base text-[var(--omlu-text-secondary)]">×</button>}
             </div>
           )}
 
           {/* Category Tabs */}
           {displayCategories.length > 0 && !sessionCompleteNotice && !expiredSessionNotice && (
-            <div className="flex gap-2 overflow-x-auto no-scrollbar py-1">
+            <div className="flex gap-1.5 overflow-x-auto no-scrollbar py-1">
               {displayCategories.map((category) => (
                 <button
                   key={category.id}
+                  id={`cat-tab-${category.id}`}
                   onClick={() => scrollToCategory(category.id)}
-                  className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap cursor-pointer transition ${
+                  className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-bold whitespace-nowrap cursor-pointer transition ${
                     activeCategory === category.id
-                      ? "bg-orange-600 text-[var(--omlu-primary-action-text)] shadow-xs"
-                      : "bg-[var(--omlu-muted-surface)] dark:bg-[var(--omlu-muted-surface)] text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)] hover:bg-[var(--omlu-muted-surface)] dark:hover:bg-[var(--omlu-muted-surface)]"
+                      ? "bg-orange-600 text-white shadow-xs"
+                      : "bg-[var(--omlu-muted-surface)] text-[var(--omlu-text-secondary)] hover:bg-[var(--omlu-border)]"
                   }`}
                 >
                   {getLocalizedText(category.name_en, category.name_ml)}
@@ -1097,13 +1106,25 @@ export default function MenuClient({
                             disabled={disabled}
                             onClick={() => toggleDraftOption(group.id, option.id, multi)}
                             aria-pressed={checked}
-                            className={`flex min-h-12 items-center justify-between rounded-xl border px-4 py-3 text-left text-sm transition disabled:opacity-40 ${
+                            className={`flex min-h-12 items-center justify-between gap-3 rounded-xl border-2 px-4 py-3 text-left text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 disabled:opacity-40 ${
                               checked
-                                ? "border-orange-600 bg-orange-50 text-[var(--omlu-text-primary)] dark:bg-orange-950/20 dark:text-[var(--omlu-text-primary)]"
-                                : "border-[var(--omlu-border-strong)] bg-[var(--omlu-muted-surface)] text-[var(--omlu-text-primary)] dark:border-[var(--omlu-border)] dark:bg-[var(--omlu-page-background)] dark:text-[var(--omlu-text-secondary)]"
+                                ? "border-orange-500 bg-orange-50 text-orange-950 dark:border-orange-500 dark:bg-orange-950/40 dark:text-[var(--omlu-text-primary)]"
+                                : "border-[var(--omlu-border-strong)] bg-[var(--omlu-muted-surface)] text-[var(--omlu-text-primary)] dark:border-[var(--omlu-border)] dark:bg-[var(--omlu-page-background)] dark:text-[var(--omlu-text-secondary)] hover:border-orange-300"
                             }`}
                           >
-                            <span className="font-bold">{option.name}</span>
+                            <span className="flex items-center gap-3 min-w-0">
+                              <span
+                                aria-hidden="true"
+                                className={`flex h-5 w-5 shrink-0 items-center justify-center ${multi ? "rounded-md" : "rounded-full"} border-2 ${
+                                  checked
+                                    ? "border-orange-600 bg-orange-600 text-[10px] text-white"
+                                    : "border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] text-transparent"
+                                }`}
+                              >
+                                ✓
+                              </span>
+                              <span className="font-bold">{option.name}</span>
+                            </span>
                             <span className="shrink-0 text-xs font-black text-[var(--omlu-text-primary)]">
                               {group.type === "variant"
                                 ? `₹${Number(option.price_delta).toFixed(2)}`

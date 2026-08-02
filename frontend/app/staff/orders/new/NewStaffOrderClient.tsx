@@ -456,9 +456,12 @@ export default function NewStaffOrderClient({ initialTableId }: { initialTableId
                         const checked = Boolean(draftOptions[group.id]?.[option.id]);
                         const disabled = !option.available || (!checked && Boolean(max) && selectedCount >= max);
                         return (
-                          <button key={option.id} type="button" disabled={disabled} onClick={() => toggleDraftOption(group.id, option.id, multi)} className={`flex min-h-12 justify-between rounded-2xl border px-4 py-3 text-left text-sm font-bold disabled:opacity-40 ${checked ? "border-red-300 bg-orange-50 text-red-800" : "border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] text-[var(--omlu-text-primary)]"}`}>
-                            <span>{option.name}</span>
-                            <span>₹{Number(option.price_delta).toFixed(2)}</span>
+                          <button key={option.id} type="button" disabled={disabled} onClick={() => toggleDraftOption(group.id, option.id, multi)} className={`flex min-h-12 items-center justify-between gap-3 rounded-2xl border-2 px-4 py-3 text-left text-sm font-bold disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 ${checked ? "border-orange-500 bg-orange-50 text-orange-950 dark:border-orange-500 dark:bg-orange-950/40 dark:text-[var(--omlu-text-primary)]" : "border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] text-[var(--omlu-text-primary)] hover:border-orange-300"}`}>
+                            <span className="flex items-center gap-3 min-w-0">
+                              <span aria-hidden="true" className={`flex h-5 w-5 shrink-0 items-center justify-center ${multi ? "rounded-md" : "rounded-full"} border-2 ${checked ? "border-orange-600 bg-orange-600 text-[10px] text-white" : "border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] text-transparent"}`}>✓</span>
+                              <span>{option.name}</span>
+                            </span>
+                            <span className="shrink-0 font-extrabold text-[var(--omlu-text-primary)]">₹{Number(option.price_delta).toFixed(2)}</span>
                           </button>
                         );
                       })}

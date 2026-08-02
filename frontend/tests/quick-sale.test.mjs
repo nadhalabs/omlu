@@ -55,7 +55,7 @@ test("Quick Sale specification dialog exposes required radio choices and an expl
   assert.match(client, /role=\{multi \? "group" : "radiogroup"\}/);
   assert.match(client, /role=\{multi \? undefined : "radio"\}/);
   assert.match(client, /aria-checked=\{multi \? undefined : checked\}/);
-  assert.match(client, /checked \? "border-orange-500 bg-orange-50 text-\[var\(--omlu-text-primary\)\]"/);
+  assert.match(client, /checked \? "border-orange-500 bg-orange-50 text-orange-950/);
   assert.match(client, /Select all required options to continue\./);
   assert.match(client, /disabled=\{!requiredSelectionsComplete\(customisingItem, selectedOptionsFromDraft\(\)\)\}/);
   assert.match(client, /Add to order["'] : ["']Update order/);

@@ -3,9 +3,13 @@
 import { useEffect, useState } from "react";
 import { PublicThemeControl } from "@/components/PublicThemeControl";
 import { readCompletedSession, CompletedSessionMarker } from "@/lib/customerCompletion";
+import { clearCustomerCartState } from "@/lib/customerCompletion";
+import { clearPublicSessionToken, clearParticipantToken } from "@/lib/publicSessionStorage";
 
 export default function CompletionClient({ sessionToken }: { sessionToken: string }) {
   const [marker, setMarker] = useState<CompletedSessionMarker | null>(null);
+  const [tabClosedFallback, setTabClosedFallback] = useState(false);
+
   useEffect(() => {
     const timeout = window.setTimeout(() => setMarker(readCompletedSession(sessionToken)), 0);
     return () => window.clearTimeout(timeout);
@@ -13,6 +17,22 @@ export default function CompletionClient({ sessionToken }: { sessionToken: strin
 
   const restaurant = marker?.restaurantName || "the restaurant";
   const tableDisplay = marker?.tableNumber ? `Table ${marker.tableNumber}` : null;
+
+  const handleDone = () => {
+    if (marker?.restaurantSlug && marker?.tableCode) {
+      clearPublicSessionToken(marker.restaurantSlug, marker.tableCode);
+      clearParticipantToken(marker.restaurantSlug, marker.tableCode);
+      clearCustomerCartState(marker.restaurantSlug, marker.tableCode, sessionToken);
+    }
+    try {
+      window.close();
+    } catch {
+      // ignore
+    }
+    setTimeout(() => {
+      setTabClosedFallback(true);
+    }, 300);
+  };
 
   return (
     <main className="min-h-screen bg-[var(--omlu-page-background)] px-4 py-6 text-[var(--omlu-text-primary)]">
@@ -69,6 +89,20 @@ export default function CompletionClient({ sessionToken }: { sessionToken: strin
             This table is ready for the next guest.
           </p>
 
+          {tabClosedFallback && (
+            <div className="mt-4 rounded-2xl bg-emerald-50 p-4 text-sm font-bold text-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200">
+              <p>You can safely close this tab.</p>
+              {marker?.restaurantSlug && marker?.tableCode && (
+                <a
+                  href={`/menu/${encodeURIComponent(marker.restaurantSlug)}/${encodeURIComponent(marker.tableCode)}`}
+                  className="mt-2 inline-block text-xs font-black text-orange-700 underline dark:text-orange-400"
+                >
+                  Scan table QR for a new visit
+                </a>
+              )}
+            </div>
+          )}
+
           <div className="mt-6 grid gap-3">
             {marker?.receiptToken ? (
               <a
@@ -88,7 +122,7 @@ export default function CompletionClient({ sessionToken }: { sessionToken: strin
             )}
             <button
               type="button"
-              onClick={() => window.close()}
+              onClick={handleDone}
               className="min-h-12 rounded-xl border border-[var(--omlu-border)] px-5 py-3 text-sm font-black"
             >Close</button>
           </div>

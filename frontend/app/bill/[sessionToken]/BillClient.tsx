@@ -32,6 +32,7 @@ export default function BillClient({ sessionToken, receiptToken = "" }: BillClie
   const [waitingSession, setWaitingSession] = useState<PublicDiningSessionResponse | null>(null);
   const [language, setLanguage] = useState<"en" | "ml">("en");
   const [showPaymentSuccess, setShowPaymentSuccess] = useState<boolean>(false);
+  const [doneFallback, setDoneFallback] = useState<boolean>(false);
   const [codeCopied, setCodeCopied] = useState(false);
   const [participantToken, setParticipantToken] = useState<string | null>(
     () => readSessionParticipantToken(sessionToken)
@@ -529,6 +530,19 @@ export default function BillClient({ sessionToken, receiptToken = "" }: BillClie
                 </div>
               </dl>
               <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">{t.tableReady}</p>
+              {doneFallback && (
+                <div className="w-full rounded-2xl bg-emerald-100/80 p-3 text-xs font-bold text-emerald-950 dark:bg-emerald-900/40 dark:text-emerald-100">
+                  <p>You can safely close this tab.</p>
+                  {bill?.restaurant_slug && bill?.table_code && (
+                    <a
+                      href={`/menu/${encodeURIComponent(bill.restaurant_slug)}/${encodeURIComponent(bill.table_code)}`}
+                      className="mt-1 inline-block font-black text-orange-700 underline dark:text-orange-400"
+                    >
+                      Scan table QR for a new visit
+                    </a>
+                  )}
+                </div>
+              )}
               {/* Actions */}
               <div className="flex w-full flex-col gap-3 sm:flex-row sm:justify-center">
                 <button
@@ -538,7 +552,15 @@ export default function BillClient({ sessionToken, receiptToken = "" }: BillClie
                   {t.viewFullReceipt}
                 </button>
                 <button
-                  onClick={() => window.close()}
+                  onClick={() => {
+                    if (bill?.restaurant_slug && bill?.table_code) {
+                      clearPublicSessionToken(bill.restaurant_slug, bill.table_code);
+                      clearParticipantToken(bill.restaurant_slug, bill.table_code);
+                      clearCustomerCartState(bill.restaurant_slug, bill.table_code, sessionToken);
+                    }
+                    try { window.close(); } catch {}
+                    setTimeout(() => setDoneFallback(true), 300);
+                  }}
                   className="min-h-12 rounded-2xl border border-emerald-300 bg-transparent px-6 py-3 text-sm font-black text-emerald-800 transition hover:bg-emerald-100 dark:border-emerald-700 dark:text-emerald-200 dark:hover:bg-emerald-900/40"
                 >
                   {t.doneLabel}
