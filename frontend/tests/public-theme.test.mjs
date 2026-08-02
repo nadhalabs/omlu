@@ -26,10 +26,15 @@ test("customer menu uses the shared theme and compact public control", () => {
   assert.match(menu, /menu-cart-title/);
 });
 
-test("public theme control is accessible and delegates to ThemeToggle", () => {
-  assert.match(control, /aria-label="Choose color theme"/);
-  assert.match(control, /<ThemeToggle/);
-  assert.match(control, /<details/);
+test("public theme control is a direct accessible light and dark icon toggle", () => {
+  assert.match(control, /useTheme/);
+  assert.match(control, /resolvedTheme/);
+  assert.match(control, /setPreference\(isDark \? "light" : "dark"\)/);
+  assert.match(control, /"Switch to light mode"/);
+  assert.match(control, /"Switch to dark mode"/);
+  assert.match(control, /type="button"/);
+  assert.match(control, /size-11/);
+  assert.doesNotMatch(control, /<ThemeToggle|system|<details|<summary|Appearance|>Theme</);
 });
 
 test("landing uses a compact direct light and dark toggle without a theme panel", () => {
@@ -66,6 +71,11 @@ test("session and order tracking retain textual status with semantic surfaces", 
   }
   assert.match(order, /orderData\.status/);
   assert.match(session, /requestStatusLabel/);
+});
+
+test("every QR customer surface uses the compact public toggle", () => {
+  for (const source of [menu, session, order, bill]) assert.match(source, /<PublicThemeControl/);
+  assert.equal((`${menu}\n${session}\n${order}\n${bill}`.match(/<ThemeToggle/g) || []).length, 0);
 });
 
 test("bill is theme-aware on screen and forced white and black in print", () => {

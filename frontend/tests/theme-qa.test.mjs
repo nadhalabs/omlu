@@ -31,7 +31,8 @@ test("one provider owns every ThemeToggle placement", () => {
   assert.equal((allUi.match(/function ThemeProvider/g) || []).length, 1);
   assert.match(provider, /THEME_STORAGE_KEY = "omlu_theme"/);
   assert.match(read("components/ThemeToggle.tsx"), /useTheme/);
-  assert.match(read("components/PublicThemeControl.tsx"), /<ThemeToggle/);
+  assert.match(read("components/PublicThemeControl.tsx"), /useTheme/);
+  assert.doesNotMatch(read("components/PublicThemeControl.tsx"), /<ThemeToggle|system|<details/);
   assert.match(read("components/LandingThemeToggle.tsx"), /useTheme/);
 });
 
@@ -75,11 +76,10 @@ test("representative route families use semantic theme styles", () => {
   }
 });
 
-test("charts and mobile theme popovers use theme-aware contracts", () => {
+test("charts and staff theme popovers use theme-aware contracts", () => {
   const charts = read("app/admin/performance/PerformanceCharts.tsx");
   assert.match(charts, /stroke="var\(--omlu-border\)"/);
   assert.match(charts, /stroke="var\(--omlu-accent\)"/);
-  assert.match(read("components/PublicThemeControl.tsx"), /calc\(100vw-2rem\)/);
   assert.match(read("components/staff/StaffBottomNav.tsx"), /calc\(100vw-2rem\)/);
 });
 
