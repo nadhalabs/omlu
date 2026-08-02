@@ -101,12 +101,12 @@ export default async function AdminLayout({
           {/* Navigation Links */}
           <nav className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 lg:mx-0 lg:flex-col lg:overflow-visible lg:px-0 lg:pb-0" aria-label="Admin navigation">
             <AdminSidebarLink href="/admin/dashboard" label="📊 Dashboard" />
-            <AdminSidebarLink href="/admin/tables" label="📋 Tables Map" />
-            <AdminSidebarLink href="/admin/requests" label="🔔 Service Requests" />
-            <PendingPaymentsSidebarLink initialCount={pendingPaymentCount} />
             <AdminSidebarLink href="/admin/quick-sale" label="🧾 Quick Sale" />
+            <PendingPaymentsSidebarLink initialCount={pendingPaymentCount} />
             <AdminSidebarLink href={`/kitchen/${staffInfo.restaurant_slug}`} label="🧑‍🍳 Kitchen Dashboard" />
+            <AdminSidebarLink href="/admin/requests" label="🔔 Service Requests" />
             <AdminSidebarLink href="/admin/history?view=orders" label="History" />
+            <AdminSidebarLink href="/admin/tables" label="📋 Tables Map" />
             <AdminSidebarLink href="/admin/menu" label="🍔 Menu Items" />
             <AdminSidebarLink href="/admin/staff" label="👥 Staff Management" />
             <AdminSidebarLink href="/admin/performance" label="Performance" />

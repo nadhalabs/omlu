@@ -7,7 +7,7 @@ const read = (path) => fs.readFileSync(new URL(`../${path}`, import.meta.url), "
 test("Quick Sale appears in the required admin navigation and dashboard actions", () => {
   const layout = read("app/admin/layout.tsx");
   const dashboard = read("app/admin/dashboard/AdminDashboardClient.tsx");
-  assert.match(layout, /PendingPaymentsSidebarLink[\s\S]*\/admin\/quick-sale[\s\S]*Kitchen Dashboard/);
+  assert.match(layout, /\/admin\/quick-sale[\s\S]*PendingPaymentsSidebarLink[\s\S]*Kitchen Dashboard/);
   assert.match(dashboard, /🧾 Quick Sale["'], ["']\/admin\/quick-sale/);
 });
 
