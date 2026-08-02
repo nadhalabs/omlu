@@ -32,6 +32,7 @@ import {
 } from "@/lib/publicSessionStorage";
 import { useRealtime } from "@/lib/realtime";
 import { completionPath, readCompletedTable } from "@/lib/customerCompletion";
+import { detachedBillPath, readDetachedSession } from "@/lib/customerDetachment";
 
 interface MenuClientProps {
   restaurantSlug: string;
@@ -177,6 +178,13 @@ export default function MenuClient({
     options: { clearCachedStateFirst?: boolean } = {}
   ) => {
     const queryToken = new URLSearchParams(window.location.search).get("session");
+    const detached = queryToken ? readDetachedSession(queryToken) : null;
+    if (detached) {
+      clearOrderingState();
+      setParticipantToken(null);
+      router.replace(detachedBillPath(detached));
+      return;
+    }
     const savedToken = readPublicSessionToken(restaurantSlug, tableCode);
     const savedParticipantToken = readParticipantToken(restaurantSlug, tableCode);
 
@@ -261,7 +269,7 @@ export default function MenuClient({
     } finally {
       setSessionLoading(false);
     }
-  }, [clearOrderingState, removeSessionQueryParam, restaurantSlug, tableCode]);
+  }, [clearOrderingState, removeSessionQueryParam, restaurantSlug, router, tableCode]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => void validateSavedSession(), 0);
@@ -308,6 +316,26 @@ export default function MenuClient({
       window.removeEventListener("focus", enforceCompletedHistory);
     };
   }, [clearOrderingState, restaurantSlug, router, tableCode]);
+
+  useEffect(() => {
+    const enforceDetachedHistory = () => {
+      const queryToken = new URLSearchParams(window.location.search).get("session");
+      const detached = queryToken ? readDetachedSession(queryToken) : null;
+      if (!detached) return;
+      clearOrderingState();
+      setParticipantToken(null);
+      router.replace(detachedBillPath(detached));
+    };
+    enforceDetachedHistory();
+    window.addEventListener("pageshow", enforceDetachedHistory);
+    window.addEventListener("popstate", enforceDetachedHistory);
+    window.addEventListener("focus", enforceDetachedHistory);
+    return () => {
+      window.removeEventListener("pageshow", enforceDetachedHistory);
+      window.removeEventListener("popstate", enforceDetachedHistory);
+      window.removeEventListener("focus", enforceDetachedHistory);
+    };
+  }, [clearOrderingState, router]);
 
   // Local translations for UI labels
   const translations = {

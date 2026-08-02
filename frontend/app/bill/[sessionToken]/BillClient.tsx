@@ -17,6 +17,7 @@ import {
   markPaymentSuccessSeen,
   readSessionParticipantToken,
 } from "@/lib/publicSessionStorage";
+import { clearDetachedSession, markDetachedSession } from "@/lib/customerDetachment";
 
 interface BillClientProps {
   sessionToken: string;
@@ -30,6 +31,7 @@ export default function BillClient({ sessionToken, receiptToken = "" }: BillClie
   const [error, setError] = useState<string | null>(null);
   const [language, setLanguage] = useState<"en" | "ml">("en");
   const [showPaymentSuccess, setShowPaymentSuccess] = useState<boolean>(false);
+  const [codeCopied, setCodeCopied] = useState(false);
   const [participantToken, setParticipantToken] = useState<string | null>(
     () => readSessionParticipantToken(sessionToken)
   );
@@ -76,6 +78,13 @@ export default function BillClient({ sessionToken, receiptToken = "" }: BillClie
       receiptAction: "View receipt",
       paidAmount: "Paid amount",
       sessionComplete: "Your dining session is complete. Scan the table QR again to start a new order.",
+      billReadyTitle: "Bill ready",
+      billReadyMessage: "Your ordering session has ended. Show this code at the counter to complete payment.",
+      paymentCode: "Payment code",
+      copyCode: "Copy payment code",
+      copied: "Copied",
+      amountDue: "Amount due",
+      awaitingPayment: "Awaiting payment",
       paymentLabels: {
         counter_cash: "Cash at counter",
         counter_upi: "UPI at counter",
@@ -121,6 +130,13 @@ export default function BillClient({ sessionToken, receiptToken = "" }: BillClie
       receiptAction: "രസീത് കാണുക",
       paidAmount: "അടച്ച തുക",
       sessionComplete: "നിങ്ങളുടെ ഡൈനിംഗ് സെഷൻ പൂർത്തിയായി. പുതിയ ഓർഡർ തുടങ്ങാൻ ടേബിൾ QR വീണ്ടും സ്കാൻ ചെയ്യുക.",
+      billReadyTitle: "ബിൽ തയ്യാറായി",
+      billReadyMessage: "നിങ്ങളുടെ ഓർഡറിംഗ് സെഷൻ അവസാനിച്ചു. പണമടയ്ക്കാൻ ഈ കോഡ് കൗണ്ടറിൽ കാണിക്കുക.",
+      paymentCode: "പേയ്മെന്റ് കോഡ്",
+      copyCode: "പേയ്മെന്റ് കോഡ് പകർത്തുക",
+      copied: "പകർത്തി",
+      amountDue: "അടയ്ക്കാനുള്ള തുക",
+      awaitingPayment: "പേയ്മെന്റ് കാത്തിരിക്കുന്നു",
       paymentLabels: {
         counter_cash: "കൗണ്ടറിൽ കാഷ്",
         counter_upi: "കൗണ്ടറിൽ UPI",
@@ -197,6 +213,21 @@ export default function BillClient({ sessionToken, receiptToken = "" }: BillClie
         window.history.replaceState(window.history.state, "", receiptUrl);
       }
 
+      if (data.session_status === "detached_awaiting_payment" && data.receipt_token) {
+        clearPublicSessionToken(data.restaurant_slug, data.table_code);
+        clearParticipantToken(data.restaurant_slug, data.table_code);
+        clearSessionParticipantToken(sessionToken);
+        clearCustomerCartState(data.restaurant_slug, data.table_code, sessionToken);
+        setParticipantToken(null);
+        markDetachedSession({
+          sessionToken,
+          restaurantSlug: data.restaurant_slug,
+          restaurantName: data.restaurant_name,
+          tableCode: data.table_code,
+          receiptToken: data.receipt_token,
+        });
+      }
+
       if (!isPaid) {
         setShowPaymentSuccess(false);
         hasLoadedBillRef.current = true;
@@ -208,6 +239,7 @@ export default function BillClient({ sessionToken, receiptToken = "" }: BillClie
       clearLegacyPublicReceiptToken(data.restaurant_slug, data.table_code);
       clearSessionParticipantToken(sessionToken);
       clearCustomerCartState(data.restaurant_slug, data.table_code, sessionToken);
+      clearDetachedSession(sessionToken);
       setParticipantToken(null);
       if (!receiptToken) {
         markCompletedSession({
@@ -334,6 +366,14 @@ export default function BillClient({ sessionToken, receiptToken = "" }: BillClie
 
   if (!bill) return null;
 
+  const isDetached = bill.session_status === "detached_awaiting_payment";
+  const copyPaymentCode = async () => {
+    if (!bill.payment_code) return;
+    await navigator.clipboard.writeText(bill.payment_code);
+    setCodeCopied(true);
+    window.setTimeout(() => setCodeCopied(false), 3000);
+  };
+
   const shareUrl = buildWhatsAppBillShareUrl(bill, billUrl);
   const paidMethodLabel = bill.payment_method
     ? t.paymentLabels[bill.payment_method] || bill.payment_method
@@ -357,7 +397,7 @@ export default function BillClient({ sessionToken, receiptToken = "" }: BillClie
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 print:max-w-none print:gap-0">
         <div className="print-hidden flex flex-wrap items-center justify-end gap-3">
           <PublicThemeControl />
-          {bill.status !== "paid" && (
+          {bill.status !== "paid" && !isDetached && (
             <button
               onClick={() => router.push(`/session/${bill.session_token}`)}
               className="min-h-11 rounded-2xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-4 py-2 text-sm font-bold text-[var(--omlu-text-primary)] shadow-2xs dark:border-[var(--omlu-border)] dark:bg-[var(--omlu-primary-surface)] dark:text-[var(--omlu-text-secondary)]"
@@ -372,6 +412,28 @@ export default function BillClient({ sessionToken, receiptToken = "" }: BillClie
             {language === "en" ? "മലയാളം" : "English"}
           </button>
         </div>
+
+        {isDetached && bill.payment_code && (
+          <section className="print-hidden rounded-3xl border border-orange-200 bg-orange-50 p-5 text-center shadow-sm dark:border-orange-900/60 dark:bg-orange-950/25 sm:p-7" aria-labelledby="bill-ready-title">
+            <p className="text-sm font-black uppercase tracking-wide text-orange-700 dark:text-orange-400">{t.awaitingPayment}</p>
+            <h1 id="bill-ready-title" className="mt-2 text-3xl font-black text-[var(--omlu-text-primary)]">{t.billReadyTitle}</h1>
+            <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-[var(--omlu-text-secondary)]">{t.billReadyMessage}</p>
+            <div className="mx-auto mt-6 max-w-sm rounded-2xl border-2 border-dashed border-orange-300 bg-[var(--omlu-primary-surface)] p-5 dark:border-orange-800">
+              <p className="text-xs font-black uppercase tracking-wide text-[var(--omlu-text-secondary)]">{t.paymentCode}</p>
+              <p className="mt-2 break-all font-mono text-4xl font-black tracking-[0.18em] text-orange-700 dark:text-orange-400 sm:text-5xl">{bill.payment_code}</p>
+              <button type="button" onClick={() => void copyPaymentCode()} className="mt-4 min-h-11 rounded-xl border border-[var(--omlu-border)] px-4 text-sm font-black" aria-live="polite">
+                {codeCopied ? t.copied : t.copyCode}
+              </button>
+            </div>
+            <dl className="mx-auto mt-6 grid max-w-xl grid-cols-2 gap-3 text-left text-sm sm:grid-cols-4">
+              <div><dt className="text-[var(--omlu-text-secondary)]">{t.amountDue}</dt><dd className="font-black">{formatBillTotal(bill)}</dd></div>
+              <div><dt className="text-[var(--omlu-text-secondary)]">{t.billNumber}</dt><dd className="break-all font-black">{bill.bill_number}</dd></div>
+              <div><dt className="text-[var(--omlu-text-secondary)]">{t.table}</dt><dd className="font-black">{bill.table_number}</dd></div>
+              <div><dt className="text-[var(--omlu-text-secondary)]">{t.generated}</dt><dd className="font-black">{new Date(bill.generated_at).toLocaleString()}</dd></div>
+            </dl>
+            <button type="button" onClick={() => document.querySelector("article")?.scrollIntoView({ behavior: "smooth" })} className="mt-6 min-h-11 rounded-xl bg-orange-600 px-5 text-sm font-black text-white">{t.receiptAction}</button>
+          </section>
+        )}
 
         <article className="print-bill-sheet rounded-3xl bg-[var(--omlu-primary-surface)] p-5 shadow-sm sm:p-7 print:rounded-none print:border-0 print:bg-white print:p-8 print:text-black print:shadow-none">
           <header className="border-b border-[var(--omlu-border-strong)] pb-5 dark:border-[var(--omlu-border)] print:border-black">

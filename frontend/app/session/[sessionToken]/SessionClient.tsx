@@ -23,6 +23,7 @@ import {
 import { clearCustomerCartState, completionPath, markCompletedSession, readCompletedSession } from "@/lib/customerCompletion";
 import { useRealtime } from "@/lib/realtime";
 import { customerPushSupported, enableCustomerPush } from "@/lib/customerPush";
+import { detachedBillPath, markDetachedSession, readDetachedSession } from "@/lib/customerDetachment";
 
 interface SessionClientProps {
   sessionToken: string;
@@ -53,7 +54,11 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
   const [animatedStages, setAnimatedStages] = useState<Record<string, string>>({});
   const prevStatusesRef = useRef<Record<string, string>>({});
   useEffect(() => {
-    const enforce = () => { if (readCompletedSession(sessionToken)) router.replace(completionPath(sessionToken)); };
+    const enforce = () => {
+      const detached = readDetachedSession(sessionToken);
+      if (detached) router.replace(detachedBillPath(detached));
+      else if (readCompletedSession(sessionToken)) router.replace(completionPath(sessionToken));
+    };
     enforce();
     window.addEventListener("pageshow", enforce);
     window.addEventListener("popstate", enforce);
@@ -326,7 +331,14 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
   const realtimeStatus = useRealtime({
     enabled: Boolean(participantToken),
     target: { kind: "session", token: sessionToken, participantToken: participantToken || undefined },
-    onEvent: () => void fetchSession(false),
+    onEvent: (event) => {
+      if (event.type === "bill.detached_for_payment") {
+        const detached = readDetachedSession(sessionToken);
+        if (detached) router.replace(detachedBillPath(detached));
+        return;
+      }
+      void fetchSession(false);
+    },
     onReconnect: () => void fetchSession(false),
   });
 
@@ -360,8 +372,9 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
     setBillActionError(null);
     try {
       if (!participantToken) throw new Error("Your access to this table has ended.");
-      await createOrRefreshPublicBill(session.public_token, participantToken);
-      router.push(`/bill/${session.public_token}`);
+      const prepared = await createOrRefreshPublicBill(session.public_token, participantToken);
+      markDetachedSession({ sessionToken: session.public_token, restaurantSlug: session.restaurant_slug, restaurantName: session.restaurant_name, tableCode: session.table_code, receiptToken: prepared.receipt_token });
+      router.push(detachedBillPath({ sessionToken: session.public_token, receiptToken: prepared.receipt_token }));
     } catch (err) {
       setBillActionError(err instanceof Error ? err.message : "Failed to prepare bill.");
     } finally {
@@ -375,10 +388,11 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
     setBillActionError(null);
     try {
       if (!participantToken) throw new Error("Your access to this table has ended.");
-      await requestPublicSessionBill(session.public_token, participantToken);
+      const prepared = await requestPublicSessionBill(session.public_token, participantToken);
+      markDetachedSession({ sessionToken: session.public_token, restaurantSlug: session.restaurant_slug, restaurantName: session.restaurant_name, tableCode: session.table_code, receiptToken: prepared.receipt_token });
       setBillActionError(null);
       setServiceMessage((prev) => ({ ...prev, bill: t.billRequestSent }));
-      router.push(`/bill/${session.public_token}`);
+      router.push(detachedBillPath({ sessionToken: session.public_token, receiptToken: prepared.receipt_token }));
     } catch (err) {
       setBillActionError(err instanceof Error ? err.message : "Failed to request bill.");
     } finally {

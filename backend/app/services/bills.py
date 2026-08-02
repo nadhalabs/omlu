@@ -827,4 +827,16 @@ def build_bill_response(db: Session, bill: Bill):
         "registered_billing_address": bill.billing_address_snapshot,
         "state_name": bill.state_name_snapshot,
         "state_code": bill.state_code_snapshot,
+        "session_status": bill.dining_session.status,
+        "detached_at": bill.dining_session.detached_at,
+        "payment_code": (
+            decrypt_payment_code(bill.payment_code_ciphertext)
+            if bill.dining_session.status == "detached_awaiting_payment"
+            and bill.status == "payment_pending"
+            and bill.payment_code_ciphertext
+            and bill.payment_code_expires_at
+            and bill.payment_code_expires_at > datetime.datetime.now(datetime.timezone.utc)
+            else None
+        ),
+        "payment_code_expires_at": bill.payment_code_expires_at,
     }

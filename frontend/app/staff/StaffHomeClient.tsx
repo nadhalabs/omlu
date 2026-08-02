@@ -69,6 +69,7 @@ export default function StaffHomeClient() {
             <Link href="/staff/tables" className="px-3 py-2 rounded-lg bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border)] text-sm font-bold">New Order</Link>
             <Link href="/staff/availability" className="px-3 py-2 rounded-lg bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border)] text-sm font-bold">Availability</Link>
             <Link href="/staff/sessions" className="px-3 py-2 rounded-lg bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border)] text-sm font-bold">Active Tables</Link>
+            <Link href="/staff/payments/pending" className="px-3 py-2 rounded-lg bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border)] text-sm font-bold">Payment Code</Link>
             <Link href="/staff/requests" className="px-3 py-2 rounded-lg bg-orange-600 text-sm font-bold text-[var(--omlu-primary-action-text)]">Requests</Link>
           </div>
         </div>

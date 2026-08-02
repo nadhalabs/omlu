@@ -128,6 +128,7 @@ export type DiningSessionStatus =
   | "open"
   | "payment_requested"
   | "payment_pending"
+  | "detached_awaiting_payment"
   | "paid"
   | "closed"
   | "cancelled";
@@ -230,6 +231,41 @@ export interface BillResponse {
   registered_billing_address: string | null;
   state_name: string | null;
   state_code: string | null;
+  session_status: DiningSessionStatus;
+  detached_at: string | null;
+  payment_code: string | null;
+  payment_code_expires_at: string | null;
+}
+
+export interface ShortOrderSummary {
+  order_count: number;
+  item_count: number;
+  items: string[];
+}
+
+export interface DetachedPendingBill {
+  bill_number: string;
+  restaurant_name: string;
+  original_table: string;
+  original_table_id: number;
+  session_id: number;
+  bill_status: "payment_pending";
+  session_status: "detached_awaiting_payment";
+  amount_due: string;
+  currency: string;
+  issued_at: string;
+  detached_at: string;
+  payment_code_expires_at: string;
+}
+
+export interface IssueAndReleaseResponse extends DetachedPendingBill {
+  payment_code: string;
+}
+
+export interface PaymentCodeLookupResponse extends DetachedPendingBill {
+  waiting_seconds: number;
+  order_summary: ShortOrderSummary;
+  can_confirm_payment: boolean;
 }
 
 export interface PublicDiningSessionBillSummary {
@@ -618,7 +654,12 @@ export interface PendingPaymentItem {
   sent_by_staff_name: string | null;
   session_opened_at: string;
   status: "draft" | "issued" | "payment_pending";
-  stage: "bill_requested" | "bill_issued" | "ready_for_payment" | "payment_pending";
+  session_status: DiningSessionStatus;
+  detached_at: string | null;
+  payment_code: string | null;
+  payment_code_expires_at: string | null;
+  order_summary: ShortOrderSummary;
+  stage: "bill_requested" | "bill_issued" | "detached_awaiting_payment" | "ready_for_payment" | "payment_pending";
 }
 
 export interface StaffSessionDetail extends StaffSessionListItem {

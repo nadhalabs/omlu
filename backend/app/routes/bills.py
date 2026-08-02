@@ -344,6 +344,7 @@ def list_pending_counter_payments(
         )
         sender = db.query(StaffUser).filter(StaffUser.id == sent_audit.actor_user_id).first() if sent_audit and sent_audit.actor_user_id else bill.generated_by_staff
         session = bill.dining_session
+        summary = _short_order_summary(db, bill)
         items.append({
             "bill_id": bill.id,
             "bill_number": bill.bill_number,
@@ -363,9 +364,24 @@ def list_pending_counter_payments(
             "sent_by_staff_id": sender.id if sender else None,
             "sent_by_staff_name": sender.name if sender else None,
             "status": bill.status,
+            "session_status": session.status,
+            "detached_at": session.detached_at.isoformat() if session.detached_at else None,
+            "payment_code": (
+                decrypt_payment_code(bill.payment_code_ciphertext)
+                if session.status == "detached_awaiting_payment"
+                and bill.payment_code_ciphertext
+                and bill.payment_code_expires_at
+                and bill.payment_code_expires_at > datetime.datetime.now(datetime.timezone.utc)
+                else None
+            ),
+            "payment_code_expires_at": (
+                bill.payment_code_expires_at.isoformat() if bill.payment_code_expires_at else None
+            ),
+            "order_summary": summary.model_dump(),
             "stage": (
                 "bill_requested" if bill.status == "draft"
                 else "bill_issued" if bill.status == "issued" and not sent_audit
+                else "detached_awaiting_payment" if session.status == "detached_awaiting_payment"
                 else "ready_for_payment" if bill.status == "payment_pending" and bill.payment_method is None
                 else "payment_pending"
             ),

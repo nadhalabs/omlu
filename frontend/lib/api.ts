@@ -28,6 +28,8 @@ import {
   PendingPaymentItem,
   MenuImportResponse,
   MenuImportDraftItem,
+  IssueAndReleaseResponse,
+  PaymentCodeLookupResponse,
 } from "./types";
 import { saveOrderParticipantToken } from "./publicSessionStorage";
 import {
@@ -1546,6 +1548,49 @@ export async function getPendingPayments(): Promise<PendingPaymentItem[]> {
   }
   const body = await res.json();
   return body.items || [];
+}
+
+export async function issueAndReleaseBill(
+  billNumber: string,
+  idempotencyKey: string,
+): Promise<IssueAndReleaseResponse> {
+  const res = await fetch(
+    `/api/staff/bills/${encodeURIComponent(billNumber)}/issue-and-release`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Idempotency-Key": idempotencyKey,
+      },
+      body: JSON.stringify({ confirm_table_is_free: true }),
+    },
+  );
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError(res.status, body.detail || "Could not release this table.");
+  return body;
+}
+
+export async function lookupPendingPaymentCode(
+  paymentCode: string,
+): Promise<PaymentCodeLookupResponse> {
+  const normalized = paymentCode.replace(/\s+/g, "").toUpperCase();
+  const res = await fetch("/api/staff/bills/payment-code/lookup", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ payment_code: normalized }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const retryAfter = res.headers.get("Retry-After");
+    if (res.status === 429) {
+      throw new ApiError(429, `Too many attempts. Try again in ${retryAfter || body.retry_after_seconds || "a few"} seconds.`);
+    }
+    if (res.status === 404) {
+      throw new ApiError(404, "No active unpaid bill was found for this code.");
+    }
+    throw new ApiError(res.status, body.detail || "Could not look up this payment code.");
+  }
+  return body;
 }
 
 export async function confirmPendingPayment(

@@ -117,7 +117,7 @@ test("SessionClient listens to existing session WebSocket", () => {
 
 test("WebSocket event triggers fetchSession refetch without page reload", () => {
   // Confirm onEvent handler in useRealtime executes fetchSession(false)
-  assert.match(source, /onEvent:\s*\(\)\s*=>\s*void\s+fetchSession\(false\)/);
+  assert.match(source, /onEvent:\s*\(event\)\s*=>\s*\{[\s\S]*?void fetchSession\(false\);[\s\S]*?\}/);
   assert.match(source, /onReconnect:\s*\(\)\s*=>\s*void\s+fetchSession\(false\)/);
 });
 

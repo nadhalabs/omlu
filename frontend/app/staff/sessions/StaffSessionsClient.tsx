@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
-import { getStaffMe, getStaffSessions, closeEmptySession, createOrRefreshStaffSessionBill, issueStaffBill, ApiError } from "@/lib/api";
+import { getStaffMe, getStaffSessions, closeEmptySession, createOrRefreshStaffSessionBill, issueStaffBill, issueAndReleaseBill, ApiError } from "@/lib/api";
 import { CurrentStaffResponse, StaffSessionListItem } from "@/lib/types";
 import { useRealtime } from "@/lib/realtime";
 import { registerAuthenticatedCleanup } from "@/lib/authRuntime.mjs";
@@ -78,6 +78,7 @@ export default function StaffSessionsClient() {
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingIssueTokens = useRef(new Set<string>());
+  const releaseKeys = useRef(new Map<string, string>());
 
   const fetchSessions = useCallback(async (showLoading = true) => {
     if (showLoading) setLoading(true);
@@ -181,6 +182,40 @@ export default function StaffSessionsClient() {
         } catch (err) {
           const message = err instanceof ApiError ? err.message : "Failed to issue bill.";
           setCloseError((previous) => ({ ...previous, [session.session_token]: message }));
+        } finally {
+          pendingIssueTokens.current.delete(session.session_token);
+          setIssuingTokens((previous) => {
+            const next = new Set(previous);
+            next.delete(session.session_token);
+            return next;
+          });
+        }
+      },
+    });
+  };
+
+  const handleIssueAndRelease = async (session: StaffSessionListItem) => {
+    if (!session.bill_number || pendingIssueTokens.current.has(session.session_token)) return;
+    await confirmDialog({
+      title: "Release this table?",
+      message: "The current bill will move to Pending Payments, and new customers will be able to start a separate session at this table.",
+      details: [`Table ${session.table_number}`, `Bill ${session.bill_number}`, session.bill_total ? `Amount ₹${session.bill_total}` : ""].filter(Boolean),
+      cancelLabel: "Cancel",
+      confirmLabel: "Issue bill and release table",
+      onConfirm: async () => {
+        if (pendingIssueTokens.current.has(session.session_token)) return;
+        pendingIssueTokens.current.add(session.session_token);
+        setIssuingTokens((previous) => new Set(previous).add(session.session_token));
+        const key = releaseKeys.current.get(session.bill_number!) || `bill-release-${session.bill_number}-${crypto.randomUUID()}`;
+        releaseKeys.current.set(session.bill_number!, key);
+        try {
+          const result = await issueAndReleaseBill(session.bill_number!, key);
+          setSessions((previous) => previous.filter((item) => item.session_token !== session.session_token));
+          window.dispatchEvent(new Event("admin-operational-counts-changed"));
+          window.dispatchEvent(new Event("pending-payments-changed"));
+          toast(`Table released · Payment code ${result.payment_code} · ₹${Number(result.amount_due).toFixed(2)}`, "success");
+        } catch (err) {
+          throw new Error(err instanceof ApiError ? err.message : "Could not issue the bill and release this table.");
         } finally {
           pendingIssueTokens.current.delete(session.session_token);
           setIssuingTokens((previous) => {
@@ -412,6 +447,11 @@ export default function StaffSessionsClient() {
                         {s.bill_total && <span className="font-black text-orange-400">₹{s.bill_total}</span>}
                       </div>
                       <Link href={`/bill/${encodeURIComponent(s.session_token)}`} className="rounded-xl bg-[var(--omlu-muted-surface)] px-4 py-2 text-center text-xs font-black text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-muted-surface)]">View Bill</Link>
+                      {s.status === "payment_requested" && ["draft", "issued"].includes(s.bill_status || "") && (
+                        <button type="button" disabled={isIssuing} onClick={() => void handleIssueAndRelease(s)} className="min-h-11 rounded-xl bg-orange-600 px-4 py-2 text-xs font-black text-white disabled:opacity-50">
+                          {isIssuing ? "Releasing table…" : "Issue bill and release table"}
+                        </button>
+                      )}
                     </div>
                   )}
                   {canCloseSession && s.billable_order_count > 0 && !s.bill_number && (

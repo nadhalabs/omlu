@@ -134,6 +134,10 @@ class BillResponse(BaseModel):
     registered_billing_address: Optional[str] = None
     state_name: Optional[str] = None
     state_code: Optional[str] = None
+    session_status: str
+    detached_at: Optional[datetime] = None
+    payment_code: Optional[str] = None
+    payment_code_expires_at: Optional[datetime] = None
 
     @field_serializer(
         "subtotal", "tax_amount", "discount_amount", "total_amount",

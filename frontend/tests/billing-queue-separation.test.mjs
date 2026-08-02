@@ -12,7 +12,7 @@ test("customer bill requests use the canonical bill workflow, not Service Reques
 
 test("Pending Payments exposes canonical bill stages and actions", () => {
   const pending = read("app/admin/payments/pending/PendingPaymentsClient.tsx");
-  for (const label of ["All", "Bill Requested", "Ready for Payment", "Payment Pending", "Issue Bill", "Confirm Cash", "Confirm UPI"]) {
+  for (const label of ["All", "Bill requested", "Detached", "Ready", "Payment pending", "Issue bill", "Collect payment"]) {
     assert.ok(pending.includes(label), label);
   }
 });
