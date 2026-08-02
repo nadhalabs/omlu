@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { confirmAdminMenuImport, scanAdminMenu } from "@/lib/api";
 import {
   AdminCategoryResponse,
@@ -16,16 +16,136 @@ type Props = {
   onImported: (summary: { imported: number; skipped: number }) => Promise<void>;
 };
 
+type ScanStatus = "idle" | "scanning" | "success" | "error";
+
 const confidenceThreshold = 0.75;
+const MAX_FILES = 5;
+const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
+
+const SCAN_MESSAGES = [
+  "Preparing your photos…",
+  "Reading visible menu text…",
+  "Looking for categories and item rows…",
+  "Checking prices and configurable choices…",
+  "Structuring the menu draft…",
+  "Finalising the review-ready draft…",
+];
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 export default function MenuImportFlow({ categories, onClose, onImported }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<File[]>([]);
+  const [fileError, setFileError] = useState<string | null>(null);
+
   const [result, setResult] = useState<MenuImportResponse | null>(null);
+  const [status, setStatus] = useState<ScanStatus>("idle");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [activePhotoIndex, setActivePhotoIndex] = useState(0);
+  const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
   const [bulkCategory, setBulkCategory] = useState("");
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
+
+  // Derive object URLs synchronously using useMemo
+  const objectUrls = useMemo(() => {
+    return files.map((file) => {
+      try {
+        return URL.createObjectURL(file);
+      } catch {
+        return "";
+      }
+    });
+  }, [files]);
+
+  // Clean up object URLs when files change or component unmounts
+  useEffect(() => {
+    return () => {
+      objectUrls.forEach((url) => {
+        if (url) {
+          try {
+            URL.revokeObjectURL(url);
+          } catch {
+            // Ignore revoke errors in unit tests / environments without full URL.revokeObjectURL
+          }
+        }
+      });
+    };
+  }, [objectUrls]);
+
+  // Handle scanning status timers
+  useEffect(() => {
+    if (status !== "scanning") return;
+
+    const messageTimers = [
+      setTimeout(() => setCurrentMessageIndex(1), 2000),
+      setTimeout(() => setCurrentMessageIndex(2), 8000),
+      setTimeout(() => setCurrentMessageIndex(3), 15000),
+      setTimeout(() => setCurrentMessageIndex(4), 25000),
+      setTimeout(() => setCurrentMessageIndex(5), 40000),
+    ];
+
+    const interval = setInterval(() => {
+      setElapsedSeconds((prev) => prev + 1);
+    }, 1000);
+
+    return () => {
+      messageTimers.forEach(clearTimeout);
+      clearInterval(interval);
+    };
+  }, [status]);
+
+  // Rotate preview photos during scanning if multiple photos selected
+  useEffect(() => {
+    if (status !== "scanning" || files.length <= 1) return;
+    const interval = setInterval(() => {
+      setActivePhotoIndex((prev) => (prev + 1) % files.length);
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [status, files.length]);
+
+  const validateAndAddFiles = useCallback((newFiles: File[]) => {
+    setFileError(null);
+    setError(null);
+
+    const combined = [...files, ...newFiles];
+    if (combined.length > MAX_FILES) {
+      setFileError(`Maximum ${MAX_FILES} menu photos allowed.`);
+      setFiles(combined.slice(0, MAX_FILES));
+      return;
+    }
+
+    const invalidType = newFiles.find(
+      (f) => !["image/jpeg", "image/png", "image/webp"].includes(f.type)
+    );
+    if (invalidType) {
+      setFileError(`"${invalidType.name}" is not a supported format. Use JPG, PNG or WebP.`);
+      return;
+    }
+
+    const oversize = newFiles.find((f) => f.size > MAX_FILE_SIZE_BYTES);
+    if (oversize) {
+      setFileError(`"${oversize.name}" exceeds the 10 MB limit (${formatFileSize(oversize.size)}).`);
+      return;
+    }
+
+    setFiles(combined);
+  }, [files]);
+
+  const removeFile = (index: number) => {
+    setFiles((prev) => prev.filter((_, idx) => idx !== index));
+    setFileError(null);
+    if (activePhotoIndex >= files.length - 1) {
+      setActivePhotoIndex(Math.max(0, files.length - 2));
+    }
+  };
 
   const update = (id: string, patch: Partial<MenuImportDraftItem>) => {
     setResult((current) =>
@@ -39,16 +159,43 @@ export default function MenuImportFlow({ categories, onClose, onImported }: Prop
   };
 
   const scan = async () => {
-    if (!files.length) return setError("Select at least one menu photo.");
+    if (!files.length) {
+      setError("Select at least one menu photo.");
+      return;
+    }
+
+    setCurrentMessageIndex(0);
+    setElapsedSeconds(0);
+    setActivePhotoIndex(0);
+    setStatus("scanning");
     setBusy(true);
     setError(null);
+
     try {
-      setResult(await scanAdminMenu(files));
+      const res = await scanAdminMenu(files);
+      setResult(res);
+      setStatus("success");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Menu scan failed.");
+      setStatus("error");
+      const msg = err instanceof Error ? err.message : "Menu scan failed.";
+      if (msg.toLowerCase().includes("timeout") || msg.toLowerCase().includes("network")) {
+        setError("We couldn’t reach the server. Please check your connection and try again.");
+      } else if (msg.toLowerCase().includes("invalid") || msg.toLowerCase().includes("format")) {
+        setError("We couldn’t read this menu. Try a clearer photo with good lighting and full menu visible.");
+      } else {
+        setError(msg);
+      }
     } finally {
       setBusy(false);
     }
+  };
+
+  const resetSelection = () => {
+    setFiles([]);
+    setResult(null);
+    setStatus("idle");
+    setError(null);
+    setFileError(null);
   };
 
   const confirm = async () => {
@@ -127,7 +274,6 @@ export default function MenuImportFlow({ categories, onClose, onImported }: Prop
 
       const merged = { ...og, ...patch };
 
-      // Handle type switch validation / transformation
       if (patch.type === "variant" && og.type !== "variant") {
         merged.required = true;
         merged.minimum_selections = 1;
@@ -253,36 +399,191 @@ export default function MenuImportFlow({ categories, onClose, onImported }: Prop
   ).size;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/80 p-4 backdrop-blur-xs">
-      <div className="mx-auto my-4 w-full max-w-6xl rounded-3xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-6 shadow-2xl">
+    <div
+      className="fixed inset-0 z-50 overflow-y-auto bg-black/80 p-3 sm:p-4 backdrop-blur-xs flex items-center justify-center"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Menu photo import"
+    >
+      <div className="mx-auto my-auto w-full max-w-5xl rounded-3xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-4 sm:p-6 shadow-2xl transition-all">
+        {/* Modal Header */}
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h3 className="text-xl font-black text-[var(--omlu-text-primary)]">
-              {result ? "Menu Scan Review" : "Upload menu photos"}
+            <h3 className="text-lg sm:text-xl font-black text-[var(--omlu-text-primary)]">
+              {status === "scanning"
+                ? "Reading your menu"
+                : status === "error"
+                ? "We couldn’t read this menu"
+                : result
+                ? "Menu Scan Review"
+                : "Upload menu photos"}
             </h3>
-            {!result && (
-              <p className="mt-1 text-xs font-semibold text-[var(--omlu-text-secondary)]">
-                Maximum 5 images · JPG, PNG or WebP · 10 MB each
-              </p>
-            )}
+            <p className="mt-1 text-xs font-medium text-[var(--omlu-text-secondary)]">
+              {status === "scanning"
+                ? "OMLU is turning your photos into a review-ready menu draft."
+                : status === "error"
+                ? "Try a clearer photo with the full menu visible, good lighting and minimal glare."
+                : result
+                ? "Review names, categories, base prices and option choices before publishing."
+                : "Up to 5 photos · JPG, PNG or WebP · Maximum 10 MB each"}
+            </p>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            disabled={busy}
-            className="rounded-lg bg-[var(--omlu-muted-surface)] px-3 py-2 text-xs font-bold text-[var(--omlu-text-secondary)] hover:text-[var(--omlu-text-primary)] transition"
+            disabled={status === "scanning" || busy}
+            className="rounded-xl bg-[var(--omlu-muted-surface)] px-3 py-2 text-xs font-bold text-[var(--omlu-text-secondary)] hover:text-[var(--omlu-text-primary)] transition disabled:opacity-40"
           >
             Close
           </button>
         </div>
 
-        {error && (
-          <div className="mt-4 rounded-xl border border-red-900 bg-red-950/40 p-3 text-xs font-semibold text-red-300">
-            ⚠️ {error}
+        {/* Global Error Banner */}
+        {error && status !== "error" && (
+          <div className="mt-4 rounded-xl border border-red-900 bg-red-950/40 p-3 text-xs font-semibold text-red-300 flex items-center gap-2">
+            <span>⚠️</span>
+            <span>{error}</span>
           </div>
         )}
 
-        {!result ? (
-          <div className="mt-6 flex flex-col items-center rounded-2xl border border-dashed border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-10">
+        {/* File Selection Error Banner */}
+        {fileError && (
+          <div className="mt-4 rounded-xl border border-amber-900 bg-amber-950/40 p-3 text-xs font-semibold text-amber-300 flex items-center gap-2">
+            <span>⚠️</span>
+            <span>{fileError}</span>
+          </div>
+        )}
+
+        {/* ---------------------------------------------------- */}
+        {/* DEDICATED SCANNING VIEW                              */}
+        {/* ---------------------------------------------------- */}
+        {status === "scanning" ? (
+          <div className="mt-6 flex flex-col gap-6">
+            {/* Image Preview Container with Scanning Line */}
+            <div className="relative h-64 sm:h-80 w-full overflow-hidden rounded-2xl border border-[var(--omlu-border)] bg-black/80 flex items-center justify-center">
+              {objectUrls[activePhotoIndex] ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={objectUrls[activePhotoIndex]}
+                  alt={files[activePhotoIndex]?.name || "Selected menu preview"}
+                  className="h-full w-full object-contain p-2"
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center p-6 text-center text-white/70">
+                  <span className="text-3xl">📄</span>
+                  <span className="mt-2 text-xs font-bold">{files[activePhotoIndex]?.name}</span>
+                </div>
+              )}
+
+              {/* Animated Scan Line & Glow */}
+              <div className="absolute left-0 right-0 h-1 bg-gradient-to-r from-transparent via-orange-500 to-transparent shadow-[0_0_20px_#f97316] omlu-scan-line pointer-events-none" />
+              <div className="absolute inset-0 bg-gradient-to-b from-orange-500/10 via-transparent to-transparent pointer-events-none" />
+
+              {/* Photo Indicator Badge */}
+              {files.length > 1 && (
+                <div className="absolute top-3 right-3 flex items-center gap-2 rounded-full bg-black/70 backdrop-blur-md px-3 py-1 text-xs font-bold text-white border border-white/20">
+                  <span>Photo {activePhotoIndex + 1} of {files.length}</span>
+                </div>
+              )}
+
+              {/* Filename Pill */}
+              <div className="absolute bottom-3 left-3 max-w-[75%] truncate rounded-xl bg-black/75 backdrop-blur-md px-3 py-1.5 text-xs font-semibold text-white/90 border border-white/10">
+                {files[activePhotoIndex]?.name}
+              </div>
+            </div>
+
+            {/* Honest Presentational Progress Section */}
+            <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] p-6 text-center shadow-xs">
+              <div className="flex items-center gap-3">
+                <svg
+                  className="h-5 w-5 animate-spin text-orange-500"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  />
+                </svg>
+                <p className="text-sm font-black text-[var(--omlu-text-primary)]" aria-live="polite">
+                  {SCAN_MESSAGES[currentMessageIndex]}
+                </p>
+              </div>
+
+              {elapsedSeconds > 50 && (
+                <p className="text-xs font-medium text-amber-400">
+                  Detailed menus can take a little longer. OMLU is still working… ({elapsedSeconds}s elapsed)
+                </p>
+              )}
+
+              <p className="text-xs font-semibold text-[var(--omlu-text-secondary)] border-t border-[var(--omlu-border)] pt-3 mt-1 max-w-lg">
+                🔒 Nothing will be published automatically. You’ll review the extracted menu before publishing.
+              </p>
+            </div>
+          </div>
+        ) : status === "error" ? (
+          /* ---------------------------------------------------- */
+          /* RECOVERABLE ERROR STATE                              */
+          /* ---------------------------------------------------- */
+          <div className="mt-6 flex flex-col gap-6">
+            <div className="rounded-2xl border border-red-900/50 bg-red-950/20 p-6 text-center">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-900/30 text-2xl text-red-400 mb-3">
+                ⚠️
+              </div>
+              <h4 className="text-base font-black text-[var(--omlu-text-primary)]">
+                We couldn’t read this menu
+              </h4>
+              <p className="mt-1 text-xs text-[var(--omlu-text-secondary)] max-w-md mx-auto">
+                {error || "Try a clearer photo with the full menu visible, good lighting and minimal glare."}
+              </p>
+
+              {/* Retained Files Preview List */}
+              {files.length > 0 && (
+                <div className="mt-4 flex flex-wrap justify-center gap-2">
+                  {files.map((file, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center gap-2 rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] px-3 py-1.5 text-xs text-[var(--omlu-text-primary)]"
+                    >
+                      <span className="font-bold truncate max-w-[120px]">{file.name}</span>
+                      <span className="text-[10px] text-[var(--omlu-text-secondary)]">({formatFileSize(file.size)})</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={scan}
+                  className="rounded-xl bg-orange-600 px-5 py-2.5 text-xs font-black text-white hover:bg-orange-700 transition"
+                >
+                  Try again
+                </button>
+                <button
+                  type="button"
+                  onClick={resetSelection}
+                  className="rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] px-5 py-2.5 text-xs font-bold text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-hover-background)] transition"
+                >
+                  Choose different photos
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : !result ? (
+          /* ---------------------------------------------------- */
+          /* UPLOAD & SELECTION STATE                             */
+          /* ---------------------------------------------------- */
+          <div className="mt-6 flex flex-col gap-6">
             <input
               ref={inputRef}
               hidden
@@ -290,36 +591,125 @@ export default function MenuImportFlow({ categories, onClose, onImported }: Prop
               multiple
               accept="image/jpeg,image/png,image/webp"
               onChange={(event) => {
-                const selected = Array.from(event.target.files || []).slice(0, 5);
-                setFiles(selected);
-                setError(
-                  event.target.files && event.target.files.length > 5
-                    ? "Only the first 5 photos were selected."
-                    : null
-                );
+                const selected = Array.from(event.target.files || []);
+                validateAndAddFiles(selected);
               }}
             />
-            <button
-              onClick={() => inputRef.current?.click()}
-              className="rounded-xl bg-[var(--omlu-muted-surface)] px-5 py-3 text-sm font-black text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-hover-background)]"
-            >
-              Select photos
-            </button>
-            <p className="mt-3 text-xs text-[var(--omlu-text-secondary)]">
-              {files.length ? files.map((file) => file.name).join(", ") : "No photos selected"}
-            </p>
-            <button
-              onClick={scan}
-              disabled={busy || !files.length}
-              className="mt-6 rounded-xl bg-orange-600 px-6 py-3 text-sm font-black text-white hover:bg-orange-700 disabled:opacity-40"
-            >
-              {busy ? "Scanning menu…" : "Scan Menu"}
-            </button>
+
+            {files.length === 0 ? (
+              /* Empty Dropzone */
+              <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-10 sm:p-14 text-center">
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[var(--omlu-muted-surface)] text-2xl mb-3">
+                  📸
+                </div>
+                <h4 className="text-sm font-black text-[var(--omlu-text-primary)]">
+                  Select menu photos to scan
+                </h4>
+                <p className="mt-1 text-xs text-[var(--omlu-text-secondary)] max-w-sm">
+                  Upload clear, well-lit photos of your food & beverage menu. You will review and edit everything before publishing.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => inputRef.current?.click()}
+                  className="mt-5 rounded-xl bg-[var(--omlu-muted-surface)] px-6 py-3 text-xs font-black text-[var(--omlu-text-primary)] border border-[var(--omlu-border)] hover:bg-[var(--omlu-hover-background)] transition"
+                >
+                  Select photos
+                </button>
+              </div>
+            ) : (
+              /* Selected Files Grid */
+              <div className="flex flex-col gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+                  {files.map((file, idx) => (
+                    <div
+                      key={idx}
+                      className="group relative flex flex-col rounded-2xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-2 shadow-xs transition hover:border-[var(--omlu-focus-ring)]"
+                    >
+                      <div className="relative h-32 w-full overflow-hidden rounded-xl bg-black/60 flex items-center justify-center">
+                        {objectUrls[idx] ? (
+                          /* eslint-disable-next-line @next/next/no-img-element */
+                          <img
+                            src={objectUrls[idx]}
+                            alt={file.name}
+                            className="h-full w-full object-contain"
+                          />
+                        ) : (
+                          <span className="text-2xl">📄</span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => removeFile(idx)}
+                          className="absolute top-1.5 right-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/70 text-xs font-bold text-white hover:bg-red-600 transition"
+                          title="Remove photo"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      <div className="mt-2 flex flex-col px-1">
+                        <span className="text-xs font-bold text-[var(--omlu-text-primary)] truncate" title={file.name}>
+                          {file.name}
+                        </span>
+                        <span className="text-[10px] text-[var(--omlu-text-secondary)] font-medium">
+                          {formatFileSize(file.size)}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+
+                  {files.length < MAX_FILES && (
+                    <button
+                      type="button"
+                      onClick={() => inputRef.current?.click()}
+                      className="flex h-full min-h-[140px] flex-col items-center justify-center rounded-2xl border border-dashed border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] p-4 text-center hover:bg-[var(--omlu-hover-background)] transition"
+                    >
+                      <span className="text-xl font-bold text-[var(--omlu-text-secondary)]">+</span>
+                      <span className="mt-1 text-xs font-bold text-[var(--omlu-text-primary)]">Add photo</span>
+                      <span className="text-[10px] text-[var(--omlu-text-secondary)]">({MAX_FILES - files.length} remaining)</span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex flex-col items-center gap-3 border-t border-[var(--omlu-border)] pt-4 mt-2">
+                  <button
+                    type="button"
+                    onClick={scan}
+                    disabled={busy || !files.length || Boolean(fileError)}
+                    className="w-full sm:w-auto rounded-xl bg-orange-600 px-8 py-3.5 text-sm font-black text-white hover:bg-orange-700 transition disabled:opacity-40 shadow-md"
+                  >
+                    Scan {files.length} {files.length === 1 ? "photo" : "photos"}
+                  </button>
+                  <p className="text-xs font-medium text-[var(--omlu-text-secondary)] text-center">
+                    🔒 You’ll review the extracted menu before publishing.
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
+          /* ---------------------------------------------------- */
+          /* REVIEW & EDIT DRAFT STATE                            */
+          /* ---------------------------------------------------- */
           <>
+            {/* Success Banner */}
+            <div className="mt-4 rounded-2xl border border-emerald-800/60 bg-emerald-950/30 p-3.5 text-xs font-semibold text-emerald-300 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-base">✨</span>
+                <div>
+                  <strong className="block text-white">Menu draft ready</strong>
+                  <span>We found menu content in your photos. Review names, prices and choices before importing.</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={resetSelection}
+                className="text-[11px] font-bold underline text-emerald-400 hover:text-emerald-200"
+              >
+                Scan again
+              </button>
+            </div>
+
             {/* Summary Statistics */}
-            <div className="mt-5 grid grid-cols-3 gap-3">
+            <div className="mt-4 grid grid-cols-3 gap-3">
               {[
                 [result.items.length, "items"],
                 [categoryCount, "categories"],

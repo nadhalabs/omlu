@@ -241,6 +241,25 @@ a.text-white[aria-disabled="true"] {
   color: var(--omlu-text-primary);
 }
 
+@keyframes omlu-scan-line {
+  0% {
+    top: 0%;
+    opacity: 0.75;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    top: 96%;
+    opacity: 0.75;
+  }
+}
+
+.omlu-scan-line {
+  animation: omlu-scan-line 3s ease-in-out infinite alternate;
+}
+
+
 @media print {
   .print-hidden {
     display: none !important;
