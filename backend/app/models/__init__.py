@@ -5,7 +5,7 @@ from app.models.order import Order, OrderItem, OrderItemSelectedOption, OrderSta
 from app.models.staff_user import AuditLog, StaffSession, StaffUser
 from app.models.service_request import ServiceRequest
 from app.models.dining_session import DiningSession
-from app.models.bill import Bill, RestaurantBillDailySequence, RestaurantInvoiceSequence
+from app.models.bill import Bill, PaymentCodeLookupAttempt, RestaurantBillDailySequence, RestaurantInvoiceSequence
 from app.models.push_subscription import CustomerPushSubscription
 from app.models.quick_sale import QuickSale, QuickSaleItem, QuickSaleItemSelectedOption
 from app.models.menu_import import MenuImportJob, MenuImportDraftItem
@@ -32,6 +32,7 @@ __all__ = [
     "ServiceRequest",
     "DiningSession",
     "Bill",
+    "PaymentCodeLookupAttempt",
     "RestaurantBillDailySequence",
     "RestaurantInvoiceSequence",
     "CustomerPushSubscription",

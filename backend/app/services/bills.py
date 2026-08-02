@@ -14,7 +14,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.config import settings
-from app.models.bill import Bill, RestaurantBillDailySequence, RestaurantInvoiceSequence
+from app.models.bill import (
+    Bill,
+    PaymentCodeLookupAttempt,
+    RestaurantBillDailySequence,
+    RestaurantInvoiceSequence,
+)
 from app.models.dining_session import DiningSession
 from app.models.order import Order, OrderItem
 from app.models.restaurant import Restaurant
@@ -34,6 +39,9 @@ PAYMENT_CODE_ALPHABET = "2346789ABCDEFGHJKLMNPQRTUVWXYZ"
 PAYMENT_CODE_LENGTH = 6
 PAYMENT_CODE_TTL = datetime.timedelta(days=30)
 PAYMENT_CODE_COLLISION_RETRIES = 20
+PAYMENT_CODE_LOOKUP_LIMIT = 10
+PAYMENT_CODE_LOOKUP_WINDOW = datetime.timedelta(minutes=10)
+PAYMENT_CODE_LOOKUP_RETENTION = datetime.timedelta(hours=24)
 
 
 @dataclass(frozen=True)
@@ -85,6 +93,55 @@ def find_unresolved_bill_by_payment_code(
     if lock_for_update:
         query = query.with_for_update()
     return query.first()
+
+
+def begin_payment_code_lookup_attempt(
+    db: Session,
+    *,
+    restaurant_id: int,
+    actor_user_id: int,
+    client_identifier_hash: str,
+) -> tuple[PaymentCodeLookupAttempt, int | None]:
+    now = datetime.datetime.now(datetime.timezone.utc)
+    db.query(PaymentCodeLookupAttempt).filter(
+        PaymentCodeLookupAttempt.window_started_at < now - PAYMENT_CODE_LOOKUP_RETENTION
+    ).delete(synchronize_session=False)
+    insert = pg_insert(PaymentCodeLookupAttempt).values(
+        restaurant_id=restaurant_id,
+        actor_user_id=actor_user_id,
+        client_identifier_hash=client_identifier_hash,
+        window_started_at=now,
+    ).on_conflict_do_nothing(constraint="uq_payment_code_lookup_actor_client")
+    db.execute(insert)
+    attempt = db.query(PaymentCodeLookupAttempt).filter(
+        PaymentCodeLookupAttempt.restaurant_id == restaurant_id,
+        PaymentCodeLookupAttempt.actor_user_id == actor_user_id,
+        PaymentCodeLookupAttempt.client_identifier_hash == client_identifier_hash,
+    ).with_for_update().one()
+    if now - attempt.window_started_at >= PAYMENT_CODE_LOOKUP_WINDOW:
+        attempt.window_started_at = now
+        attempt.attempt_count = 0
+        attempt.successful_count = 0
+        attempt.failed_count = 0
+        attempt.blocked_until = None
+    if attempt.blocked_until and attempt.blocked_until > now:
+        return attempt, max(1, int((attempt.blocked_until - now).total_seconds()))
+    if attempt.attempt_count >= PAYMENT_CODE_LOOKUP_LIMIT:
+        attempt.blocked_until = attempt.window_started_at + PAYMENT_CODE_LOOKUP_WINDOW
+        return attempt, max(1, int((attempt.blocked_until - now).total_seconds()))
+    attempt.attempt_count += 1
+    return attempt, None
+
+
+def finish_payment_code_lookup_attempt(
+    attempt: PaymentCodeLookupAttempt,
+    *,
+    succeeded: bool,
+) -> None:
+    if succeeded:
+        attempt.successful_count += 1
+    else:
+        attempt.failed_count += 1
 
 
 def round_money(value: Decimal) -> Decimal:
@@ -407,6 +464,9 @@ def detach_issued_bill_and_release_table(
     restaurant_id: int,
     bill_id: int,
     actor: StaffUser,
+    idempotency_key: str | None = None,
+    payload_hash: str | None = None,
+    request_id: str | None = None,
 ) -> DetachedBillResult:
     """Atomically issue a bill, revoke ordering authority, and free its table.
 
@@ -474,6 +534,9 @@ def detach_issued_bill_and_release_table(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"Bill cannot be detached while status is {bill.status}.",
             )
+        if idempotency_key is not None:
+            bill.detachment_idempotency_key = idempotency_key
+            bill.detachment_request_hash = payload_hash
 
         previous_state = {
             "bill_status": bill.status,
@@ -510,6 +573,7 @@ def detach_issued_bill_and_release_table(
                 "detached_at": now.isoformat(),
                 "detached_by_staff_id": actor.id,
                 "revoked_participant_count": revoked_count,
+                "request_id": request_id,
             }, sort_keys=True),
         ))
         db.flush()

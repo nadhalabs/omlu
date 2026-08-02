@@ -107,6 +107,8 @@ class Bill(Base):
     payment_code_created_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     payment_code_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     payment_code_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    detachment_idempotency_key: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    detachment_request_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     paid_by_staff_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("staff_users.id", ondelete="SET NULL"),
         nullable=True,
@@ -128,6 +130,7 @@ class Bill(Base):
     __table_args__ = (
         UniqueConstraint("restaurant_id", "issue_idempotency_key", name="uq_bill_issue_idempotency"),
         UniqueConstraint("restaurant_id", "payment_idempotency_key", name="uq_bill_payment_idempotency"),
+        UniqueConstraint("restaurant_id", "detachment_idempotency_key", name="uq_bill_detachment_idempotency"),
         UniqueConstraint("dining_session_id", name="uq_bills_dining_session_id"),
         UniqueConstraint("restaurant_id", "bill_number", name="uq_restaurant_bill_number"),
         UniqueConstraint("restaurant_id", "invoice_number", name="uq_bills_restaurant_invoice_number"),
@@ -178,4 +181,42 @@ class Bill(Base):
     generated_by_staff: Mapped[Optional["StaffUser"]] = relationship(
         "StaffUser",
         foreign_keys=[generated_by_staff_id],
+    )
+
+
+class PaymentCodeLookupAttempt(Base):
+    __tablename__ = "payment_code_lookup_attempts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    restaurant_id: Mapped[int] = mapped_column(
+        ForeignKey("restaurants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    actor_user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    client_identifier_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    window_started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    successful_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    failed_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    blocked_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "restaurant_id",
+            "actor_user_id",
+            "client_identifier_hash",
+            name="uq_payment_code_lookup_actor_client",
+        ),
+        ForeignKeyConstraint(
+            ["restaurant_id", "actor_user_id"],
+            ["staff_users.restaurant_id", "staff_users.id"],
+            name="fk_payment_code_lookup_restaurant_actor",
+            ondelete="CASCADE",
+        ),
+        Index("ix_payment_code_lookup_window", "window_started_at"),
+        CheckConstraint("attempt_count >= 0", name="chk_payment_code_lookup_attempt_count"),
+        CheckConstraint("successful_count >= 0", name="chk_payment_code_lookup_success_count"),
+        CheckConstraint("failed_count >= 0", name="chk_payment_code_lookup_failed_count"),
     )

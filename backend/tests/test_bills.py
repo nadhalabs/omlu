@@ -1,4 +1,5 @@
 import datetime
+import json
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
@@ -10,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.main import app
 from app.database import SessionLocal
-from app.models.bill import Bill
+from app.models.bill import Bill, PaymentCodeLookupAttempt
 from app.models.dining_session import DiningSession
 from app.models.menu import MenuCategory, MenuItem
 from app.models.order import Order, OrderItem, OrderStatusHistory
@@ -18,7 +19,7 @@ from app.models.payment import Payment, RevenueEntry
 from app.models.restaurant import Restaurant
 from app.models.restaurant_table import RestaurantTable
 from app.models.service_request import ServiceRequest
-from app.models.staff_user import StaffUser
+from app.models.staff_user import AuditLog, StaffUser
 from app.services.bills import (
     calculate_gst_totals,
     decrypt_payment_code,
@@ -293,6 +294,17 @@ def detach_bill(data, bill_number):
     db.commit()
     db.close()
     return code
+
+
+def issue_and_release(data, bill_number, token_key="owner_token", key=None, confirm=True):
+    return client.post(
+        f"/staff/bills/{bill_number}/issue-and-release",
+        json={"confirm_table_is_free": confirm},
+        headers={
+            "Authorization": f"Bearer {data[token_key]}",
+            "Idempotency-Key": key or f"detach-{bill_number}-phase2",
+        },
+    )
 
 
 def test_create_bill(bill_context):
@@ -1310,6 +1322,249 @@ def test_concurrent_detached_payment_creates_one_payment(bill_context):
 
     db = SessionLocal()
     bill = db.query(Bill).filter(Bill.bill_number == issued["bill_number"]).one()
+    assert db.query(Payment).filter(Payment.bill_id == bill.id).count() == 1
+    db.close()
+
+
+@pytest.mark.parametrize("token_key", ["owner_token", "admin_token"])
+def test_issue_and_release_api_authorized_and_secret_safe(bill_context, token_key):
+    add_order(bill_context)
+    issued = issue_bill_for(bill_context)
+    response = issue_and_release(bill_context, issued["bill_number"], token_key=token_key)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["bill_number"] == issued["bill_number"]
+    assert body["bill_status"] == "payment_pending"
+    assert body["session_status"] == "detached_awaiting_payment"
+    assert len(body["payment_code"]) == 6
+    serialized = response.text.lower()
+    assert "payment_code_hash" not in serialized
+    assert "ciphertext" not in serialized
+    assert "receipt_token" not in serialized
+    assert "participant" not in serialized
+
+
+def test_issue_and_release_api_permissions_idempotency_and_state_validation(bill_context):
+    add_order(bill_context)
+    issued = issue_bill_for(bill_context)
+    denied = issue_and_release(bill_context, issued["bill_number"], token_key="staff_token")
+    assert denied.status_code == 403
+
+    key = f"detach-retry-{uuid.uuid4().hex}"
+    first = issue_and_release(bill_context, issued["bill_number"], key=key)
+    replay = issue_and_release(bill_context, issued["bill_number"], key=key)
+    conflict = issue_and_release(bill_context, issued["bill_number"], key=key, confirm=False)
+    assert first.status_code == replay.status_code == 200
+    assert replay.json() == first.json()
+    assert conflict.status_code == 409
+
+    other_tenant = issue_and_release(
+        bill_context, issued["bill_number"], token_key="other_token", key=f"other-{uuid.uuid4().hex}"
+    )
+    assert other_tenant.status_code == 404
+
+
+def test_open_session_without_bill_request_cannot_detach(bill_context):
+    add_order(bill_context)
+    draft = create_bill(bill_context).json()
+    response = issue_and_release(bill_context, draft["bill_number"])
+    assert response.status_code == 409
+
+
+def test_payment_code_lookup_scoping_expiry_and_safe_response(bill_context):
+    add_order(bill_context)
+    issued = issue_bill_for(bill_context)
+    detached = issue_and_release(bill_context, issued["bill_number"]).json()
+    code = detached["payment_code"]
+
+    staff_lookup = client.post(
+        "/staff/bills/payment-code/lookup",
+        json={"payment_code": f"  {code.lower()}  "},
+        headers={"Authorization": f"Bearer {bill_context['staff_token']}"},
+    )
+    assert staff_lookup.status_code == 200
+    body = staff_lookup.json()
+    assert body["bill_number"] == issued["bill_number"]
+    assert body["can_confirm_payment"] is False
+    assert body["order_summary"]["item_count"] == 1
+    assert "payment_code" not in body
+    assert "receipt_token" not in staff_lookup.text
+    assert "ciphertext" not in staff_lookup.text
+
+    cross_tenant = client.post(
+        "/staff/bills/payment-code/lookup",
+        json={"payment_code": code},
+        headers={"Authorization": f"Bearer {bill_context['other_token']}"},
+    )
+    assert cross_tenant.status_code == 404
+    assert cross_tenant.json()["detail"] == "Payment code was not found."
+
+    invalid_format = client.post(
+        "/staff/bills/payment-code/lookup",
+        json={"payment_code": "O0I15S"},
+        headers={"Authorization": f"Bearer {bill_context['owner_token']}"},
+    )
+    assert invalid_format.status_code == 422
+
+    db = SessionLocal()
+    bill = db.query(Bill).filter(Bill.bill_number == issued["bill_number"]).one()
+    bill.payment_code_expires_at = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=1)
+    db.commit()
+    db.close()
+    expired = client.post(
+        "/staff/bills/payment-code/lookup",
+        json={"payment_code": code},
+        headers={"Authorization": f"Bearer {bill_context['owner_token']}"},
+    )
+    assert expired.status_code == 404
+
+
+def test_payment_code_lookup_rate_limit_and_audit_never_store_plain_code(monkeypatch, bill_context):
+    from app.services import bills as bill_service
+
+    monkeypatch.setattr(bill_service, "PAYMENT_CODE_LOOKUP_LIMIT", 2)
+    attempted_code = "A7K4P2"
+    headers = {"Authorization": f"Bearer {bill_context['owner_token']}"}
+    assert client.post(
+        "/staff/bills/payment-code/lookup", json={"payment_code": attempted_code}, headers=headers
+    ).status_code == 404
+    assert client.post(
+        "/staff/bills/payment-code/lookup", json={"payment_code": attempted_code}, headers=headers
+    ).status_code == 404
+    limited = client.post(
+        "/staff/bills/payment-code/lookup", json={"payment_code": attempted_code}, headers=headers
+    )
+    assert limited.status_code == 429
+    assert limited.headers["retry-after"]
+
+    db = SessionLocal()
+    attempt = db.query(PaymentCodeLookupAttempt).filter(
+        PaymentCodeLookupAttempt.restaurant_id == bill_context["restaurant_id"],
+        PaymentCodeLookupAttempt.actor_user_id == bill_context["owner_id"],
+    ).one()
+    audits = db.query(AuditLog).filter(
+        AuditLog.restaurant_id == bill_context["restaurant_id"],
+        AuditLog.action == "payment_code_lookup_rate_limited",
+    ).all()
+    assert attempt.attempt_count == 2
+    assert attempt.failed_count == 2
+    assert audits
+    assert attempted_code not in "".join((audit.new_value or "") + (audit.previous_value or "") for audit in audits)
+    db.close()
+
+
+def test_lookup_audits_success_and_staff_still_cannot_confirm(bill_context):
+    add_order(bill_context)
+    issued = issue_bill_for(bill_context)
+    code = issue_and_release(bill_context, issued["bill_number"]).json()["payment_code"]
+    lookup = client.post(
+        "/staff/bills/payment-code/lookup",
+        json={"payment_code": code},
+        headers={"Authorization": f"Bearer {bill_context['staff_token']}"},
+    )
+    assert lookup.status_code == 200
+    denied = confirm_counter_payment(
+        bill_context, issued["bill_number"], token_key="staff_token"
+    )
+    assert denied.status_code == 403
+
+    db = SessionLocal()
+    audit = db.query(AuditLog).filter(
+        AuditLog.restaurant_id == bill_context["restaurant_id"],
+        AuditLog.action == "payment_code_lookup_succeeded",
+    ).one()
+    attempt = db.query(PaymentCodeLookupAttempt).filter(
+        PaymentCodeLookupAttempt.restaurant_id == bill_context["restaurant_id"],
+        PaymentCodeLookupAttempt.actor_user_id == bill_context["staff_id"],
+    ).one()
+    assert code not in (audit.new_value or "")
+    assert attempt.successful_count == 1
+    db.close()
+
+
+def test_issue_release_and_detached_payment_realtime_are_safe(monkeypatch, bill_context):
+    from app.services import realtime
+
+    add_order(bill_context)
+    issued = issue_bill_for(bill_context)
+    published = []
+    monkeypatch.setattr(realtime.broker, "publish", lambda event: published.append(event))
+    detached = issue_and_release(bill_context, issued["bill_number"])
+    assert detached.status_code == 200
+    code = detached.json()["payment_code"]
+
+    event = next(item for item in published if item.type == "bill.detached_for_payment")
+    assert event.state["session_status"] == "detached_awaiting_payment"
+    assert event.state["original_table_id"] == bill_context["table_id"]
+    assert event.event_id
+    assert event.timestamp
+    assert code not in json.dumps(event.state)
+    assert "payment_code" not in json.dumps(event.state)
+    customer_payload = event.public_payload()
+    assert customer_payload["state"]["restaurant_id"] == bill_context["restaurant_id"]
+    assert customer_payload["state"]["original_session_id"] == bill_context["session_id"]
+    assert code not in json.dumps(customer_payload)
+
+    created = client.post(
+        f"/public/restaurants/{bill_context['restaurant_slug']}/tables/"
+        f"{bill_context['table_code']}/sessions",
+        headers={"X-Device-ID": uuid.uuid4().hex},
+    )
+    assert created.status_code == 201
+    new_token = created.json()["session"]["public_id"]
+    published.clear()
+    paid = confirm_counter_payment(bill_context, issued["bill_number"])
+    assert paid.status_code == 200
+    table_event = next(item for item in published if item.type == "table.status_changed")
+    assert table_event.state == {"status": "open", "session_token": new_token}
+
+    db = SessionLocal()
+    new_session = db.query(DiningSession).filter(DiningSession.public_token == new_token).one()
+    old_bill = db.query(Bill).filter(Bill.bill_number == issued["bill_number"]).one()
+    assert new_session.status == "open"
+    assert old_bill.status == "paid"
+    assert old_bill.payment_code_hash is None
+    assert old_bill.payment_code_ciphertext is None
+    assert db.query(AuditLog).filter(
+        AuditLog.target_id == str(old_bill.id),
+        AuditLog.action == "payment_code_invalidated",
+    ).count() == 1
+    db.close()
+
+
+def test_concurrent_lookup_and_payment_preserve_detached_bill_integrity(bill_context):
+    add_order(bill_context)
+    issued = issue_bill_for(bill_context)
+    code = issue_and_release(bill_context, issued["bill_number"]).json()["payment_code"]
+
+    def lookup():
+        return client.post(
+            "/staff/bills/payment-code/lookup",
+            json={"payment_code": code},
+            headers={"Authorization": f"Bearer {bill_context['owner_token']}"},
+        ).status_code
+
+    def pay():
+        return client.post(
+            f"/staff/bills/{issued['bill_number']}/confirm-counter-payment",
+            json={"method": "counter_cash"},
+            headers={
+                "Authorization": f"Bearer {bill_context['owner_token']}",
+                "Idempotency-Key": f"lookup-payment-{uuid.uuid4().hex}",
+            },
+        ).status_code
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        lookup_status = executor.submit(lookup)
+        payment_status = executor.submit(pay)
+        outcomes = (lookup_status.result(), payment_status.result())
+    assert outcomes[0] in {200, 404}
+    assert outcomes[1] == 200
+
+    db = SessionLocal()
+    bill = db.query(Bill).filter(Bill.bill_number == issued["bill_number"]).one()
+    assert bill.status == "paid"
     assert db.query(Payment).filter(Payment.bill_id == bill.id).count() == 1
     db.close()
 

@@ -29,6 +29,7 @@ EVENT_BILL_SENT_TO_COUNTER = "bill.sent_to_counter"
 EVENT_BILL_PAYMENT_PENDING = "bill.payment_pending"
 EVENT_BILL_PAYMENT_RECORDED = "bill.payment_recorded"
 EVENT_BILL_PAID = "bill.paid"
+EVENT_BILL_DETACHED_FOR_PAYMENT = "bill.detached_for_payment"
 EVENT_PAYMENT_ASSISTANCE_REQUESTED = "payment.assistance_requested"
 EVENT_TABLE_UPDATED = "table.updated"
 EVENT_TABLE_STATUS_CHANGED = "table.status_changed"
@@ -134,11 +135,18 @@ class RealtimeEvent:
     timestamp: str = field(default_factory=lambda: datetime.datetime.now(datetime.timezone.utc).isoformat())
 
     def public_payload(self, *, include_restaurant_id: bool = False) -> dict[str, Any]:
+        public_state = self.state if include_restaurant_id else _public_safe_state(self.state)
+        if not include_restaurant_id and self.type == EVENT_BILL_DETACHED_FOR_PAYMENT:
+            public_state.update({
+                key: self.state[key]
+                for key in ("restaurant_id", "original_table_id", "original_session_id")
+                if key in self.state
+            })
         payload = {
             "id": self.event_id,
             "type": self.type,
             "timestamp": self.timestamp,
-            "state": self.state if include_restaurant_id else _public_safe_state(self.state),
+            "state": public_state,
         }
         if include_restaurant_id:
             payload["restaurant_id"] = self.restaurant_id

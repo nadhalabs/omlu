@@ -2,7 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, field_serializer
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 from app.schemas.order import OrderItemSelectedOptionResponse
 
 
@@ -11,6 +11,64 @@ CounterPaymentMethod = Literal["counter_cash", "counter_upi"]
 
 class CounterPaymentRequest(BaseModel):
     method: CounterPaymentMethod
+
+
+class IssueAndReleaseRequest(BaseModel):
+    confirm_table_is_free: bool
+
+
+class PaymentCodeLookupRequest(BaseModel):
+    payment_code: str = Field(min_length=6, max_length=32)
+
+    @field_validator("payment_code")
+    @classmethod
+    def normalize_and_validate_code(cls, value: str) -> str:
+        normalized = value.strip().upper()
+        allowed = set("2346789ABCDEFGHJKLMNPQRTUVWXYZ")
+        if len(normalized) != 6 or any(character not in allowed for character in normalized):
+            raise ValueError("Payment code must be six valid characters.")
+        return normalized
+
+
+class ShortOrderSummary(BaseModel):
+    order_count: int
+    item_count: int
+    items: List[str]
+
+
+class DetachedPendingBillResponse(BaseModel):
+    bill_number: str
+    restaurant_name: str
+    original_table: str
+    original_table_id: int
+    session_id: int
+    bill_status: str
+    session_status: str
+    amount_due: Decimal
+    currency: str
+    issued_at: datetime
+    detached_at: datetime
+    payment_code_expires_at: datetime
+
+    @field_serializer("amount_due")
+    def serialize_amount(self, value: Decimal) -> str:
+        return f"{value:.2f}"
+
+
+class IssueAndReleaseResponse(DetachedPendingBillResponse):
+    payment_code: str
+
+
+class PaymentCodeLookupResponse(DetachedPendingBillResponse):
+    waiting_seconds: int
+    order_summary: ShortOrderSummary
+    can_confirm_payment: bool
+
+
+class RateLimitErrorResponse(BaseModel):
+    detail: str
+    retry_after_seconds: int
+    request_id: Optional[str] = None
 
 
 class BillItemResponse(BaseModel):

@@ -1,6 +1,9 @@
 import datetime
+import json
+import logging
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
@@ -8,21 +11,38 @@ from app.models.bill import Bill
 from app.models.dining_session import DiningSession
 from app.models.empty_table_report import EmptyTableReport
 from app.models.staff_user import AuditLog, StaffUser
-from app.services.idempotency import request_hash, require_key
-from app.schemas.bill import BillResponse, CounterPaymentRequest
+from app.services.idempotency import ensure_same_request, request_hash, require_key
+from app.schemas.bill import (
+    BillResponse,
+    CounterPaymentRequest,
+    DetachedPendingBillResponse,
+    IssueAndReleaseRequest,
+    IssueAndReleaseResponse,
+    PaymentCodeLookupRequest,
+    PaymentCodeLookupResponse,
+    RateLimitErrorResponse,
+    ShortOrderSummary,
+)
 from app.services.bills import (
+    begin_payment_code_lookup_attempt,
     build_bill_response,
     confirm_counter_payment,
     create_or_refresh_bill_for_session,
+    decrypt_payment_code,
+    detach_issued_bill_and_release_table,
+    find_unresolved_bill_by_payment_code,
+    finish_payment_code_lookup_attempt,
+    get_billable_orders,
     issue_bill,
     send_bill_to_counter,
 )
 from app.services.dining_sessions import find_current_open_session_for_table
-from app.services.table_participants import enforce_session_action_rate, load_participant, participant_token_header
+from app.services.table_participants import authority_hash, enforce_session_action_rate, load_participant, participant_token_header
 from app.services.table_participants import invalidate_session_participants
 from app.utils.auth import OperationalWriteChecker, RoleChecker
 from app.services.realtime import (
     EVENT_BILL_GENERATED,
+    EVENT_BILL_DETACHED_FOR_PAYMENT,
     EVENT_BILL_PAYMENT_PENDING,
     EVENT_BILL_PAYMENT_RECORDED,
     EVENT_BILL_PAID,
@@ -38,9 +58,58 @@ from app.services.realtime import (
 
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 _bill_issue_roles = OperationalWriteChecker(["owner", "admin", "staff"])
 _payment_record_roles = RoleChecker(["owner", "admin"])
+_payment_lookup_roles = RoleChecker(["owner", "admin", "staff"])
+
+
+def _short_order_summary(db: Session, bill: Bill) -> ShortOrderSummary:
+    orders = get_billable_orders(db, bill.dining_session_id)
+    item_count = sum(item.quantity for order in orders for item in order.items)
+    labels = [
+        f"{item.quantity} × {item.item_name}"
+        for order in orders
+        for item in order.items
+    ][:5]
+    return ShortOrderSummary(order_count=len(orders), item_count=item_count, items=labels)
+
+
+def _detached_response(
+    db: Session,
+    bill: Bill,
+    *,
+    payment_code: str | None = None,
+    actor: StaffUser | None = None,
+) -> DetachedPendingBillResponse | IssueAndReleaseResponse | PaymentCodeLookupResponse:
+    session = bill.dining_session
+    common = {
+        "bill_number": bill.bill_number,
+        "restaurant_name": bill.restaurant.name,
+        "original_table": session.table.table_number,
+        "original_table_id": session.table_id,
+        "session_id": session.id,
+        "bill_status": bill.status,
+        "session_status": session.status,
+        "amount_due": bill.total_amount,
+        "currency": bill.currency,
+        "issued_at": bill.generated_at,
+        "detached_at": session.detached_at,
+        "payment_code_expires_at": bill.payment_code_expires_at,
+    }
+    if payment_code is not None:
+        return IssueAndReleaseResponse(**common, payment_code=payment_code)
+    now = datetime.datetime.now(datetime.timezone.utc)
+    detached_at = session.detached_at
+    if detached_at.tzinfo is None:
+        detached_at = detached_at.replace(tzinfo=datetime.timezone.utc)
+    return PaymentCodeLookupResponse(
+        **common,
+        waiting_seconds=max(0, int((now - detached_at).total_seconds())),
+        order_summary=_short_order_summary(db, bill),
+        can_confirm_payment=bool(actor and actor.role in {"owner", "admin"}),
+    )
 
 
 @router.post(
@@ -304,6 +373,202 @@ def list_pending_counter_payments(
     return {"items": items}
 
 
+@router.post(
+    "/staff/bills/payment-code/lookup",
+    response_model=PaymentCodeLookupResponse,
+    responses={429: {"model": RateLimitErrorResponse}},
+)
+def lookup_staff_bill_by_payment_code(
+    payload: PaymentCodeLookupRequest,
+    request: Request,
+    current_user: StaffUser = Depends(_payment_lookup_roles),
+    db: Session = Depends(get_db),
+):
+    request_id = getattr(request.state, "request_id", None)
+    client_material = (
+        f"{request.client.host if request.client else 'unknown'}:"
+        f"{request.headers.get('user-agent', 'unknown')[:200]}"
+    )
+    client_identifier_hash = authority_hash(f"payment-code-lookup:{client_material}")
+    attempt, retry_after = begin_payment_code_lookup_attempt(
+        db,
+        restaurant_id=current_user.restaurant_id,
+        actor_user_id=current_user.id,
+        client_identifier_hash=client_identifier_hash,
+    )
+    if retry_after is not None:
+        db.add(AuditLog(
+            restaurant_id=current_user.restaurant_id,
+            actor_user_id=current_user.id,
+            actor_role=current_user.role,
+            target_type="payment_code_lookup",
+            target_id=None,
+            action="payment_code_lookup_rate_limited",
+            new_value=json.dumps({
+                "request_id": request_id,
+                "attempt_count": attempt.attempt_count,
+                "retry_after_seconds": retry_after,
+            }, sort_keys=True),
+        ))
+        db.commit()
+        logger.warning(
+            "event=payment_code_lookup_rate_limited restaurant_id=%s actor_id=%s request_id=%s",
+            current_user.restaurant_id,
+            current_user.id,
+            request_id,
+        )
+        return JSONResponse(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            content={
+                "detail": "Too many payment-code lookup attempts. Please wait and retry.",
+                "retry_after_seconds": retry_after,
+                "request_id": request_id,
+            },
+            headers={"Retry-After": str(retry_after)},
+        )
+
+    bill = find_unresolved_bill_by_payment_code(
+        db,
+        restaurant_id=current_user.restaurant_id,
+        code=payload.payment_code,
+        lock_for_update=True,
+    )
+    finish_payment_code_lookup_attempt(attempt, succeeded=bill is not None)
+    if bill is not None:
+        db.add(AuditLog(
+            restaurant_id=current_user.restaurant_id,
+            actor_user_id=current_user.id,
+            actor_role=current_user.role,
+            target_type="bill",
+            target_id=str(bill.id),
+            action="payment_code_lookup_succeeded",
+            previous_value=json.dumps({"bill_status": bill.status}, sort_keys=True),
+            new_value=json.dumps({
+                "bill_status": bill.status,
+                "session_id": bill.dining_session_id,
+                "table_id": bill.dining_session.table_id,
+                "request_id": request_id,
+            }, sort_keys=True),
+        ))
+    db.commit()
+    logger.info(
+        "event=payment_code_lookup restaurant_id=%s actor_id=%s outcome=%s request_id=%s",
+        current_user.restaurant_id,
+        current_user.id,
+        "success" if bill else "not_found",
+        request_id,
+    )
+    if bill is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payment code was not found.")
+    return _detached_response(db, bill, actor=current_user)
+
+
+@router.post(
+    "/staff/bills/{bill_number}/issue-and-release",
+    response_model=IssueAndReleaseResponse,
+)
+def issue_and_release_staff_bill(
+    bill_number: str,
+    payload: IssueAndReleaseRequest,
+    request: Request,
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
+    current_user: StaffUser = Depends(_payment_record_roles),
+    db: Session = Depends(get_db),
+):
+    key = require_key(idempotency_key)
+    payload_hash = request_hash(payload.model_dump(mode="json"))
+    bill = db.query(Bill).filter(
+        Bill.restaurant_id == current_user.restaurant_id,
+        Bill.bill_number == bill_number,
+    ).first()
+    if not bill:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
+
+    if bill.detachment_idempotency_key:
+        if bill.detachment_idempotency_key != key:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Bill was already detached with a different Idempotency-Key.",
+            )
+        ensure_same_request(bill.detachment_request_hash, payload_hash)
+        if (
+            bill.dining_session.status != "detached_awaiting_payment"
+            or bill.status != "payment_pending"
+            or not bill.payment_code_ciphertext
+            or not bill.payment_code_expires_at
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="The detached bill is no longer awaiting payment.",
+            )
+        return _detached_response(
+            db, bill, payment_code=decrypt_payment_code(bill.payment_code_ciphertext)
+        )
+
+    if not payload.confirm_table_is_free:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Staff must confirm that the table is physically free.",
+        )
+    result = detach_issued_bill_and_release_table(
+        db,
+        restaurant_id=current_user.restaurant_id,
+        bill_id=bill.id,
+        actor=current_user,
+        idempotency_key=key,
+        payload_hash=payload_hash,
+        request_id=getattr(request.state, "request_id", None),
+    )
+    db.commit()
+    detached = result.bill
+    current_table_session = find_current_open_session_for_table(
+        db, detached.dining_session.table_id
+    )
+    event_state = {
+        "restaurant_id": current_user.restaurant_id,
+        "original_table_id": detached.dining_session.table_id,
+        "original_session_id": detached.dining_session_id,
+        "bill_number": detached.bill_number,
+        "bill_status": detached.status,
+        "session_status": detached.dining_session.status,
+        "detached_at": detached.dining_session.detached_at.isoformat(),
+        "authority_epoch": detached.dining_session.join_code_version,
+    }
+    publish_event(
+        EVENT_BILL_DETACHED_FOR_PAYMENT,
+        restaurant_id=current_user.restaurant_id,
+        channels=[
+            restaurant_channel(current_user.restaurant_id, "operations"),
+            restaurant_channel(current_user.restaurant_id, "staff"),
+            session_channel(detached.dining_session.public_token),
+            table_channel(current_user.restaurant_id, detached.dining_session.table_id),
+        ],
+        resource_id=detached.id,
+        state=event_state,
+    )
+    publish_event(
+        EVENT_BILL_UPDATED,
+        restaurant_id=current_user.restaurant_id,
+        channels=[restaurant_channel(current_user.restaurant_id, "operations")],
+        resource_id=detached.id,
+        state={"bill_number": detached.bill_number, "status": detached.status},
+    )
+    publish_event(
+        EVENT_TABLE_STATUS_CHANGED,
+        restaurant_id=current_user.restaurant_id,
+        channels=[
+            restaurant_channel(current_user.restaurant_id, "operations"),
+            table_channel(current_user.restaurant_id, detached.dining_session.table_id),
+        ],
+        resource_id=detached.dining_session.table_id,
+        state={
+            "status": current_table_session.status if current_table_session else "free",
+            "session_token": current_table_session.public_token if current_table_session else None,
+        },
+    )
+    return _detached_response(db, detached, payment_code=result.payment_code)
+
+
 @router.get("/staff/bills/{bill_number}", response_model=BillResponse)
 def get_staff_bill(
     bill_number: str,
@@ -374,6 +639,7 @@ def issue_staff_bill(
 def confirm_staff_counter_payment(
     bill_number: str,
     payload: CounterPaymentRequest,
+    request: Request,
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     current_user: StaffUser = Depends(_payment_record_roles),
     db: Session = Depends(get_db),
@@ -388,6 +654,11 @@ def confirm_staff_counter_payment(
     if not bill:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
 
+    previous_bill_status = bill.status
+    had_payment_code = bool(bill.payment_code_hash or bill.payment_code_ciphertext)
+    previous_session_status = (
+        "detached_awaiting_payment" if had_payment_code else "payment_pending"
+    )
     paid, replayed = confirm_counter_payment(db, bill, current_user, payload.method, key, payload_hash)
     if replayed:
         return build_bill_response(db, paid)
@@ -418,11 +689,43 @@ def confirm_staff_counter_payment(
         target_type="bill",
         target_id=str(paid.id),
         action="counter_payment_recorded",
-        new_value=(
-            f'{{"bill_number": "{paid.bill_number}", '
-            f'"method": "{paid.payment_method}", "amount": "{paid.total_amount}"}}'
-        ),
+        previous_value=json.dumps({
+            "bill_status": previous_bill_status,
+            "session_status": previous_session_status,
+        }, sort_keys=True),
+        new_value=json.dumps({
+            "bill_number": paid.bill_number,
+            "bill_status": paid.status,
+            "session_status": paid.dining_session.status,
+            "session_id": paid.dining_session_id,
+            "table_id": paid.dining_session.table_id,
+            "method": paid.payment_method,
+            "amount": str(paid.total_amount),
+            "request_id": getattr(request.state, "request_id", None),
+        }, sort_keys=True),
     ))
+    if had_payment_code:
+        db.add(AuditLog(
+            restaurant_id=current_user.restaurant_id,
+            actor_user_id=current_user.id,
+            actor_role=current_user.role,
+            target_type="bill",
+            target_id=str(paid.id),
+            action="payment_code_invalidated",
+            previous_value=json.dumps({
+                "bill_status": previous_bill_status,
+                "session_status": previous_session_status,
+                "code_active": True,
+            }, sort_keys=True),
+            new_value=json.dumps({
+                "bill_status": paid.status,
+                "session_status": paid.dining_session.status,
+                "code_active": False,
+                "session_id": paid.dining_session_id,
+                "table_id": paid.dining_session.table_id,
+                "request_id": getattr(request.state, "request_id", None),
+            }, sort_keys=True),
+        ))
     db.commit()
     staff_event_channels = [
         restaurant_channel(current_user.restaurant_id, "operations"),

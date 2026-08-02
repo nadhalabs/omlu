@@ -149,6 +149,7 @@ def invalidate_session_participants(db: Session, session: DiningSession, reason:
     session.join_code_hash = None
     session.join_code_ciphertext = None
     session.join_code_expires_at = now
+    session.join_code_version += 1
     return updated
 
 
