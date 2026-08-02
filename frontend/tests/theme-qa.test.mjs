@@ -32,6 +32,7 @@ test("one provider owns every ThemeToggle placement", () => {
   assert.match(provider, /THEME_STORAGE_KEY = "omlu_theme"/);
   assert.match(read("components/ThemeToggle.tsx"), /useTheme/);
   assert.match(read("components/PublicThemeControl.tsx"), /<ThemeToggle/);
+  assert.match(read("components/LandingThemeToggle.tsx"), /useTheme/);
 });
 
 test("anti-flash, persistence, System, and cross-tab synchronization remain intact", () => {

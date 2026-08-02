@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { AndroidDownloadCard } from "@/components/AndroidDownloadCard";
-import { PublicThemeControl } from "@/components/PublicThemeControl";
+import { LandingThemeToggle } from "@/components/LandingThemeToggle";
 
 export default function Home() {
   return (
     <div className="min-h-screen overflow-x-hidden bg-[var(--omlu-page-background)] text-[var(--omlu-text-primary)]">
-      <div className="mx-auto flex w-full max-w-6xl justify-end px-5 pt-5 sm:px-8"><PublicThemeControl /></div>
+      <header className="mx-auto flex w-full max-w-6xl justify-end px-5 pt-5 sm:px-8"><LandingThemeToggle /></header>
       <main className="mx-auto flex w-full max-w-6xl flex-col gap-16 px-5 py-12 sm:px-8 sm:py-16">
         <section className="max-w-2xl py-8 sm:py-14">
           <p className="mb-3 text-sm font-black uppercase tracking-widest text-orange-700">
