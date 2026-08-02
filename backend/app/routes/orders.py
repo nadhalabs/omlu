@@ -157,6 +157,7 @@ def build_session_response(db: Session, dining_session: DiningSession):
         "table_number": dining_session.table.table_number,
         "table_code": dining_session.table.table_code,
         "opened_at": dining_session.opened_at,
+        "payment_requested_at": dining_session.payment_requested_at,
         "orders": orders,
         "combined_subtotal": sum((order.subtotal for order in orders), Decimal("0.00")),
         "order_count": len(orders),

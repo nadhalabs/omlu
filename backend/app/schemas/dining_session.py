@@ -75,6 +75,7 @@ class PublicDiningSessionResponse(BaseModel):
     table_number: str
     table_code: str
     opened_at: datetime
+    payment_requested_at: Optional[datetime] = None
     orders: List[DiningSessionOrderSummary]
     combined_subtotal: Decimal
     order_count: int

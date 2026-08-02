@@ -828,6 +828,7 @@ def build_bill_response(db: Session, bill: Bill):
         "state_name": bill.state_name_snapshot,
         "state_code": bill.state_code_snapshot,
         "session_status": bill.dining_session.status,
+        "payment_requested_at": bill.dining_session.payment_requested_at,
         "detached_at": bill.dining_session.detached_at,
         "payment_code": (
             decrypt_payment_code(bill.payment_code_ciphertext)

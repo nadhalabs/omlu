@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PublicThemeControl } from "@/components/PublicThemeControl";
-import { ApiError, getPublicBill } from "@/lib/api";
-import { BillResponse } from "@/lib/types";
+import { ApiError, getPublicBill, getPublicDiningSession } from "@/lib/api";
+import { BillResponse, PublicDiningSessionResponse } from "@/lib/types";
 import { buildWhatsAppBillShareUrl } from "@/lib/billShare";
 import { clearCustomerCartState, completionPath, markCompletedSession, readCompletedSession } from "@/lib/customerCompletion";
 import { useRealtime } from "@/lib/realtime";
@@ -29,6 +29,7 @@ export default function BillClient({ sessionToken, receiptToken = "" }: BillClie
   const [bill, setBill] = useState<BillResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [waitingSession, setWaitingSession] = useState<PublicDiningSessionResponse | null>(null);
   const [language, setLanguage] = useState<"en" | "ml">("en");
   const [showPaymentSuccess, setShowPaymentSuccess] = useState<boolean>(false);
   const [codeCopied, setCodeCopied] = useState(false);
@@ -55,8 +56,14 @@ export default function BillClient({ sessionToken, receiptToken = "" }: BillClie
       billNumber: "Bill number",
       loading: "Loading bill...",
       retry: "Retry",
-      notFound: "Bill not found",
-      notFoundDesc: "Ask the staff or return to the table session to prepare the bill.",
+      unavailable: "Bill unavailable",
+      unavailableDesc: "We could not open this bill. Please ask the restaurant staff for help.",
+      requestedTitle: "Bill requested",
+      requestedDesc: "The restaurant is preparing your bill.",
+      stayHere: "You can stay on this page",
+      autoUpdate: "This page will update automatically.",
+      requestedAt: "Requested time",
+      currentOrderTotal: "Current order total",
       orders: "Orders",
       subtotal: "Subtotal",
       tax: "Tax",
@@ -107,8 +114,14 @@ export default function BillClient({ sessionToken, receiptToken = "" }: BillClie
       billNumber: "ബിൽ നമ്പർ",
       loading: "ബിൽ ലോഡ് ചെയ്യുന്നു...",
       retry: "വീണ്ടും ശ്രമിക്കുക",
-      notFound: "ബിൽ കണ്ടെത്തിയില്ല",
-      notFoundDesc: "സ്റ്റാഫിനെ അറിയിക്കുക അല്ലെങ്കിൽ ടേബിൾ സെഷനിൽ നിന്ന് ബിൽ തയ്യാറാക്കുക.",
+      unavailable: "ബിൽ ലഭ്യമല്ല",
+      unavailableDesc: "ഈ ബിൽ തുറക്കാൻ കഴിഞ്ഞില്ല. ദയവായി റെസ്റ്റോറന്റ് സ്റ്റാഫിനോട് സഹായം ചോദിക്കുക.",
+      requestedTitle: "ബിൽ അഭ്യർത്ഥിച്ചു",
+      requestedDesc: "റെസ്റ്റോറന്റ് നിങ്ങളുടെ ബിൽ തയ്യാറാക്കുകയാണ്.",
+      stayHere: "നിങ്ങൾക്ക് ഈ പേജിൽ തുടരാം",
+      autoUpdate: "ബിൽ തയ്യാറാകുമ്പോൾ ഈ പേജ് സ്വയം പുതുക്കും.",
+      requestedAt: "അഭ്യർത്ഥിച്ച സമയം",
+      currentOrderTotal: "നിലവിലെ ഓർഡർ ആകെ",
       orders: "ഓർഡറുകൾ",
       subtotal: "ആകെ",
       tax: "നികുതി",
@@ -205,6 +218,7 @@ export default function BillClient({ sessionToken, receiptToken = "" }: BillClie
       const seen = hasSeenPaymentSuccess(sessionToken, billKey);
 
       setBill(data);
+      setWaitingSession(null);
       setError(null);
       paidStatusRef.current = data.status;
       if (data.status !== "draft" && data.receipt_token) {
@@ -286,16 +300,27 @@ export default function BillClient({ sessionToken, receiptToken = "" }: BillClie
         const data = await getPublicBill(sessionToken, authority, receiptAccessToken);
         applyFetchedBill(data, source);
       } catch (err) {
-        if (err instanceof ApiError) {
-          setError(err.status === 404 ? t.notFound : err.message);
-        } else {
-          setError("Could not connect to the backend server.");
+        const authority = readSessionParticipantToken(sessionToken) || "";
+        if (err instanceof ApiError && err.status === 404 && authority && !receiptAccessToken) {
+          try {
+            const session = await getPublicDiningSession(sessionToken, authority);
+            if (session.status === "payment_requested" && (!session.bill || session.bill.status === "draft")) {
+              setBill(null);
+              setWaitingSession(session);
+              setError(null);
+              return;
+            }
+          } catch {
+            // The customer-friendly unavailable state below covers invalid or revoked authority.
+          }
         }
+        setWaitingSession(null);
+        setError(t.unavailable);
       } finally {
         if (showLoading) setLoading(false);
       }
     },
-    [applyFetchedBill, receiptAccessToken, sessionToken, t.notFound]
+    [applyFetchedBill, receiptAccessToken, sessionToken, t.unavailable]
   );
 
   useEffect(() => {
@@ -306,12 +331,17 @@ export default function BillClient({ sessionToken, receiptToken = "" }: BillClie
       }
     };
     const handleOnline = () => fetchBill(false, "poll");
+    const handlePageRestore = () => fetchBill(false, "poll");
     document.addEventListener("visibilitychange", handleVisibility);
     window.addEventListener("online", handleOnline);
+    window.addEventListener("focus", handlePageRestore);
+    window.addEventListener("pageshow", handlePageRestore);
     return () => {
       window.clearTimeout(timeout);
       document.removeEventListener("visibilitychange", handleVisibility);
       window.removeEventListener("online", handleOnline);
+      window.removeEventListener("focus", handlePageRestore);
+      window.removeEventListener("pageshow", handlePageRestore);
     };
   }, [fetchBill]);
 
@@ -332,13 +362,38 @@ export default function BillClient({ sessionToken, receiptToken = "" }: BillClie
       ? ""
       : `${window.location.origin}/bill/${encodeURIComponent(sessionToken)}?receipt=${encodeURIComponent(receiptAccessToken)}`;
 
-  if (loading && !bill) {
+  if (loading && !bill && !waitingSession) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-[var(--omlu-muted-surface)] px-4 py-8 dark:bg-[var(--omlu-page-background)]">
         <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-t-2 border-orange-600" />
         <p className="mt-4 font-medium text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)]">
           {t.loading}
         </p>
+      </div>
+    );
+  }
+
+  const draftWaiting = bill?.session_status === "payment_requested" && bill.status === "draft";
+  const waitingTable = waitingSession?.table_number || bill?.table_number;
+  const waitingTotal = waitingSession?.combined_subtotal || bill?.total_amount;
+  const waitingRequestedAt = waitingSession?.payment_requested_at || bill?.payment_requested_at || bill?.generated_at;
+
+  if ((waitingSession || draftWaiting) && !error) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[var(--omlu-page-background)] p-5 text-[var(--omlu-text-primary)]">
+        <section aria-labelledby="bill-requested-title" className="w-full max-w-lg rounded-3xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-6 text-center shadow-sm sm:p-8">
+          <div aria-hidden="true" className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-orange-200 border-t-orange-600 dark:border-orange-950 dark:border-t-orange-500" />
+          <h1 id="bill-requested-title" className="mt-5 text-3xl font-black">{t.requestedTitle}</h1>
+          <p className="mt-3 text-base text-[var(--omlu-text-secondary)]">{t.requestedDesc}</p>
+          <dl className="mt-6 grid gap-3 rounded-2xl bg-[var(--omlu-muted-surface)] p-4 text-left sm:grid-cols-3">
+            <div><dt className="text-xs font-bold text-[var(--omlu-text-secondary)]">{t.table}</dt><dd className="mt-1 font-black">{waitingTable}</dd></div>
+            {waitingTotal && <div><dt className="text-xs font-bold text-[var(--omlu-text-secondary)]">{t.currentOrderTotal}</dt><dd className="mt-1 font-black">₹{Number(waitingTotal).toFixed(2)}</dd></div>}
+            {waitingRequestedAt && <div><dt className="text-xs font-bold text-[var(--omlu-text-secondary)]">{t.requestedAt}</dt><dd className="mt-1 text-sm font-bold">{new Date(waitingRequestedAt).toLocaleString()}</dd></div>}
+          </dl>
+          <p className="mt-6 font-bold text-orange-700 dark:text-orange-400">{t.stayHere}</p>
+          <p className="mt-1 text-sm text-[var(--omlu-text-secondary)]">{t.autoUpdate}</p>
+          <div className="mt-5 flex justify-center"><PublicThemeControl /></div>
+        </section>
       </div>
     );
   }
@@ -351,14 +406,8 @@ export default function BillClient({ sessionToken, receiptToken = "" }: BillClie
             {error}
           </h1>
           <p className="mt-2 text-sm text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)]">
-            {t.notFoundDesc}
+            {t.unavailableDesc}
           </p>
-          <button
-            onClick={() => fetchBill(true)}
-            className="mt-6 min-h-12 rounded-2xl bg-orange-600 px-6 py-3 font-bold text-[var(--omlu-primary-action-text)]"
-          >
-            {t.retry}
-          </button>
         </div>
       </div>
     );

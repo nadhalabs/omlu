@@ -162,6 +162,7 @@ export interface PublicDiningSessionResponse {
   table_number: string;
   table_code: string;
   opened_at: string;
+  payment_requested_at: string | null;
   orders: DiningSessionOrder[];
   combined_subtotal: string;
   order_count: number;
@@ -232,6 +233,7 @@ export interface BillResponse {
   state_name: string | null;
   state_code: string | null;
   session_status: DiningSessionStatus;
+  payment_requested_at: string | null;
   detached_at: string | null;
   payment_code: string | null;
   payment_code_expires_at: string | null;

@@ -135,6 +135,7 @@ class BillResponse(BaseModel):
     state_name: Optional[str] = None
     state_code: Optional[str] = None
     session_status: str
+    payment_requested_at: Optional[datetime] = None
     detached_at: Optional[datetime] = None
     payment_code: Optional[str] = None
     payment_code_expires_at: Optional[datetime] = None
