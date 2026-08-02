@@ -2086,3 +2086,197 @@ def test_concurrent_invoice_generation_is_unique(bill_context):
         numbers = list(executor.map(allocate, range(12)))
     assert len(set(numbers)) == 12
     assert sorted(int(number.rsplit("/", 1)[1]) for number in numbers) == list(range(1, 13))
+
+
+# ---------------------------------------------------------------------------
+# Post-payment lifecycle regression tests
+# Scope: explicit checks for the invariants that are most critical for
+#   customer-lifecycle correctness but were NOT individually asserted above.
+# ---------------------------------------------------------------------------
+
+def test_payment_revokes_all_active_participant_tokens(bill_context):
+    """All TableSessionParticipant rows for the session must have revoked_at set after payment."""
+    add_order(bill_context)
+    issued = issue_bill_for(bill_context)
+    send_to_counter(bill_context, issued["bill_number"])
+
+    db = SessionLocal()
+    session = db.query(DiningSession).filter(DiningSession.id == bill_context["session_id"]).one()
+    active_before = sum(1 for p in session.participants if p.revoked_at is None)
+    db.close()
+    assert active_before >= 1, "at least one active participant must exist before payment"
+
+    paid = confirm_counter_payment(bill_context, issued["bill_number"])
+    assert paid.status_code == 200
+
+    db = SessionLocal()
+    session = db.query(DiningSession).filter(DiningSession.id == bill_context["session_id"]).one()
+    db.refresh(session)
+    still_active = [p for p in session.participants if p.revoked_at is None]
+    assert still_active == [], f"expected all tokens revoked after payment; {len(still_active)} remain active"
+    db.close()
+
+
+def test_payment_clears_join_code_from_session(bill_context):
+    """Session join code hash must be cleared after payment so no new device can join."""
+    add_order(bill_context)
+    issued = issue_bill_for(bill_context)
+    send_to_counter(bill_context, issued["bill_number"])
+
+    db = SessionLocal()
+    session = db.query(DiningSession).filter(DiningSession.id == bill_context["session_id"]).one()
+    assert session.join_code_hash is not None, "join code hash must exist before payment"
+    db.close()
+
+    paid = confirm_counter_payment(bill_context, issued["bill_number"])
+    assert paid.status_code == 200
+
+    db = SessionLocal()
+    session = db.query(DiningSession).filter(DiningSession.id == bill_context["session_id"]).one()
+    assert session.join_code_hash is None, "join code hash must be cleared after payment"
+    db.close()
+
+
+def test_old_participant_cannot_request_service_after_payment(bill_context):
+    """A revoked participant token must not be able to submit a service request after payment."""
+    add_order(bill_context)
+    issued = issue_bill_for(bill_context)
+    send_to_counter(bill_context, issued["bill_number"])
+    confirm_counter_payment(bill_context, issued["bill_number"])
+
+    response = client.post(
+        f"/public/restaurants/{bill_context['restaurant_slug']}/tables/"
+        f"{bill_context['table_code']}/service-requests",
+        json={"request_type": "water"},
+        headers=participant_headers(bill_context["participant_token"]),
+    )
+    assert response.status_code == 401
+
+
+def test_receipt_token_cannot_be_used_to_place_an_order(bill_context):
+    """A receipt_token grants read-only bill access only; it must not authorise ordering."""
+    add_order(bill_context)
+    issued = issue_bill_for(bill_context)
+    send_to_counter(bill_context, issued["bill_number"])
+    confirm_counter_payment(bill_context, issued["bill_number"])
+
+    # Attempt to place an order using the receipt token as a participant token
+    response = client.post(
+        f"/public/sessions/{bill_context['session_token']}/orders",
+        json={"items": [{"menu_item_id": bill_context["item_id"], "quantity": 1}]},
+        headers={
+            "Idempotency-Key": uuid.uuid4().hex,
+            "X-Participant-Token": issued["receipt_token"],
+        },
+    )
+    assert response.status_code in (401, 409)
+
+
+def test_new_customer_after_full_payment_cannot_access_old_session_or_bill(bill_context):
+    """
+    After a full payment cycle (not just detachment), a new session at the same
+    table must be completely isolated from the previous session and its bill.
+
+    Tests the explicit requirement: 'the new session cannot access any previous
+    customer, participant, bill or receipt data'.
+    """
+    add_order(bill_context)
+    issued = issue_bill_for(bill_context)
+    send_to_counter(bill_context, issued["bill_number"])
+    confirm_counter_payment(bill_context, issued["bill_number"])
+
+    # Create a new session at the same table
+    new_session_resp = client.post(
+        f"/public/restaurants/{bill_context['restaurant_slug']}/tables/"
+        f"{bill_context['table_code']}/sessions",
+        headers={"X-Device-ID": uuid.uuid4().hex},
+    )
+    assert new_session_resp.status_code == 201
+    new_body = new_session_resp.json()
+    new_token = new_body["session"]["public_id"]
+    new_participant_token = new_body["participant_token"]
+
+    # New participant must NOT be able to see the old session
+    old_session_read = client.get(
+        f"/public/sessions/{bill_context['session_token']}",
+        headers={"X-Participant-Token": new_participant_token},
+    )
+    assert old_session_read.status_code in (401, 403, 404), (
+        "new participant must not be able to read old session"
+    )
+
+    # New participant must NOT be able to read the old bill via participant authority
+    old_bill_read = client.get(
+        f"/public/sessions/{bill_context['session_token']}/bill",
+        headers={"X-Participant-Token": new_participant_token},
+    )
+    assert old_bill_read.status_code in (401, 403, 404), (
+        "new participant must not be able to read old bill via participant token"
+    )
+
+    # Old participant must NOT be able to read the new session
+    new_session_read = client.get(
+        f"/public/sessions/{new_token}",
+        headers=participant_headers(bill_context["participant_token"]),
+    )
+    assert new_session_read.status_code == 401, (
+        "revoked old participant token must not be valid for new session"
+    )
+
+    # The new session must be independent: has its own public token
+    assert new_token != bill_context["session_token"]
+
+    # The old receipt is still accessible via receipt token (not via participant)
+    receipt_read = client.get(f"/public/bills/{issued['receipt_token']}")
+    assert receipt_read.status_code == 200
+    assert receipt_read.json()["status"] == "paid"
+
+
+def test_staff_can_complete_payment_without_customer_websocket(bill_context):
+    """
+    Payment confirmation is purely a staff-side action.  It must succeed even
+    when called directly by staff with no customer WebSocket connected, and the
+    bill must become paid + session must become closed.
+    """
+    add_order(bill_context)
+    issued = issue_bill_for(bill_context)
+    send_to_counter(bill_context, issued["bill_number"])
+
+    # Confirm without any customer connection (no WS; just staff HTTP call)
+    paid = confirm_counter_payment(bill_context, issued["bill_number"], token_key="owner_token")
+    assert paid.status_code == 200
+
+    body = paid.json()
+    assert body["status"] == "paid"
+    assert body["payment_method"] == "counter_cash"
+
+    db = SessionLocal()
+    session = db.query(DiningSession).filter(DiningSession.id == bill_context["session_id"]).one()
+    assert session.status == "closed"
+    assert session.paid_at is not None
+    assert session.closed_at is not None
+    db.close()
+
+
+def test_new_session_after_full_payment_has_independent_join_code(bill_context):
+    """
+    After a complete payment cycle, the new session at the same table must have
+    its own independent join authority — old join code must not work.
+    """
+    add_order(bill_context)
+    issued = issue_bill_for(bill_context)
+    send_to_counter(bill_context, issued["bill_number"])
+    confirm_counter_payment(bill_context, issued["bill_number"])
+
+    new_session_resp = client.post(
+        f"/public/restaurants/{bill_context['restaurant_slug']}/tables/"
+        f"{bill_context['table_code']}/sessions",
+        headers={"X-Device-ID": uuid.uuid4().hex},
+    )
+    assert new_session_resp.status_code == 201
+    new_body = new_session_resp.json()
+
+    # New session has its own join code
+    assert new_body["join_code"].isdigit()
+    assert len(new_body["join_code"]) == 4
+    assert new_body["session"]["public_id"] != bill_context["session_token"]

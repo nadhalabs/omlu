@@ -85,6 +85,11 @@ export default function BillClient({ sessionToken, receiptToken = "" }: BillClie
       receiptAction: "View receipt",
       paidAmount: "Paid amount",
       sessionComplete: "Your dining session is complete. Scan the table QR again to start a new order.",
+      tableReady: "This table is now ready for the next guest.",
+      doneLabel: "Done",
+      viewFullReceipt: "View full receipt",
+      /** Replaces raw operational kitchen status on paid customer-facing receipts. */
+      receiptOrderStatus: "Received",
       billReadyTitle: "Bill ready",
       billReadyMessage: "Your ordering session has ended.",
       showCodeAtCounter: "Show this payment code at the counter:",
@@ -145,6 +150,11 @@ export default function BillClient({ sessionToken, receiptToken = "" }: BillClie
       receiptAction: "രസീത് കാണുക",
       paidAmount: "അടച്ച തുക",
       sessionComplete: "നിങ്ങളുടെ ഡൈനിംഗ് സെഷൻ പൂർത്തിയായി. പുതിയ ഓർഡർ തുടങ്ങാൻ ടേബിൾ QR വീണ്ടും സ്കാൻ ചെയ്യുക.",
+      tableReady: "ഈ ടേബിൾ അടുത്ത അതിഥിക്കായി തയ്യാറാണ്.",
+      doneLabel: "പൂർത്തിയായി",
+      viewFullReceipt: "പൂർണ്ണ രസീത് കാണുക",
+      /** Replaces raw operational kitchen status on paid customer-facing receipts. */
+      receiptOrderStatus: "ലഭിച്ചു",
       billReadyTitle: "ബിൽ തയ്യാറായി",
       billReadyMessage: "നിങ്ങളുടെ ഓർഡറിംഗ് സെഷൻ അവസാനിച്ചു.",
       showCodeAtCounter: "ഈ പേയ്മെന്റ് കോഡ് കൗണ്ടറിൽ കാണിക്കുക:",
@@ -266,6 +276,11 @@ export default function BillClient({ sessionToken, receiptToken = "" }: BillClie
           restaurantName: data.restaurant_name,
           tableCode: data.table_code,
           receiptToken: data.receipt_token || receiptAccessToken || undefined,
+          totalAmount: new Intl.NumberFormat("en-IN", {
+            style: "currency",
+            currency: data.currency || "INR",
+          }).format(Number(data.total_amount)),
+          tableNumber: String(data.table_number),
         });
         router.replace(completionPath(sessionToken));
       }
@@ -445,12 +460,14 @@ export default function BillClient({ sessionToken, receiptToken = "" }: BillClie
             ? t.billBeingPrepared
             : null;
 
+  const isPaid = bill.status === "paid";
+
   return (
     <div className="min-h-screen bg-[var(--omlu-page-background)] px-4 py-4 text-[var(--omlu-text-primary)] sm:px-6 sm:py-6 print:bg-white print:px-0 print:py-0 print:text-black">
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 print:max-w-none print:gap-0">
         <div className="print-hidden flex flex-wrap items-center justify-end gap-3">
           <PublicThemeControl />
-          {bill.status !== "paid" && !isDetached && (
+          {!isPaid && !isDetached && (
             <button
               onClick={() => router.push(`/session/${bill.session_token}`)}
               className="min-h-11 rounded-2xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-4 py-2 text-sm font-bold text-[var(--omlu-text-primary)] shadow-2xs dark:border-[var(--omlu-border)] dark:bg-[var(--omlu-primary-surface)] dark:text-[var(--omlu-text-secondary)]"
@@ -465,6 +482,71 @@ export default function BillClient({ sessionToken, receiptToken = "" }: BillClie
             {language === "en" ? "മലയാളം" : "English"}
           </button>
         </div>
+
+        {/* Payment success — rendered FIRST and DOMINANT when bill is paid, above the full bill article */}
+        {isPaid && (
+          <section
+            id="payment-success-banner"
+            className={`print-hidden rounded-3xl border border-emerald-200 bg-emerald-50 p-6 text-emerald-950 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-50 sm:p-8 ${showPaymentSuccess ? "ring-2 ring-emerald-300 dark:ring-emerald-700" : ""}`}
+            aria-live="polite"
+            aria-labelledby="payment-success-heading"
+          >
+            <div className="flex flex-col items-center gap-5 text-center">
+              {/* Success icon */}
+              <div
+                className="grid h-16 w-16 shrink-0 place-items-center rounded-full bg-emerald-600 text-white shadow-lg"
+                aria-hidden="true"
+              >
+                <svg viewBox="0 0 32 32" className="h-10 w-10" fill="none">
+                  <circle cx="16" cy="16" r="14" stroke="currentColor" strokeWidth="2.5" opacity="0.3" />
+                  <path
+                    d="M9 16.5 13.5 21 23 11"
+                    stroke="currentColor"
+                    strokeWidth="3.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </div>
+              {/* Heading — deliberately h1 so it is the dominant landmark on the page */}
+              <div className="space-y-1">
+                <h1 id="payment-success-heading" className="text-3xl font-black tracking-tight sm:text-4xl">
+                  {t.paymentReceived}
+                </h1>
+                <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200">
+                  {t.sessionComplete}
+                </p>
+              </div>
+              {/* Key payment facts */}
+              <dl className="grid w-full max-w-xs grid-cols-2 gap-3 rounded-2xl bg-emerald-100/60 p-4 text-left text-sm dark:bg-emerald-900/30">
+                <div>
+                  <dt className="font-bold text-emerald-700 dark:text-emerald-300">{t.paidAmount}</dt>
+                  <dd className="mt-0.5 text-base font-black">{formatBillTotal(bill)}</dd>
+                </div>
+                <div>
+                  <dt className="font-bold text-emerald-700 dark:text-emerald-300">{t.paymentMethod}</dt>
+                  <dd className="mt-0.5 font-black">{paidMethodLabel}</dd>
+                </div>
+              </dl>
+              <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">{t.tableReady}</p>
+              {/* Actions */}
+              <div className="flex w-full flex-col gap-3 sm:flex-row sm:justify-center">
+                <button
+                  onClick={() => document.querySelector("article")?.scrollIntoView({ behavior: "smooth" })}
+                  className="min-h-12 rounded-2xl bg-emerald-700 px-6 py-3 text-sm font-black text-white shadow-md transition hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+                >
+                  {t.viewFullReceipt}
+                </button>
+                <button
+                  onClick={() => window.close()}
+                  className="min-h-12 rounded-2xl border border-emerald-300 bg-transparent px-6 py-3 text-sm font-black text-emerald-800 transition hover:bg-emerald-100 dark:border-emerald-700 dark:text-emerald-200 dark:hover:bg-emerald-900/40"
+                >
+                  {t.doneLabel}
+                </button>
+              </div>
+            </div>
+          </section>
+        )}
 
         {isDetached && bill.payment_code && (
           <section className="print-hidden rounded-3xl border border-orange-200 bg-orange-50 p-5 text-center shadow-sm dark:border-orange-900/60 dark:bg-orange-950/25 sm:p-7" aria-labelledby="bill-ready-title">
@@ -559,8 +641,11 @@ export default function BillClient({ sessionToken, receiptToken = "" }: BillClie
                     <h3 className="font-black">
                       Order {orderIndex + 1}: {order.order_number}
                     </h3>
+                    {/* On paid receipts, the kitchen status (e.g. "pending") is a stale operational
+                        snapshot that is confusing to customers. Replace with a friendly receipt label.
+                        The raw status is unchanged in the backend payload. */}
                     <p className="text-xs font-bold uppercase text-[var(--omlu-text-secondary)]">
-                      {order.status}
+                      {isPaid ? t.receiptOrderStatus : order.status}
                     </p>
                   </div>
                   <div className="flex flex-col gap-2">
@@ -635,59 +720,17 @@ export default function BillClient({ sessionToken, receiptToken = "" }: BillClie
           </footer>
         </article>
 
-        {bill.status === "paid" && (
-          <section
-            className={`print-hidden rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-emerald-950 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-50 ${showPaymentSuccess ? "ring-2 ring-emerald-300" : ""}`}
-            aria-live="polite"
-          >
-            <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:text-left">
-              <div
-                className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-emerald-600 text-white"
-                aria-hidden="true"
-              >
-                <svg viewBox="0 0 32 32" className="h-9 w-9" fill="none">
-                  <circle cx="16" cy="16" r="14" stroke="currentColor" strokeWidth="3" opacity="0.35" />
-                  <path
-                    d="M9 16.5 13.5 21 23 11"
-                    stroke="currentColor"
-                    strokeWidth="3.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </div>
-              <div className="min-w-0 flex-1">
-                <h2 className="text-xl font-black">{t.paymentReceived}</h2>
-                <p className="mt-2 text-sm font-bold text-emerald-900 dark:text-emerald-100">
-                  {t.sessionComplete}
-                </p>
-                <div className="mt-2 grid grid-cols-1 gap-1 text-sm font-bold text-emerald-800 dark:text-emerald-200 sm:grid-cols-2">
-                  <p>
-                    {t.paidAmount}: {formatBillTotal(bill)}
-                  </p>
-                  <p>
-                    {t.paymentMethod}: {paidMethodLabel}
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => document.querySelector("article")?.scrollIntoView({ behavior: "smooth" })}
-                className="min-h-12 rounded-2xl bg-emerald-700 px-5 py-3 text-sm font-black text-[var(--omlu-strong-action-text)] shadow-md transition hover:bg-emerald-800"
-              >
-                {t.receiptAction}
-              </button>
-            </div>
-          </section>
+        {/* Secondary compact confirmation below the receipt for print/accessibility context */}
+        {isPaid && (
+          <p className="print-hidden text-center text-sm font-bold text-emerald-700 dark:text-emerald-400">
+            {t.paymentComplete}
+          </p>
         )}
 
         <div className="print-hidden px-1 py-2">
-          {billWorkflowMessage && bill.status !== "paid" && (
+          {/* Workflow guidance only shown while payment is still pending */}
+          {billWorkflowMessage && !isPaid && (
             <p className="rounded-2xl bg-orange-50 px-4 py-3 text-sm font-black text-orange-800 dark:bg-orange-950/30 dark:text-orange-400">
-              {billWorkflowMessage}
-            </p>
-          )}
-          {bill.status === "paid" && (
-            <p className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm font-black text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400">
               {billWorkflowMessage}
             </p>
           )}

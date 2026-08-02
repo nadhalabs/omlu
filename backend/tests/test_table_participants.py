@@ -242,3 +242,124 @@ def test_concurrent_join_failures_cannot_bypass_distributed_limit(participant_co
         statuses = list(executor.map(fail_join, range(6)))
     assert statuses.count(401) == 4
     assert statuses.count(429) == 2
+
+
+# ---------------------------------------------------------------------------
+# Post-payment participant isolation tests
+# ---------------------------------------------------------------------------
+
+def test_old_participant_websocket_rejected_after_session_close(participant_context):
+    """
+    A WebSocket connection opened with a participant token from a closed session must
+    be rejected (WebSocketDisconnect) — the old authority is no longer valid.
+    """
+    authority = start(participant_context).json()
+    session_token = authority["session"]["public_id"]
+
+    # Close the session directly via staff action (simulates payment closing it)
+    closed = client.post(
+        f"/staff/sessions/{session_token}/close-empty",
+        headers={f"Authorization": f"Bearer {participant_context['owner_token']}"},
+    )
+    assert closed.status_code == 200
+
+    # WebSocket with old participant token must be disconnected
+    with pytest.raises(WebSocketDisconnect):
+        with client.websocket_connect(
+            f"/ws/public/sessions/{session_token}?participant_token={authority['participant_token']}"
+        ):
+            pass
+
+
+def test_new_session_after_detachment_is_isolated_from_old_session(participant_context):
+    """
+    After a session is detached (detached_awaiting_payment), a new session can be
+    created at the same table.  That new session must be completely independent:
+    - New participant cannot read the old (detached) session.
+    - Old (revoked) participant cannot read the new session.
+    - New session has its own join code.
+    - Old session's detached status is unchanged.
+    """
+    from decimal import Decimal
+    from app.database import SessionLocal as _db
+    from app.models.order import Order, OrderItem
+    from app.models.bill import Bill
+    from app.services.bills import detach_issued_bill_and_release_table
+    from app.services.table_participants import invalidate_session_participants
+    from app.models.dining_session import DiningSession as DS
+
+    # Build a session with an order and bill, then detach
+    authority = start(participant_context).json()
+    session_token = authority["session"]["public_id"]
+    old_participant_token = authority["participant_token"]
+
+    db = _db()
+    session = db.query(DS).filter(DS.public_token == session_token).one()
+    item = db.query(
+        __import__("app.models.menu", fromlist=["MenuItem"]).MenuItem
+    ).filter_by(restaurant_id=session.restaurant_id).first()
+    order = Order(
+        restaurant_id=session.restaurant_id,
+        table_id=session.table_id,
+        dining_session_id=session.id,
+        order_number=f"ISO-{uuid.uuid4().hex[:8]}",
+        public_token=uuid.uuid4().hex,
+        status="served",
+        subtotal=Decimal("120.00"),
+        idempotency_key=f"iso-{uuid.uuid4().hex}",
+    )
+    db.add(order)
+    db.flush()
+    db.add(OrderItem(order_id=order.id, menu_item_id=item.id, item_name=item.name_en, quantity=1, unit_price=Decimal("120.00"), total_price=Decimal("120.00")))
+    bill = Bill(
+        restaurant_id=session.restaurant_id,
+        dining_session_id=session.id,
+        bill_number=f"BILL-ISO-{uuid.uuid4().hex[:8]}",
+        status="issued",
+        subtotal=Decimal("120.00"),
+        tax_amount=Decimal("0.00"),
+        discount_amount=Decimal("0.00"),
+        total_amount=Decimal("120.00"),
+        currency="INR",
+    )
+    db.add(bill)
+    session.status = "payment_requested"
+    db.flush()
+    owner = db.query(__import__("app.models.staff_user", fromlist=["StaffUser"]).StaffUser).filter_by(restaurant_id=session.restaurant_id, role="owner").first()
+    result = detach_issued_bill_and_release_table(db, restaurant_id=session.restaurant_id, bill_id=bill.id, actor=owner)
+    db.commit()
+    bill_number = bill.bill_number
+    db.close()
+
+    # Create new session at same table
+    new_resp = client.post(
+        f"/public/restaurants/{participant_context['slug']}/tables/{participant_context['table_code']}/sessions",
+        headers={"X-Device-ID": uuid.uuid4().hex},
+    )
+    assert new_resp.status_code == 201
+    new_authority = new_resp.json()
+    new_token = new_authority["session"]["public_id"]
+    new_participant_token = new_authority["participant_token"]
+
+    # New participant must NOT be able to read the old detached session
+    old_read = client.get(
+        f"/public/sessions/{session_token}",
+        headers={"X-Participant-Token": new_participant_token},
+    )
+    assert old_read.status_code in (401, 403, 404), (
+        "new participant must not read the old detached session"
+    )
+
+    # Old revoked participant must NOT be able to read the new session
+    new_read = client.get(
+        f"/public/sessions/{new_token}",
+        headers={"X-Participant-Token": old_participant_token},
+    )
+    assert new_read.status_code == 401, (
+        "old revoked participant must not read the new session"
+    )
+
+    # New session has independent join code
+    assert new_authority["join_code"].isdigit()
+    assert len(new_authority["join_code"]) == 4
+    assert new_token != session_token

@@ -42,7 +42,7 @@ test("completion marker is session and browser-tab scoped without blocking fresh
 });
 
 test("terminal screen preserves receipt access and exposes only completion actions", () => {
-  assert.match(completion, /Payment complete/);
+  assert.match(completion, /Payment successful/);
   assert.match(completion, /Your dining session has ended\. Thank you for visiting/);
   assert.match(completion, /View receipt/);
   assert.match(completion, />Close</);

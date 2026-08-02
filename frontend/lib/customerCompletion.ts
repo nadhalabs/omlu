@@ -6,6 +6,10 @@ export type CompletedSessionMarker = {
   restaurantName: string;
   tableCode: string;
   receiptToken?: string;
+  /** Human-readable paid amount, e.g. "₹320.00" — for display on the terminal screen only. */
+  totalAmount?: string;
+  /** Table display number, e.g. "4" — for display on the terminal screen only. */
+  tableNumber?: string;
 };
 
 const sessionKey = (sessionToken: string) => `${PREFIX}:session:${sessionToken}`;
