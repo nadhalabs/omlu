@@ -939,3 +939,158 @@ def test_schema_validator_independently_rejects_non_canonical_variants_without_n
         ExtractedMenuOptionGroup.model_validate(invalid_variant_payload)
 
     assert "Variant option groups must be required" in str(excinfo.value)
+
+
+def test_menu_extraction_prompt_requires_visual_matrix_reasoning_order():
+    from app.services.menu_extraction import MENU_EXTRACTION_PROMPT
+
+    ordered_stages = [
+        "1. PAGE SEGMENTATION",
+        "2. STRUCTURAL TRANSCRIPTION",
+        "3. PRICE-MATRIX CONSTRUCTION",
+        "4. SCHEMA MAPPING",
+        "5. FINAL VISUAL RECONCILIATION",
+    ]
+    positions = [MENU_EXTRACTION_PROMPT.index(stage) for stage in ordered_stages]
+    assert positions == sorted(positions)
+
+    required_contracts = [
+        "Never select the smallest, first, last, or most prominent matrix price",
+        "Every matrix price must appear exactly once as a final_price option",
+        "Quarter above\n  WITHOUT RICE and Quarter beneath it are distinct choices",
+        'one group named "Portion & Preparation"',
+        "meaningful varying dimensions",
+        "count the visible purchasable rows",
+        "derived\n  category only when the blocks are visibly grouped as peers",
+        'category "Mandi" is permitted',
+    ]
+    for contract in required_contracts:
+        assert contract in MENU_EXTRACTION_PROMPT
+
+
+def test_menu_extraction_prompt_contains_complete_chicken_mandi_matrix_example():
+    from app.services.menu_extraction import MENU_EXTRACTION_PROMPT
+
+    expected_options = {
+        "Quarter — With Rice, final_price=170",
+        "Half — With Rice, final_price=330",
+        "Full — With Rice, final_price=650",
+        "Quarter — Without Rice, final_price=100",
+        "Half — Without Rice, final_price=190",
+        "Full — Without Rice, final_price=370",
+    }
+    assert "CHICKEN MANDI" in MENU_EXTRACTION_PROMPT
+    assert "price/base_price: null" in MENU_EXTRACTION_PROMPT
+    for option in expected_options:
+        assert MENU_EXTRACTION_PROMPT.count(option) == 1
+
+
+def test_chicken_mandi_matrix_response_validates_without_schema_changes():
+    from app.schemas.menu_import import MenuExtractionResult
+
+    payload = {
+        "categories": [
+            {
+                "name": "Mandi",
+                "items": [
+                    {
+                        "name": "Chicken Mandi",
+                        "category": "Mandi",
+                        "price": None,
+                        "option_groups": [
+                            {
+                                "name": "Portion & Preparation",
+                                "type": "variant",
+                                "required": True,
+                                "minimum_selections": 1,
+                                "maximum_selections": 1,
+                                "options": [
+                                    {"name": "Quarter — With Rice", "final_price": 170},
+                                    {"name": "Half — With Rice", "final_price": 330},
+                                    {"name": "Full — With Rice", "final_price": 650},
+                                    {"name": "Quarter — Without Rice", "final_price": 100},
+                                    {"name": "Half — Without Rice", "final_price": 190},
+                                    {"name": "Full — Without Rice", "final_price": 370},
+                                ],
+                                "warnings": [],
+                            }
+                        ],
+                        "warnings": [
+                            "Category derived from repeated visible sibling headings; review recommended."
+                        ],
+                    }
+                ],
+            }
+        ],
+        "general_warnings": [],
+    }
+
+    result = MenuExtractionResult.model_validate(payload)
+    item = result.categories[0].items[0]
+    group = item.option_groups[0]
+    assert item.price is None
+    assert group.name == "Portion & Preparation"
+    assert len(group.options) == 6
+    assert [option.final_price for option in group.options] == [170, 330, 650, 100, 190, 370]
+    assert all(option.price_delta is None for option in group.options)
+
+
+@pytest.mark.asyncio
+async def test_mocked_gemini_matrix_extraction_preserves_all_combinations(monkeypatch):
+    import json
+    import google.genai
+
+    from app.config import settings
+    from app.schemas.menu_import import MenuExtractionResult
+    from app.services.menu_extraction import extract_menu
+
+    payload = {
+        "categories": [{
+            "name": "Mandi",
+            "items": [{
+                "name": "Chicken Mandi",
+                "category": "Mandi",
+                "price": None,
+                "option_groups": [{
+                    "name": "Portion & Preparation",
+                    "type": "variant",
+                    "required": True,
+                    "minimum_selections": 1,
+                    "maximum_selections": 1,
+                    "options": [
+                        {"name": "Quarter — With Rice", "final_price": 170},
+                        {"name": "Half — With Rice", "final_price": 330},
+                        {"name": "Full — With Rice", "final_price": 650},
+                        {"name": "Quarter — Without Rice", "final_price": 100},
+                        {"name": "Half — Without Rice", "final_price": 190},
+                        {"name": "Full — Without Rice", "final_price": 370},
+                    ],
+                }],
+            }],
+        }],
+        "general_warnings": [
+            "Mandi category derived from repeated visible sibling product headings; review recommended."
+        ],
+    }
+
+    class MockModelsService:
+        def generate_content(self, **kwargs):
+            assert kwargs["config"]["response_schema"] is MenuExtractionResult
+            return type("MockModelResponse", (), {"text": json.dumps(payload)})()
+
+    class MockGenAIClient:
+        def __init__(self, api_key=None):
+            self.models = MockModelsService()
+
+    monkeypatch.setattr(settings, "gemini_api_key", "mock_key")
+    monkeypatch.setattr(settings, "gemini_model", "mock_model")
+    monkeypatch.setattr(google.genai, "Client", MockGenAIClient)
+
+    result = await extract_menu([{"mime_type": "image/jpeg", "content": b"not-a-live-image"}])
+    assert isinstance(result, MenuExtractionResult)
+    item = result.categories[0].items[0]
+    assert item.price is None
+    assert len(item.option_groups[0].options) == 6
+    assert [option.final_price for option in item.option_groups[0].options] == [
+        170, 330, 650, 100, 190, 370,
+    ]
