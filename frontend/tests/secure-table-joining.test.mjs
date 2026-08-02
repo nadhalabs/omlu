@@ -35,16 +35,15 @@ test("authorized participants receive code updates and revoked access is cleared
   assert.match(realtime, /participant_token/);
 });
 
-test("active customer session renders the authorized join-code card above bill and orders", () => {
+test("active customer session renders a compact authorized join-code row", () => {
   assert.match(session, /participantToken && visibleJoinCode/);
   assert.match(session, /\["open", "payment_requested", "payment_pending"\]\.includes\(session\.status\)/);
-  assert.match(session, /Invite people at your table/);
+  assert.match(session, /Invite someone to this table/);
   assert.match(session, /Join code:/);
-  assert.match(session, /Other people can scan this table QR and enter this code\./);
   assert.match(session, /navigator\.clipboard\.writeText\(visibleJoinCode\)/);
   assert.match(session, /joinCodeCopied \? "Copied" : "Copy code"/);
-  assert.ok(session.indexOf("Invite people at your table") < session.indexOf("{t.billState}"));
-  assert.doesNotMatch(menu, /Invite people at your table/);
+  assert.ok(session.indexOf("Invite someone to this table") < session.indexOf("{t.billState}"));
+  assert.doesNotMatch(menu, /Invite someone to this table/);
   assert.doesNotMatch(session, /[?&]join_code=/);
 });
 

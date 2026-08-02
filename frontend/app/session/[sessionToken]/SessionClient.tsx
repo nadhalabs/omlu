@@ -491,7 +491,12 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
   return (
     <div className="min-h-screen bg-[var(--omlu-muted-surface)] px-4 py-6 text-[var(--omlu-text-primary)] dark:bg-[var(--omlu-page-background)] dark:text-[var(--omlu-text-secondary)] sm:px-6">
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
-        <div className="flex flex-wrap justify-end gap-2">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="truncate text-lg font-extrabold text-[var(--omlu-text-primary)]">{session.restaurant_name}</h1>
+            <p className="text-xs font-semibold text-[var(--omlu-text-secondary)]">{t.table} {session.table_number}</p>
+          </div>
+          <div className="flex gap-2">
           <PublicThemeControl />
           <button
             onClick={handleEnablePush}
@@ -506,6 +511,7 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
           >
             {language === "en" ? "മലയാളം" : "English"}
           </button>
+          </div>
         </div>
 
         {pushMessage && (
@@ -518,20 +524,13 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
           </p>
         )}
 
-        <header className="rounded-3xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-6 shadow-xs dark:border-[var(--omlu-border)] dark:bg-[var(--omlu-primary-surface)]">
+        <header className="rounded-3xl bg-[var(--omlu-primary-surface)] p-5 shadow-xs">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-xs font-black uppercase tracking-wide text-orange-700 dark:text-orange-500">
-                {session.restaurant_name}
-              </p>
-              <h1 className="mt-1 text-2xl font-black text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-primary)]">
-                {t.currentBill}
-              </h1>
-              <p className="mt-1 text-sm font-bold text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)]">
-                {t.table} {session.table_number}
-              </p>
+              <p className="text-sm font-bold text-[var(--omlu-text-secondary)]">{session.order_count ? (language === "en" ? "Your order" : "നിങ്ങളുടെ ഓർഡർ") : t.noOrders}</p>
+              <h2 className="mt-1 text-xl font-black text-[var(--omlu-text-primary)]">{session.orders.length ? t.statusLabels[session.orders[session.orders.length - 1].status] : (language === "en" ? "Ready when you are" : "നിങ്ങൾ തയ്യാറാകുമ്പോൾ")}</h2>
             </div>
-            <div className="text-right">
+            <div className="text-right tabular-nums">
               <p className="text-xs font-semibold text-[var(--omlu-text-secondary)]">
                 {t.sessionStatus}
               </p>
@@ -542,36 +541,32 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
           </div>
 
           {participantToken && visibleJoinCode && ["open", "payment_requested", "payment_pending"].includes(session.status) && (
-            <section className="mt-4 flex flex-col gap-3 rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 dark:border-orange-900/50 dark:bg-orange-950/20 sm:flex-row sm:items-center sm:justify-between" aria-labelledby="session-invite-title">
-              <div className="min-w-0">
-                <h2 id="session-invite-title" className="text-sm font-black text-[var(--omlu-text-primary)] dark:text-[var(--omlu-primary-action-text)]">Invite people at your table</h2>
-                <p className="mt-1 text-lg font-black text-orange-700 dark:text-orange-400">Join code: <span className="tracking-[0.18em]">{visibleJoinCode}</span></p>
-                <p className="mt-1 text-xs text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)]">Other people can scan this table QR and enter this code.</p>
-              </div>
-              <button type="button" onClick={() => void copyJoinCode()} className="min-h-10 shrink-0 rounded-xl bg-orange-600 px-4 py-2 text-sm font-black text-[var(--omlu-primary-action-text)]">
+            <section className="mt-4 flex items-center justify-between gap-3 border-t border-[var(--omlu-border)] pt-3" aria-labelledby="session-invite-title">
+              <div className="min-w-0 text-sm"><h2 id="session-invite-title" className="font-bold">Invite someone to this table</h2><p className="text-xs text-[var(--omlu-text-secondary)]">Join code: <span className="font-black tracking-[0.16em] tabular-nums">{visibleJoinCode}</span></p></div>
+              <button type="button" onClick={() => void copyJoinCode()} className="min-h-11 shrink-0 rounded-xl border border-[var(--omlu-border)] px-3 text-xs font-black">
                 {joinCodeCopied ? "Copied" : "Copy code"}
               </button>
             </section>
           )}
 
-          <div className="mt-5 grid grid-cols-2 gap-3">
-            <div className="rounded-2xl bg-[var(--omlu-muted-surface)] p-4 dark:bg-[var(--omlu-muted-surface)]">
+          <div className="mt-5 flex items-end justify-between gap-3 border-t border-[var(--omlu-border)] pt-4">
+            <div>
               <p className="text-xs font-bold uppercase text-[var(--omlu-text-secondary)]">
                 {t.orders}
               </p>
-              <p className="mt-1 text-2xl font-black">{session.order_count}</p>
+              <p className="mt-1 text-sm font-black">{session.order_count}</p>
             </div>
-            <div className="rounded-2xl bg-emerald-50 p-4 text-right dark:bg-emerald-950/20">
-              <p className="text-xs font-bold uppercase text-emerald-700 dark:text-emerald-400">
+            <div className="text-right">
+              <p className="text-xs font-bold text-[var(--omlu-text-secondary)]">
                 {t.combinedSubtotal}
               </p>
-              <p className="mt-1 text-2xl font-black text-emerald-700 dark:text-emerald-400">
+              <p className="mt-1 text-2xl font-black tabular-nums text-[var(--omlu-text-primary)]">
                 ₹{Number(session.combined_subtotal).toFixed(2)}
               </p>
             </div>
           </div>
 
-          <div className="mt-4 rounded-2xl border border-orange-100 bg-orange-50 p-4 dark:border-orange-900/40 dark:bg-orange-950/20">
+          <div className="mt-4 rounded-2xl bg-[var(--omlu-muted-surface)] p-4">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-xs font-black uppercase tracking-wide text-orange-700 dark:text-orange-500">
@@ -598,9 +593,9 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
             {canOrderMore && (
               <button
                 onClick={handleAddMore}
-                className="min-h-14 rounded-2xl bg-orange-600 px-5 py-4 text-center text-base font-black text-[var(--omlu-primary-action-text)] shadow-md transition hover:bg-orange-700 active:bg-orange-800"
+                className="min-h-12 rounded-xl bg-orange-600 px-5 py-3 text-center text-sm font-black text-white shadow-sm hover:bg-orange-700"
               >
-                {t.addMore} · {t.addMoreMl}
+                {t.addMore}
               </button>
             )}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -615,7 +610,7 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
                 <button
                   onClick={handleRequestBill}
                   disabled={billActionLoading !== null}
-                  className="min-h-14 rounded-2xl bg-emerald-600 px-5 py-4 text-base font-black text-[var(--omlu-primary-action-text)] shadow-md transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="min-h-12 rounded-xl border border-[var(--omlu-border)] bg-transparent px-5 py-3 text-sm font-black text-[var(--omlu-text-primary)] disabled:opacity-60"
                 >
                   {billActionLoading === "request" ? t.requestingBill : t.requestBillAction}
                 </button>
@@ -654,15 +649,12 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
           )}
         </header>
 
-        <section className="rounded-3xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-5 shadow-xs dark:border-[var(--omlu-border)] dark:bg-[var(--omlu-primary-surface)]">
-          <h2 className="mb-4 text-sm font-black uppercase tracking-wide text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)]">
+        <section className="border-y border-[var(--omlu-border)] py-5">
+          <h2 className="mb-3 text-base font-black text-[var(--omlu-text-primary)]">
             {t.needSomething}
           </h2>
-          <p className="mb-4 text-xs font-medium text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)]">
-            {t.needSomethingDesc}
-          </p>
           {session.service_requests_enabled ? (
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               {serviceTypes.map(({ type, label }) => {
                 const status = serviceStatus[type] || "idle";
                 const message = serviceMessage[type];
@@ -671,7 +663,7 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
                     <button
                       onClick={() => handleServiceRequest(type)}
                       disabled={status === "loading" || status === "success"}
-                      className={`min-h-16 rounded-2xl border p-3 text-xs font-black transition disabled:cursor-not-allowed ${
+                      className={`min-h-11 rounded-xl border px-3 py-2 text-sm font-black transition disabled:cursor-not-allowed ${
                         status === "success"
                           ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-700/40 dark:bg-emerald-950/20 dark:text-emerald-400"
                           : status === "error"
@@ -696,15 +688,10 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
             </p>
           )}
 
-          <div className="mt-5 border-t border-[var(--omlu-border-strong)] pt-4 dark:border-[var(--omlu-border)]">
+          {session.service_requests.length > 0 && <div className="mt-5 border-t border-[var(--omlu-border)] pt-4">
             <h3 className="text-xs font-black uppercase tracking-wide text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)]">
               {t.serviceHistory}
             </h3>
-            {session.service_requests.length === 0 ? (
-              <p className="mt-3 rounded-2xl bg-[var(--omlu-muted-surface)] p-4 text-sm font-semibold text-[var(--omlu-text-secondary)] dark:bg-[var(--omlu-muted-surface)]">
-                {t.noServiceHistory}
-              </p>
-            ) : (
               <div className="mt-3 flex flex-col gap-2">
                 {session.service_requests.map((request, index) => (
                   <div
@@ -730,8 +717,7 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
                   </div>
                 ))}
               </div>
-            )}
-          </div>
+          </div>}
         </section>
 
         <main className="flex flex-col gap-4">
@@ -791,7 +777,7 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
               return (
                 <section
                   key={order.public_token}
-                  className="rounded-3xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-5 shadow-xs dark:border-[var(--omlu-border)] dark:bg-[var(--omlu-primary-surface)]"
+                  className="rounded-2xl bg-[var(--omlu-primary-surface)] p-4 shadow-xs"
                 >
                   <div
                     onClick={handleToggle}
@@ -828,8 +814,8 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
                   </div>
 
                   {isExpanded && (
-                    <div className="mt-6 border-b border-[var(--omlu-border-strong)] pb-5 dark:border-[var(--omlu-border)]">
-                      <div className="flex flex-col">
+                    <div className="mt-4 border-b border-[var(--omlu-border)] pb-4">
+                      <div className="flex items-start overflow-x-auto pb-2" aria-label={`Order progress: ${t.statusLabels[order.status] || order.status}`}>
                         {stages.map((stage, sIdx) => {
                           let state: "completed" | "current" | "future" = "future";
                           if (order.status === "rejected") {
@@ -864,14 +850,12 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
                           const isAnimated = animatedStages[order.public_token] === stage.key;
 
                           return (
-                            <div key={stage.key} className="flex min-h-[64px] last:min-h-0">
+                            <div key={stage.key} className="relative flex min-w-[76px] flex-1 flex-col items-center text-center">
                               {/* Left: Time */}
-                              <div className="w-16 flex-none pr-3 pt-1 text-right text-xs font-semibold text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)]">
-                                {timestamp || ""}
-                              </div>
+                              <span className="sr-only">{timestamp || ""}</span>
 
                               {/* Middle: Circle and connector */}
-                              <div className="relative flex w-8 flex-none flex-col items-center">
+                              <div className="relative flex h-7 w-full flex-none flex-col items-center">
                                 <div
                                   className={`z-10 flex h-6 w-6 items-center justify-center rounded-full text-[var(--omlu-primary-action-text)] transition-all duration-300 ${
                                     state === "completed"
@@ -892,7 +876,7 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
 
                                 {!isLast && (
                                   <div
-                                    className={`absolute top-6 bottom-0 w-[2px] ${
+                                    className={`absolute left-1/2 top-3 h-[2px] w-full ${
                                       state === "completed" ? "bg-emerald-600" : "bg-[var(--omlu-muted-surface)] dark:bg-[var(--omlu-muted-surface)]"
                                     }`}
                                   />
@@ -900,9 +884,9 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
                               </div>
 
                               {/* Right: Content */}
-                              <div className="flex-1 pb-6 pl-2">
+                              <div className="mt-1 min-w-0 px-1">
                                 <h3
-                                  className={`text-sm font-black transition-colors duration-300 ${
+                                  className={`text-[11px] font-black leading-tight transition-colors duration-300 ${
                                     state === "current"
                                       ? "text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-primary)]"
                                       : state === "completed"
@@ -912,11 +896,7 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
                                 >
                                   {title}
                                 </h3>
-                                {state !== "future" && (
-                                  <p className="mt-1 text-xs text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)] leading-relaxed">
-                                    {desc}
-                                  </p>
-                                )}
+                                <span className="sr-only">{desc}</span>
                               </div>
                             </div>
                           );

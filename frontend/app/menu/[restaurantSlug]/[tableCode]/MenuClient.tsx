@@ -318,6 +318,9 @@ export default function MenuClient({
       viewFullBill: "View full table bill",
       viewFinalReceipt: "View final bill",
       sessionComplete: "Your dining session is complete. Scan the table QR again to start a new order.",
+      clearSearch: "Clear search",
+      unavailable: "Unavailable",
+      choose: "Choose",
     },
     ml: {
       searchPlaceholder: "വിഭവങ്ങൾ തിരയുക...",
@@ -347,6 +350,9 @@ export default function MenuClient({
       viewFullBill: "മുഴുവൻ ടേബിൾ ബിൽ കാണുക",
       viewFinalReceipt: "അവസാന ബിൽ കാണുക",
       sessionComplete: "നിങ്ങളുടെ ഡൈനിംഗ് സെഷൻ പൂർത്തിയായി. പുതിയ ഓർഡർ തുടങ്ങാൻ ടേബിൾ QR വീണ്ടും സ്കാൻ ചെയ്യുക.",
+      clearSearch: "തിരച്ചിൽ മായ്ക്കുക",
+      unavailable: "ലഭ്യമല്ല",
+      choose: "തിരഞ്ഞെടുക്കുക",
     },
   };
 
@@ -721,12 +727,12 @@ export default function MenuClient({
   };
 
   return (
-    <div className="flex flex-col flex-1 min-h-screen bg-[var(--omlu-muted-surface)] dark:bg-[var(--omlu-page-background)] pb-28 text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-secondary)]">
+    <div className="flex min-h-screen flex-1 flex-col bg-[var(--omlu-page-background)] pb-[calc(6.5rem+env(safe-area-inset-bottom))] text-[var(--omlu-text-primary)]">
       {/* Sticky Top Header */}
-      <header className="sticky top-0 z-40 bg-[var(--omlu-primary-surface)] dark:bg-[var(--omlu-primary-surface)] backdrop-blur-md border-b border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] shadow-xs px-4 py-3 sm:px-6">
+      <header className="sticky top-0 z-40 border-b border-[var(--omlu-border)] bg-[color:var(--omlu-primary-surface)]/95 px-4 py-2.5 backdrop-blur-md sm:px-6">
         <div className="max-w-3xl mx-auto flex items-center justify-between gap-4">
           <div className="min-w-0">
-            <h1 className="break-words text-xl font-bold text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-primary)]">
+            <h1 className="break-words text-base font-extrabold leading-tight text-[var(--omlu-text-primary)] sm:text-lg">
               {restaurant.name}
             </h1>
             <p className="text-xs text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)] font-medium">
@@ -738,16 +744,17 @@ export default function MenuClient({
           {/* Language Selector */}
           <button
             onClick={() => setLanguage(language === "en" ? "ml" : "en")}
-            className="flex items-center gap-1.5 px-3 py-1.5 border border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] rounded-lg text-sm font-semibold bg-[var(--omlu-muted-surface)] dark:bg-[var(--omlu-muted-surface)] hover:bg-[var(--omlu-muted-surface)] dark:hover:bg-[var(--omlu-muted-surface)] cursor-pointer transition"
+            aria-label={language === "en" ? "Switch to Malayalam" : "Switch to English"}
+            className="min-h-11 rounded-full border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] px-3 text-xs font-bold"
           >
-            🌐 {language === "en" ? "മലയാളം" : "English"}
+            {language === "en" ? "മലയാളം" : "English"}
           </button>
           </div>
         </div>
       </header>
 
       {/* Floating search and category bar */}
-      <div className="sticky top-[61px] z-30 bg-[var(--omlu-primary-surface)] dark:bg-[var(--omlu-primary-surface)] backdrop-blur-md border-b border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] py-3 px-4 sm:px-6">
+      <div className="sticky top-[61px] z-30 border-b border-[var(--omlu-border)] bg-[color:var(--omlu-primary-surface)]/95 px-4 py-2.5 backdrop-blur-md sm:px-6">
         <div className="max-w-3xl mx-auto flex flex-col gap-3">
           {/* Search box */}
           {sessionLoading && (
@@ -816,16 +823,17 @@ export default function MenuClient({
 
           {!orderingDisabled && (
             <div className="relative">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-[var(--omlu-text-secondary)]">
-                🔍
-              </span>
+              <label htmlFor="menu-search" className="sr-only">{t.searchPlaceholder}</label>
+              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--omlu-text-secondary)]"><circle cx="11" cy="11" r="7" strokeWidth="2"/><path d="m16 16 4 4" strokeWidth="2" strokeLinecap="round"/></svg>
               <input
-                type="text"
+                id="menu-search"
+                type="search"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={t.searchPlaceholder}
-                className="w-full pl-9 pr-4 py-2 bg-[var(--omlu-muted-surface)] dark:bg-[var(--omlu-muted-surface)] border-0 rounded-xl text-sm focus:ring-2 focus:ring-orange-600 outline-none text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-secondary)]"
+                className="w-full rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-input-background)] py-2.5 pl-10 pr-11 text-sm outline-none focus:ring-2 focus:ring-orange-600"
               />
+              {searchQuery && <button type="button" onClick={() => setSearchQuery("")} aria-label={t.clearSearch} className="absolute right-0 top-0 min-h-11 w-11 text-lg text-[var(--omlu-text-secondary)]">×</button>}
             </div>
           )}
 
@@ -888,7 +896,7 @@ export default function MenuClient({
                 id={`category-${category.id}`}
                 className="scroll-mt-36"
               >
-                <h2 className="text-lg font-bold border-b border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] pb-2 mb-4 text-orange-700 dark:text-orange-500">
+                <h2 className="mb-3 text-lg font-extrabold text-[var(--omlu-text-primary)]">
                   {getLocalizedText(category.name_en, category.name_ml)}
                 </h2>
 
@@ -902,11 +910,11 @@ export default function MenuClient({
                     return (
                       <div
                         key={item.id}
-                        className="bg-[var(--omlu-primary-surface)] dark:bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] rounded-xl p-4 flex gap-4 shadow-2xs hover:shadow-xs transition"
+                        className="flex min-h-[104px] gap-3 border-b border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] px-1 py-4 last:border-b-0 md:rounded-2xl md:border md:p-4"
                       >
                         <div className="flex-1 flex flex-col justify-between min-w-0">
                           <div>
-                            <h3 className="font-bold text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-primary)] truncate">
+                            <h3 className="line-clamp-2 break-words font-bold leading-snug text-[var(--omlu-text-primary)]">
                               {getLocalizedText(item.name_en, item.name_ml)}
                             </h3>
                             <p className="text-xs text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)] mt-1 line-clamp-2">
@@ -917,19 +925,19 @@ export default function MenuClient({
                             </p>
                           </div>
                           <div className="mt-3 flex items-center justify-between">
-                            <span className="font-bold text-orange-600 dark:text-orange-500 text-sm">
+                            <span className="font-extrabold tabular-nums text-[var(--omlu-text-primary)] text-sm">
                               ₹{Number(item.price).toFixed(2)}
                             </span>
                             {orderingDisabled ? null : !item.is_available ? (
                               <span className="rounded-md border border-red-300 bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-700">
-                                Unavailable
+                                {t.unavailable}
                               </span>
                             ) : cartQty === 0 || isConfigurable ? (
                               <button
                                 onClick={() => addToCart(item)}
-                                className="px-4 py-1.5 bg-orange-600 hover:bg-orange-700 text-[var(--omlu-primary-action-text)] text-xs font-bold rounded-lg cursor-pointer transition shadow-2xs"
+                                className="min-h-11 rounded-xl bg-orange-600 px-4 text-xs font-bold text-white hover:bg-orange-700"
                               >
-                                + {isConfigurable ? "Choose" : t.add}
+                                {isConfigurable ? t.choose : t.add}
                               </button>
                             ) : (
                               <div className="flex items-center border border-orange-600 rounded-lg overflow-hidden bg-orange-50/50 dark:bg-orange-950/10">
@@ -976,25 +984,19 @@ export default function MenuClient({
 
       {/* Sticky Bottom Cart Bar */}
       {totalQty > 0 && !orderingDisabled && (
-        <div className="fixed bottom-0 left-0 right-0 z-40 bg-[var(--omlu-primary-surface)] dark:bg-[var(--omlu-primary-surface)] backdrop-blur-md border-t border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] shadow-lg px-4 py-4 sm:px-6">
+        <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--omlu-border)] bg-[color:var(--omlu-primary-surface)]/95 px-3 pb-[calc(.75rem+env(safe-area-inset-bottom))] pt-3 shadow-lg backdrop-blur-md sm:px-6">
           <button
             onClick={() => setIsCartOpen(true)}
-            className="max-w-3xl mx-auto flex items-center justify-between w-full bg-orange-600 hover:bg-orange-700 active:bg-orange-800 text-[var(--omlu-primary-action-text)] rounded-2xl px-5 py-4 shadow-md transition cursor-pointer"
+            className="mx-auto flex min-h-14 w-full max-w-3xl items-center justify-between rounded-2xl bg-orange-600 px-4 py-3 text-white shadow-md hover:bg-orange-700"
           >
             <div className="flex flex-col text-left">
-              <span className="text-xs font-semibold opacity-90 uppercase tracking-wider">
-                {t.cart}
-              </span>
               <span className="text-sm font-bold">
-                {totalQty} {totalQty === 1 ? "item" : t.items}
+                {totalQty} {totalQty === 1 ? "item" : t.items} · {formattedSubtotal}
               </span>
             </div>
             <div className="flex items-center gap-4">
-              <span className="text-sm font-bold bg-orange-500 px-3 py-1 rounded-xl">
+              <span className="text-sm font-bold">
                 {t.viewCart}
-              </span>
-              <span className="text-base font-extrabold">
-                {formattedSubtotal}
               </span>
             </div>
           </button>

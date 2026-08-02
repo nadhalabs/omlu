@@ -333,7 +333,7 @@ export default function BillClient({ sessionToken, receiptToken = "" }: BillClie
             : null;
 
   return (
-    <div className="min-h-screen bg-[var(--omlu-muted-surface)] px-4 py-6 text-[var(--omlu-text-primary)] dark:bg-[var(--omlu-page-background)] dark:text-[var(--omlu-text-secondary)] sm:px-6 print:bg-white print:px-0 print:py-0 print:text-black">
+    <div className="min-h-screen bg-[var(--omlu-page-background)] px-4 py-4 text-[var(--omlu-text-primary)] sm:px-6 sm:py-6 print:bg-white print:px-0 print:py-0 print:text-black">
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 print:max-w-none print:gap-0">
         <div className="print-hidden flex flex-wrap items-center justify-end gap-3">
           <PublicThemeControl />
@@ -353,14 +353,14 @@ export default function BillClient({ sessionToken, receiptToken = "" }: BillClie
           </button>
         </div>
 
-        <article className="print-bill-sheet rounded-3xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-5 shadow-sm dark:border-[var(--omlu-border)] dark:bg-[var(--omlu-primary-surface)] print:rounded-none print:border-0 print:bg-white print:p-8 print:text-black print:shadow-none">
+        <article className="print-bill-sheet rounded-3xl bg-[var(--omlu-primary-surface)] p-5 shadow-sm sm:p-7 print:rounded-none print:border-0 print:bg-white print:p-8 print:text-black print:shadow-none">
           <header className="border-b border-[var(--omlu-border-strong)] pb-5 dark:border-[var(--omlu-border)] print:border-black">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-xs font-black uppercase tracking-wide text-orange-700 dark:text-orange-500 print:text-black">
+                <p className="text-sm font-black text-[var(--omlu-text-primary)] print:text-black">
                   {bill.restaurant_name}
                 </p>
-                <h1 className="mt-1 text-3xl font-black">{t.title}</h1>
+                <h1 className="mt-1 text-2xl font-black">{t.title}</h1>
                 <p className="mt-1 text-sm font-bold text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)] print:text-black">
                   {t.table} {bill.table_number}
                 </p>
@@ -416,7 +416,7 @@ export default function BillClient({ sessionToken, receiptToken = "" }: BillClie
               {bill.orders.map((order, orderIndex) => (
                 <section
                   key={order.order_number}
-                  className="rounded-2xl border border-[var(--omlu-border-strong)] p-4 dark:border-[var(--omlu-border)] print:rounded-none print:border-black"
+                  className="border-b border-[var(--omlu-border)] py-4 last:border-b-0 print:border-black"
                 >
                   <div className="mb-3 flex items-center justify-between gap-3 border-b border-[var(--omlu-border-strong)] pb-2 dark:border-[var(--omlu-border)] print:border-black">
                     <h3 className="font-black">
@@ -438,6 +438,11 @@ export default function BillClient({ sessionToken, receiptToken = "" }: BillClie
                             {item.quantity} × {bill.currency}{" "}
                             {Number(item.unit_price).toFixed(2)}
                           </p>
+                          {item.selected_options?.map((option, optionIndex) => (
+                            <p key={`${option.option_name}-${optionIndex}`} className="text-xs leading-relaxed text-[var(--omlu-text-secondary)] print:text-black">
+                              {option.group_name}: {option.option_name}{option.quantity > 1 ? ` × ${option.quantity}` : ""}
+                            </p>
+                          ))}
                         </div>
                         <p className="font-black">
                           {bill.currency} {Number(item.line_total).toFixed(2)}
@@ -495,16 +500,12 @@ export default function BillClient({ sessionToken, receiptToken = "" }: BillClie
 
         {bill.status === "paid" && (
           <section
-            className={`print-hidden rounded-3xl border border-emerald-200 bg-emerald-50 p-5 text-emerald-950 shadow-sm dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-50 ${
-              showPaymentSuccess ? "motion-safe:animate-pulse" : ""
-            }`}
+            className={`print-hidden rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-emerald-950 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-50 ${showPaymentSuccess ? "ring-2 ring-emerald-300" : ""}`}
             aria-live="polite"
           >
             <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:text-left">
               <div
-                className={`grid h-16 w-16 shrink-0 place-items-center rounded-full bg-emerald-600 text-[var(--omlu-primary-action-text)] shadow-lg ${
-                  showPaymentSuccess ? "motion-safe:animate-bounce" : ""
-                }`}
+                className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-emerald-600 text-white"
                 aria-hidden="true"
               >
                 <svg viewBox="0 0 32 32" className="h-9 w-9" fill="none">
@@ -519,7 +520,7 @@ export default function BillClient({ sessionToken, receiptToken = "" }: BillClie
                 </svg>
               </div>
               <div className="min-w-0 flex-1">
-                <h2 className="text-2xl font-black">{t.paymentReceived}</h2>
+                <h2 className="text-xl font-black">{t.paymentReceived}</h2>
                 <p className="mt-2 text-sm font-bold text-emerald-900 dark:text-emerald-100">
                   {t.sessionComplete}
                 </p>
@@ -542,7 +543,7 @@ export default function BillClient({ sessionToken, receiptToken = "" }: BillClie
           </section>
         )}
 
-        <div className="print-hidden rounded-3xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-5 shadow-sm dark:border-[var(--omlu-border)] dark:bg-[var(--omlu-primary-surface)]">
+        <div className="print-hidden px-1 py-2">
           {billWorkflowMessage && bill.status !== "paid" && (
             <p className="rounded-2xl bg-orange-50 px-4 py-3 text-sm font-black text-orange-800 dark:bg-orange-950/30 dark:text-orange-400">
               {billWorkflowMessage}
@@ -558,13 +559,13 @@ export default function BillClient({ sessionToken, receiptToken = "" }: BillClie
         <div className="print-hidden grid grid-cols-1 gap-3 sm:grid-cols-2">
           <button
             onClick={() => window.print()}
-            className="min-h-14 rounded-2xl bg-orange-600 px-5 py-4 text-base font-black text-[var(--omlu-primary-action-text)] shadow-md transition hover:bg-orange-700"
+            className="min-h-12 rounded-xl bg-orange-600 px-5 py-3 text-sm font-black text-white shadow-sm hover:bg-orange-700"
           >
             {t.print}
           </button>
           <button
             onClick={() => window.open(shareUrl, "_blank", "noopener,noreferrer")}
-            className="min-h-14 rounded-2xl bg-emerald-600 px-5 py-4 text-base font-black text-[var(--omlu-primary-action-text)] shadow-md transition hover:bg-emerald-700"
+            className="min-h-12 rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] px-5 py-3 text-sm font-black text-[var(--omlu-text-primary)]"
           >
             {t.whatsapp}
           </button>
