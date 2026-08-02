@@ -12,6 +12,8 @@ const bill = read("app/bill/[sessionToken]/BillClient.tsx");
 const login = read("app/login/LoginClient.tsx");
 const register = read("app/register/page.tsx");
 const control = read("components/PublicThemeControl.tsx");
+const landingControl = read("components/LandingThemeToggle.tsx");
+const landing = read("app/page.tsx");
 const provider = read("components/ThemeProvider.tsx");
 const rootLayout = read("app/layout.tsx");
 const globals = read("app/globals.css");
@@ -28,6 +30,20 @@ test("public theme control is accessible and delegates to ThemeToggle", () => {
   assert.match(control, /aria-label="Choose color theme"/);
   assert.match(control, /<ThemeToggle/);
   assert.match(control, /<details/);
+});
+
+test("landing uses a compact direct light and dark toggle without a theme panel", () => {
+  assert.match(landing, /<LandingThemeToggle/);
+  assert.doesNotMatch(landing, /<PublicThemeControl|<ThemeToggle/);
+  assert.match(landingControl, /useTheme/);
+  assert.match(landingControl, /resolvedTheme/);
+  assert.match(landingControl, /setPreference\(isDark \? "light" : "dark"\)/);
+  assert.match(landingControl, /"Switch to light mode"/);
+  assert.match(landingControl, /"Switch to dark mode"/);
+  assert.match(landingControl, /type="button"/);
+  assert.match(landingControl, /size-11/);
+  assert.match(landingControl, /focus-visible:outline/);
+  assert.doesNotMatch(landingControl, /<ThemeToggle|system|<details|<summary/);
 });
 
 test("login and registration are theme-aware without changing form behavior", () => {
