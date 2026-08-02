@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FormToast } from "@/components/FormToast";
 import { PasswordInput } from "@/components/PasswordInput";
-import { PublicThemeControl } from "@/components/PublicThemeControl";
+import { LandingThemeToggle } from "@/components/LandingThemeToggle";
+import { AuthErrorAlert } from "@/components/AuthErrorAlert";
+import { AuthErrorPresentation, presentAuthError } from "@/lib/authError";
 import { ApiError, registerRestaurant, staffLogin } from "@/lib/api";
 import {
   backendFieldName,
@@ -49,16 +51,17 @@ export default function RegisterPage() {
   const router = useRouter();
   const [form, setForm] = useState<RestaurantRegistrationRequest>(initialForm);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<AuthErrorPresentation | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors<RegistrationField>>({});
+  const submissionPending = useRef(false);
 
   const showValidationError = useCallback((errors: FieldErrors<RegistrationField>) => {
     setFieldErrors(errors);
     const first = firstError(errors, fieldOrder);
     if (first) {
       setToast(first.message);
-      setError("Please correct the highlighted fields.");
+      setError({ message: "Please correct the highlighted fields.", retryable: false });
       focusField(first.field);
     }
   }, []);
@@ -71,16 +74,15 @@ export default function RegisterPage() {
     setFieldErrors((current) => ({ ...current, [key]: undefined }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (loading) return;
-
+  const submitRegistration = async () => {
+    if (submissionPending.current) return;
     const validation = validateRegistration(form);
     if (firstError(validation.errors, fieldOrder)) {
       showValidationError(validation.errors);
       return;
     }
 
+    submissionPending.current = true;
     setLoading(true);
     setError(null);
     setFieldErrors({});
@@ -101,15 +103,23 @@ export default function RegisterPage() {
           showValidationError(nextErrors);
           return;
         }
-        setError(err.message);
-        setToast(err.message);
+        const presented = presentAuthError(err, typeof navigator !== "undefined" && !navigator.onLine, "Something went wrong while creating your account. Please try again.");
+        setError(presented);
+        setToast(presented.message);
       } else {
-        setError("Could not create the restaurant account.");
-        setToast("Could not create the restaurant account.");
+        const presented = presentAuthError(err, typeof navigator !== "undefined" && !navigator.onLine, "Something went wrong while creating your account. Please try again.");
+        setError(presented);
+        setToast(presented.message);
       }
     } finally {
+      submissionPending.current = false;
       setLoading(false);
     }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    void submitRegistration();
   };
 
   return (
@@ -123,14 +133,10 @@ export default function RegisterPage() {
             </Link>
             <h1 className="mt-3 text-3xl font-black tracking-tight">Create Restaurant</h1>
           </div>
-          <div className="flex items-center gap-3"><PublicThemeControl /><Link href="/login" className="text-sm font-bold text-[var(--omlu-text-primary)] underline underline-offset-4">Back to Login</Link></div>
+          <div className="flex items-center gap-3"><LandingThemeToggle /><Link href="/login" className="text-sm font-bold text-[var(--omlu-text-primary)] underline underline-offset-4">Back to Login</Link></div>
         </div>
 
-        {error && (
-          <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">
-            {error}
-          </div>
-        )}
+        {error && <AuthErrorAlert error={error} loading={loading} onRetry={() => void submitRegistration()} />}
 
         <form onSubmit={handleSubmit} className="rounded-lg border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-6 shadow-sm">
           <div className="grid gap-8 lg:grid-cols-2">

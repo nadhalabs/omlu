@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FormToast } from "@/components/FormToast";
 import { PasswordInput } from "@/components/PasswordInput";
-import { PublicThemeControl } from "@/components/PublicThemeControl";
+import { LandingThemeToggle } from "@/components/LandingThemeToggle";
+import { AuthErrorAlert } from "@/components/AuthErrorAlert";
+import { AuthErrorPresentation, presentAuthError } from "@/lib/authError";
 import { staffLogin, ApiError } from "@/lib/api";
 import { FieldErrors, firstError, focusField, validateLogin } from "@/lib/formValidation";
 import { roleHomePath } from "@/lib/roleRoutes";
@@ -24,9 +26,10 @@ export default function LoginClient() {
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<AuthErrorPresentation | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors<keyof StaffLoginRequest>>({});
+  const submissionPending = useRef(false);
 
   useEffect(() => {
     if (getActiveWebTenantScope()) {
@@ -46,16 +49,14 @@ export default function LoginClient() {
     setFieldErrors(errors);
     const first = firstError(errors, fieldOrder);
     if (first) {
-      setError("Please correct the highlighted fields.");
+      setError({ message: "Please correct the highlighted fields.", retryable: false });
       setToast(first.message);
       focusField(first.field);
     }
   }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (loading) return;
-
+  const submitLogin = async () => {
+    if (submissionPending.current) return;
     const payload = {
       restaurant_slug: restaurantSlug.trim().toLowerCase(),
       login: login.trim(),
@@ -67,6 +68,7 @@ export default function LoginClient() {
       return;
     }
 
+    submissionPending.current = true;
     setLoading(true);
     setError(null);
     setFieldErrors({});
@@ -75,30 +77,30 @@ export default function LoginClient() {
       const response = await staffLogin(payload);
       const destination = roleHomePath(response.staff);
       if (destination === "/login") {
-        setError("Your account role is not allowed to access this system.");
+        setError({ message: "Your account role is not allowed to access this system.", retryable: false });
         return;
       }
       router.replace(destination);
     } catch (err) {
-      if (err instanceof ApiError) {
-        setError(
-          err.status === 401
-            ? "Invalid restaurant credentials, email, or password."
-            : err.message
-        );
+      const presented = presentAuthError(err, typeof navigator !== "undefined" && !navigator.onLine);
+      setError(presented);
+      setToast(presented.message);
+      if (err instanceof ApiError && !presented.retryable) {
         if (err.field && fieldOrder.includes(err.field as keyof StaffLoginRequest)) {
           const field = err.field as keyof StaffLoginRequest;
           setFieldErrors({ [field]: err.message });
           focusField(field);
         }
-        setToast(err.message);
-      } else {
-        setError("Could not connect to the authentication server.");
-        setToast("Could not connect to the authentication server.");
       }
     } finally {
+      submissionPending.current = false;
       setLoading(false);
     }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    void submitLogin();
   };
 
   return (
@@ -106,7 +108,7 @@ export default function LoginClient() {
       <FormToast message={toast} onDismiss={() => setToast(null)} />
       <div className="flex w-full max-w-md flex-col gap-4 lg:max-w-4xl lg:flex-row lg:items-center">
       <main className="w-full rounded-lg border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-8 shadow-sm lg:flex-1">
-        <div className="mb-2 flex justify-end"><PublicThemeControl /></div>
+        <div className="mb-2 flex justify-end"><LandingThemeToggle /></div>
         <div className="mb-8">
           <Link href="/" className="text-sm font-black uppercase tracking-widest text-orange-700">
             OMLU
@@ -114,11 +116,7 @@ export default function LoginClient() {
           <h1 className="mt-3 text-2xl font-black tracking-tight">Restaurant Login</h1>
         </div>
 
-        {error && (
-          <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">
-            {error}
-          </div>
-        )}
+        {error && <AuthErrorAlert error={error} loading={loading} onRetry={() => void submitLogin()} />}
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-5">
           <label className="flex flex-col gap-1.5 text-sm font-bold">

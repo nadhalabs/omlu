@@ -48,7 +48,8 @@ test("landing uses a compact direct light and dark toggle without a theme panel"
 
 test("login and registration are theme-aware without changing form behavior", () => {
   for (const source of [login, register]) {
-    assert.match(source, /<PublicThemeControl/);
+    assert.match(source, /<LandingThemeToggle/);
+    assert.doesNotMatch(source, /<PublicThemeControl/);
     assert.match(source, /--omlu-primary-surface/);
     assert.match(source, /--omlu-text-primary/);
     assert.match(source, /--omlu-border/);
@@ -87,4 +88,29 @@ test("first visit still defaults to shared System preference", () => {
   assert.match(rootLayout, /omlu_theme/);
   assert.match(rootLayout, /prefers-color-scheme: dark/);
   assert.doesNotMatch(`${menu}\n${session}\n${order}\n${bill}\n${login}\n${register}`, /localStorage\.(?:getItem|setItem)\([^)]*theme/i);
+});
+
+test("authentication pages present retryable connectivity errors without raw internals", () => {
+  const presentation = read("lib/authError.ts");
+  const alert = read("components/AuthErrorAlert.tsx");
+  assert.match(presentation, /Unable to connect/);
+  assert.match(presentation, /We couldn’t reach OMLU\. Check your internet connection and try again\./);
+  assert.match(presentation, /You appear to be offline\. Reconnect to the internet and try again\./);
+  assert.match(presentation, /OMLU is temporarily unavailable\. Please try again shortly\./);
+  assert.match(presentation, /The connection took too long/);
+  assert.match(presentation, /Invalid restaurant credentials, email, or password\./);
+  assert.match(presentation, /error\.message/);
+  assert.match(alert, /role="alert"/);
+  assert.match(alert, /Try again/);
+  assert.match(alert, /disabled=\{loading\}/);
+  assert.doesNotMatch(`${login}\n${register}`, /Could not connect|Next\.js|API server|proxy server|authentication server/);
+});
+
+test("login retry keeps current values and rejects duplicate submissions", () => {
+  assert.match(login, /submissionPending\.current/);
+  assert.match(login, /if \(submissionPending\.current\) return/);
+  assert.match(login, /onRetry=\{\(\) => void submitLogin\(\)\}/);
+  assert.match(login, /restaurant_slug: restaurantSlug\.trim\(\)\.toLowerCase\(\)/);
+  assert.match(login, /login: login\.trim\(\)/);
+  assert.match(login, /password,/);
 });
