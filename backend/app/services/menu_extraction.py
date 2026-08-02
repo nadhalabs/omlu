@@ -1,7 +1,11 @@
 import asyncio
+import json
+import logging
 
 from app.config import settings
 from app.schemas.menu_import import MenuExtractionResult
+
+logger = logging.getLogger(__name__)
 
 MENU_EXTRACTION_PROMPT = """
 You are extracting structured restaurant-menu data from one or more uploaded menu images.
@@ -208,6 +212,23 @@ Treat labels as separate items when:
 Do not create a group merely because several names are similar.
 
 ==================================================
+EMPTY OPTION GROUPS — STRICTLY FORBIDDEN
+==================================================
+
+- Never return an option group with an empty options array.
+- Create an option group only when at least one real, visible option can be extracted from the menu.
+- A heading, bracket, indentation pattern, price column, or suspected configuration structure is not sufficient by itself.
+- Never create placeholder option groups.
+- Never create a group named "Choice" unless it contains at least one actual extracted option.
+- If a possible option structure is visible but its options are unreadable, cropped, absent, or ambiguous:
+  - omit the option group completely;
+  - preserve the menu item;
+  - lower the relevant confidence where supported by the schema;
+  - add an owner-review warning only if the existing schema supports such a warning.
+- Never represent uncertainty using an empty option group.
+- Before returning JSON, remove every option group whose options array is empty.
+
+==================================================
 9. OPTION GROUP NAME RULES
 ==================================================
 
@@ -215,7 +236,9 @@ Do not create a group merely because several names are similar.
 - Do not rename or normalize a visible heading.
 - If choices are clearly connected to an item but no group heading is visible,
   use a short neutral structural name only if the schema requires a name.
-- For generated neutral names, use a generic label such as "Choice".
+- Use the neutral group name "Choice" only when real options are clearly visible but the group heading is missing or unreadable.
+- "Choice" must never be created merely because an item might be configurable.
+- Every "Choice" group must contain at least one extracted option.
 - Lower confidence and add a warning whenever the group name was not visibly
   present.
 - Do not invent marketing-oriented, cuisine-based or knowledge-based group names.
@@ -560,10 +583,68 @@ Before returning JSON, verify:
 - row and column prices were not shifted
 - overlapping photos did not create duplicates
 - no required or multi-select rule was invented
+- every option group contains at least one valid option
+- no option group has an empty options array
+- no placeholder option groups exist
+- every generic "Choice" group contains real extracted options
+- unreadable option structures are omitted rather than returned as empty groups
 - every uncertainty has a warning
 - only schema-supported fields are returned
 - the response is valid JSON only
 """.strip()
+
+
+def _normalize_extraction_payload(payload: dict) -> dict:
+    """Normalize extracted menu JSON payload by removing invalid empty option groups before schema validation."""
+    if not isinstance(payload, dict):
+        return payload
+
+    categories = payload.get("categories")
+    if not isinstance(categories, list):
+        return payload
+
+    removed_groups_count = 0
+    affected_items_count = 0
+
+    for cat in categories:
+        if not isinstance(cat, dict):
+            continue
+        items = cat.get("items")
+        if not isinstance(items, list):
+            continue
+
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            option_groups = item.get("option_groups")
+            if option_groups is None or not isinstance(option_groups, list):
+                continue
+
+            valid_groups = []
+            item_affected = False
+            for group in option_groups:
+                if not isinstance(group, dict):
+                    removed_groups_count += 1
+                    item_affected = True
+                    continue
+                options = group.get("options")
+                if not isinstance(options, list) or len(options) == 0:
+                    removed_groups_count += 1
+                    item_affected = True
+                    continue
+
+                valid_groups.append(group)
+
+            item["option_groups"] = valid_groups
+            if item_affected:
+                affected_items_count += 1
+
+    if removed_groups_count > 0:
+        logger.info(
+            f"Normalized menu extraction payload: removed {removed_groups_count} empty option group(s) across {affected_items_count} item(s)."
+        )
+
+    return payload
 
 
 async def extract_menu(images: list[dict]) -> MenuExtractionResult:
@@ -596,4 +677,10 @@ async def extract_menu(images: list[dict]) -> MenuExtractionResult:
         )
 
     response = await asyncio.to_thread(generate)
-    return MenuExtractionResult.model_validate_json(response.text)
+    try:
+        raw_payload = json.loads(response.text)
+    except Exception:
+        return MenuExtractionResult.model_validate_json(response.text)
+
+    normalized_payload = _normalize_extraction_payload(raw_payload)
+    return MenuExtractionResult.model_validate(normalized_payload)

@@ -440,3 +440,216 @@ def test_legacy_variants_backward_compatibility(import_context):
     assert group is not None
     assert group.type == "variant"
     db.close()
+
+
+def test_normalize_extraction_payload_empty_group_removal():
+    from app.services.menu_extraction import _normalize_extraction_payload
+    from app.schemas.menu_import import MenuExtractionResult
+
+    payload = {
+        "categories": [
+            {
+                "name": "Hot Drinks",
+                "items": [
+                    {
+                        "name": "Black Tea",
+                        "price": 15.0,
+                        "option_groups": [
+                            {"name": "Choice", "type": "variant", "options": []}
+                        ],
+                    }
+                ],
+            }
+        ]
+    }
+
+    normalized = _normalize_extraction_payload(payload)
+    assert normalized["categories"][0]["items"][0]["option_groups"] == []
+    result = MenuExtractionResult.model_validate(normalized)
+    assert len(result.categories[0].items[0].option_groups) == 0
+
+
+def test_normalize_extraction_payload_valid_group_preservation():
+    from app.services.menu_extraction import _normalize_extraction_payload
+    from app.schemas.menu_import import MenuExtractionResult
+
+    payload = {
+        "categories": [
+            {
+                "name": "Beverages",
+                "items": [
+                    {
+                        "name": "Coffee",
+                        "price": 40.0,
+                        "option_groups": [
+                            {
+                                "name": "Sugar Preference",
+                                "type": "addon",
+                                "required": True,
+                                "minimum_selections": 1,
+                                "maximum_selections": 1,
+                                "options": [
+                                    {"name": "With Sugar", "price_delta": 0.0}
+                                ],
+                            }
+                        ],
+                    }
+                ],
+            }
+        ]
+    }
+
+    normalized = _normalize_extraction_payload(payload)
+    result = MenuExtractionResult.model_validate(normalized)
+    assert len(result.categories[0].items[0].option_groups) == 1
+    assert result.categories[0].items[0].option_groups[0].name == "Sugar Preference"
+
+
+def test_normalize_extraction_payload_mixed_groups():
+    from app.services.menu_extraction import _normalize_extraction_payload
+    from app.schemas.menu_import import MenuExtractionResult
+
+    payload = {
+        "categories": [
+            {
+                "name": "Beverages",
+                "items": [
+                    {
+                        "name": "Tea",
+                        "price": 20.0,
+                        "option_groups": [
+                            {"name": "Choice", "type": "variant", "options": []},
+                            {
+                                "name": "Sugar",
+                                "type": "addon",
+                                "required": True,
+                                "minimum_selections": 1,
+                                "maximum_selections": 1,
+                                "options": [{"name": "Less Sugar", "price_delta": 0.0}],
+                            },
+                        ],
+                    }
+                ],
+            }
+        ]
+    }
+
+    normalized = _normalize_extraction_payload(payload)
+    result = MenuExtractionResult.model_validate(normalized)
+    assert len(result.categories[0].items[0].option_groups) == 1
+    assert result.categories[0].items[0].option_groups[0].name == "Sugar"
+
+
+def test_normalize_extraction_payload_multiple_affected_items():
+    from app.services.menu_extraction import _normalize_extraction_payload
+    from app.schemas.menu_import import MenuExtractionResult
+
+    items_payload = [
+        {
+            "name": f"Item {i}",
+            "price": 50.0 + i,
+            "option_groups": [
+                {"name": "Choice", "type": "variant", "options": []}
+            ],
+        }
+        for i in range(6)
+    ]
+    payload = {
+        "categories": [
+            {
+                "name": "Main Menu",
+                "items": items_payload,
+            }
+        ]
+    }
+
+    normalized = _normalize_extraction_payload(payload)
+    result = MenuExtractionResult.model_validate(normalized)
+    assert len(result.categories[0].items) == 6
+    for item in result.categories[0].items:
+        assert len(item.option_groups) == 0
+
+
+def test_normalize_extraction_payload_unrelated_validation_still_fails():
+    from app.services.menu_extraction import _normalize_extraction_payload
+    from app.schemas.menu_import import MenuExtractionResult
+    from pydantic import ValidationError
+
+    payload = {
+        "categories": [
+            {
+                "name": "Food",
+                "items": [
+                    {
+                        "name": "Invalid Option Item",
+                        "price": 100.0,
+                        "option_groups": [
+                            {
+                                "name": "Bad Group",
+                                "type": "addon",
+                                "options": [
+                                    {
+                                        "name": "Conflict",
+                                        "final_price": 50.0,
+                                        "price_delta": 10.0,
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ],
+            }
+        ]
+    }
+
+    normalized = _normalize_extraction_payload(payload)
+    with pytest.raises(ValidationError):
+        MenuExtractionResult.model_validate(normalized)
+
+
+@pytest.mark.asyncio
+async def test_extract_menu_end_to_end_with_mocked_gemini_empty_groups(monkeypatch):
+    import json
+    from app.config import settings
+    from app.services.menu_extraction import extract_menu
+
+    monkeypatch.setattr(settings, "gemini_api_key", "mock_key")
+    monkeypatch.setattr(settings, "gemini_model", "mock_model")
+
+    mock_json_response = json.dumps({
+        "categories": [
+            {
+                "name": "Breakfast",
+                "items": [
+                    {
+                        "name": f"Breakfast Item {i}",
+                        "price": 100.0,
+                        "option_groups": [
+                            {"name": "Choice", "type": "variant", "options": []}
+                        ],
+                    }
+                    for i in range(6)
+                ],
+            }
+        ],
+        "general_warnings": [],
+    })
+
+    class MockModelResponse:
+        text = mock_json_response
+
+    class MockModelsService:
+        def generate_content(self, **kwargs):
+            return MockModelResponse()
+
+    class MockGenAIClient:
+        def __init__(self, api_key=None):
+            self.models = MockModelsService()
+
+    import google.genai
+    monkeypatch.setattr(google.genai, "Client", MockGenAIClient)
+
+    result = await extract_menu([{"mime_type": "image/jpeg", "content": b"fake_image_bytes"}])
+    assert len(result.categories[0].items) == 6
+    for item in result.categories[0].items:
+        assert len(item.option_groups) == 0
