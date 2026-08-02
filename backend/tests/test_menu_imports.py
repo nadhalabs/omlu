@@ -1,0 +1,442 @@
+import uuid
+from decimal import Decimal
+
+import pytest
+
+from app.database import SessionLocal
+from app.main import app
+from app.models.menu import MenuItem, MenuOption, MenuOptionGroup
+from app.models.menu_import import MenuImportDraftItem, MenuImportJob
+from app.models.restaurant import Restaurant
+from app.models.staff_user import StaffUser
+from app.utils.auth import hash_password
+from tests.auth_helpers import create_session_access_token as create_access_token
+from tests.participant_helpers import ParticipantTestClient
+
+client = ParticipantTestClient(app)
+
+
+@pytest.fixture
+def import_context():
+    db = SessionLocal()
+    suffix = uuid.uuid4().hex[:10]
+    restaurant = Restaurant(name="Import Bistro", slug=f"import-{suffix}", is_active=True, currency="INR", order_prefix="IB")
+    other_restaurant = Restaurant(name="Other Bistro", slug=f"import-other-{suffix}", is_active=True, currency="INR", order_prefix="OB")
+    db.add_all([restaurant, other_restaurant])
+    db.flush()
+
+    owner = StaffUser(
+        restaurant_id=restaurant.id,
+        name="Owner User",
+        email=f"owner-{suffix}@import.local",
+        password_hash=hash_password("Password123!"),
+        role="owner",
+        is_active=True,
+    )
+    other_owner = StaffUser(
+        restaurant_id=other_restaurant.id,
+        name="Other Owner",
+        email=f"other-{suffix}@import.local",
+        password_hash=hash_password("Password123!"),
+        role="owner",
+        is_active=True,
+    )
+    db.add_all([owner, other_owner])
+    db.commit()
+
+    data = {
+        "restaurant_id": restaurant.id,
+        "other_restaurant_id": other_restaurant.id,
+        "owner_token": create_access_token({"sub": str(owner.id), "restaurant_id": restaurant.id, "role": "owner"}),
+        "other_owner_token": create_access_token({"sub": str(other_owner.id), "restaurant_id": other_restaurant.id, "role": "owner"}),
+    }
+    db.close()
+    yield data
+
+    db = SessionLocal()
+    db.query(Restaurant).filter(Restaurant.id.in_([restaurant.id, other_restaurant.id])).delete()
+    db.commit()
+    db.close()
+
+
+def auth(data, key="owner_token"):
+    return {"Authorization": f"Bearer {data[key]}"}
+
+
+def create_draft_job(db, restaurant_id, created_by_id, items_data):
+    job = MenuImportJob(
+        restaurant_id=restaurant_id,
+        created_by=created_by_id,
+        status="review_required",
+        original_result={"categories": [], "general_warnings": []},
+    )
+    db.add(job)
+    db.flush()
+
+    draft_items = []
+    for item in items_data:
+        draft = MenuImportDraftItem(
+            import_job_id=job.id,
+            category_name=item.get("category_name", "Beverages"),
+            item_name=item.get("item_name", "Test Item"),
+            description=item.get("description"),
+            price=Decimal(str(item["price"])) if item.get("price") is not None else None,
+            food_type=item.get("food_type", "veg"),
+            option_groups=item.get("option_groups", []),
+            variants=item.get("variants", []),
+            warnings=item.get("warnings", []),
+            item_confidence=Decimal("0.95"),
+            category_confidence=Decimal("0.95"),
+            selected=item.get("selected", True),
+        )
+        db.add(draft)
+        draft_items.append(draft)
+
+    db.commit()
+    job_id = job.id
+    draft_ids = [d.id for d in draft_items]
+    return job_id, draft_ids
+
+
+def test_simple_item_import(import_context):
+    db = SessionLocal()
+    owner = db.query(StaffUser).filter(StaffUser.email.like("%import.local")).first()
+    job_id, draft_ids = create_draft_job(db, import_context["restaurant_id"], owner.id, [
+        {"item_name": "Black Tea", "price": "15.00", "category_name": "Hot Drinks", "description": "Freshly brewed tea"}
+    ])
+    db.close()
+
+    response = client.post(
+        f"/admin/menu-imports/{job_id}/confirm",
+        headers=auth(import_context),
+        json={
+            "items": [
+                {
+                    "draft_item_id": str(draft_ids[0]),
+                    "selected": True,
+                    "category_name": "Hot Drinks",
+                    "item_name": "Black Tea",
+                    "description": "Freshly brewed hot tea",
+                    "price": 15.00,
+                    "food_type": "veg",
+                    "option_groups": [],
+                }
+            ]
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["imported"] == 1
+
+    db = SessionLocal()
+    created_item = db.query(MenuItem).filter(MenuItem.restaurant_id == import_context["restaurant_id"], MenuItem.name_en == "Black Tea").first()
+    assert created_item is not None
+    assert created_item.price == Decimal("15.00")
+    assert created_item.description_en == "Freshly brewed hot tea"
+    db.close()
+
+
+def test_final_price_variant_import(import_context):
+    db = SessionLocal()
+    owner = db.query(StaffUser).filter(StaffUser.email.like("%import.local")).first()
+    job_id, draft_ids = create_draft_job(db, import_context["restaurant_id"], owner.id, [
+        {
+            "item_name": "Chicken Mandhi",
+            "price": None,
+            "category_name": "Arabic",
+            "option_groups": [
+                {
+                    "name": "Portion",
+                    "type": "variant",
+                    "required": True,
+                    "minimum_selections": 1,
+                    "maximum_selections": 1,
+                    "options": [
+                        {"name": "Quarter", "final_price": 180.00, "price_delta": None},
+                        {"name": "Half", "final_price": 350.00, "price_delta": None},
+                        {"name": "Full", "final_price": 680.00, "price_delta": None},
+                    ],
+                }
+            ],
+        }
+    ])
+    db.close()
+
+    response = client.post(
+        f"/admin/menu-imports/{job_id}/confirm",
+        headers=auth(import_context),
+        json={
+            "items": [
+                {
+                    "draft_item_id": str(draft_ids[0]),
+                    "selected": True,
+                    "category_name": "Arabic",
+                    "item_name": "Chicken Mandhi",
+                    "price": None,
+                    "food_type": "non_veg",
+                    "option_groups": [
+                        {
+                            "name": "Portion",
+                            "type": "variant",
+                            "required": True,
+                            "minimum_selections": 1,
+                            "maximum_selections": 1,
+                            "options": [
+                                {"name": "Quarter", "final_price": 180.00},
+                                {"name": "Half", "final_price": 350.00},
+                                {"name": "Full", "final_price": 680.00},
+                            ],
+                        }
+                    ],
+                }
+            ]
+        },
+    )
+
+    assert response.status_code == 200
+    db = SessionLocal()
+    item = db.query(MenuItem).filter(MenuItem.name_en == "Chicken Mandhi").first()
+    assert item is not None
+    assert item.price == Decimal("180.00")
+    group = db.query(MenuOptionGroup).filter(MenuOptionGroup.name == "Portion").first()
+    assert group is not None
+    assert group.type == "variant"
+    assert group.required is True
+    options = db.query(MenuOption).filter(MenuOption.group_id == group.id).all()
+    assert len(options) == 3
+    assert {opt.name: opt.price_delta for opt in options} == {
+        "Quarter": Decimal("180.00"),
+        "Half": Decimal("350.00"),
+        "Full": Decimal("680.00"),
+    }
+    db.close()
+
+
+def test_zero_price_sugar_choice_and_additive_extra(import_context):
+    db = SessionLocal()
+    owner = db.query(StaffUser).filter(StaffUser.email.like("%import.local")).first()
+    job_id, draft_ids = create_draft_job(db, import_context["restaurant_id"], owner.id, [
+        {
+            "item_name": "Coffee",
+            "price": "40.00",
+            "category_name": "Beverages",
+            "option_groups": [
+                {
+                    "name": "Sugar Preference",
+                    "type": "addon",
+                    "required": True,
+                    "minimum_selections": 1,
+                    "maximum_selections": 1,
+                    "options": [
+                        {"name": "With Sugar", "price_delta": 0.0},
+                        {"name": "Without Sugar", "price_delta": 0.0},
+                        {"name": "Less Sugar", "price_delta": 0.0},
+                    ],
+                },
+                {
+                    "name": "Extras",
+                    "type": "addon",
+                    "required": False,
+                    "minimum_selections": 0,
+                    "maximum_selections": 2,
+                    "options": [
+                        {"name": "Extra Shot", "price_delta": 20.0},
+                        {"name": "Ice Cream", "price_delta": 30.0},
+                    ],
+                },
+            ],
+        }
+    ])
+    db.close()
+
+    response = client.post(
+        f"/admin/menu-imports/{job_id}/confirm",
+        headers=auth(import_context),
+        json={
+            "items": [
+                {
+                    "draft_item_id": str(draft_ids[0]),
+                    "selected": True,
+                    "category_name": "Beverages",
+                    "item_name": "Coffee",
+                    "price": 40.00,
+                    "food_type": "veg",
+                    "option_groups": [
+                        {
+                            "name": "Sugar Preference",
+                            "type": "addon",
+                            "required": True,
+                            "minimum_selections": 1,
+                            "maximum_selections": 1,
+                            "options": [
+                                {"name": "With Sugar", "price_delta": 0.0},
+                                {"name": "Without Sugar", "price_delta": 0.0},
+                                {"name": "Less Sugar", "price_delta": 0.0},
+                            ],
+                        },
+                        {
+                            "name": "Extras",
+                            "type": "addon",
+                            "required": False,
+                            "minimum_selections": 0,
+                            "maximum_selections": 2,
+                            "options": [
+                                {"name": "Extra Shot", "price_delta": 20.0},
+                                {"name": "Ice Cream", "price_delta": 30.0},
+                            ],
+                        },
+                    ],
+                }
+            ]
+        },
+    )
+
+    assert response.status_code == 200
+    db = SessionLocal()
+    item = db.query(MenuItem).filter(MenuItem.name_en == "Coffee").first()
+    assert item.price == Decimal("40.00")
+    sugar_group = db.query(MenuOptionGroup).filter(MenuOptionGroup.name == "Sugar Preference").first()
+    assert sugar_group.required is True
+    sugar_opts = db.query(MenuOption).filter(MenuOption.group_id == sugar_group.id).all()
+    assert len(sugar_opts) == 3
+    assert all(opt.price_delta == Decimal("0.00") for opt in sugar_opts)
+
+    extras_group = db.query(MenuOptionGroup).filter(MenuOptionGroup.name == "Extras").first()
+    assert extras_group.required is False
+    assert extras_group.maximum_selections == 2
+    extras_opts = db.query(MenuOption).filter(MenuOption.group_id == extras_group.id).all()
+    assert {opt.name: opt.price_delta for opt in extras_opts} == {
+        "Extra Shot": Decimal("20.00"),
+        "Ice Cream": Decimal("30.00"),
+    }
+    db.close()
+
+
+def test_invalid_option_pricing_rejected(import_context):
+    db = SessionLocal()
+    owner = db.query(StaffUser).filter(StaffUser.email.like("%import.local")).first()
+    job_id, draft_ids = create_draft_job(db, import_context["restaurant_id"], owner.id, [
+        {"item_name": "Invalid Item", "price": "100.00"}
+    ])
+    db.close()
+
+    response = client.post(
+        f"/admin/menu-imports/{job_id}/confirm",
+        headers=auth(import_context),
+        json={
+            "items": [
+                {
+                    "draft_item_id": str(draft_ids[0]),
+                    "selected": True,
+                    "category_name": "Food",
+                    "item_name": "Invalid Item",
+                    "price": 100.00,
+                    "food_type": "veg",
+                    "option_groups": [
+                        {
+                            "name": "Bad Group",
+                            "type": "addon",
+                            "required": False,
+                            "minimum_selections": 0,
+                            "maximum_selections": 1,
+                            "options": [
+                                {"name": "Conflict", "final_price": 50.0, "price_delta": 10.0}
+                            ],
+                        }
+                    ],
+                }
+            ]
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_tenant_isolation_and_atomic_rollback(import_context):
+    db = SessionLocal()
+    owner = db.query(StaffUser).filter(StaffUser.email.like("%import.local")).first()
+    job_id, draft_ids = create_draft_job(db, import_context["restaurant_id"], owner.id, [
+        {"item_name": "Valid Item", "price": "100.00"},
+        {"item_name": "Failing Item", "price": "200.00"},
+    ])
+    db.close()
+
+    cross_response = client.post(
+        f"/admin/menu-imports/{job_id}/confirm",
+        headers=auth(import_context, "other_owner_token"),
+        json={"items": []},
+    )
+    assert cross_response.status_code == 404
+
+    fail_response = client.post(
+        f"/admin/menu-imports/{job_id}/confirm",
+        headers=auth(import_context),
+        json={
+            "items": [
+                {
+                    "draft_item_id": str(draft_ids[0]),
+                    "selected": True,
+                    "category_name": "Valid Category",
+                    "item_name": "Valid Item",
+                    "price": 100.00,
+                    "food_type": "veg",
+                    "option_groups": [],
+                },
+                {
+                    "draft_item_id": str(draft_ids[1]),
+                    "selected": True,
+                    "category_name": "",
+                    "item_name": "Failing Item",
+                    "price": 200.00,
+                    "food_type": "veg",
+                    "option_groups": [],
+                },
+            ]
+        },
+    )
+
+    assert fail_response.status_code == 400
+    db = SessionLocal()
+    assert db.query(MenuItem).filter(MenuItem.restaurant_id == import_context["restaurant_id"]).count() == 0
+    db.close()
+
+
+def test_legacy_variants_backward_compatibility(import_context):
+    db = SessionLocal()
+    owner = db.query(StaffUser).filter(StaffUser.email.like("%import.local")).first()
+    job_id, draft_ids = create_draft_job(db, import_context["restaurant_id"], owner.id, [
+        {
+            "item_name": "Legacy Pizza",
+            "price": "180.00",
+            "variants": [{"name": "Small", "price": 180.00}, {"name": "Large", "price": 300.00}],
+        }
+    ])
+    db.close()
+
+    response = client.post(
+        f"/admin/menu-imports/{job_id}/confirm",
+        headers=auth(import_context),
+        json={
+            "items": [
+                {
+                    "draft_item_id": str(draft_ids[0]),
+                    "selected": True,
+                    "category_name": "Pizzas",
+                    "item_name": "Legacy Pizza",
+                    "price": 180.00,
+                    "food_type": "veg",
+                    "option_groups": [],
+                    "variants": [{"name": "Small", "price": 180.00}, {"name": "Large", "price": 300.00}],
+                }
+            ]
+        },
+    )
+
+    assert response.status_code == 200
+    db = SessionLocal()
+    item = db.query(MenuItem).filter(MenuItem.name_en == "Legacy Pizza").first()
+    assert item is not None
+    group = db.query(MenuOptionGroup).filter(MenuOptionGroup.name == "Legacy Pizza size").first()
+    assert group is not None
+    assert group.type == "variant"
+    db.close()

@@ -397,6 +397,26 @@ export interface AdminMenuItemResponse {
 
 export type MenuFoodType = "veg" | "non_veg" | "egg" | "unknown";
 
+export interface MenuOptionDraft {
+  name: string;
+  final_price?: number | null;
+  price_delta?: number | null;
+  kitchen_display_name?: string | null;
+  confidence?: number;
+  warnings?: string[];
+}
+
+export interface MenuOptionGroupDraft {
+  name: string;
+  type: "variant" | "addon";
+  required: boolean;
+  minimum_selections: number;
+  maximum_selections: number;
+  options: MenuOptionDraft[];
+  confidence?: number;
+  warnings?: string[];
+}
+
 export interface MenuImportDraftItem {
   id: string;
   category_name: string | null;
@@ -404,6 +424,7 @@ export interface MenuImportDraftItem {
   description: string | null;
   price: number | null;
   food_type: MenuFoodType;
+  option_groups: MenuOptionGroupDraft[];
   variants: { name: string; price: number }[];
   warnings: string[];
   item_confidence: number;

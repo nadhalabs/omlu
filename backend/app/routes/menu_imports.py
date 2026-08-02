@@ -27,6 +27,29 @@ def normalize_item_name(value: str) -> str:
     return " ".join(value.lower().strip().split())
 
 
+def build_legacy_variant_group(item_name: str, variants: list[dict]) -> dict:
+    return {
+        "name": f"{item_name.strip()} size",
+        "type": "variant",
+        "required": True,
+        "minimum_selections": 1,
+        "maximum_selections": 1,
+        "options": [
+            {
+                "name": v["name"],
+                "final_price": float(v["price"]),
+                "price_delta": None,
+                "kitchen_display_name": None,
+                "confidence": 1.0,
+                "warnings": [],
+            }
+            for v in variants
+        ],
+        "confidence": 1.0,
+        "warnings": [],
+    }
+
+
 def serialize_job(job: MenuImportJob, db: Session) -> dict:
     existing = {
         normalize_item_name(name)
@@ -35,24 +58,31 @@ def serialize_job(job: MenuImportJob, db: Session) -> dict:
         ).all()
     }
     result = job.original_result or {}
-    return {
-        "id": job.id,
-        "status": job.status,
-        "general_warnings": result.get("general_warnings", []),
-        "items": [{
+    items = []
+    for row in job.draft_items:
+        option_groups = row.option_groups or []
+        if not option_groups and row.variants:
+            option_groups = [build_legacy_variant_group(row.item_name, row.variants)]
+        items.append({
             "id": row.id,
             "category_name": row.category_name,
             "item_name": row.item_name,
             "description": row.description,
             "price": float(row.price) if row.price is not None else None,
             "food_type": row.food_type,
+            "option_groups": option_groups,
             "variants": row.variants,
             "warnings": row.warnings,
             "item_confidence": float(row.item_confidence),
             "category_confidence": float(row.category_confidence),
             "selected": row.selected,
             "duplicate": normalize_item_name(row.item_name) in existing,
-        } for row in job.draft_items],
+        })
+    return {
+        "id": job.id,
+        "status": job.status,
+        "general_warnings": result.get("general_warnings", []),
+        "items": items,
     }
 
 
@@ -90,17 +120,35 @@ async def create_menu_import(
         job.original_result = extraction.model_dump(mode="json")
         for category in extraction.categories:
             for item in category.items:
+                option_groups_data = [og.model_dump(mode="json") for og in item.option_groups]
+                if not option_groups_data and item.variants:
+                    option_groups_data = [
+                        build_legacy_variant_group(item.name, [v.model_dump() for v in item.variants])
+                    ]
+
+                # Determine base price
+                calculated_price = item.price
+                if calculated_price is None and option_groups_data:
+                    variant_groups = [og for og in option_groups_data if og.get("type") == "variant"]
+                    if variant_groups:
+                        final_prices = [
+                            opt["final_price"]
+                            for og in variant_groups
+                            for opt in og.get("options", [])
+                            if opt.get("final_price") is not None
+                        ]
+                        if final_prices:
+                            calculated_price = min(final_prices)
+
                 db.add(MenuImportDraftItem(
                     import_job_id=job.id,
                     category_name=item.category if item.category is not None else category.name,
                     item_name=item.name.strip(),
                     description=item.description,
-                    price=Decimal(str(
-                        min(variant.price for variant in item.variants)
-                        if item.variants else item.price
-                    )) if (item.variants or item.price is not None) else None,
+                    price=Decimal(str(calculated_price)) if calculated_price is not None else None,
                     food_type=item.food_type.value,
-                    variants=[variant.model_dump() for variant in item.variants],
+                    option_groups=option_groups_data,
+                    variants=[v.model_dump() for v in item.variants],
                     warnings=item.warnings,
                     item_confidence=Decimal(str(item.item_confidence)),
                     category_confidence=Decimal(str(item.category_confidence)),
@@ -163,13 +211,43 @@ def confirm_menu_import(
             draft.selected = submitted.selected
             draft.category_name = submitted.category_name
             draft.item_name = submitted.item_name.strip()
+            draft.description = submitted.description
             draft.price = Decimal(str(submitted.price)) if submitted.price is not None else None
             draft.food_type = submitted.food_type.value
+            draft.option_groups = [og.model_dump(mode="json") for og in submitted.option_groups]
             draft.variants = [variant.model_dump() for variant in submitted.variants]
+
             if not submitted.selected:
                 continue
-            if not submitted.category_name or submitted.price is None:
-                raise HTTPException(400, f"{submitted.item_name}: category and price are required")
+
+            if not submitted.category_name or not submitted.category_name.strip():
+                raise HTTPException(400, f"{submitted.item_name}: category is required")
+            if not submitted.item_name or not submitted.item_name.strip():
+                raise HTTPException(400, "Item name cannot be empty")
+
+            # Fallback legacy variants if option_groups is empty
+            option_groups = submitted.option_groups
+            if not option_groups and submitted.variants:
+                option_groups = [
+                    build_legacy_variant_group(submitted.item_name, [v.model_dump() for v in submitted.variants])
+                ]
+
+            # Price validation
+            item_price_val = submitted.price
+            if item_price_val is None:
+                # If item has variant option group with final_price, set base price to min final_price
+                variant_groups = [og for og in option_groups if (isinstance(og, dict) and og.get("type") == "variant") or (hasattr(og, "type") and og.type == "variant")]
+                final_prices = []
+                for og in variant_groups:
+                    opts = og.get("options", []) if isinstance(og, dict) else og.options
+                    for opt in opts:
+                        fp = opt.get("final_price") if isinstance(opt, dict) else opt.final_price
+                        if fp is not None:
+                            final_prices.append(fp)
+                if final_prices:
+                    item_price_val = min(final_prices)
+                else:
+                    raise HTTPException(400, f"{submitted.item_name}: price is required")
 
             normalized = normalize_item_name(submitted.item_name)
             duplicate = existing_by_name.get(normalized)
@@ -197,45 +275,68 @@ def confirm_menu_import(
                 restaurant_id=current_user.restaurant_id,
                 category_id=category.id,
                 name_en=submitted.item_name.strip(),
-                description_en=draft.description,
-                price=Decimal(str(submitted.price)),
+                description_en=submitted.description,
+                price=Decimal(str(item_price_val)),
                 food_type=submitted.food_type.value,
                 is_available=True,
                 display_order=0,
             )
             db.add(menu_item)
             db.flush()
-            if submitted.variants:
+
+            # Create Option Groups & Options
+            for group_order, og_item in enumerate(option_groups):
+                group_dict = og_item if isinstance(og_item, dict) else og_item.model_dump(mode="json")
+                group_name = group_dict.get("name", "").strip()
+                group_type = group_dict.get("type", "addon")
+                required_val = bool(group_dict.get("required", True))
+                min_sel = int(group_dict.get("minimum_selections", 1 if required_val else 0))
+                max_sel = int(group_dict.get("maximum_selections", 1))
+
                 option_group = MenuOptionGroup(
                     restaurant_id=current_user.restaurant_id,
-                    name=f"{submitted.item_name.strip()} size",
-                    type="variant",
-                    required=True,
-                    minimum_selections=1,
-                    maximum_selections=1,
-                    display_order=0,
+                    name=group_name,
+                    type=group_type,
+                    required=required_val,
+                    minimum_selections=min_sel,
+                    maximum_selections=max_sel,
+                    display_order=group_order,
                     active=True,
                 )
                 db.add(option_group)
                 db.flush()
+
                 db.add(MenuItemOptionGroup(
                     restaurant_id=current_user.restaurant_id,
                     menu_item_id=menu_item.id,
                     option_group_id=option_group.id,
-                    display_order=0,
+                    display_order=group_order,
                     active=True,
                 ))
-                for order, variant in enumerate(submitted.variants):
+
+                opts_list = group_dict.get("options", [])
+                for opt_order, opt_item in enumerate(opts_list):
+                    opt_dict = opt_item if isinstance(opt_item, dict) else opt_item.model_dump(mode="json")
+                    opt_name = opt_dict.get("name", "").strip()
+                    kitchen_label = opt_dict.get("kitchen_display_name")
+                    if kitchen_label:
+                        kitchen_label = kitchen_label.strip() or None
+
+                    if group_type == "variant":
+                        price_delta_val = Decimal(str(opt_dict["final_price"]))
+                    else:
+                        price_delta_val = Decimal(str(opt_dict.get("price_delta", 0)))
+
                     db.add(MenuOption(
                         restaurant_id=current_user.restaurant_id,
                         group_id=option_group.id,
-                        name=variant.name,
-                        # Variant price_delta is the canonical final variant
-                        # price (addons use additive deltas).
-                        price_delta=Decimal(str(variant.price)),
+                        name=opt_name,
+                        kitchen_display_name=kitchen_label,
+                        price_delta=price_delta_val,
                         available=True,
-                        display_order=order,
+                        display_order=opt_order,
                     ))
+
             existing_by_name[normalized] = menu_item
             imported += 1
 
@@ -247,6 +348,7 @@ def confirm_menu_import(
         raise
     except Exception as exc:
         db.rollback()
+        logger.exception("event=menu_import_confirmation_failed job_id=%s error=%s", import_id, exc)
         raise HTTPException(500, "Import failed; no menu items were changed") from exc
 
     return {"status": "completed", "imported": imported, "skipped": skipped}

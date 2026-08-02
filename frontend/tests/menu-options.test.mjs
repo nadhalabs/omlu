@@ -78,8 +78,11 @@ test("option-group API contracts and stored fields remain unchanged", () => {
   assert.match(editor, /behavior === "different" \? "variant" : "addon"/);
 });
 
-test("Gemini review labels extracted variants as editable final customer prices", () => {
+test("Gemini review flow supports universal option group review, editing and customer preview", () => {
   const review = read("app/admin/menu/MenuImportFlow.tsx");
-  assert.match(review, /Confirm final option prices/);
-  assert.match(review, /final customer prices, not amounts added/);
+  assert.match(review, /Option Groups for/);
+  assert.match(review, /Pricing method/);
+  assert.match(review, /Added to base price/);
+  assert.match(review, /Final customer price/);
+  assert.match(review, /Customer Preview/);
 });

@@ -36,6 +36,7 @@ class MenuImportDraftItem(Base):
     price: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
     food_type: Mapped[str] = mapped_column(String(20), nullable=False, default="unknown")
     variants: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    option_groups: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     warnings: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     item_confidence: Mapped[Decimal] = mapped_column(Numeric(4, 3), nullable=False)
     category_confidence: Mapped[Decimal] = mapped_column(Numeric(4, 3), nullable=False)
