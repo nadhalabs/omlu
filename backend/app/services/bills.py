@@ -463,7 +463,7 @@ def detach_issued_bill_and_release_table(
     *,
     restaurant_id: int,
     bill_id: int,
-    actor: StaffUser,
+    actor: StaffUser | None,
     idempotency_key: str | None = None,
     payload_hash: str | None = None,
     request_id: str | None = None,
@@ -474,7 +474,7 @@ def detach_issued_bill_and_release_table(
     This savepoint guarantees that a raised error cannot leave a partial
     detachment staged in that transaction.
     """
-    if actor.restaurant_id != restaurant_id:
+    if actor is not None and actor.restaurant_id != restaurant_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
 
     result: DetachedBillResult | None = None
@@ -511,6 +511,20 @@ def detach_issued_bill_and_release_table(
         ).with_for_update().first()
         if not bill:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
+
+        # A customer retry can arrive after the first request committed and
+        # revoked that customer's participant authority. Replaying the already
+        # detached result under the same row locks is safe and, importantly,
+        # never allocates a second code.
+        if (
+            session.status == "detached_awaiting_payment"
+            and bill.status == "payment_pending"
+            and bill.payment_code_ciphertext
+        ):
+            return DetachedBillResult(
+                bill=bill,
+                payment_code=decrypt_payment_code(bill.payment_code_ciphertext),
+            )
 
         active_session = db.query(DiningSession.id).filter(
             DiningSession.restaurant_id == restaurant_id,
@@ -552,7 +566,7 @@ def detach_issued_bill_and_release_table(
         bill.payment_method = None
         session.status = "detached_awaiting_payment"
         session.detached_at = now
-        session.detached_by_staff_id = actor.id
+        session.detached_by_staff_id = actor.id if actor is not None else None
         revoked_count = invalidate_session_participants(
             db, session, "Ordering authority revoked after bill detachment"
         )
@@ -560,8 +574,8 @@ def detach_issued_bill_and_release_table(
         payment_code = _assign_unique_payment_code(db, bill, now)
         db.add(AuditLog(
             restaurant_id=restaurant_id,
-            actor_user_id=actor.id,
-            actor_role=actor.role,
+            actor_user_id=actor.id if actor is not None else None,
+            actor_role=actor.role if actor is not None else "customer",
             target_type="bill",
             target_id=str(bill.id),
             action="bill.detached_and_table_released",
@@ -571,7 +585,7 @@ def detach_issued_bill_and_release_table(
                 "session_status": session.status,
                 "table_id": table.id,
                 "detached_at": now.isoformat(),
-                "detached_by_staff_id": actor.id,
+                "detached_by_staff_id": actor.id if actor is not None else None,
                 "revoked_participant_count": revoked_count,
                 "request_id": request_id,
             }, sort_keys=True),
@@ -840,4 +854,9 @@ def build_bill_response(db: Session, bill: Bill):
             else None
         ),
         "payment_code_expires_at": bill.payment_code_expires_at,
+        "amount_due": bill.total_amount,
+        "original_table": bill.dining_session.table.table_number,
+        "issued_at": bill.payment_code_created_at or bill.generated_at,
+        "detached_session_status": bill.dining_session.status,
+        "receipt_access": bill.receipt_token,
     }

@@ -237,6 +237,11 @@ export interface BillResponse {
   detached_at: string | null;
   payment_code: string | null;
   payment_code_expires_at: string | null;
+  amount_due: string | null;
+  original_table: string | null;
+  issued_at: string | null;
+  detached_session_status: DiningSessionStatus | null;
+  receipt_access: string | null;
 }
 
 export interface ShortOrderSummary {

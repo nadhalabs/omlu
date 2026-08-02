@@ -128,21 +128,41 @@ def request_public_session_bill(
     ).with_for_update().first()
     if not session:
         raise HTTPException(status_code=404, detail="Dining session not found")
-    load_participant(db, participant_token, session_token=session_token, lock_for_action=True)
+    load_participant(
+        db,
+        participant_token,
+        session_token=session_token,
+        lock_for_action=True,
+        allow_revoked_for_detached_bill=True,
+    )
     enforce_session_action_rate(
         db, session, action="bill_request",
         ip_value=request.client.host if request.client else "unknown",
         participant_token=participant_token, limit=5,
     )
+    if session.status == "detached_awaiting_payment" and session.bill:
+        # Secure retry: only a token that belonged to this exact session reaches
+        # this branch, and the secret is returned directly in the response.
+        return build_bill_response(db, session.bill)
     if session.status not in {"open", "payment_requested"}:
         raise HTTPException(status_code=409, detail="Bill cannot be requested for this session")
     bill = create_or_refresh_bill_for_session(db, session)
     if session.status == "open":
         session.status = "payment_requested"
         session.payment_requested_at = datetime.datetime.now(datetime.timezone.utc)
+    result = detach_issued_bill_and_release_table(
+        db,
+        restaurant_id=session.restaurant_id,
+        bill_id=bill.id,
+        actor=None,
+        idempotency_key=f"customer-bill-request:{session.id}",
+        payload_hash=request_hash({"session_id": session.id, "action": "bill_request"}),
+        request_id=getattr(request.state, "request_id", None),
+    )
     db.commit()
+    bill = result.bill
     publish_event(
-        EVENT_BILL_GENERATED,
+        EVENT_BILL_DETACHED_FOR_PAYMENT,
         restaurant_id=session.restaurant_id,
         channels=[
             restaurant_channel(session.restaurant_id, "operations"),
@@ -151,7 +171,30 @@ def request_public_session_bill(
             table_channel(session.restaurant_id, session.table_id),
         ],
         resource_id=bill.id,
-        state={"bill_number": bill.bill_number, "status": "bill_requested", "session_token": session.public_token},
+        state={
+            "restaurant_id": session.restaurant_id,
+            "original_table_id": session.table_id,
+            "original_session_id": session.id,
+            "bill_number": bill.bill_number,
+            "bill_status": bill.status,
+            "session_status": session.status,
+            "detached_at": session.detached_at.isoformat(),
+            "authority_epoch": session.join_code_version,
+        },
+    )
+    current_table_session = find_current_open_session_for_table(db, session.table_id)
+    publish_event(
+        EVENT_TABLE_STATUS_CHANGED,
+        restaurant_id=session.restaurant_id,
+        channels=[
+            restaurant_channel(session.restaurant_id, "operations"),
+            table_channel(session.restaurant_id, session.table_id),
+        ],
+        resource_id=session.table_id,
+        state={
+            "status": current_table_session.status if current_table_session else "free",
+            "session_token": current_table_session.public_token if current_table_session else None,
+        },
     )
     return build_bill_response(db, bill)
 
@@ -501,6 +544,17 @@ def issue_and_release_staff_bill(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
 
     if bill.detachment_idempotency_key:
+        if (
+            bill.detachment_idempotency_key.startswith("customer-bill-request:")
+            and bill.dining_session.status == "detached_awaiting_payment"
+            and bill.status == "payment_pending"
+            and bill.payment_code_ciphertext
+        ):
+            # Administrative recovery is deliberately idempotent after the
+            # normal customer-triggered transition has already succeeded.
+            return _detached_response(
+                db, bill, payment_code=decrypt_payment_code(bill.payment_code_ciphertext)
+            )
         if bill.detachment_idempotency_key != key:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,

@@ -86,11 +86,13 @@ export default function BillClient({ sessionToken, receiptToken = "" }: BillClie
       paidAmount: "Paid amount",
       sessionComplete: "Your dining session is complete. Scan the table QR again to start a new order.",
       billReadyTitle: "Bill ready",
-      billReadyMessage: "Your ordering session has ended. Show this code at the counter to complete payment.",
+      billReadyMessage: "Your ordering session has ended.",
+      showCodeAtCounter: "Show this payment code at the counter:",
       paymentCode: "Payment code",
       copyCode: "Copy payment code",
       copied: "Copied",
       amountDue: "Amount due",
+      paymentStatus: "Payment status",
       awaitingPayment: "Awaiting payment",
       paymentLabels: {
         counter_cash: "Cash at counter",
@@ -144,11 +146,13 @@ export default function BillClient({ sessionToken, receiptToken = "" }: BillClie
       paidAmount: "അടച്ച തുക",
       sessionComplete: "നിങ്ങളുടെ ഡൈനിംഗ് സെഷൻ പൂർത്തിയായി. പുതിയ ഓർഡർ തുടങ്ങാൻ ടേബിൾ QR വീണ്ടും സ്കാൻ ചെയ്യുക.",
       billReadyTitle: "ബിൽ തയ്യാറായി",
-      billReadyMessage: "നിങ്ങളുടെ ഓർഡറിംഗ് സെഷൻ അവസാനിച്ചു. പണമടയ്ക്കാൻ ഈ കോഡ് കൗണ്ടറിൽ കാണിക്കുക.",
+      billReadyMessage: "നിങ്ങളുടെ ഓർഡറിംഗ് സെഷൻ അവസാനിച്ചു.",
+      showCodeAtCounter: "ഈ പേയ്മെന്റ് കോഡ് കൗണ്ടറിൽ കാണിക്കുക:",
       paymentCode: "പേയ്മെന്റ് കോഡ്",
       copyCode: "പേയ്മെന്റ് കോഡ് പകർത്തുക",
       copied: "പകർത്തി",
       amountDue: "അടയ്ക്കാനുള്ള തുക",
+      paymentStatus: "പേയ്മെന്റ് നില",
       awaitingPayment: "പേയ്മെന്റ് കാത്തിരിക്കുന്നു",
       paymentLabels: {
         counter_cash: "കൗണ്ടറിൽ കാഷ്",
@@ -467,6 +471,7 @@ export default function BillClient({ sessionToken, receiptToken = "" }: BillClie
             <p className="text-sm font-black uppercase tracking-wide text-orange-700 dark:text-orange-400">{t.awaitingPayment}</p>
             <h1 id="bill-ready-title" className="mt-2 text-3xl font-black text-[var(--omlu-text-primary)]">{t.billReadyTitle}</h1>
             <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-[var(--omlu-text-secondary)]">{t.billReadyMessage}</p>
+            <p className="mx-auto mt-2 max-w-lg text-sm font-black leading-6 text-[var(--omlu-text-primary)]">{t.showCodeAtCounter}</p>
             <div className="mx-auto mt-6 max-w-sm rounded-2xl border-2 border-dashed border-orange-300 bg-[var(--omlu-primary-surface)] p-5 dark:border-orange-800">
               <p className="text-xs font-black uppercase tracking-wide text-[var(--omlu-text-secondary)]">{t.paymentCode}</p>
               <p className="mt-2 break-all font-mono text-4xl font-black tracking-[0.18em] text-orange-700 dark:text-orange-400 sm:text-5xl">{bill.payment_code}</p>
@@ -474,11 +479,12 @@ export default function BillClient({ sessionToken, receiptToken = "" }: BillClie
                 {codeCopied ? t.copied : t.copyCode}
               </button>
             </div>
-            <dl className="mx-auto mt-6 grid max-w-xl grid-cols-2 gap-3 text-left text-sm sm:grid-cols-4">
+            <dl className="mx-auto mt-6 grid max-w-xl grid-cols-2 gap-3 text-left text-sm sm:grid-cols-5">
               <div><dt className="text-[var(--omlu-text-secondary)]">{t.amountDue}</dt><dd className="font-black">{formatBillTotal(bill)}</dd></div>
               <div><dt className="text-[var(--omlu-text-secondary)]">{t.billNumber}</dt><dd className="break-all font-black">{bill.bill_number}</dd></div>
               <div><dt className="text-[var(--omlu-text-secondary)]">{t.table}</dt><dd className="font-black">{bill.table_number}</dd></div>
-              <div><dt className="text-[var(--omlu-text-secondary)]">{t.generated}</dt><dd className="font-black">{new Date(bill.generated_at).toLocaleString()}</dd></div>
+              <div><dt className="text-[var(--omlu-text-secondary)]">{t.generated}</dt><dd className="font-black">{new Date(bill.issued_at || bill.generated_at).toLocaleString()}</dd></div>
+              <div><dt className="text-[var(--omlu-text-secondary)]">{t.paymentStatus}</dt><dd className="font-black">{t.statusLabels[bill.status] || bill.status}</dd></div>
             </dl>
             <button type="button" onClick={() => document.querySelector("article")?.scrollIntoView({ behavior: "smooth" })} className="mt-6 min-h-11 rounded-xl bg-orange-600 px-5 text-sm font-black text-white">{t.receiptAction}</button>
           </section>

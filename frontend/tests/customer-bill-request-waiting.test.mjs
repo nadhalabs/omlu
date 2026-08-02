@@ -5,12 +5,22 @@ import test from "node:test";
 const read = (path) => fs.readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const bill = read("app/bill/[sessionToken]/BillClient.tsx");
 
-test("payment-requested session without an issued bill renders a waiting state", () => {
+test("payment-requested session without an issued bill retains a recovery-only waiting state", () => {
   assert.match(bill, /getPublicDiningSession\(sessionToken, authority\)/);
   assert.match(bill, /session\.status === "payment_requested"/);
   assert.match(bill, /!session\.bill \|\| session\.bill\.status === "draft"/);
   assert.match(bill, /Bill requested/);
   assert.match(bill, /The restaurant is preparing your bill/);
+});
+
+test("normal customer transition routes directly to the bill-ready receipt", () => {
+  const session = read("app/session/[sessionToken]/SessionClient.tsx");
+  assert.match(session, /requestPublicSessionBill/);
+  assert.match(session, /router\.push\(detachedBillPath/);
+  assert.match(bill, /billReadyTitle: "Bill ready"/);
+  assert.match(bill, /billReadyMessage: "Your ordering session has ended\."/);
+  assert.match(bill, /showCodeAtCounter: "Show this payment code at the counter:"/);
+  assert.match(bill, /paymentStatus: "Payment status"/);
 });
 
 test("draft requested bills use waiting rather than the unavailable screen", () => {

@@ -625,7 +625,7 @@ def test_staff_bill_request_reuses_customer_created_session(staff_order_context)
     db.close()
 
 
-def test_customer_bill_request_enters_pending_payments_without_service_request(staff_order_context):
+def test_customer_bill_request_auto_detaches_into_pending_payments(staff_order_context):
     order = client.post(
         f"/public/restaurants/{staff_order_context['restaurant_slug']}/tables/{staff_order_context['second_table_code']}/orders",
         headers={"Idempotency-Key": f"customer-bill-{uuid.uuid4().hex}"},
@@ -635,14 +635,17 @@ def test_customer_bill_request_enters_pending_payments_without_service_request(s
         f"/public/sessions/{order['dining_session_token']}/bill-request"
     )
     assert requested.status_code == 201
-    assert requested.json()["status"] == "draft"
+    assert requested.json()["status"] == "payment_pending"
+    assert requested.json()["session_status"] == "detached_awaiting_payment"
+    assert len(requested.json()["payment_code"]) == 6
+    assert requested.json()["receipt_token"]
 
     queue = client.get(
         "/staff/bills/pending-payments",
         headers=auth(staff_order_context, "owner_token"),
     ).json()["items"]
     entry = next(item for item in queue if item["bill_number"] == requested.json()["bill_number"])
-    assert entry["stage"] == "bill_requested"
+    assert entry["stage"] == "detached_awaiting_payment"
 
     services = client.get(
         "/staff/service-requests",

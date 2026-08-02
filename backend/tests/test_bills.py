@@ -1134,6 +1134,117 @@ def test_detachment_releases_table_revokes_authority_and_stays_pending(bill_cont
     assert join.status_code == 404
 
 
+def test_customer_bill_request_automatically_issues_detaches_and_replays(bill_context):
+    add_order(bill_context)
+    url = f"/public/sessions/{bill_context['session_token']}/bill-request"
+    headers = participant_headers(bill_context["participant_token"])
+
+    first = client.post(url, headers=headers)
+    replay = client.post(url, headers=headers)
+
+    assert first.status_code == replay.status_code == 201
+    body = first.json()
+    assert replay.json() == body
+    assert body["status"] == "payment_pending"
+    assert body["session_status"] == "detached_awaiting_payment"
+    assert body["payment_code"] and len(body["payment_code"]) == 6
+    assert body["bill_number"]
+    assert body["total_amount"] == "100.00"
+    assert body["amount_due"] == body["total_amount"]
+    assert body["original_table"] == body["table_number"]
+    assert body["generated_at"]
+    assert body["issued_at"]
+    assert body["detached_session_status"] == "detached_awaiting_payment"
+    assert body["receipt_token"]
+    assert body["receipt_access"] == body["receipt_token"]
+    assert b"payment_code=" not in first.request.url.query
+
+    status_response = client.get(
+        f"/public/restaurants/{bill_context['restaurant_slug']}/tables/"
+        f"{bill_context['table_code']}/session-status"
+    )
+    assert status_response.json() == {"occupied": False}
+
+    db = SessionLocal()
+    session = db.query(DiningSession).filter(DiningSession.id == bill_context["session_id"]).one()
+    bill = db.query(Bill).filter(Bill.dining_session_id == session.id).one()
+    assert session.detached_by_staff_id is None
+    assert bill.detachment_idempotency_key == f"customer-bill-request:{session.id}"
+    assert db.query(Bill).filter(Bill.dining_session_id == session.id).count() == 1
+    db.close()
+
+    assert client.get(f"/public/bills/{body['receipt_token']}").status_code == 200
+    assert client.get(
+        f"/public/sessions/{bill_context['session_token']}", headers=headers
+    ).status_code in {401, 409}
+
+    fallback = issue_and_release(
+        bill_context, body["bill_number"], key=f"admin-recovery-{uuid.uuid4().hex}"
+    )
+    assert fallback.status_code == 200
+    assert fallback.json()["payment_code"] == body["payment_code"]
+
+    created = client.post(
+        f"/public/restaurants/{bill_context['restaurant_slug']}/tables/"
+        f"{bill_context['table_code']}/sessions",
+        headers={"X-Device-ID": uuid.uuid4().hex},
+    )
+    assert created.status_code == 201
+    new_session_token = created.json()["session"]["public_id"]
+
+    paid = confirm_counter_payment(bill_context, body["bill_number"])
+    assert paid.status_code == 200
+    db = SessionLocal()
+    assert db.query(DiningSession).filter(
+        DiningSession.public_token == new_session_token,
+        DiningSession.status == "open",
+    ).one()
+    db.close()
+
+
+def test_concurrent_customer_bill_requests_return_one_bill_and_code(bill_context):
+    add_order(bill_context)
+    url = f"/public/sessions/{bill_context['session_token']}/bill-request"
+    headers = participant_headers(bill_context["participant_token"])
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        responses = list(executor.map(lambda _index: client.post(url, headers=headers), range(2)))
+
+    assert [response.status_code for response in responses] == [201, 201]
+    assert responses[0].json()["bill_number"] == responses[1].json()["bill_number"]
+    assert responses[0].json()["payment_code"] == responses[1].json()["payment_code"]
+
+    db = SessionLocal()
+    assert db.query(Bill).filter(Bill.dining_session_id == bill_context["session_id"]).count() == 1
+    db.close()
+
+
+def test_customer_auto_detachment_failure_rolls_back_full_request(monkeypatch, bill_context):
+    from app.services import bills as bill_service
+
+    add_order(bill_context)
+    monkeypatch.setattr(
+        bill_service,
+        "_assign_unique_payment_code",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("injected failure")),
+    )
+
+    with pytest.raises(RuntimeError, match="injected failure"):
+        client.post(
+            f"/public/sessions/{bill_context['session_token']}/bill-request",
+            headers=participant_headers(bill_context["participant_token"]),
+        )
+
+    db = SessionLocal()
+    session = db.query(DiningSession).filter(DiningSession.id == bill_context["session_id"]).one()
+    assert session.status == "open"
+    assert session.detached_at is None
+    assert db.query(Bill).filter(Bill.dining_session_id == session.id).count() == 0
+    assert any(participant.revoked_at is None for participant in session.participants)
+    assert find_current_open_session_for_table(db, bill_context["table_id"]).id == session.id
+    db.close()
+
+
 def test_new_session_is_independent_and_old_detached_bill_remains_payable(bill_context):
     add_order(bill_context)
     issued = issue_bill_for(bill_context)

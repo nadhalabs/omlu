@@ -139,10 +139,17 @@ class BillResponse(BaseModel):
     detached_at: Optional[datetime] = None
     payment_code: Optional[str] = None
     payment_code_expires_at: Optional[datetime] = None
+    # Explicit bill-ready contract. Legacy fields above remain for existing
+    # receipt clients while these names make the detachment response unambiguous.
+    amount_due: Optional[Decimal] = None
+    original_table: Optional[str] = None
+    issued_at: Optional[datetime] = None
+    detached_session_status: Optional[str] = None
+    receipt_access: Optional[str] = None
 
     @field_serializer(
         "subtotal", "tax_amount", "discount_amount", "total_amount",
-        "taxable_amount", "gst_rate", "cgst_amount", "sgst_amount", "igst_amount",
+        "taxable_amount", "gst_rate", "cgst_amount", "sgst_amount", "igst_amount", "amount_due",
     )
     def serialize_money(self, value: Decimal) -> str:
         return f"{value:.2f}" if value is not None else None
