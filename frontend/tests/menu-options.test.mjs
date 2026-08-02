@@ -4,17 +4,78 @@ import test from "node:test";
 
 const read = (path) => fs.readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Admin menu editor distinguishes final variant prices from add-on adjustments", () => {
+test("Admin menu editor presents an owner-friendly guided specification flow", () => {
   const editor = read("app/admin/menu/MenuOptionEditor.tsx");
   const page = read("app/admin/menu/page.tsx");
   assert.match(page, /MenuOptionEditor/);
-  assert.match(editor, /Single-select \/ final price/);
-  assert.match(editor, /Multi-select \/ price adjustment/);
-  assert.match(editor, /Final price ₹/);
-  assert.match(editor, /Adds ₹/);
-  for (const field of ["Required", "Min", "Max", "Available", "Sort"]) {
-    assert.ok(editor.includes(field), field);
+  for (const copy of [
+    "Customer choices",
+    "Question shown to customer",
+    "What can the customer choose?",
+    "Choose one",
+    "Choose multiple",
+    "Must the customer choose?",
+    "Yes, required",
+    "No, optional",
+    "How should these choices affect the price?",
+    "Different price for each choice",
+    "Extra price",
+    "Included in item price",
+    "Add customer choice",
+    "Add another choice",
+    "Save changes",
+    "Create choice group",
+  ]) {
+    assert.ok(editor.includes(copy), copy);
   }
+  assert.doesNotMatch(editor, /Single-select \/ final price|Multi-select \/ price adjustment|Adds ₹|Sort 0/);
+});
+
+test("choice cards use plain pricing, progressive kitchen help, and ordering actions", () => {
+  const editor = read("app/admin/menu/MenuOptionEditor.tsx");
+  for (const copy of ["Choice name", "Kitchen label", "Short text shown to kitchen staff.", "Item price ₹", "Extra price ₹", "Move up", "Move down", "Remove", "Add another choice"]) assert.ok(editor.includes(copy), copy);
+  assert.match(editor, /behavior !== "none"/);
+  assert.match(editor, /price_delta: behavior === "none" \? 0/);
+  assert.match(editor, /display_order: index/);
+  assert.match(editor, /function move</);
+});
+
+test("new groups use safe smart defaults and existing group meaning is translated", () => {
+  const editor = read("app/admin/menu/MenuOptionEditor.tsx");
+  assert.match(editor, /useState<"one" \| "multiple">\("one"\)/);
+  assert.match(editor, /useState<PricingBehavior>\("none"\)/);
+  assert.match(editor, /useState\(true\)/);
+  assert.match(editor, /useState\(1\)/);
+  assert.match(editor, /group\.type === "variant" \|\| group\.maximum_selections === 1/);
+  assert.match(editor, /group\.type === "variant"[\s\S]*"different"/);
+  assert.match(editor, /group\.options\.every[\s\S]*"none"/);
+});
+
+test("customer preview reflects selection, requirement, and existing pricing semantics", () => {
+  const editor = read("app/admin/menu/MenuOptionEditor.tsx");
+  for (const copy of ["Customer preview", "Required", "Optional", "Included in item price", "+₹"]) assert.ok(editor.includes(copy), copy);
+  assert.match(editor, /selection === "one" \? "○" : "□"/);
+  assert.match(editor, /behavior === "different" \? `₹/);
+});
+
+test("advanced constraints and validation use owner-friendly language", () => {
+  const editor = read("app/admin/menu/MenuOptionEditor.tsx");
+  assert.match(editor, /<details[\s\S]*Advanced settings/);
+  assert.match(editor, /<details[^>]*>[\s\S]*Advanced settings[\s\S]*Kitchen label/);
+  for (const copy of [
+    "Minimum choices",
+    "Maximum choices",
+    "The minimum number of choices cannot be greater than the maximum.",
+    "Enter ₹0 or a higher amount.",
+    "A required choice must ask the customer to select at least one option.",
+  ]) assert.ok(editor.includes(copy), copy);
+});
+
+test("option-group API contracts and stored fields remain unchanged", () => {
+  const editor = read("app/admin/menu/MenuOptionEditor.tsx");
+  for (const contract of ["/api/admin/menu/option-groups", "/api/admin/menu/options", "minimum_selections", "maximum_selections", "price_delta", "kitchen_display_name", "display_order", "available", "active"]) assert.ok(editor.includes(contract), contract);
+  assert.match(editor, /newPricing === "different" \? "variant" : "addon"/);
+  assert.match(editor, /behavior === "different" \? "variant" : "addon"/);
 });
 
 test("Gemini review labels extracted variants as editable final customer prices", () => {
