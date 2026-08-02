@@ -11,6 +11,7 @@ import { registerAuthenticatedCleanup } from "@/lib/authRuntime.mjs";
 import { useOmluUi } from "@/components/OmluUiProvider";
 import { useConfirmedSignOut } from "@/components/useConfirmedSignOut";
 import { KitchenAvailabilityDialog } from "./KitchenAvailabilityDialog";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 interface KitchenDashboardClientProps {
   restaurantSlug: string;
@@ -353,9 +354,9 @@ export default function KitchenDashboardClient({
   // Render Auth Loading State
   if (authLoading) {
     return (
-      <div className="omlu-light-shell flex flex-col flex-1 items-center justify-center min-h-screen px-4 py-8">
+      <div className="omlu-operational-shell flex flex-col flex-1 items-center justify-center min-h-screen px-4 py-8">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-orange-500"></div>
-        <p className="mt-4 text-zinc-500 font-bold text-sm">
+        <p className="mt-4 text-[var(--omlu-text-secondary)] font-bold text-sm">
           Verifying session credentials...
         </p>
       </div>
@@ -365,15 +366,15 @@ export default function KitchenDashboardClient({
   // Render Auth Authorization Errors
   if (authError) {
     return (
-      <div className="omlu-light-shell flex flex-col flex-1 items-center justify-center min-h-screen p-6 text-center">
-        <div className="max-w-md bg-zinc-900 border border-zinc-800 rounded-3xl p-8 shadow-2xl">
+      <div className="omlu-operational-shell flex flex-col flex-1 items-center justify-center min-h-screen p-6 text-center">
+        <div className="max-w-md bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border)] rounded-3xl p-8 shadow-2xl">
           <div className="text-red-500 text-5xl mb-4">⛔</div>
-          <h2 className="text-xl font-bold text-white mb-2">Access Denied</h2>
-          <p className="text-sm text-zinc-500 mb-6">{authError}</p>
+          <h2 className="text-xl font-bold text-[var(--omlu-text-primary)] mb-2">Access Denied</h2>
+          <p className="text-sm text-[var(--omlu-text-secondary)] mb-6">{authError}</p>
           <button
             onClick={requestSignOut}
             disabled={signOutPending}
-            className="px-6 py-2.5 bg-red-700 text-white font-semibold rounded-xl transition cursor-pointer disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-600"
+            className="px-6 py-2.5 bg-red-700 text-[var(--omlu-strong-action-text)] font-semibold rounded-xl transition cursor-pointer disabled:cursor-not-allowed disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)]"
           >
             Return to Login
           </button>
@@ -397,16 +398,16 @@ export default function KitchenDashboardClient({
   };
 
   return (
-    <div className={`omlu-light-shell flex flex-col flex-1 min-h-screen ${focusMode ? "p-3 md:p-4" : "p-6"}`}>
+    <div className={`omlu-operational-shell flex flex-col flex-1 min-h-screen ${focusMode ? "p-3 md:p-4" : "p-6"}`}>
       {/* Top Header Banner displaying Staff name, role, restaurant and logout */}
-      <header className={`flex items-center justify-between gap-4 border-b border-zinc-800 pb-4 ${focusMode ? "mb-4" : "mb-6 flex-col md:flex-row md:items-center"}`}>
+      <header className={`flex items-center justify-between gap-4 border-b border-[var(--omlu-border)] pb-4 ${focusMode ? "mb-4" : "mb-6 flex-col md:flex-row md:items-center"}`}>
         <div>
-          <span className="text-xs font-normal text-zinc-500">Kitchen display</span>
-          {!focusMode && <><h1 className="text-3xl font-black tracking-tight text-white mt-1">Active Orders</h1>
-          <p className="text-zinc-500 text-xs mt-1.5 font-bold">
-            Logged in as <span className="text-zinc-300 font-black">{staffInfo.name}</span> (Role: <span className="text-orange-500 font-black uppercase text-[10px] bg-orange-950/20 px-2 py-0.5 rounded border border-orange-900/30">{staffInfo.role}</span>)
+          <span className="text-xs font-normal text-[var(--omlu-text-secondary)]">Kitchen display</span>
+          {!focusMode && <><h1 className="text-3xl font-black tracking-tight text-[var(--omlu-text-primary)] mt-1">Active Orders</h1>
+          <p className="text-[var(--omlu-text-secondary)] text-xs mt-1.5 font-bold">
+            Logged in as <span className="text-[var(--omlu-text-secondary)] font-black">{staffInfo.name}</span> (Role: <span className="text-orange-500 font-black uppercase text-[10px] bg-orange-950/20 px-2 py-0.5 rounded border border-orange-900/30">{staffInfo.role}</span>)
           </p>
-          <p className="mt-1 text-[11px] font-bold uppercase tracking-wide text-zinc-600">
+          <p className="mt-1 text-[11px] font-bold uppercase tracking-wide text-[var(--omlu-text-secondary)]">
             Real-time: {realtimeStatus}
             {lastUpdated ? ` • Updated ${lastUpdated.toLocaleTimeString()}` : ""}
           </p></>}
@@ -414,14 +415,15 @@ export default function KitchenDashboardClient({
 
         {/* Action / Sync controls */}
         <div className="flex flex-wrap items-center gap-3 self-stretch md:self-auto justify-between">
+          {!focusMode && <ThemeToggle className="w-full sm:w-64" />}
           {!focusMode && <Link
             href={dashboardHref}
-            className="px-4 py-2.5 rounded-xl text-sm font-bold bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition"
+            className="px-4 py-2.5 rounded-xl text-sm font-bold bg-[var(--omlu-muted-surface)] hover:bg-[var(--omlu-muted-surface)] text-[var(--omlu-text-secondary)] transition"
           >
             Back to dashboard
           </Link>}
-          <button onClick={() => setAvailabilityOpen(true)} className="cursor-pointer rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm font-normal text-zinc-300 transition hover:border-zinc-600 hover:bg-zinc-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 disabled:cursor-not-allowed disabled:opacity-50">Manage availability</button>
-          <button onClick={focusMode ? exitFocusMode : enterFocusMode} aria-label={focusMode ? "Exit kitchen full screen" : "Enlarge kitchen display"} className="cursor-pointer rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm font-normal text-zinc-300 transition hover:border-zinc-600 hover:bg-zinc-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 disabled:cursor-not-allowed disabled:opacity-50">
+          <button onClick={() => setAvailabilityOpen(true)} className="cursor-pointer rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] px-3 py-2 text-sm font-normal text-[var(--omlu-text-secondary)] transition hover:border-[var(--omlu-border)] hover:bg-[var(--omlu-muted-surface)] hover:text-[var(--omlu-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--omlu-page-background)] disabled:cursor-not-allowed disabled:opacity-50">Manage availability</button>
+          <button onClick={focusMode ? exitFocusMode : enterFocusMode} aria-label={focusMode ? "Exit kitchen full screen" : "Enlarge kitchen display"} className="cursor-pointer rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] px-3 py-2 text-sm font-normal text-[var(--omlu-text-secondary)] transition hover:border-[var(--omlu-border)] hover:bg-[var(--omlu-muted-surface)] hover:text-[var(--omlu-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--omlu-page-background)] disabled:cursor-not-allowed disabled:opacity-50">
             ⛶ {focusMode ? "Exit" : "Enlarge"}
           </button>
           {/* Sound Alert Toggle */}
@@ -429,8 +431,8 @@ export default function KitchenDashboardClient({
             onClick={handleToggleSound}
             className={`px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 cursor-pointer transition ${
               soundEnabled
-                ? "bg-orange-600 hover:bg-orange-700 text-white shadow-md shadow-amber-900/30"
-                : "bg-zinc-800 hover:bg-zinc-700 text-zinc-400"
+                ? "bg-orange-600 hover:bg-orange-700 text-[var(--omlu-primary-action-text)] shadow-md shadow-amber-900/30"
+                : "bg-[var(--omlu-muted-surface)] hover:bg-[var(--omlu-muted-surface)] text-[var(--omlu-text-secondary)]"
             }`}
           >
             {soundEnabled ? "🔊 Sound Enabled" : "🔇 Sound Disabled"}
@@ -439,7 +441,7 @@ export default function KitchenDashboardClient({
           {/* Manual Refresh */}
           {!focusMode && <button
             onClick={() => fetchOrders(true)}
-            className="p-2.5 bg-zinc-800 hover:bg-zinc-700 rounded-xl cursor-pointer text-sm font-bold text-zinc-300 transition"
+            className="p-2.5 bg-[var(--omlu-muted-surface)] hover:bg-[var(--omlu-muted-surface)] rounded-xl cursor-pointer text-sm font-bold text-[var(--omlu-text-secondary)] transition"
             title="Refresh"
           >
             🔄
@@ -475,13 +477,13 @@ export default function KitchenDashboardClient({
       {loading && orders.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center py-20">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-orange-500"></div>
-          <span className="text-zinc-500 text-sm font-bold mt-4">Loading active orders...</span>
+          <span className="text-[var(--omlu-text-secondary)] text-sm font-bold mt-4">Loading active orders...</span>
         </div>
       ) : (
         <div className={`grid flex-1 items-start overflow-x-auto ${focusMode ? "grid-cols-4 gap-3 min-w-[1050px]" : "grid-cols-1 gap-6 md:grid-cols-4"}`}>
           {/* COLUMN 1: NEW */}
-          <div className="bg-zinc-950/40 border border-zinc-800/40 rounded-3xl p-4 flex flex-col gap-4 min-h-[70vh]">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-2 mb-1">
+          <div className="bg-[var(--omlu-page-background)] border border-[var(--omlu-border)] rounded-3xl p-4 flex flex-col gap-4 min-h-[70vh]">
+            <div className="flex items-center justify-between border-b border-[var(--omlu-border)] pb-2 mb-1">
               <h2 className="text-sm font-black text-orange-500 uppercase tracking-wider">
                 New ({cols.pending.length})
               </h2>
@@ -489,7 +491,7 @@ export default function KitchenDashboardClient({
             </div>
             <div className="flex flex-col gap-4 overflow-y-auto max-h-[70vh] no-scrollbar">
               {cols.pending.length === 0 ? (
-                <p className="text-center text-zinc-600 text-xs py-8 font-semibold">No pending orders</p>
+                <p className="text-center text-[var(--omlu-text-secondary)] text-xs py-8 font-semibold">No pending orders</p>
               ) : (
                 cols.pending.map((order) => (
                   <OrderCard
@@ -506,15 +508,15 @@ export default function KitchenDashboardClient({
           </div>
 
           {/* COLUMN 2: ACCEPTED */}
-          <div className="bg-zinc-950/40 border border-zinc-800/40 rounded-3xl p-4 flex flex-col gap-4 min-h-[70vh]">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-2 mb-1">
+          <div className="bg-[var(--omlu-page-background)] border border-[var(--omlu-border)] rounded-3xl p-4 flex flex-col gap-4 min-h-[70vh]">
+            <div className="flex items-center justify-between border-b border-[var(--omlu-border)] pb-2 mb-1">
               <h2 className="text-sm font-black text-cyan-500 uppercase tracking-wider">
                 Accepted ({cols.accepted.length})
               </h2>
             </div>
             <div className="flex flex-col gap-4 overflow-y-auto max-h-[70vh] no-scrollbar">
               {cols.accepted.length === 0 ? (
-                <p className="text-center text-zinc-600 text-xs py-8 font-semibold">No accepted orders</p>
+                <p className="text-center text-[var(--omlu-text-secondary)] text-xs py-8 font-semibold">No accepted orders</p>
               ) : (
                 cols.accepted.map((order) => (
                   <OrderCard
@@ -531,15 +533,15 @@ export default function KitchenDashboardClient({
           </div>
 
           {/* COLUMN 3: PREPARING */}
-          <div className="bg-zinc-950/40 border border-zinc-800/40 rounded-3xl p-4 flex flex-col gap-4 min-h-[70vh]">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-2 mb-1">
+          <div className="bg-[var(--omlu-page-background)] border border-[var(--omlu-border)] rounded-3xl p-4 flex flex-col gap-4 min-h-[70vh]">
+            <div className="flex items-center justify-between border-b border-[var(--omlu-border)] pb-2 mb-1">
               <h2 className="text-sm font-black text-purple-500 uppercase tracking-wider">
                 Preparing ({cols.preparing.length})
               </h2>
             </div>
             <div className="flex flex-col gap-4 overflow-y-auto max-h-[70vh] no-scrollbar">
               {cols.preparing.length === 0 ? (
-                <p className="text-center text-zinc-600 text-xs py-8 font-semibold">No preparing orders</p>
+                <p className="text-center text-[var(--omlu-text-secondary)] text-xs py-8 font-semibold">No preparing orders</p>
               ) : (
                 cols.preparing.map((order) => (
                   <OrderCard
@@ -555,15 +557,15 @@ export default function KitchenDashboardClient({
           </div>
 
           {/* COLUMN 4: READY */}
-          <div className="bg-zinc-950/40 border border-zinc-800/40 rounded-3xl p-4 flex flex-col gap-4 min-h-[70vh]">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-2 mb-1">
+          <div className="bg-[var(--omlu-page-background)] border border-[var(--omlu-border)] rounded-3xl p-4 flex flex-col gap-4 min-h-[70vh]">
+            <div className="flex items-center justify-between border-b border-[var(--omlu-border)] pb-2 mb-1">
               <h2 className="text-sm font-black text-green-500 uppercase tracking-wider">
                 Ready ({cols.ready.length})
               </h2>
             </div>
             <div className="flex flex-col gap-4 overflow-y-auto max-h-[70vh] no-scrollbar">
               {cols.ready.length === 0 ? (
-                <p className="text-center text-zinc-600 text-xs py-8 font-semibold">No ready orders</p>
+                <p className="text-center text-[var(--omlu-text-secondary)] text-xs py-8 font-semibold">No ready orders</p>
               ) : (
                 cols.ready.map((order) => (
                   <OrderCard
@@ -614,10 +616,10 @@ function OrderCard({
       ? tableDisplay.toLocaleUpperCase()
       : `TABLE ${tableDisplay}`;
   return (
-    <article aria-label={`${sourceHeading}, order ${order.order_number}`} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 flex flex-col gap-4 shadow-sm hover:border-zinc-700 transition">
+    <article aria-label={`${sourceHeading}, order ${order.order_number}`} className="bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border)] rounded-2xl p-5 flex flex-col gap-4 shadow-sm hover:border-[var(--omlu-border)] transition">
       {/* Header */}
-      <div className="flex items-start justify-between gap-3 border-b border-zinc-800 pb-3">
-        <h3 className="min-w-0 break-words text-2xl font-black leading-tight tracking-wide text-white">{sourceHeading}</h3>
+      <div className="flex items-start justify-between gap-3 border-b border-[var(--omlu-border)] pb-3">
+        <h3 className="min-w-0 break-words text-2xl font-black leading-tight tracking-wide text-[var(--omlu-text-primary)]">{sourceHeading}</h3>
         <span className="shrink-0 whitespace-nowrap rounded-lg border border-orange-900/40 bg-orange-950/30 px-2.5 py-1 text-sm font-black uppercase text-orange-400">
           {elapsedTime}
         </span>
@@ -627,7 +629,7 @@ function OrderCard({
       <div className="flex flex-col gap-4">
         {order.items.map((item, idx) => (
           <div key={idx} className="min-w-0">
-            <p className="break-words text-lg font-extrabold leading-snug text-zinc-100">
+            <p className="break-words text-lg font-extrabold leading-snug text-[var(--omlu-text-secondary)]">
               <span className="text-orange-400">{item.quantity} ×</span> {item.item_name}
             </p>
             {item.selected_options.map((option, optionIndex) => (
@@ -647,15 +649,15 @@ function OrderCard({
 
       {/* Customer order note */}
       {order.customer_note && (
-        <div className="bg-zinc-950/50 p-2.5 rounded-xl border border-zinc-850">
-          <span className="text-[9px] font-black text-zinc-500 uppercase tracking-wider block mb-0.5">
+        <div className="bg-[var(--omlu-page-background)] p-2.5 rounded-xl border border-[var(--omlu-border)]">
+          <span className="text-[9px] font-black text-[var(--omlu-text-secondary)] uppercase tracking-wider block mb-0.5">
             Customer Note
           </span>
-          <p className="break-words text-sm font-medium text-zinc-200">{order.customer_note}</p>
+          <p className="break-words text-sm font-medium text-[var(--omlu-text-secondary)]">{order.customer_note}</p>
         </div>
       )}
 
-      <p className="border-t border-zinc-800 pt-3 text-xs font-semibold text-zinc-500">Order {order.order_number}</p>
+      <p className="border-t border-[var(--omlu-border)] pt-3 text-xs font-semibold text-[var(--omlu-text-secondary)]">Order {order.order_number}</p>
 
       {/* Actions */}
       <div className="flex gap-2 mt-2">
@@ -664,7 +666,7 @@ function OrderCard({
             disabled={isUpdating}
             onClick={onReject}
             aria-label={`Reject order ${order.order_number}`}
-            className="min-h-12 px-4 bg-zinc-800 hover:bg-zinc-700 text-red-500 hover:text-red-400 font-bold rounded-xl text-sm transition cursor-pointer disabled:opacity-50"
+            className="min-h-12 px-4 bg-[var(--omlu-muted-surface)] hover:bg-[var(--omlu-muted-surface)] text-red-500 hover:text-red-400 font-bold rounded-xl text-sm transition cursor-pointer disabled:opacity-50"
           >
             ✕
           </button>
@@ -673,7 +675,7 @@ function OrderCard({
           <button
             disabled={isUpdating}
             onClick={onAccept}
-            className="min-h-12 flex-1 bg-orange-600 hover:bg-orange-700 text-white font-bold rounded-xl text-sm transition cursor-pointer disabled:opacity-50"
+            className="min-h-12 flex-1 bg-orange-600 hover:bg-orange-700 text-[var(--omlu-primary-action-text)] font-bold rounded-xl text-sm transition cursor-pointer disabled:opacity-50"
           >
             Accept
           </button>
@@ -682,7 +684,7 @@ function OrderCard({
           <button
             disabled={isUpdating}
             onClick={onStartPrep}
-            className="min-h-12 flex-1 bg-cyan-600 hover:bg-cyan-700 text-white font-bold rounded-xl text-sm transition cursor-pointer disabled:opacity-50"
+            className="min-h-12 flex-1 bg-cyan-600 hover:bg-cyan-700 text-[var(--omlu-primary-action-text)] font-bold rounded-xl text-sm transition cursor-pointer disabled:opacity-50"
           >
             Start Preparing
           </button>
@@ -691,7 +693,7 @@ function OrderCard({
           <button
             disabled={isUpdating}
             onClick={onMarkReady}
-            className="min-h-12 flex-1 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl text-sm transition cursor-pointer disabled:opacity-50"
+            className="min-h-12 flex-1 bg-purple-600 hover:bg-purple-700 text-[var(--omlu-strong-action-text)] font-bold rounded-xl text-sm transition cursor-pointer disabled:opacity-50"
           >
             Mark Ready
           </button>
@@ -700,7 +702,7 @@ function OrderCard({
           <button
             disabled={isUpdating}
             onClick={onMarkServed}
-            className="min-h-12 flex-1 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl text-sm transition cursor-pointer disabled:opacity-50"
+            className="min-h-12 flex-1 bg-green-600 hover:bg-green-700 text-[var(--omlu-primary-action-text)] font-bold rounded-xl text-sm transition cursor-pointer disabled:opacity-50"
           >
             Mark Served
           </button>

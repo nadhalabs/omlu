@@ -63,7 +63,7 @@ export function TrendChart({
             const y = top + chartHeight - fraction * chartHeight;
             return (
               <g key={fraction}>
-                <line x1={left} x2={width - right} y1={y} y2={y} stroke="#e4e4e7" strokeWidth="1" />
+                <line x1={left} x2={width - right} y1={y} y2={y} stroke="var(--omlu-border)" strokeWidth="1" />
                 <text x={left - 10} y={y + 4} textAnchor="end" className="fill-zinc-400 text-[10px]">
                   {formatAxis(max * fraction, isCurrency)}
                 </text>
@@ -71,15 +71,15 @@ export function TrendChart({
             );
           })}
           <path d={area} fill="rgba(249,115,22,.08)" />
-          <path d={line} fill="none" stroke="#f97316" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
+          <path d={line} fill="none" stroke="var(--omlu-accent)" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
           {points.map((point, index) => (
             <g key={`${data[index].label}-${index}`}>
               <circle
                 cx={point.x}
                 cy={point.y}
                 r={active === index ? 6 : 10}
-                fill={active === index ? "#f97316" : "transparent"}
-                stroke={active === index ? "#fff" : "transparent"}
+                fill={active === index ? "var(--omlu-accent)" : "transparent"}
+                stroke={active === index ? "var(--omlu-elevated-surface)" : "transparent"}
                 strokeWidth="3"
                 tabIndex={0}
                 aria-label={`${data[index].label}: ${isCurrency ? formatCurrency(data[index].value) : `${data[index].value} orders`}`}

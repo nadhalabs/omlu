@@ -43,7 +43,7 @@ const STATUS_PILL: Record<string, string> = {
 };
 
 const ORDER_STATUS_DOT: Record<string, string> = {
-  pending: "bg-zinc-500",
+  pending: "bg-[var(--omlu-muted-surface)]",
   accepted: "bg-blue-500",
   preparing: "bg-orange-500",
   ready: "bg-lime-500",
@@ -196,21 +196,21 @@ export default function StaffSessionsClient() {
   // ── render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 py-8 px-4 sm:px-6">
+    <div className="min-h-screen bg-[var(--omlu-page-background)] text-[var(--omlu-text-secondary)] py-8 px-4 sm:px-6">
       <div className="max-w-5xl mx-auto flex flex-col gap-6">
 
         {/* Header */}
         <div className="flex items-start justify-between flex-wrap gap-4">
           <div>
-            <h1 className="text-2xl font-black text-white flex items-center gap-3">
+            <h1 className="text-2xl font-black text-[var(--omlu-text-primary)] flex items-center gap-3">
               <span>🍽️ Active Tables</span>
               {sessions.length > 0 && (
-                <span className="bg-emerald-600 text-white text-xs font-extrabold px-2.5 py-1 rounded-full">
+                <span className="bg-emerald-600 text-[var(--omlu-primary-action-text)] text-xs font-extrabold px-2.5 py-1 rounded-full">
                   {sessions.length}
                 </span>
               )}
             </h1>
-            <p className="text-zinc-500 text-sm mt-1">
+            <p className="text-[var(--omlu-text-secondary)] text-sm mt-1">
               {lastUpdated
                 ? `Updated: ${lastUpdated.toLocaleTimeString()} · Real-time: ${realtimeStatus}`
                 : "Loading…"}
@@ -220,25 +220,25 @@ export default function StaffSessionsClient() {
             {/* Nav links */}
             <Link
               href={dashboardHref}
-              className="text-xs text-zinc-400 hover:text-orange-400 font-semibold transition px-3 py-1.5 rounded-lg border border-zinc-800 hover:border-orange-700/50"
+              className="text-xs text-[var(--omlu-text-secondary)] hover:text-orange-400 font-semibold transition px-3 py-1.5 rounded-lg border border-[var(--omlu-border)] hover:border-orange-700/50"
             >
               Back to dashboard
             </Link>
             <Link
               href="/staff/tables"
-              className="text-xs text-zinc-400 hover:text-orange-400 font-semibold transition px-3 py-1.5 rounded-lg border border-zinc-800 hover:border-orange-700/50"
+              className="text-xs text-[var(--omlu-text-secondary)] hover:text-orange-400 font-semibold transition px-3 py-1.5 rounded-lg border border-[var(--omlu-border)] hover:border-orange-700/50"
             >
               Staff Tables
             </Link>
             <Link
               href="/staff/tables"
-              className="text-xs text-zinc-400 hover:text-orange-400 font-semibold transition px-3 py-1.5 rounded-lg border border-zinc-800 hover:border-orange-700/50"
+              className="text-xs text-[var(--omlu-text-secondary)] hover:text-orange-400 font-semibold transition px-3 py-1.5 rounded-lg border border-[var(--omlu-border)] hover:border-orange-700/50"
             >
               New Order
             </Link>
             <Link
               href="/staff/requests"
-              className="text-xs text-zinc-400 hover:text-orange-400 font-semibold transition px-3 py-1.5 rounded-lg border border-zinc-800 hover:border-orange-700/50"
+              className="text-xs text-[var(--omlu-text-secondary)] hover:text-orange-400 font-semibold transition px-3 py-1.5 rounded-lg border border-[var(--omlu-border)] hover:border-orange-700/50"
             >
               Service Requests
             </Link>
@@ -271,7 +271,7 @@ export default function StaffSessionsClient() {
             {[...Array(3)].map((_, i) => (
               <div
                 key={i}
-                className="h-52 rounded-2xl bg-zinc-900 border border-zinc-800 animate-pulse"
+                className="h-52 rounded-2xl bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border)] animate-pulse"
               />
             ))}
           </div>
@@ -281,10 +281,10 @@ export default function StaffSessionsClient() {
         {!loading && sessions.length === 0 && !error && (
           <div className="flex flex-col items-center justify-center py-24 gap-3 text-center">
             <span className="text-5xl">🪑</span>
-            <h2 className="text-xl font-black text-zinc-300">
+            <h2 className="text-xl font-black text-[var(--omlu-text-secondary)]">
               No active tables
             </h2>
-            <p className="text-zinc-500 text-sm max-w-xs">
+            <p className="text-[var(--omlu-text-secondary)] text-sm max-w-xs">
               All tables are idle. New sessions appear here automatically every
               5 seconds.
             </p>
@@ -302,7 +302,7 @@ export default function StaffSessionsClient() {
               const orderDot =
                 s.latest_order_status && ORDER_STATUS_DOT[s.latest_order_status]
                   ? ORDER_STATUS_DOT[s.latest_order_status]
-                  : "bg-zinc-600";
+                  : "bg-[var(--omlu-muted-surface)]";
               const orderLabel =
                 s.latest_order_status
                   ? ORDER_STATUS_LABEL[s.latest_order_status] ?? s.latest_order_status
@@ -311,21 +311,21 @@ export default function StaffSessionsClient() {
               return (
                 <div
                   key={s.session_token}
-                  className="relative flex flex-col gap-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-5 shadow-lg transition-all duration-200 hover:border-zinc-700"
+                  className="relative flex flex-col gap-4 rounded-2xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-5 shadow-lg transition-all duration-200 hover:border-[var(--omlu-border)]"
                 >
                   {/* Table number + status pill */}
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
-                      <span className="text-3xl font-black text-white leading-none">
+                      <span className="text-3xl font-black text-[var(--omlu-text-primary)] leading-none">
                         {s.table_number}
                       </span>
-                      <span className="text-zinc-500 text-sm font-semibold">
+                      <span className="text-[var(--omlu-text-secondary)] text-sm font-semibold">
                         Table
                       </span>
                     </div>
                     <span
                       className={`text-[10px] font-extrabold uppercase tracking-widest px-2.5 py-1 rounded-full border ${
-                        STATUS_PILL[s.status] ?? "bg-zinc-800 border-zinc-700 text-zinc-400"
+                        STATUS_PILL[s.status] ?? "bg-[var(--omlu-muted-surface)] border-[var(--omlu-border)] text-[var(--omlu-text-secondary)]"
                       }`}
                     >
                       {STATUS_LABEL[s.status] ?? s.status}
@@ -334,35 +334,35 @@ export default function StaffSessionsClient() {
 
                   {/* Metrics row */}
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-zinc-800/60 rounded-xl p-3 flex flex-col gap-0.5">
-                      <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
+                    <div className="bg-[var(--omlu-muted-surface)] rounded-xl p-3 flex flex-col gap-0.5">
+                      <span className="text-[10px] font-bold text-[var(--omlu-text-secondary)] uppercase tracking-wider">
                         Open for
                       </span>
                       <span
                         id={`open-duration-${s.session_token}`}
-                        className="text-base font-black text-white"
+                        className="text-base font-black text-[var(--omlu-text-primary)]"
                       >
                         {formatDuration(s.opened_at)}
                       </span>
                     </div>
-                    <div className="bg-zinc-800/60 rounded-xl p-3 flex flex-col gap-0.5">
-                      <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
+                    <div className="bg-[var(--omlu-muted-surface)] rounded-xl p-3 flex flex-col gap-0.5">
+                      <span className="text-[10px] font-bold text-[var(--omlu-text-secondary)] uppercase tracking-wider">
                         Last Activity
                       </span>
-                      <span className="text-base font-black text-zinc-300">
+                      <span className="text-base font-black text-[var(--omlu-text-secondary)]">
                         {timeAgo(s.last_activity_at)}
                       </span>
                     </div>
-                    <div className="bg-zinc-800/60 rounded-xl p-3 flex flex-col gap-0.5">
-                      <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
+                    <div className="bg-[var(--omlu-muted-surface)] rounded-xl p-3 flex flex-col gap-0.5">
+                      <span className="text-[10px] font-bold text-[var(--omlu-text-secondary)] uppercase tracking-wider">
                         Orders
                       </span>
-                      <span className="text-base font-black text-white">
+                      <span className="text-base font-black text-[var(--omlu-text-primary)]">
                         {s.order_count}
                       </span>
                     </div>
-                    <div className="bg-zinc-800/60 rounded-xl p-3 flex flex-col gap-0.5">
-                      <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
+                    <div className="bg-[var(--omlu-muted-surface)] rounded-xl p-3 flex flex-col gap-0.5">
+                      <span className="text-[10px] font-bold text-[var(--omlu-text-secondary)] uppercase tracking-wider">
                         Subtotal
                       </span>
                       <span className="text-base font-black text-orange-400">
@@ -377,9 +377,9 @@ export default function StaffSessionsClient() {
                       <span
                         className={`w-2 h-2 rounded-full flex-shrink-0 ${orderDot}`}
                       />
-                      <span className="text-xs font-semibold text-zinc-400">
+                      <span className="text-xs font-semibold text-[var(--omlu-text-secondary)]">
                         Latest order:{" "}
-                        <span className="text-zinc-200">{orderLabel}</span>
+                        <span className="text-[var(--omlu-text-secondary)]">{orderLabel}</span>
                       </span>
                     </div>
                   )}
@@ -396,22 +396,22 @@ export default function StaffSessionsClient() {
                     <div className="mt-auto flex flex-col gap-2">
                       <Link
                         href={`/admin/payments/pending?bill=${encodeURIComponent(s.bill_number)}`}
-                        className="rounded-xl bg-orange-600 px-4 py-2 text-center text-xs font-black text-white hover:bg-orange-500"
+                        className="rounded-xl bg-orange-600 px-4 py-2 text-center text-xs font-black text-[var(--omlu-primary-action-text)] hover:bg-orange-500"
                       >
                         Review Pending Payment
                       </Link>
-                      <p className="text-center text-[10px] text-zinc-500">
+                      <p className="text-center text-[10px] text-[var(--omlu-text-secondary)]">
                         Cannot close a session with a payment_pending bill.
                       </p>
                     </div>
                   )}
                   {canCloseSession && s.bill_number && s.status !== "payment_pending" && (
                     <div className="mt-auto flex flex-col gap-2">
-                      <div className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs">
-                        <span className="font-bold text-zinc-400">{s.bill_status === "issued" ? "Bill issued" : `Bill ${s.bill_status || "created"}`}</span>
+                      <div className="flex items-center justify-between rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-page-background)] px-3 py-2 text-xs">
+                        <span className="font-bold text-[var(--omlu-text-secondary)]">{s.bill_status === "issued" ? "Bill issued" : `Bill ${s.bill_status || "created"}`}</span>
                         {s.bill_total && <span className="font-black text-orange-400">₹{s.bill_total}</span>}
                       </div>
-                      <Link href={`/bill/${encodeURIComponent(s.session_token)}`} className="rounded-xl bg-zinc-800 px-4 py-2 text-center text-xs font-black text-white hover:bg-zinc-700">View Bill</Link>
+                      <Link href={`/bill/${encodeURIComponent(s.session_token)}`} className="rounded-xl bg-[var(--omlu-muted-surface)] px-4 py-2 text-center text-xs font-black text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-muted-surface)]">View Bill</Link>
                     </div>
                   )}
                   {canCloseSession && s.billable_order_count > 0 && !s.bill_number && (
@@ -419,7 +419,7 @@ export default function StaffSessionsClient() {
                       type="button"
                       disabled={isIssuing}
                       onClick={() => void handleIssueBill(s)}
-                      className="mt-auto rounded-xl bg-orange-600 px-4 py-3 text-sm font-black text-white hover:bg-orange-500 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="mt-auto rounded-xl bg-orange-600 px-4 py-3 text-sm font-black text-[var(--omlu-primary-action-text)] hover:bg-orange-500 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       {isIssuing ? "Issuing bill…" : "Issue Bill"}
                     </button>
@@ -430,27 +430,27 @@ export default function StaffSessionsClient() {
                       id={`close-btn-${s.session_token}`}
                       disabled={isClosing}
                       onClick={() => handleAskClose(s.session_token)}
-                      className="mt-auto text-xs font-bold text-zinc-400 hover:text-red-400 hover:bg-red-950/20 hover:border-red-800/40 border border-zinc-800 rounded-xl py-2 px-4 transition-all duration-150 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                      className="mt-auto text-xs font-bold text-[var(--omlu-text-secondary)] hover:text-red-400 hover:bg-red-950/20 hover:border-red-800/40 border border-[var(--omlu-border)] rounded-xl py-2 px-4 transition-all duration-150 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       {isClosing ? "Closing…" : "Close Empty Session"}
                     </button>
                   ) : (
                     <div className="mt-auto flex flex-col gap-2">
-                      <p className="text-xs text-zinc-300 font-semibold text-center">
+                      <p className="text-xs text-[var(--omlu-text-secondary)] font-semibold text-center">
                         Close this session because the table is empty?
                       </p>
                       <div className="flex gap-2">
                         <button
                           id={`confirm-close-btn-${s.session_token}`}
                           onClick={() => handleConfirmClose(s.session_token)}
-                          className="flex-1 bg-red-700 hover:bg-red-600 text-white text-xs font-extrabold py-2 rounded-xl transition cursor-pointer"
+                          className="flex-1 bg-red-700 hover:bg-red-600 text-[var(--omlu-strong-action-text)] text-xs font-extrabold py-2 rounded-xl transition cursor-pointer"
                         >
                           Confirm
                         </button>
                         <button
                           id={`cancel-close-btn-${s.session_token}`}
                           onClick={() => setConfirmToken(null)}
-                          className="flex-1 border border-zinc-700 text-zinc-400 hover:text-zinc-200 text-xs font-bold py-2 rounded-xl transition cursor-pointer"
+                          className="flex-1 border border-[var(--omlu-border)] text-[var(--omlu-text-secondary)] hover:text-[var(--omlu-text-secondary)] text-xs font-bold py-2 rounded-xl transition cursor-pointer"
                         >
                           Cancel
                         </button>
@@ -464,7 +464,7 @@ export default function StaffSessionsClient() {
         )}
 
         {/* Footer note */}
-        <p className="text-center text-zinc-700 text-xs">
+        <p className="text-center text-[var(--omlu-text-primary)] text-xs">
           Polling every 5 seconds · Only pending orders are cancelled on close ·
           Active kitchen orders block closing
         </p>

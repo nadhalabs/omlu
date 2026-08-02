@@ -87,7 +87,7 @@ export default function MenuImportFlow({ categories, onClose, onImported }: Prop
             }} />
             <button onClick={() => inputRef.current?.click()} className="rounded-xl bg-[var(--omlu-muted-surface)] px-5 py-3 text-sm font-black text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-muted-surface)]">Select photos</button>
             <p className="mt-3 text-xs text-[var(--omlu-text-secondary)]">{files.length ? files.map((file) => file.name).join(", ") : "No photos selected"}</p>
-            <button onClick={scan} disabled={busy || !files.length} className="mt-6 rounded-xl bg-orange-600 px-6 py-3 text-sm font-black text-[var(--omlu-text-primary)] disabled:opacity-40">
+            <button onClick={scan} disabled={busy || !files.length} className="mt-6 rounded-xl bg-orange-600 px-6 py-3 text-sm font-black text-[var(--omlu-primary-action-text)] disabled:opacity-40">
               {busy ? "Scanning menu…" : "Scan Menu"}
             </button>
           </div>
@@ -143,7 +143,7 @@ export default function MenuImportFlow({ categories, onClose, onImported }: Prop
               </table>
               <datalist id="menu-import-categories">{categories.map((category) => <option key={category.id} value={category.name_en} />)}</datalist>
             </div>
-            <div className="mt-5 flex justify-end"><button onClick={confirm} disabled={busy} className="rounded-xl bg-orange-600 px-6 py-3 text-sm font-black text-[var(--omlu-text-primary)] disabled:opacity-50">{busy ? "Importing…" : "Confirm Import"}</button></div>
+            <div className="mt-5 flex justify-end"><button onClick={confirm} disabled={busy} className="rounded-xl bg-orange-600 px-6 py-3 text-sm font-black text-[var(--omlu-primary-action-text)] disabled:opacity-50">{busy ? "Importing…" : "Confirm Import"}</button></div>
           </>
         )}
       </div>

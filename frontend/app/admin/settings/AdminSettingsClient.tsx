@@ -276,7 +276,7 @@ export default function AdminSettingsClient() {
             type="button"
             onClick={handleSave}
             disabled={saving}
-            className="px-6 py-2.5 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-[var(--omlu-text-primary)] font-bold rounded-xl transition cursor-pointer"
+            className="px-6 py-2.5 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-[var(--omlu-primary-action-text)] font-bold rounded-xl transition cursor-pointer"
           >
             {saving ? "Saving…" : "Save Settings"}
           </button>

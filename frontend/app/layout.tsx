@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { OmluUiProvider } from "@/components/OmluUiProvider";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import Script from "next/script";
 
 const themeScript = `(function(){try{var key='omlu_theme';var value=localStorage.getItem(key);var theme=value==='light'||value==='dark'||value==='system'?value:'system';var dark=theme==='dark'||(theme==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.classList.toggle('dark',dark);document.documentElement.style.colorScheme=dark?'dark':'light';}catch(e){var dark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;document.documentElement.classList.toggle('dark',!!dark);}})();`;
 
@@ -33,7 +34,7 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <head><script dangerouslySetInnerHTML={{ __html: themeScript }} /></head>
+      <head><Script id="omlu-theme-init" strategy="beforeInteractive" dangerouslySetInnerHTML={{ __html: themeScript }} /></head>
       <body className="min-h-full flex flex-col"><ThemeProvider><OmluUiProvider>{children}</OmluUiProvider></ThemeProvider></body>
     </html>
   );

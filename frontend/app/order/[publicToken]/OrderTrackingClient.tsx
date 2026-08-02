@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { PublicThemeControl } from "@/components/PublicThemeControl";
 import {
   getPublicOrder,
   createPublicServiceRequest,
@@ -188,9 +189,9 @@ export default function OrderTrackingClient({
 
   if (loading && !orderData) {
     return (
-      <div className="flex flex-col flex-1 items-center justify-center min-h-screen bg-zinc-50 dark:bg-zinc-950 px-4 py-8">
+      <div className="flex flex-col flex-1 items-center justify-center min-h-screen bg-[var(--omlu-muted-surface)] dark:bg-[var(--omlu-page-background)] px-4 py-8">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-orange-600"></div>
-        <p className="mt-4 text-zinc-600 dark:text-zinc-400 font-medium">
+        <p className="mt-4 text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)] font-medium">
           {language === "en" ? "Loading order details..." : "ഓർഡർ വിവരങ്ങൾ ലോഡ് ചെയ്യുന്നു..."}
         </p>
       </div>
@@ -199,13 +200,13 @@ export default function OrderTrackingClient({
 
   if (error === "Order not found" && !orderData) {
     return (
-      <div className="flex flex-col flex-1 items-center justify-center min-h-screen bg-zinc-50 dark:bg-zinc-950 p-6 text-center">
-        <div className="max-w-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-8 shadow-sm">
+      <div className="flex flex-col flex-1 items-center justify-center min-h-screen bg-[var(--omlu-muted-surface)] dark:bg-[var(--omlu-page-background)] p-6 text-center">
+        <div className="max-w-md bg-[var(--omlu-primary-surface)] dark:bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] rounded-3xl p-8 shadow-sm">
           <div className="text-red-500 text-5xl mb-4">❌</div>
-          <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-50 mb-2">
+          <h2 className="text-xl font-bold text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-primary)] mb-2">
             {t.orderNotFound}
           </h2>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+          <p className="text-sm text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)]">
             {t.orderNotFoundDesc}
           </p>
         </div>
@@ -215,18 +216,18 @@ export default function OrderTrackingClient({
 
   if (error && !orderData) {
     return (
-      <div className="flex flex-col flex-1 items-center justify-center min-h-screen bg-zinc-50 dark:bg-zinc-950 p-6 text-center">
-        <div className="max-w-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-8 shadow-sm">
+      <div className="flex flex-col flex-1 items-center justify-center min-h-screen bg-[var(--omlu-muted-surface)] dark:bg-[var(--omlu-page-background)] p-6 text-center">
+        <div className="max-w-md bg-[var(--omlu-primary-surface)] dark:bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] rounded-3xl p-8 shadow-sm">
           <div className="text-red-500 text-5xl mb-4">⚠️</div>
-          <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-50 mb-2">
+          <h2 className="text-xl font-bold text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-primary)] mb-2">
             {language === "en" ? "Connection Error" : "കണക്ഷൻ തകരാർ"}
           </h2>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-6">
+          <p className="text-sm text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)] mb-6">
             {t.connectionError}
           </p>
           <button
             onClick={() => fetchOrder(true)}
-            className="px-6 py-2.5 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-xl transition cursor-pointer"
+            className="px-6 py-2.5 bg-orange-600 hover:bg-orange-700 text-[var(--omlu-primary-action-text)] font-semibold rounded-xl transition cursor-pointer"
           >
             {t.retry}
           </button>
@@ -241,36 +242,37 @@ export default function OrderTrackingClient({
   const isRejected = orderData.status === "rejected";
 
   return (
-    <div className="flex flex-col flex-1 min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 py-8 px-4 sm:px-6">
+    <div className="flex flex-col flex-1 min-h-screen bg-[var(--omlu-muted-surface)] dark:bg-[var(--omlu-page-background)] text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-secondary)] py-8 px-4 sm:px-6">
       <div className="max-w-2xl mx-auto w-full flex flex-col gap-6">
         
         {/* Language Selector bar at top */}
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-2">
+          <PublicThemeControl />
           <button
             onClick={() => setLanguage(language === "en" ? "ml" : "en")}
-            className="text-xs font-bold text-orange-600 dark:text-orange-500 hover:underline px-3 py-1.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 cursor-pointer shadow-2xs"
+            className="text-xs font-bold text-orange-600 dark:text-orange-500 hover:underline px-3 py-1.5 rounded-lg bg-[var(--omlu-primary-surface)] dark:bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] cursor-pointer shadow-2xs"
           >
             🌐 {language === "en" ? "മലയാളം" : "English"}
           </button>
         </div>
 
         {/* Main Header */}
-        <header className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-xs flex flex-col gap-3 relative overflow-hidden">
+        <header className="bg-[var(--omlu-primary-surface)] dark:bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] rounded-3xl p-6 shadow-xs flex flex-col gap-3 relative overflow-hidden">
           <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-orange-500 to-orange-600"></div>
           <div className="flex items-start justify-between gap-4 mt-2">
             <div>
               <span className="text-xs font-semibold uppercase tracking-wider text-orange-700 dark:text-orange-500">
                 {orderData.restaurant_name}
               </span>
-              <h1 className="text-2xl font-black text-zinc-950 dark:text-zinc-50 mt-0.5">
+              <h1 className="text-2xl font-black text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-primary)] mt-0.5">
                 {orderData.order_number}
               </h1>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400 font-bold mt-1">
+              <p className="text-xs text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)] font-bold mt-1">
                 {t.table} {orderData.table_number}
               </p>
             </div>
             <div className="flex flex-col items-end">
-              <span className="text-xs text-zinc-400 dark:text-zinc-500 font-semibold">
+              <span className="text-xs text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)] font-semibold">
                 {t.status}
               </span>
               <span
@@ -298,7 +300,7 @@ export default function OrderTrackingClient({
           )}
 
           {lastUpdated && (
-            <div className="text-[10px] font-semibold text-zinc-400 dark:text-zinc-500 self-end">
+            <div className="text-[10px] font-semibold text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)] self-end">
               {t.lastUpdated}: {lastUpdated.toLocaleTimeString()}
             </div>
           )}
@@ -335,7 +337,7 @@ export default function OrderTrackingClient({
                     }
                     router.push(`/session/${orderData.dining_session_token}`);
                   }}
-                  className="min-h-12 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-black text-white transition hover:bg-emerald-700"
+                  className="min-h-12 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-black text-[var(--omlu-primary-action-text)] transition hover:bg-emerald-700"
                 >
                   {t.viewFullBill}
                 </button>
@@ -345,8 +347,8 @@ export default function OrderTrackingClient({
         </header>
 
         {/* Visual Timeline Panel */}
-        <section className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-xs flex flex-col gap-4">
-          <h2 className="text-sm font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
+        <section className="bg-[var(--omlu-primary-surface)] dark:bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] rounded-3xl p-6 shadow-xs flex flex-col gap-4">
+          <h2 className="text-sm font-black text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)] uppercase tracking-wider mb-2">
             {t.orderProgress}
           </h2>
 
@@ -363,7 +365,7 @@ export default function OrderTrackingClient({
           ) : (
             /* Horizontal Timeline */
             <div className="relative flex items-center justify-between mt-2">
-              <div className="absolute left-6 right-6 top-[15px] h-0.5 bg-zinc-200 dark:bg-zinc-800 -z-0"></div>
+              <div className="absolute left-6 right-6 top-[15px] h-0.5 bg-[var(--omlu-muted-surface)] dark:bg-[var(--omlu-muted-surface)] -z-0"></div>
               <div
                 className="absolute left-6 top-[15px] h-0.5 bg-orange-600 -z-0 transition-all duration-500"
                 style={{
@@ -387,10 +389,10 @@ export default function OrderTrackingClient({
                     <div
                       className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs transition duration-300 ${
                         isCompleted
-                          ? "bg-orange-600 text-white"
+                          ? "bg-orange-600 text-[var(--omlu-primary-action-text)]"
                           : isActive
-                          ? "bg-orange-600 text-white ring-4 ring-orange-100 dark:ring-orange-950/30"
-                          : "bg-zinc-100 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500"
+                          ? "bg-orange-600 text-[var(--omlu-primary-action-text)] ring-4 ring-orange-100 dark:ring-orange-950/30"
+                          : "bg-[var(--omlu-muted-surface)] dark:bg-[var(--omlu-muted-surface)] text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)]"
                       }`}
                     >
                       {isCompleted ? "✓" : idx + 1}
@@ -400,8 +402,8 @@ export default function OrderTrackingClient({
                         isActive
                           ? "text-orange-600 dark:text-orange-500 font-extrabold"
                           : isCompleted
-                          ? "text-zinc-800 dark:text-zinc-200"
-                          : "text-zinc-400 dark:text-zinc-500"
+                          ? "text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-secondary)]"
+                          : "text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)]"
                       }`}
                     >
                       {label}
@@ -414,8 +416,8 @@ export default function OrderTrackingClient({
         </section>
 
         {/* Order Details Panel */}
-        <section className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-xs flex flex-col gap-4">
-          <h2 className="text-sm font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800 pb-2">
+        <section className="bg-[var(--omlu-primary-surface)] dark:bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] rounded-3xl p-6 shadow-xs flex flex-col gap-4">
+          <h2 className="text-sm font-black text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)] uppercase tracking-wider border-b border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] pb-2">
             {t.itemsOrdered}
           </h2>
 
@@ -423,13 +425,13 @@ export default function OrderTrackingClient({
             {orderData.items.map((item, idx) => (
               <div
                 key={idx}
-                className="flex items-start justify-between gap-4 pb-4 border-b border-zinc-100 dark:border-zinc-800/50 last:border-b-0 last:pb-0"
+                className="flex items-start justify-between gap-4 pb-4 border-b border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] last:border-b-0 last:pb-0"
               >
                 <div>
-                  <h4 className="font-bold text-sm text-zinc-900 dark:text-zinc-50">
+                  <h4 className="font-bold text-sm text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-primary)]">
                     {item.item_name}
                   </h4>
-                  <span className="text-xs text-zinc-400 dark:text-zinc-500 font-semibold">
+                  <span className="text-xs text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)] font-semibold">
                     ₹{Number(item.unit_price).toFixed(2)} × {item.quantity}
                   </span>
                   {item.item_note && (
@@ -438,7 +440,7 @@ export default function OrderTrackingClient({
                     </p>
                   )}
                 </div>
-                <span className="font-bold text-sm text-zinc-950 dark:text-zinc-50 whitespace-nowrap">
+                <span className="font-bold text-sm text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-primary)] whitespace-nowrap">
                   ₹{Number(item.total_price).toFixed(2)}
                 </span>
               </div>
@@ -446,18 +448,18 @@ export default function OrderTrackingClient({
           </div>
 
           {orderData.customer_note && (
-            <div className="mt-4 bg-zinc-50 dark:bg-zinc-800/30 p-4 rounded-2xl border border-zinc-100 dark:border-zinc-850/50">
-              <h4 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-1">
+            <div className="mt-4 bg-[var(--omlu-muted-surface)] dark:bg-[var(--omlu-muted-surface)] p-4 rounded-2xl border border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)]">
+              <h4 className="text-xs font-bold text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)] uppercase tracking-wider mb-1">
                 {t.yourNote}
               </h4>
-              <p className="text-xs text-zinc-600 dark:text-zinc-300">
+              <p className="text-xs text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)]">
                 {orderData.customer_note}
               </p>
             </div>
           )}
 
-          <div className="border-t border-zinc-200 dark:border-zinc-800 pt-4 flex items-center justify-between">
-            <span className="text-zinc-500 dark:text-zinc-400 font-bold text-sm">
+          <div className="border-t border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] pt-4 flex items-center justify-between">
+            <span className="text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)] font-bold text-sm">
               {t.totalPrice}
             </span>
             <span className="text-lg font-black text-orange-600 dark:text-orange-500">
@@ -472,11 +474,11 @@ export default function OrderTrackingClient({
           orderData.status !== "served" &&
           orderData.restaurant_slug &&
           orderData.table_code && (
-          <section className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-xs flex flex-col gap-4">
-            <h2 className="text-sm font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
+          <section className="bg-[var(--omlu-primary-surface)] dark:bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] rounded-3xl p-6 shadow-xs flex flex-col gap-4">
+            <h2 className="text-sm font-black text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)] uppercase tracking-wider">
               {t.needSomething}
             </h2>
-            <p className="text-xs text-zinc-500 dark:text-zinc-500">
+            <p className="text-xs text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)]">
               {t.needSomethingDesc}
             </p>
             <div className="grid grid-cols-3 gap-3">
@@ -528,7 +530,7 @@ export default function OrderTrackingClient({
                           ? "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800/40"
                           : status === "loading"
                           ? "bg-orange-50 dark:bg-orange-950/20 border-orange-200 dark:border-orange-700/40 opacity-70"
-                          : "bg-zinc-50 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-700 hover:bg-orange-50 dark:hover:bg-orange-950/20 hover:border-orange-300 dark:hover:border-orange-600/50"
+                          : "bg-[var(--omlu-muted-surface)] dark:bg-[var(--omlu-muted-surface)] border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] hover:bg-orange-50 dark:hover:bg-orange-950/20 hover:border-orange-300 dark:hover:border-orange-600/50"
                       }`}
                     >
                       <span className="text-xl">
@@ -539,7 +541,7 @@ export default function OrderTrackingClient({
                           ? "text-emerald-600 dark:text-emerald-400"
                           : status === "error"
                           ? "text-red-500 dark:text-red-400"
-                          : "text-zinc-700 dark:text-zinc-300"
+                          : "text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-secondary)]"
                       }`}>
                         {label.split(" ").slice(1).join(" ")}
                       </span>

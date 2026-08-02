@@ -52,7 +52,7 @@ export default function PendingPaymentsSidebarLink({ initialCount }: { initialCo
   const state = notice?.state || {};
   const billNumber = String(state.bill_number || "");
   return <>
-    <Link aria-current={active ? "page" : undefined} href="/admin/payments/pending" className={`flex min-h-11 shrink-0 items-center justify-between gap-2 whitespace-nowrap rounded-xl px-4 py-3 text-sm font-bold transition lg:w-full ${active ? "bg-orange-600 text-[var(--omlu-text-primary)]" : "text-[var(--omlu-text-secondary)] hover:bg-[var(--omlu-primary-surface)] hover:text-[var(--omlu-text-secondary)]"}`}>
+    <Link aria-current={active ? "page" : undefined} href="/admin/payments/pending" className={`flex min-h-11 shrink-0 items-center justify-between gap-2 whitespace-nowrap rounded-xl px-4 py-3 text-sm font-bold transition lg:w-full ${active ? "bg-orange-600 text-[var(--omlu-primary-action-text)]" : "text-[var(--omlu-text-secondary)] hover:bg-[var(--omlu-primary-surface)] hover:text-[var(--omlu-text-secondary)]"}`}>
       <span>💳 Pending Payments</span>
       {count > 0 && <span className="rounded-full bg-red-600 px-2 py-0.5 text-[10px] text-[var(--omlu-text-primary)]">{count}</span>}
     </Link>

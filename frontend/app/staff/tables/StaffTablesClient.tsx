@@ -121,28 +121,28 @@ export default function StaffTablesClient() {
   };
 
   return (
-    <div className="min-h-screen bg-[var(--omlu-background)] px-4 pb-28 pt-5 text-zinc-950">
+    <div className="min-h-screen bg-[var(--omlu-background)] px-4 pb-28 pt-5 text-[var(--omlu-text-primary)]">
       <div className="mx-auto flex max-w-md flex-col gap-5 sm:max-w-xl">
         <header className="flex items-center justify-between">
-          <button type="button" disabled={refreshing} onClick={() => void load().catch(() => undefined)} className="flex h-12 w-12 items-center justify-center rounded-full text-2xl text-zinc-900 transition active:scale-95 disabled:opacity-50" aria-label="Refresh tables">
+          <button type="button" disabled={refreshing} onClick={() => void load().catch(() => undefined)} className="flex h-12 w-12 items-center justify-center rounded-full text-2xl text-[var(--omlu-text-primary)] transition active:scale-95 disabled:opacity-50" aria-label="Refresh tables">
             ≡
           </button>
           <div className="text-center">
-            <p className="text-xs font-bold text-zinc-400">{staffInfo?.restaurant_name || "OMLU"}</p>
+            <p className="text-xs font-bold text-[var(--omlu-text-secondary)]">{staffInfo?.restaurant_name || "OMLU"}</p>
             <h1 className="text-2xl font-black text-orange-600">Active Tables</h1>
             {reportCount > 0 && <p className="text-xs font-black text-amber-700">{reportCount} empty-table {reportCount === 1 ? "report" : "reports"}</p>}
           </div>
-          <Link href="/staff/requests" className="flex h-12 w-12 items-center justify-center rounded-full text-2xl text-zinc-900" aria-label="Requests">
+          <Link href="/staff/requests" className="flex h-12 w-12 items-center justify-center rounded-full text-2xl text-[var(--omlu-text-primary)]" aria-label="Requests">
             ⌾
           </Link>
         </header>
 
-        <div className="rounded-2xl border border-zinc-200 bg-white px-4 py-3 shadow-sm shadow-orange-100/50">
+        <div className="rounded-2xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-4 py-3 shadow-sm shadow-orange-100/50">
           <input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search table..."
-            className="h-10 w-full bg-transparent text-base font-semibold text-zinc-900 outline-none placeholder:text-zinc-400"
+            className="h-10 w-full bg-transparent text-base font-semibold text-[var(--omlu-text-primary)] outline-none placeholder:text-[var(--omlu-text-secondary)]"
           />
         </div>
 
@@ -153,7 +153,7 @@ export default function StaffTablesClient() {
               type="button"
               onClick={() => setFilter(value)}
               className={`h-10 whitespace-nowrap rounded-full px-4 text-sm font-bold transition ${
-                filter === value ? "bg-orange-600 text-white shadow-sm shadow-orange-200" : "bg-white text-zinc-600"
+                filter === value ? "bg-orange-600 text-[var(--omlu-primary-action-text)] shadow-sm shadow-orange-200" : "bg-[var(--omlu-primary-surface)] text-[var(--omlu-text-secondary)]"
               }`}
             >
               {label}
@@ -162,9 +162,9 @@ export default function StaffTablesClient() {
         </div>
 
         {error && (
-          <div className="rounded-3xl border border-red-200 bg-white p-5 text-sm font-semibold text-red-700">
+          <div className="rounded-3xl border border-red-200 bg-[var(--omlu-primary-surface)] p-5 text-sm font-semibold text-red-700">
             <p>{error}</p>
-            <button onClick={() => void load().catch(() => undefined)} className="mt-4 h-12 rounded-full bg-orange-600 px-6 font-black text-white transition active:scale-95">
+            <button onClick={() => void load().catch(() => undefined)} className="mt-4 h-12 rounded-full bg-orange-600 px-6 font-black text-[var(--omlu-primary-action-text)] transition active:scale-95">
               Retry
             </button>
           </div>
@@ -172,10 +172,10 @@ export default function StaffTablesClient() {
 
         {loading ? (
           <div className="grid grid-cols-1 gap-4 min-[360px]:grid-cols-2">
-            {[1, 2, 3, 4].map((item) => <div key={item} className="h-44 animate-pulse rounded-3xl bg-white" />)}
+            {[1, 2, 3, 4].map((item) => <div key={item} className="h-44 animate-pulse rounded-3xl bg-[var(--omlu-primary-surface)]" />)}
           </div>
         ) : visibleTables.length === 0 ? (
-          <div className="rounded-3xl bg-white p-8 text-center text-sm font-semibold text-zinc-500">No tables found.</div>
+          <div className="rounded-3xl bg-[var(--omlu-primary-surface)] p-8 text-center text-sm font-semibold text-[var(--omlu-text-secondary)]">No tables found.</div>
         ) : (
           <div className="grid grid-cols-1 gap-4 min-[360px]:grid-cols-2">
             {visibleTables.map((table) => {
@@ -188,11 +188,11 @@ export default function StaffTablesClient() {
                   className={`min-w-0 min-h-44 rounded-3xl border p-4 text-center shadow-sm shadow-orange-100/60 ${statusClasses(status)}`}
                 >
                   <Link href={`/staff/tables/${table.id}`} className="block">
-                  <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-white/70 text-2xl">●●</div>
-                  <div className="break-words text-xl font-black text-zinc-950">Table {table.table_number}</div>
-                  {amount > 0 && <div className="mt-1 text-sm font-bold text-zinc-600">₹{table.current_bill_amount}</div>}
-                  {openFor && <div className="mt-1 text-xs font-semibold text-zinc-500">{openFor}</div>}
-                  <div className="mt-4 inline-flex min-h-9 items-center rounded-full bg-white/75 px-4 text-sm font-black">{status}</div>
+                  <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-[var(--omlu-primary-surface)] text-2xl">●●</div>
+                  <div className="break-words text-xl font-black text-[var(--omlu-text-primary)]">Table {table.table_number}</div>
+                  {amount > 0 && <div className="mt-1 text-sm font-bold text-[var(--omlu-text-secondary)]">₹{table.current_bill_amount}</div>}
+                  {openFor && <div className="mt-1 text-xs font-semibold text-[var(--omlu-text-secondary)]">{openFor}</div>}
+                  <div className="mt-4 inline-flex min-h-9 items-center rounded-full bg-[var(--omlu-primary-surface)] px-4 text-sm font-black">{status}</div>
                   </Link>
                   {table.empty_table_report && (
                     <div className="mt-3 rounded-2xl border border-amber-500 bg-amber-50 p-3 text-left text-amber-950">
@@ -200,7 +200,7 @@ export default function StaffTablesClient() {
                       <p className="mt-1 text-xs">Reported by {table.empty_table_report.reported_by_name} · {reportedAgo(table.empty_table_report.reported_at)}</p>
                       <p className="mt-0.5 text-[11px] opacity-75">{new Date(table.empty_table_report.reported_at).toLocaleString()}</p>
                       {canResolveReports && <div className="mt-3 flex flex-wrap gap-2">
-                        <button onClick={() => void resolveReport(table, "close")} className="rounded-lg bg-zinc-900 px-3 py-2 text-xs font-black text-white">Close Session</button>
+                        <button onClick={() => void resolveReport(table, "close")} className="rounded-lg bg-[var(--omlu-primary-surface)] px-3 py-2 text-xs font-black text-[var(--omlu-text-primary)]">Close Session</button>
                         <button onClick={() => void resolveReport(table, "dismiss")} className="rounded-lg border border-amber-700 px-3 py-2 text-xs font-black">Dismiss Report</button>
                       </div>}
                     </div>
@@ -210,7 +210,7 @@ export default function StaffTablesClient() {
             })}
           </div>
         )}
-        {refreshing && <p className="text-center text-xs font-bold text-zinc-400">Updating tables...</p>}
+        {refreshing && <p className="text-center text-xs font-bold text-[var(--omlu-text-secondary)]">Updating tables...</p>}
       </div>
       <StaffBottomNav active="tables" />
     </div>

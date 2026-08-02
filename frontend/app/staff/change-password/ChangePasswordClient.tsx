@@ -84,12 +84,12 @@ export default function ChangePasswordClient() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex items-center justify-center px-4">
+    <div className="min-h-screen bg-[var(--omlu-page-background)] text-[var(--omlu-text-secondary)] flex items-center justify-center px-4">
       <FormToast message={toast} onDismiss={() => setToast(null)} dark />
-      <form onSubmit={submit} className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-2xl p-6 flex flex-col gap-4">
+      <form onSubmit={submit} className="w-full max-w-md bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border)] rounded-2xl p-6 flex flex-col gap-4">
         <div>
-          <h1 className="text-2xl font-black text-white">Change Password</h1>
-          <p className="text-sm text-zinc-500 mt-1">Set a new password before accessing the restaurant workspace.</p>
+          <h1 className="text-2xl font-black text-[var(--omlu-text-primary)]">Change Password</h1>
+          <p className="text-sm text-[var(--omlu-text-secondary)] mt-1">Set a new password before accessing the restaurant workspace.</p>
         </div>
         {error && <div className="rounded-lg border border-red-800/40 bg-red-950/20 px-3 py-2 text-sm text-red-300">{error}</div>}
         <PasswordInput
@@ -137,7 +137,7 @@ export default function ChangePasswordClient() {
             setFieldError("confirm_password");
           }}
         />
-        <button disabled={loading} className="rounded-lg bg-orange-600 hover:bg-orange-700 disabled:bg-zinc-800 px-4 py-3 text-sm font-black text-white">
+        <button disabled={loading} className="rounded-lg bg-orange-600 hover:bg-orange-700 disabled:bg-[var(--omlu-muted-surface)] px-4 py-3 text-sm font-black text-[var(--omlu-primary-action-text)]">
           {loading ? "Changing..." : "Change Password"}
         </button>
       </form>

@@ -253,7 +253,7 @@ export default function AdminRequestsClient() {
             <h1 className="text-2xl font-black text-[var(--omlu-text-primary)]">
               Service Requests
               {pendingCount > 0 && (
-                <span className="ml-3 bg-orange-600 text-[var(--omlu-text-primary)] text-xs font-extrabold px-2.5 py-1 rounded-full align-middle animate-pulse">
+                <span className="ml-3 bg-orange-600 text-[var(--omlu-primary-action-text)] text-xs font-extrabold px-2.5 py-1 rounded-full align-middle animate-pulse">
                   {pendingCount}
                 </span>
               )}
@@ -398,7 +398,7 @@ export default function AdminRequestsClient() {
                               <button
                                 onClick={() => handleIssueBill(req)}
                                 disabled={issuingId === req.id}
-                                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-[var(--omlu-text-primary)] font-bold text-xs rounded-xl transition cursor-pointer"
+                                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-[var(--omlu-strong-action-text)] font-bold text-xs rounded-xl transition cursor-pointer"
                               >
                                 {issuingId === req.id ? "Issuing…" : "Issue Bill"}
                               </button>
@@ -416,7 +416,7 @@ export default function AdminRequestsClient() {
                                   <button
                                     onClick={() => handleConfirmPayment(req, "counter_upi")}
                                     disabled={confirmingPayment !== null}
-                                    className="px-4 py-2 bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-[var(--omlu-text-primary)] font-bold text-xs rounded-xl transition cursor-pointer"
+                                    className="px-4 py-2 bg-sky-700 hover:bg-sky-700 disabled:opacity-50 text-[var(--omlu-strong-action-text)] font-bold text-xs rounded-xl transition cursor-pointer"
                                   >
                                     {confirmingPayment === `${req.id}-counter_upi`
                                       ? "Confirming…"
@@ -431,7 +431,7 @@ export default function AdminRequestsClient() {
                                 <button
                                   onClick={() => handleRequestPaymentAssistance(req)}
                                   disabled={requestingAssistanceId !== null}
-                                  className="px-4 py-2 bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-[var(--omlu-text-primary)] font-bold text-xs rounded-xl transition cursor-pointer"
+                                  className="px-4 py-2 bg-sky-700 hover:bg-sky-700 disabled:opacity-50 text-[var(--omlu-strong-action-text)] font-bold text-xs rounded-xl transition cursor-pointer"
                                 >
                                   {requestingAssistanceId === req.id
                                     ? "Sending…"
@@ -444,7 +444,7 @@ export default function AdminRequestsClient() {
                             id={`resolve-btn-${req.id}`}
                             onClick={() => handleResolve(req.id)}
                             disabled={resolvingId === req.id}
-                            className="px-4 py-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-[var(--omlu-text-primary)] font-bold text-xs rounded-xl transition cursor-pointer"
+                            className="px-4 py-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-[var(--omlu-primary-action-text)] font-bold text-xs rounded-xl transition cursor-pointer"
                           >
                             {resolvingId === req.id ? "Resolving…" : "Mark Resolved"}
                           </button>

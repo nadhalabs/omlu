@@ -69,7 +69,7 @@ function MetricCard({
             <polyline
               points={trend.map((point, index) => `${(index / (trend.length - 1)) * 68 + 1},${27 - (point / max) * 24}`).join(" ")}
               fill="none"
-              stroke="#fb923c"
+              stroke="var(--omlu-accent)"
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"

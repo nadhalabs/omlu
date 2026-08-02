@@ -18,12 +18,13 @@
   --omlu-text: #18181b;
   --omlu-text-primary: #18181b;
   --omlu-text-secondary: #71717a;
-  --omlu-text-muted: #a1a1aa;
+  --omlu-text-muted: #71717a;
   --omlu-input-background: #ffffff;
   --omlu-hover-background: #f4f4f5;
   --omlu-focus-ring: #f97316;
   --omlu-primary-action: #ea580c;
-  --omlu-primary-action-text: #ffffff;
+  --omlu-primary-action-text: #18181b;
+  --omlu-strong-action-text: #ffffff;
   --omlu-success-background: #ecfdf5;
   --omlu-success-text: #047857;
   --omlu-success-border: #6ee7b7;
@@ -34,6 +35,8 @@
   --omlu-destructive-text: #b91c1c;
   --omlu-destructive-border: #fca5a5;
   --omlu-disabled: #f4f4f5;
+  --omlu-disabled-text: #52525b;
+  --omlu-skeleton-highlight: rgba(255, 255, 255, 0.65);
   --omlu-backdrop: rgba(24, 24, 27, 0.45);
   --background: var(--omlu-background);
   --foreground: var(--omlu-text);
@@ -63,6 +66,7 @@
   --omlu-focus-ring: #fb923c;
   --omlu-primary-action: #f97316;
   --omlu-primary-action-text: #18181b;
+  --omlu-strong-action-text: #ffffff;
   --omlu-success-background: #052e16;
   --omlu-success-text: #6ee7b7;
   --omlu-success-border: #047857;
@@ -73,6 +77,8 @@
   --omlu-destructive-text: #fca5a5;
   --omlu-destructive-border: #b91c1c;
   --omlu-disabled: #27272a;
+  --omlu-disabled-text: #a1a1aa;
+  --omlu-skeleton-highlight: rgba(255, 255, 255, 0.12);
   --omlu-backdrop: rgba(0, 0, 0, 0.72);
   --background: var(--omlu-page-background);
   --foreground: var(--omlu-text-primary);
@@ -141,8 +147,8 @@ input:disabled,
 select:disabled,
 textarea:disabled {
   background: var(--omlu-disabled);
-  color: #52525b;
-  -webkit-text-fill-color: #52525b;
+  color: var(--omlu-disabled-text);
+  -webkit-text-fill-color: var(--omlu-disabled-text);
   opacity: 1;
 }
 
@@ -204,7 +210,7 @@ a.text-white[aria-disabled="true"] {
   inset: 0;
   content: "";
   transform: translateX(-100%);
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.65), transparent);
+  background: linear-gradient(90deg, transparent, var(--omlu-skeleton-highlight), transparent);
   animation: omlu-shimmer 1.4s infinite;
 }
 
@@ -230,6 +236,11 @@ a.text-white[aria-disabled="true"] {
   color: var(--omlu-text-primary);
 }
 
+.omlu-operational-shell {
+  background: var(--omlu-page-background);
+  color: var(--omlu-text-primary);
+}
+
 @media print {
   .print-hidden {
     display: none !important;
@@ -239,5 +250,16 @@ a.text-white[aria-disabled="true"] {
     width: 210mm;
     min-height: 297mm;
     margin: 0 auto;
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  .print-bill-sheet * {
+    color: #000 !important;
+    border-color: #52525b !important;
+  }
+
+  .print-bill-sheet :is(section, article, header, footer, div, p) {
+    background-color: transparent !important;
   }
 }

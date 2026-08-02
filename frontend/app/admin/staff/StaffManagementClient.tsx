@@ -325,7 +325,7 @@ export default function StaffManagementClient() {
                 <option value="open">Open</option><option value="closing">Closing</option><option value="closed">Closed</option>
               </select>
               </label>
-              <button onClick={toggleAllStaff} className={`min-h-11 rounded-lg border px-4 py-2 text-sm font-black transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 ${operations.locked ? "border-emerald-700 bg-emerald-700 text-[var(--omlu-text-primary)] hover:bg-emerald-800" : "border-red-300 bg-[var(--omlu-primary-surface)] text-red-700 hover:bg-red-50"}`}>
+              <button onClick={toggleAllStaff} className={`min-h-11 rounded-lg border px-4 py-2 text-sm font-black transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 ${operations.locked ? "border-emerald-700 bg-emerald-700 text-[var(--omlu-strong-action-text)] hover:bg-emerald-800" : "border-red-300 bg-[var(--omlu-primary-surface)] text-red-700 hover:bg-red-50"}`}>
                 {operations.locked ? "Unlock all staff" : "Lock all staff"}
               </button>
             </div>
@@ -353,7 +353,7 @@ export default function StaffManagementClient() {
         </> : <>
           <PasswordInput name="temporary_password" label="Temporary password" value={form.temporary_password || ""} error={fieldErrors.temporary_password} disabled={saving} autoComplete="new-password" showChecklist onChange={(value) => setForm({ ...form, temporary_password: value })} />
         </>}
-        <button disabled={saving} className="min-h-11 self-end rounded-lg bg-orange-600 px-5 py-2 text-sm font-black text-[var(--omlu-text-primary)] transition hover:bg-orange-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)]">
+        <button disabled={saving} className="min-h-11 self-end rounded-lg bg-orange-600 px-5 py-2 text-sm font-black text-[var(--omlu-primary-action-text)] transition hover:bg-orange-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)]">
           {saving ? "Adding staff..." : "Add Staff"}
         </button>
         </form>
@@ -394,7 +394,7 @@ export default function StaffManagementClient() {
               <button type="button" disabled={resetSaving} onClick={() => setResetTarget(null)} className="rounded-lg bg-[var(--omlu-muted-surface)] px-4 py-2 text-sm font-bold text-[var(--omlu-text-secondary)]">
                 Cancel
               </button>
-              <button disabled={resetSaving} className="rounded-lg bg-orange-600 px-4 py-2 text-sm font-black text-[var(--omlu-text-primary)] disabled:cursor-not-allowed disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)]">
+              <button disabled={resetSaving} className="rounded-lg bg-orange-600 px-4 py-2 text-sm font-black text-[var(--omlu-primary-action-text)] disabled:cursor-not-allowed disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)]">
                 {resetSaving ? "Resetting..." : resetTarget.role === "staff" || resetTarget.role === "kitchen" ? "Reset PIN" : "Reset Password"}
               </button>
             </div>
@@ -447,7 +447,7 @@ function MemberActions(props: StaffPresentationProps) {
       ? { label: "Resume", action: () => changeStatus(member, "active"), positive: true }
       : { label: "Suspend", action: () => changeStatus(member, "suspended"), positive: false };
   return <div className="flex min-w-0 flex-wrap items-center gap-2">
-    {!owner && <button type="button" disabled={busy} onClick={() => void primary.action()} className={`min-h-10 whitespace-nowrap rounded-lg px-3 py-2 text-xs font-black transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)] ${primary.positive ? "bg-emerald-700 text-[var(--omlu-text-primary)] hover:bg-emerald-800" : "border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-muted-surface)]"}`}>{busy ? busyAction : primary.label}</button>}
+    {!owner && <button type="button" disabled={busy} onClick={() => void primary.action()} className={`min-h-10 whitespace-nowrap rounded-lg px-3 py-2 text-xs font-black transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)] ${primary.positive ? "bg-emerald-700 text-[var(--omlu-strong-action-text)] hover:bg-emerald-800" : "border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-muted-surface)]"}`}>{busy ? busyAction : primary.label}</button>}
     <button type="button" disabled={busy || member.active_session_count === 0} onClick={() => void signOutAll(member)} className="min-h-10 whitespace-nowrap rounded-lg border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-3 py-2 text-xs font-bold text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-muted-surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:border-[var(--omlu-border-strong)] disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)]">Sign out sessions</button>
     <div className="relative" ref={menuRef}><button type="button" aria-label={`More actions for ${member.name}`} aria-haspopup="menu" aria-expanded={openMenu} disabled={busy} onClick={() => setOpenMenu(!openMenu)} className="min-h-10 min-w-10 rounded-lg border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-3 text-lg font-black text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-muted-surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)]">⋮</button>
       {openMenu && <div role="menu" aria-label={`More actions for ${member.name}`} className="absolute right-0 z-20 mt-2 w-56 rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-1.5 shadow-xl">

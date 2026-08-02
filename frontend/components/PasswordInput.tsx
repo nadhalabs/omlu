@@ -49,8 +49,8 @@ export function PasswordInput({
           aria-describedby={error ? errorId : undefined}
           data-surface={dark ? "dark" : "light"}
           className={`h-12 w-full rounded-lg border px-4 pr-12 text-sm font-medium outline-none transition focus:border-orange-600 ${
-            dark ? "bg-zinc-950 text-zinc-100" : "bg-white text-zinc-950"
-          } ${error ? "border-red-500" : dark ? "border-zinc-800" : "border-zinc-300"} ${
+            dark ? "bg-[var(--omlu-page-background)] text-[var(--omlu-text-secondary)]" : "bg-[var(--omlu-primary-surface)] text-[var(--omlu-text-primary)]"
+          } ${error ? "border-red-500" : dark ? "border-[var(--omlu-border)]" : "border-[var(--omlu-border-strong)]"} ${
             disabled ? "cursor-not-allowed opacity-100" : ""
           }`}
         />
@@ -60,7 +60,7 @@ export function PasswordInput({
           onClick={() => setVisible((current) => !current)}
           disabled={disabled}
           className={`absolute inset-y-0 right-0 flex w-12 items-center justify-center transition focus:outline-none focus:ring-2 focus:ring-orange-600 disabled:cursor-not-allowed ${
-            dark ? "text-zinc-500 hover:text-zinc-100" : "text-zinc-500 hover:text-zinc-900"
+            dark ? "text-[var(--omlu-text-secondary)] hover:text-[var(--omlu-text-secondary)]" : "text-[var(--omlu-text-secondary)] hover:text-[var(--omlu-text-primary)]"
           }`}
         >
           <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
@@ -81,11 +81,11 @@ export function PasswordInput({
         </button>
       </div>
       {showChecklist && (
-        <ul className="grid gap-1 text-xs font-semibold text-zinc-500 sm:grid-cols-2">
+        <ul className="grid gap-1 text-xs font-semibold text-[var(--omlu-text-secondary)] sm:grid-cols-2">
           {PASSWORD_RULES.map((rule) => {
             const passed = rule.test(value);
             return (
-              <li key={rule.key} className={passed ? (dark ? "text-emerald-300" : "text-emerald-600") : "text-zinc-500"}>
+              <li key={rule.key} className={passed ? (dark ? "text-emerald-300" : "text-emerald-600") : "text-[var(--omlu-text-secondary)]"}>
                 {passed ? "[x]" : "[ ]"} {rule.label}
               </li>
             );

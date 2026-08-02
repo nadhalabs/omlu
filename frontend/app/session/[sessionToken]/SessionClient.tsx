@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { PublicThemeControl } from "@/components/PublicThemeControl";
 import {
   ApiError,
   createOrRefreshPublicBill,
@@ -423,9 +424,9 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
 
   if (loading && !session) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-50 px-4 py-8 dark:bg-zinc-950">
+      <div className="flex min-h-screen flex-col items-center justify-center bg-[var(--omlu-muted-surface)] px-4 py-8 dark:bg-[var(--omlu-page-background)]">
         <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-t-2 border-orange-600" />
-        <p className="mt-4 font-medium text-zinc-600 dark:text-zinc-400">
+        <p className="mt-4 font-medium text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)]">
           {t.loading}
         </p>
       </div>
@@ -434,15 +435,15 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
 
   if (error && !session) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-50 p-6 text-center dark:bg-zinc-950">
-        <div className="w-full max-w-md rounded-3xl border border-zinc-200 bg-white p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+      <div className="flex min-h-screen flex-col items-center justify-center bg-[var(--omlu-muted-surface)] p-6 text-center dark:bg-[var(--omlu-page-background)]">
+        <div className="w-full max-w-md rounded-3xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-8 shadow-sm dark:border-[var(--omlu-border)] dark:bg-[var(--omlu-primary-surface)]">
           <div className="mb-4 text-5xl">!</div>
-          <h1 className="mb-2 text-xl font-bold text-zinc-950 dark:text-zinc-50">
+          <h1 className="mb-2 text-xl font-bold text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-primary)]">
             {error}
           </h1>
           <button
             onClick={() => fetchSession(true)}
-            className="mt-6 min-h-12 rounded-2xl bg-orange-600 px-6 py-3 font-bold text-white transition hover:bg-orange-700"
+            className="mt-6 min-h-12 rounded-2xl bg-orange-600 px-6 py-3 font-bold text-[var(--omlu-primary-action-text)] transition hover:bg-orange-700"
           >
             {t.retry}
           </button>
@@ -488,9 +489,10 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
     status === "resolved" ? "completed" : status;
 
   return (
-    <div className="min-h-screen bg-zinc-50 px-4 py-6 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100 sm:px-6">
+    <div className="min-h-screen bg-[var(--omlu-muted-surface)] px-4 py-6 text-[var(--omlu-text-primary)] dark:bg-[var(--omlu-page-background)] dark:text-[var(--omlu-text-secondary)] sm:px-6">
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
         <div className="flex flex-wrap justify-end gap-2">
+          <PublicThemeControl />
           <button
             onClick={handleEnablePush}
             disabled={pushStatus === "loading" || pushStatus === "enabled"}
@@ -500,7 +502,7 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
           </button>
           <button
             onClick={() => setLanguage(language === "en" ? "ml" : "en")}
-            className="min-h-10 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-bold text-orange-700 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900 dark:text-orange-500"
+            className="min-h-10 rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-3 py-2 text-xs font-bold text-orange-700 shadow-2xs dark:border-[var(--omlu-border)] dark:bg-[var(--omlu-primary-surface)] dark:text-orange-500"
           >
             {language === "en" ? "മലയാളം" : "English"}
           </button>
@@ -510,27 +512,27 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
           <p className={`rounded-2xl px-4 py-3 text-sm font-bold ${
             pushStatus === "enabled"
               ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300"
-              : "bg-zinc-100 text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300"
+              : "bg-[var(--omlu-muted-surface)] text-[var(--omlu-text-primary)] dark:bg-[var(--omlu-primary-surface)] dark:text-[var(--omlu-text-secondary)]"
           }`}>
             {pushMessage}
           </p>
         )}
 
-        <header className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
+        <header className="rounded-3xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-6 shadow-xs dark:border-[var(--omlu-border)] dark:bg-[var(--omlu-primary-surface)]">
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-xs font-black uppercase tracking-wide text-orange-700 dark:text-orange-500">
                 {session.restaurant_name}
               </p>
-              <h1 className="mt-1 text-2xl font-black text-zinc-950 dark:text-zinc-50">
+              <h1 className="mt-1 text-2xl font-black text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-primary)]">
                 {t.currentBill}
               </h1>
-              <p className="mt-1 text-sm font-bold text-zinc-500 dark:text-zinc-400">
+              <p className="mt-1 text-sm font-bold text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)]">
                 {t.table} {session.table_number}
               </p>
             </div>
             <div className="text-right">
-              <p className="text-xs font-semibold text-zinc-400">
+              <p className="text-xs font-semibold text-[var(--omlu-text-secondary)]">
                 {t.sessionStatus}
               </p>
               <p className="mt-1 rounded-xl bg-orange-50 px-3 py-1 text-sm font-black text-orange-700 dark:bg-orange-950/20 dark:text-orange-500">
@@ -542,19 +544,19 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
           {participantToken && visibleJoinCode && ["open", "payment_requested", "payment_pending"].includes(session.status) && (
             <section className="mt-4 flex flex-col gap-3 rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 dark:border-orange-900/50 dark:bg-orange-950/20 sm:flex-row sm:items-center sm:justify-between" aria-labelledby="session-invite-title">
               <div className="min-w-0">
-                <h2 id="session-invite-title" className="text-sm font-black text-zinc-950 dark:text-white">Invite people at your table</h2>
+                <h2 id="session-invite-title" className="text-sm font-black text-[var(--omlu-text-primary)] dark:text-[var(--omlu-primary-action-text)]">Invite people at your table</h2>
                 <p className="mt-1 text-lg font-black text-orange-700 dark:text-orange-400">Join code: <span className="tracking-[0.18em]">{visibleJoinCode}</span></p>
-                <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-300">Other people can scan this table QR and enter this code.</p>
+                <p className="mt-1 text-xs text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)]">Other people can scan this table QR and enter this code.</p>
               </div>
-              <button type="button" onClick={() => void copyJoinCode()} className="min-h-10 shrink-0 rounded-xl bg-orange-600 px-4 py-2 text-sm font-black text-white">
+              <button type="button" onClick={() => void copyJoinCode()} className="min-h-10 shrink-0 rounded-xl bg-orange-600 px-4 py-2 text-sm font-black text-[var(--omlu-primary-action-text)]">
                 {joinCodeCopied ? "Copied" : "Copy code"}
               </button>
             </section>
           )}
 
           <div className="mt-5 grid grid-cols-2 gap-3">
-            <div className="rounded-2xl bg-zinc-50 p-4 dark:bg-zinc-800/50">
-              <p className="text-xs font-bold uppercase text-zinc-400">
+            <div className="rounded-2xl bg-[var(--omlu-muted-surface)] p-4 dark:bg-[var(--omlu-muted-surface)]">
+              <p className="text-xs font-bold uppercase text-[var(--omlu-text-secondary)]">
                 {t.orders}
               </p>
               <p className="mt-1 text-2xl font-black">{session.order_count}</p>
@@ -575,11 +577,11 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
                 <p className="text-xs font-black uppercase tracking-wide text-orange-700 dark:text-orange-500">
                   {t.billState}
                 </p>
-                <p className="mt-1 text-lg font-black text-zinc-950 dark:text-zinc-50">
+                <p className="mt-1 text-lg font-black text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-primary)]">
                   {billStatusLabel}
                 </p>
                 {session.bill?.paid_at && (
-                  <p className="mt-1 text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+                  <p className="mt-1 text-xs font-semibold text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)]">
                     {t.paidAt}: {new Date(session.bill.paid_at).toLocaleString()}
                   </p>
                 )}
@@ -596,7 +598,7 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
             {canOrderMore && (
               <button
                 onClick={handleAddMore}
-                className="min-h-14 rounded-2xl bg-orange-600 px-5 py-4 text-center text-base font-black text-white shadow-md transition hover:bg-orange-700 active:bg-orange-800"
+                className="min-h-14 rounded-2xl bg-orange-600 px-5 py-4 text-center text-base font-black text-[var(--omlu-primary-action-text)] shadow-md transition hover:bg-orange-700 active:bg-orange-800"
               >
                 {t.addMore} · {t.addMoreMl}
               </button>
@@ -605,7 +607,7 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
               <button
                 onClick={handleViewBill}
                 disabled={billActionLoading !== null}
-                className="min-h-14 rounded-2xl bg-zinc-900 px-5 py-4 text-base font-black text-white shadow-md transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white"
+                className="min-h-14 rounded-2xl bg-[var(--omlu-primary-surface)] px-5 py-4 text-base font-black text-[var(--omlu-primary-action-text)] shadow-md transition hover:bg-[var(--omlu-muted-surface)] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[var(--omlu-muted-surface)] dark:text-[var(--omlu-text-primary)] dark:hover:bg-[var(--omlu-primary-surface)]"
               >
                 {billActionLoading === "view" ? t.preparingBill : t.viewBill}
               </button>
@@ -613,7 +615,7 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
                 <button
                   onClick={handleRequestBill}
                   disabled={billActionLoading !== null}
-                  className="min-h-14 rounded-2xl bg-emerald-600 px-5 py-4 text-base font-black text-white shadow-md transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="min-h-14 rounded-2xl bg-emerald-600 px-5 py-4 text-base font-black text-[var(--omlu-primary-action-text)] shadow-md transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {billActionLoading === "request" ? t.requestingBill : t.requestBillAction}
                 </button>
@@ -641,22 +643,22 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
           )}
 
           {lastUpdated && (
-            <p className="mt-3 text-right text-[10px] font-semibold text-zinc-400">
+            <p className="mt-3 text-right text-[10px] font-semibold text-[var(--omlu-text-secondary)]">
               {t.lastUpdated}: {lastUpdated.toLocaleTimeString()}
             </p>
           )}
           {realtimeStatus !== "live" && (
-            <p className="mt-2 rounded-xl bg-zinc-100 px-3 py-2 text-xs font-semibold text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+            <p className="mt-2 rounded-xl bg-[var(--omlu-muted-surface)] px-3 py-2 text-xs font-semibold text-[var(--omlu-text-secondary)] dark:bg-[var(--omlu-muted-surface)] dark:text-[var(--omlu-text-secondary)]">
               {t.realtimeOffline}
             </p>
           )}
         </header>
 
-        <section className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
-          <h2 className="mb-4 text-sm font-black uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+        <section className="rounded-3xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-5 shadow-xs dark:border-[var(--omlu-border)] dark:bg-[var(--omlu-primary-surface)]">
+          <h2 className="mb-4 text-sm font-black uppercase tracking-wide text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)]">
             {t.needSomething}
           </h2>
-          <p className="mb-4 text-xs font-medium text-zinc-500 dark:text-zinc-500">
+          <p className="mb-4 text-xs font-medium text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)]">
             {t.needSomethingDesc}
           </p>
           {session.service_requests_enabled ? (
@@ -674,13 +676,13 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
                           ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-700/40 dark:bg-emerald-950/20 dark:text-emerald-400"
                           : status === "error"
                           ? "border-red-200 bg-red-50 text-red-600 dark:border-red-800/40 dark:bg-red-950/20 dark:text-red-400"
-                          : "border-zinc-200 bg-zinc-50 text-zinc-700 hover:border-orange-300 hover:bg-orange-50 dark:border-zinc-800 dark:bg-zinc-800/50 dark:text-zinc-300"
+                          : "border-[var(--omlu-border-strong)] bg-[var(--omlu-muted-surface)] text-[var(--omlu-text-primary)] hover:border-orange-300 hover:bg-orange-50 dark:border-[var(--omlu-border)] dark:bg-[var(--omlu-muted-surface)] dark:text-[var(--omlu-text-secondary)]"
                       }`}
                     >
                       {status === "loading" ? "..." : status === "success" ? "✓" : label}
                     </button>
                     {message && (
-                      <p className="text-center text-[10px] font-semibold text-zinc-500">
+                      <p className="text-center text-[10px] font-semibold text-[var(--omlu-text-secondary)]">
                         {message}
                       </p>
                     )}
@@ -689,17 +691,17 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
               })}
             </div>
           ) : (
-            <p className="rounded-2xl bg-zinc-50 p-4 text-sm font-semibold text-zinc-500 dark:bg-zinc-800/50">
+            <p className="rounded-2xl bg-[var(--omlu-muted-surface)] p-4 text-sm font-semibold text-[var(--omlu-text-secondary)] dark:bg-[var(--omlu-muted-surface)]">
               Service requests are disabled.
             </p>
           )}
 
-          <div className="mt-5 border-t border-zinc-100 pt-4 dark:border-zinc-800">
-            <h3 className="text-xs font-black uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+          <div className="mt-5 border-t border-[var(--omlu-border-strong)] pt-4 dark:border-[var(--omlu-border)]">
+            <h3 className="text-xs font-black uppercase tracking-wide text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)]">
               {t.serviceHistory}
             </h3>
             {session.service_requests.length === 0 ? (
-              <p className="mt-3 rounded-2xl bg-zinc-50 p-4 text-sm font-semibold text-zinc-500 dark:bg-zinc-800/50">
+              <p className="mt-3 rounded-2xl bg-[var(--omlu-muted-surface)] p-4 text-sm font-semibold text-[var(--omlu-text-secondary)] dark:bg-[var(--omlu-muted-surface)]">
                 {t.noServiceHistory}
               </p>
             ) : (
@@ -707,22 +709,22 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
                 {session.service_requests.map((request, index) => (
                   <div
                     key={`${request.request_type}-${request.created_at}-${index}`}
-                    className="flex items-start justify-between gap-3 rounded-2xl bg-zinc-50 p-3 dark:bg-zinc-800/50"
+                    className="flex items-start justify-between gap-3 rounded-2xl bg-[var(--omlu-muted-surface)] p-3 dark:bg-[var(--omlu-muted-surface)]"
                   >
                     <div>
-                      <p className="text-sm font-black capitalize text-zinc-900 dark:text-zinc-100">
+                      <p className="text-sm font-black capitalize text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-secondary)]">
                         {request.request_type}
                       </p>
-                      <p className="mt-1 text-[11px] font-semibold text-zinc-500">
+                      <p className="mt-1 text-[11px] font-semibold text-[var(--omlu-text-secondary)]">
                         {t.requestedAt}: {new Date(request.created_at).toLocaleTimeString()}
                       </p>
                       {request.resolved_at && (
-                        <p className="text-[11px] font-semibold text-zinc-500">
+                        <p className="text-[11px] font-semibold text-[var(--omlu-text-secondary)]">
                           {t.completedAt}: {new Date(request.resolved_at).toLocaleTimeString()}
                         </p>
                       )}
                     </div>
-                    <p className="rounded-xl bg-white px-3 py-1 text-xs font-black capitalize text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
+                    <p className="rounded-xl bg-[var(--omlu-primary-surface)] px-3 py-1 text-xs font-black capitalize text-[var(--omlu-text-primary)] dark:bg-[var(--omlu-primary-surface)] dark:text-[var(--omlu-text-secondary)]">
                       {requestStatusLabel(request.status)}
                     </p>
                   </div>
@@ -734,9 +736,9 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
 
         <main className="flex flex-col gap-4">
           {session.orders.length === 0 ? (
-            <section className="rounded-3xl border border-dashed border-zinc-300 bg-white p-8 text-center dark:border-zinc-700 dark:bg-zinc-900">
+            <section className="rounded-3xl border border-dashed border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-8 text-center dark:border-[var(--omlu-border)] dark:bg-[var(--omlu-primary-surface)]">
               <h2 className="text-lg font-black">{t.noOrders}</h2>
-              <p className="mt-2 text-sm text-zinc-500">{t.noOrdersDesc}</p>
+              <p className="mt-2 text-sm text-[var(--omlu-text-secondary)]">{t.noOrdersDesc}</p>
             </section>
           ) : (
             session.orders.map((order, index) => {
@@ -789,31 +791,31 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
               return (
                 <section
                   key={order.public_token}
-                  className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-xs dark:border-zinc-800 dark:bg-zinc-900"
+                  className="rounded-3xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-5 shadow-xs dark:border-[var(--omlu-border)] dark:bg-[var(--omlu-primary-surface)]"
                 >
                   <div
                     onClick={handleToggle}
-                    className="flex cursor-pointer items-center justify-between gap-3 border-b border-zinc-100 pb-3 dark:border-zinc-800 select-none"
+                    className="flex cursor-pointer items-center justify-between gap-3 border-b border-[var(--omlu-border-strong)] pb-3 dark:border-[var(--omlu-border)] select-none"
                   >
                     <div>
                       <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-bold uppercase text-zinc-400">
+                        <span className="text-xs font-bold uppercase text-[var(--omlu-text-secondary)]">
                           Order {index + 1} of {session.order_count}
                         </span>
-                        <span className="text-[10px] font-semibold text-zinc-400">
+                        <span className="text-[10px] font-semibold text-[var(--omlu-text-secondary)]">
                           • {new Date(order.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                         </span>
                       </div>
-                      <h2 className="text-lg font-black text-zinc-950 dark:text-zinc-50 flex items-center gap-2">
+                      <h2 className="text-lg font-black text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-primary)] flex items-center gap-2">
                         {order.order_number}
                       </h2>
                     </div>
                     <div className="flex items-center gap-2">
-                      <p className="rounded-xl bg-zinc-100 px-3 py-1 text-xs font-black text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                      <p className="rounded-xl bg-[var(--omlu-muted-surface)] px-3 py-1 text-xs font-black text-[var(--omlu-text-primary)] dark:bg-[var(--omlu-muted-surface)] dark:text-[var(--omlu-text-secondary)]">
                         {t.statusLabels[order.status] || order.status}
                       </p>
                       <svg
-                        className={`h-5 w-5 text-zinc-400 transition-transform duration-200 ${
+                        className={`h-5 w-5 text-[var(--omlu-text-secondary)] transition-transform duration-200 ${
                           isExpanded ? "rotate-180" : ""
                         }`}
                         fill="none"
@@ -826,7 +828,7 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
                   </div>
 
                   {isExpanded && (
-                    <div className="mt-6 border-b border-zinc-100 pb-5 dark:border-zinc-800">
+                    <div className="mt-6 border-b border-[var(--omlu-border-strong)] pb-5 dark:border-[var(--omlu-border)]">
                       <div className="flex flex-col">
                         {stages.map((stage, sIdx) => {
                           let state: "completed" | "current" | "future" = "future";
@@ -864,19 +866,19 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
                           return (
                             <div key={stage.key} className="flex min-h-[64px] last:min-h-0">
                               {/* Left: Time */}
-                              <div className="w-16 flex-none pr-3 pt-1 text-right text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+                              <div className="w-16 flex-none pr-3 pt-1 text-right text-xs font-semibold text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)]">
                                 {timestamp || ""}
                               </div>
 
                               {/* Middle: Circle and connector */}
                               <div className="relative flex w-8 flex-none flex-col items-center">
                                 <div
-                                  className={`z-10 flex h-6 w-6 items-center justify-center rounded-full text-white transition-all duration-300 ${
+                                  className={`z-10 flex h-6 w-6 items-center justify-center rounded-full text-[var(--omlu-primary-action-text)] transition-all duration-300 ${
                                     state === "completed"
                                       ? "bg-emerald-600 text-xs font-bold"
                                       : state === "current"
                                       ? "bg-orange-600 ring-4 ring-orange-100 dark:ring-orange-950/40"
-                                      : "bg-zinc-200 dark:bg-zinc-800"
+                                      : "bg-[var(--omlu-muted-surface)] dark:bg-[var(--omlu-muted-surface)]"
                                   } ${isAnimated ? "motion-safe:animate-[bounce_0.6s_ease-in-out_2]" : ""}`}
                                 >
                                   {state === "completed" ? (
@@ -884,14 +886,14 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                                     </svg>
                                   ) : state === "current" ? (
-                                    <div className="h-2 w-2 rounded-full bg-white" />
+                                    <div className="h-2 w-2 rounded-full bg-[var(--omlu-primary-surface)]" />
                                   ) : null}
                                 </div>
 
                                 {!isLast && (
                                   <div
                                     className={`absolute top-6 bottom-0 w-[2px] ${
-                                      state === "completed" ? "bg-emerald-600" : "bg-zinc-200 dark:bg-zinc-800"
+                                      state === "completed" ? "bg-emerald-600" : "bg-[var(--omlu-muted-surface)] dark:bg-[var(--omlu-muted-surface)]"
                                     }`}
                                   />
                                 )}
@@ -902,16 +904,16 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
                                 <h3
                                   className={`text-sm font-black transition-colors duration-300 ${
                                     state === "current"
-                                      ? "text-zinc-950 dark:text-zinc-50"
+                                      ? "text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-primary)]"
                                       : state === "completed"
-                                      ? "text-zinc-700 dark:text-zinc-300"
-                                      : "text-zinc-400 dark:text-zinc-600"
+                                      ? "text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-secondary)]"
+                                      : "text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)]"
                                   }`}
                                 >
                                   {title}
                                 </h3>
                                 {state !== "future" && (
-                                  <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                                  <p className="mt-1 text-xs text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)] leading-relaxed">
                                     {desc}
                                   </p>
                                 )}
@@ -931,7 +933,7 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
                       >
                         <div>
                           <p className="text-sm font-bold">{item.item_name}</p>
-                          <p className="text-xs font-semibold text-zinc-500">
+                          <p className="text-xs font-semibold text-[var(--omlu-text-secondary)]">
                             ₹{Number(item.unit_price).toFixed(2)} × {item.quantity}
                           </p>
                           {item.item_note && (
@@ -948,13 +950,13 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
                   </div>
 
                   {order.customer_note && (
-                    <div className="mt-4 rounded-2xl bg-zinc-50 p-3 text-xs text-zinc-600 dark:bg-zinc-800/50 dark:text-zinc-300">
+                    <div className="mt-4 rounded-2xl bg-[var(--omlu-muted-surface)] p-3 text-xs text-[var(--omlu-text-secondary)] dark:bg-[var(--omlu-muted-surface)] dark:text-[var(--omlu-text-secondary)]">
                       <span className="font-bold">{t.note}:</span> {order.customer_note}
                     </div>
                   )}
 
-                  <div className="mt-4 flex items-center justify-between border-t border-zinc-100 pt-3 dark:border-zinc-800">
-                    <p className="text-sm font-bold text-zinc-500">{t.subtotal}</p>
+                  <div className="mt-4 flex items-center justify-between border-t border-[var(--omlu-border-strong)] pt-3 dark:border-[var(--omlu-border)]">
+                    <p className="text-sm font-bold text-[var(--omlu-text-secondary)]">{t.subtotal}</p>
                     <p className="text-lg font-black text-orange-700 dark:text-orange-500">
                       ₹{Number(order.subtotal).toFixed(2)}
                     </p>

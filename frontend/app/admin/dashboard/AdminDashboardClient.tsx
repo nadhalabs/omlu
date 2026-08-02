@@ -125,7 +125,7 @@ export default function AdminDashboardClient() {
           <p className="text-[var(--omlu-text-secondary)] text-sm mb-6">{error}</p>
           <button
             onClick={() => void fetchDashboard()}
-            className="px-6 py-2.5 bg-orange-600 hover:bg-orange-700 text-[var(--omlu-text-primary)] font-semibold rounded-xl transition cursor-pointer"
+            className="px-6 py-2.5 bg-orange-600 hover:bg-orange-700 text-[var(--omlu-primary-action-text)] font-semibold rounded-xl transition cursor-pointer"
           >
             Retry
           </button>

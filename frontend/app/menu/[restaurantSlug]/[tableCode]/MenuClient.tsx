@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { PublicThemeControl } from "@/components/PublicThemeControl";
 import Image from "next/image";
 import {
   getPublicMenu,
@@ -584,13 +585,13 @@ export default function MenuClient({
   // Render Loading State
   if (loading && !menuData) {
     return (
-      <div className="min-h-screen bg-zinc-50 px-4 py-5 dark:bg-zinc-950" aria-busy="true" aria-label={t.loadingText}>
+      <div className="min-h-screen bg-[var(--omlu-muted-surface)] px-4 py-5 dark:bg-[var(--omlu-page-background)]" aria-busy="true" aria-label={t.loadingText}>
         <div className="mx-auto max-w-3xl animate-pulse">
-          <div className="h-16 rounded-2xl bg-white dark:bg-zinc-900" />
-          <div className="mt-4 h-12 rounded-2xl bg-zinc-200 dark:bg-zinc-800" />
+          <div className="h-16 rounded-2xl bg-[var(--omlu-primary-surface)] dark:bg-[var(--omlu-primary-surface)]" />
+          <div className="mt-4 h-12 rounded-2xl bg-[var(--omlu-muted-surface)] dark:bg-[var(--omlu-muted-surface)]" />
           <div className="mt-6 grid gap-4 md:grid-cols-2">
             {[1, 2, 3, 4, 5, 6].map((item) => (
-              <div key={item} className="h-32 rounded-2xl bg-white dark:bg-zinc-900" />
+              <div key={item} className="h-32 rounded-2xl bg-[var(--omlu-primary-surface)] dark:bg-[var(--omlu-primary-surface)]" />
             ))}
           </div>
         </div>
@@ -601,10 +602,10 @@ export default function MenuClient({
   // Render Error State
   if (error && !menuData) {
     return (
-      <div className="flex flex-col flex-1 items-center justify-center min-h-screen bg-zinc-50 dark:bg-zinc-950 p-6 text-center">
-        <div className="max-w-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-8 shadow-sm">
+      <div className="flex flex-col flex-1 items-center justify-center min-h-screen bg-[var(--omlu-muted-surface)] dark:bg-[var(--omlu-page-background)] p-6 text-center">
+        <div className="max-w-md bg-[var(--omlu-primary-surface)] dark:bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] rounded-2xl p-8 shadow-sm">
           <div className="text-red-500 text-5xl mb-4">⚠️</div>
-          <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-50 mb-2">
+          <h2 className="text-xl font-bold text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-primary)] mb-2">
             {error === "Restaurant not found" ||
             error === "Restaurant is inactive" ||
             error === "Table not found" ||
@@ -614,7 +615,7 @@ export default function MenuClient({
           </h2>
           <button
             onClick={() => void fetchMenu(true)}
-            className="mt-6 px-6 py-2.5 bg-orange-600 hover:bg-orange-700 active:bg-orange-800 text-white font-semibold rounded-xl transition shadow-sm cursor-pointer"
+            className="mt-6 px-6 py-2.5 bg-orange-600 hover:bg-orange-700 active:bg-orange-800 text-[var(--omlu-primary-action-text)] font-semibold rounded-xl transition shadow-sm cursor-pointer"
           >
             {t.retry}
           </button>
@@ -720,30 +721,33 @@ export default function MenuClient({
   };
 
   return (
-    <div className="flex flex-col flex-1 min-h-screen bg-zinc-50 dark:bg-zinc-950 pb-28 text-zinc-900 dark:text-zinc-100">
+    <div className="flex flex-col flex-1 min-h-screen bg-[var(--omlu-muted-surface)] dark:bg-[var(--omlu-page-background)] pb-28 text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-secondary)]">
       {/* Sticky Top Header */}
-      <header className="sticky top-0 z-40 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800 shadow-xs px-4 py-3 sm:px-6">
+      <header className="sticky top-0 z-40 bg-[var(--omlu-primary-surface)] dark:bg-[var(--omlu-primary-surface)] backdrop-blur-md border-b border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] shadow-xs px-4 py-3 sm:px-6">
         <div className="max-w-3xl mx-auto flex items-center justify-between gap-4">
           <div className="min-w-0">
-            <h1 className="break-words text-xl font-bold text-zinc-950 dark:text-zinc-50">
+            <h1 className="break-words text-xl font-bold text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-primary)]">
               {restaurant.name}
             </h1>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400 font-medium">
+            <p className="text-xs text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)] font-medium">
               {t.table} {table.table_number}
             </p>
           </div>
+          <div className="flex shrink-0 items-center gap-2">
+          <PublicThemeControl />
           {/* Language Selector */}
           <button
             onClick={() => setLanguage(language === "en" ? "ml" : "en")}
-            className="flex items-center gap-1.5 px-3 py-1.5 border border-zinc-200 dark:border-zinc-800 rounded-lg text-sm font-semibold bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 cursor-pointer transition"
+            className="flex items-center gap-1.5 px-3 py-1.5 border border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] rounded-lg text-sm font-semibold bg-[var(--omlu-muted-surface)] dark:bg-[var(--omlu-muted-surface)] hover:bg-[var(--omlu-muted-surface)] dark:hover:bg-[var(--omlu-muted-surface)] cursor-pointer transition"
           >
             🌐 {language === "en" ? "മലയാളം" : "English"}
           </button>
+          </div>
         </div>
       </header>
 
       {/* Floating search and category bar */}
-      <div className="sticky top-[61px] z-30 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800 py-3 px-4 sm:px-6">
+      <div className="sticky top-[61px] z-30 bg-[var(--omlu-primary-surface)] dark:bg-[var(--omlu-primary-surface)] backdrop-blur-md border-b border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] py-3 px-4 sm:px-6">
         <div className="max-w-3xl mx-auto flex flex-col gap-3">
           {/* Search box */}
           {sessionLoading && (
@@ -778,8 +782,8 @@ export default function MenuClient({
 
           {tableOccupied && !participantToken && (
             <section className="rounded-2xl border border-orange-200 bg-orange-50 p-4 dark:border-orange-900/50 dark:bg-orange-950/20" aria-labelledby="join-table-title">
-              <h2 id="join-table-title" className="font-black text-zinc-950 dark:text-white">Table already active</h2>
-              <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-300">Enter the 4-digit table code to join ordering. Ask someone at your table for the code.</p>
+              <h2 id="join-table-title" className="font-black text-[var(--omlu-text-primary)] dark:text-[var(--omlu-primary-action-text)]">Table already active</h2>
+              <p className="mt-1 text-sm text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)]">Enter the 4-digit table code to join ordering. Ask someone at your table for the code.</p>
               <div className="mt-3 flex gap-2">
                 <input
                   value={joinCode}
@@ -789,18 +793,18 @@ export default function MenuClient({
                   maxLength={4}
                   autoComplete="one-time-code"
                   aria-label="4-digit table join code"
-                  className="min-w-0 flex-1 rounded-xl border border-zinc-300 bg-white px-4 py-3 text-center text-lg font-black tracking-[0.35em] text-zinc-950 outline-none focus:ring-2 focus:ring-orange-600"
+                  className="min-w-0 flex-1 rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-4 py-3 text-center text-lg font-black tracking-[0.35em] text-[var(--omlu-text-primary)] outline-none focus:ring-2 focus:ring-orange-600"
                 />
-                <button disabled={joining || joinCode.length !== 4} onClick={handleJoinTable} className="rounded-xl bg-orange-600 px-5 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:text-zinc-600">{joining ? "Joining…" : "Join table"}</button>
+                <button disabled={joining || joinCode.length !== 4} onClick={handleJoinTable} className="rounded-xl bg-orange-600 px-5 py-3 text-sm font-black text-[var(--omlu-primary-action-text)] disabled:cursor-not-allowed disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)]">{joining ? "Joining…" : "Join table"}</button>
               </div>
               {joinError && <p role="alert" className="mt-2 text-sm font-semibold text-red-700 dark:text-red-400">{joinError}</p>}
             </section>
           )}
 
           {!tableOccupied && !participantToken && (
-            <section className="flex items-center justify-between gap-4 rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-              <div><p className="font-black">Ready to order?</p><p className="text-xs text-zinc-500">Start secure ordering for this table.</p></div>
-              <button disabled={joining} onClick={handleStartOrdering} className="shrink-0 rounded-xl bg-orange-600 px-5 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:text-zinc-600">{joining ? "Starting…" : "Start ordering"}</button>
+            <section className="flex items-center justify-between gap-4 rounded-2xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-4 dark:border-[var(--omlu-border)] dark:bg-[var(--omlu-primary-surface)]">
+              <div><p className="font-black">Ready to order?</p><p className="text-xs text-[var(--omlu-text-secondary)]">Start secure ordering for this table.</p></div>
+              <button disabled={joining} onClick={handleStartOrdering} className="shrink-0 rounded-xl bg-orange-600 px-5 py-3 text-sm font-black text-[var(--omlu-primary-action-text)] disabled:cursor-not-allowed disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)]">{joining ? "Starting…" : "Start ordering"}</button>
             </section>
           )}
 
@@ -812,7 +816,7 @@ export default function MenuClient({
 
           {!orderingDisabled && (
             <div className="relative">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-zinc-400">
+              <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-[var(--omlu-text-secondary)]">
                 🔍
               </span>
               <input
@@ -820,7 +824,7 @@ export default function MenuClient({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={t.searchPlaceholder}
-                className="w-full pl-9 pr-4 py-2 bg-zinc-100 dark:bg-zinc-800 border-0 rounded-xl text-sm focus:ring-2 focus:ring-orange-600 outline-none text-zinc-900 dark:text-zinc-100 placeholder-zinc-400"
+                className="w-full pl-9 pr-4 py-2 bg-[var(--omlu-muted-surface)] dark:bg-[var(--omlu-muted-surface)] border-0 rounded-xl text-sm focus:ring-2 focus:ring-orange-600 outline-none text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-secondary)]"
               />
             </div>
           )}
@@ -834,8 +838,8 @@ export default function MenuClient({
                   onClick={() => scrollToCategory(category.id)}
                   className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap cursor-pointer transition ${
                     activeCategory === category.id
-                      ? "bg-orange-600 text-white shadow-xs"
-                      : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                      ? "bg-orange-600 text-[var(--omlu-primary-action-text)] shadow-xs"
+                      : "bg-[var(--omlu-muted-surface)] dark:bg-[var(--omlu-muted-surface)] text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)] hover:bg-[var(--omlu-muted-surface)] dark:hover:bg-[var(--omlu-muted-surface)]"
                   }`}
                 >
                   {getLocalizedText(category.name_en, category.name_ml)}
@@ -851,7 +855,7 @@ export default function MenuClient({
         {error && (
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-800 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200" role="alert">
             <span>Menu refresh failed. Your last loaded menu is still shown.</span>
-            <button type="button" onClick={() => void fetchMenu(false)} className="rounded-xl bg-white px-4 py-2 font-black text-red-800 shadow-sm dark:bg-zinc-900 dark:text-red-200">
+            <button type="button" onClick={() => void fetchMenu(false)} className="rounded-xl bg-[var(--omlu-primary-surface)] px-4 py-2 font-black text-red-800 shadow-sm dark:bg-[var(--omlu-primary-surface)] dark:text-red-200">
               {t.retry}
             </button>
           </div>
@@ -869,10 +873,10 @@ export default function MenuClient({
           </div>
         ) : displayCategories.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
-            <div className="text-zinc-300 dark:text-zinc-700 text-5xl mb-4">
+            <div className="text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-primary)] text-5xl mb-4">
               🍽️
             </div>
-            <p className="text-zinc-500 dark:text-zinc-400 font-medium">
+            <p className="text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)] font-medium">
               {t.noItems}
             </p>
           </div>
@@ -884,7 +888,7 @@ export default function MenuClient({
                 id={`category-${category.id}`}
                 className="scroll-mt-36"
               >
-                <h2 className="text-lg font-bold border-b border-zinc-200 dark:border-zinc-800 pb-2 mb-4 text-orange-700 dark:text-orange-500">
+                <h2 className="text-lg font-bold border-b border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] pb-2 mb-4 text-orange-700 dark:text-orange-500">
                   {getLocalizedText(category.name_en, category.name_ml)}
                 </h2>
 
@@ -898,14 +902,14 @@ export default function MenuClient({
                     return (
                       <div
                         key={item.id}
-                        className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 flex gap-4 shadow-2xs hover:shadow-xs transition"
+                        className="bg-[var(--omlu-primary-surface)] dark:bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] rounded-xl p-4 flex gap-4 shadow-2xs hover:shadow-xs transition"
                       >
                         <div className="flex-1 flex flex-col justify-between min-w-0">
                           <div>
-                            <h3 className="font-bold text-zinc-950 dark:text-zinc-50 truncate">
+                            <h3 className="font-bold text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-primary)] truncate">
                               {getLocalizedText(item.name_en, item.name_ml)}
                             </h3>
-                            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 line-clamp-2">
+                            <p className="text-xs text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)] mt-1 line-clamp-2">
                               {getLocalizedText(
                                 item.description_en || "",
                                 item.description_ml
@@ -923,7 +927,7 @@ export default function MenuClient({
                             ) : cartQty === 0 || isConfigurable ? (
                               <button
                                 onClick={() => addToCart(item)}
-                                className="px-4 py-1.5 bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold rounded-lg cursor-pointer transition shadow-2xs"
+                                className="px-4 py-1.5 bg-orange-600 hover:bg-orange-700 text-[var(--omlu-primary-action-text)] text-xs font-bold rounded-lg cursor-pointer transition shadow-2xs"
                               >
                                 + {isConfigurable ? "Choose" : t.add}
                               </button>
@@ -931,16 +935,16 @@ export default function MenuClient({
                               <div className="flex items-center border border-orange-600 rounded-lg overflow-hidden bg-orange-50/50 dark:bg-orange-950/10">
                                 <button
                                   onClick={() => decrementQty(simpleKey)}
-                                  className="px-2.5 py-1 text-orange-600 font-bold hover:bg-orange-600 hover:text-white transition cursor-pointer text-xs"
+                                  className="px-2.5 py-1 text-orange-600 font-bold hover:bg-orange-600 hover:text-[var(--omlu-primary-action-text)] transition cursor-pointer text-xs"
                                 >
                                   −
                                 </button>
-                                <span className="px-2 text-xs font-bold text-zinc-900 dark:text-zinc-100">
+                                <span className="px-2 text-xs font-bold text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-secondary)]">
                                   {cartQty}
                                 </span>
                                 <button
                                   onClick={() => incrementQty(simpleKey)}
-                                  className="px-2.5 py-1 text-orange-600 font-bold hover:bg-orange-600 hover:text-white transition cursor-pointer text-xs"
+                                  className="px-2.5 py-1 text-orange-600 font-bold hover:bg-orange-600 hover:text-[var(--omlu-primary-action-text)] transition cursor-pointer text-xs"
                                 >
                                   +
                                 </button>
@@ -949,7 +953,7 @@ export default function MenuClient({
                           </div>
                         </div>
                         {item.image_url && (
-                          <div className="relative w-20 h-20 bg-zinc-100 dark:bg-zinc-800 rounded-lg overflow-hidden flex-shrink-0">
+                          <div className="relative w-20 h-20 bg-[var(--omlu-muted-surface)] dark:bg-[var(--omlu-muted-surface)] rounded-lg overflow-hidden flex-shrink-0">
                             <Image
                               src={item.image_url}
                               alt={item.name_en}
@@ -972,10 +976,10 @@ export default function MenuClient({
 
       {/* Sticky Bottom Cart Bar */}
       {totalQty > 0 && !orderingDisabled && (
-        <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-t border-zinc-200 dark:border-zinc-800 shadow-lg px-4 py-4 sm:px-6">
+        <div className="fixed bottom-0 left-0 right-0 z-40 bg-[var(--omlu-primary-surface)] dark:bg-[var(--omlu-primary-surface)] backdrop-blur-md border-t border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] shadow-lg px-4 py-4 sm:px-6">
           <button
             onClick={() => setIsCartOpen(true)}
-            className="max-w-3xl mx-auto flex items-center justify-between w-full bg-orange-600 hover:bg-orange-700 active:bg-orange-800 text-white rounded-2xl px-5 py-4 shadow-md transition cursor-pointer"
+            className="max-w-3xl mx-auto flex items-center justify-between w-full bg-orange-600 hover:bg-orange-700 active:bg-orange-800 text-[var(--omlu-primary-action-text)] rounded-2xl px-5 py-4 shadow-md transition cursor-pointer"
           >
             <div className="flex flex-col text-left">
               <span className="text-xs font-semibold opacity-90 uppercase tracking-wider">
@@ -999,19 +1003,19 @@ export default function MenuClient({
 
       {customisingItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center overscroll-contain bg-black/60 p-4 backdrop-blur-xs">
-          <div className="max-h-[85vh] w-full max-w-lg overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900" role="dialog" aria-modal="true" aria-labelledby="menu-options-title">
-            <div className="flex items-start justify-between gap-4 border-b border-zinc-200 px-6 py-4 dark:border-zinc-800">
+          <div className="max-h-[85vh] w-full max-w-lg overflow-hidden rounded-3xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] shadow-2xl dark:border-[var(--omlu-border)] dark:bg-[var(--omlu-primary-surface)]" role="dialog" aria-modal="true" aria-labelledby="menu-options-title">
+            <div className="flex items-start justify-between gap-4 border-b border-[var(--omlu-border-strong)] px-6 py-4 dark:border-[var(--omlu-border)]">
               <div>
-                <h2 id="menu-options-title" className="break-words text-lg font-black text-zinc-950 dark:text-zinc-50">
+                <h2 id="menu-options-title" className="break-words text-lg font-black text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-primary)]">
                   {getLocalizedText(customisingItem.name_en, customisingItem.name_ml)}
                 </h2>
-                <p className="mt-1 text-xs font-semibold text-zinc-500">
+                <p className="mt-1 text-xs font-semibold text-[var(--omlu-text-secondary)]">
                   Choose required options before adding this item.
                 </p>
               </div>
               <button
                 onClick={() => setCustomisingItem(null)}
-                className="text-sm font-bold text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+                className="text-sm font-bold text-[var(--omlu-text-secondary)] hover:text-[var(--omlu-text-primary)] dark:hover:text-[var(--omlu-text-secondary)]"
               >
                 Close
               </button>
@@ -1023,11 +1027,11 @@ export default function MenuClient({
                 const max = group.maximum_selections;
                 const multi = group.type === "addon" && max !== 1;
                 return (
-                  <section key={group.id} className="rounded-2xl border border-zinc-100 p-4 dark:border-zinc-800">
+                  <section key={group.id} className="rounded-2xl border border-[var(--omlu-border-strong)] p-4 dark:border-[var(--omlu-border)]">
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <h3 className="text-sm font-black text-zinc-900 dark:text-zinc-100">{group.name}</h3>
-                        <p className="text-xs text-zinc-500">
+                        <h3 className="text-sm font-black text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-secondary)]">{group.name}</h3>
+                        <p className="text-xs text-[var(--omlu-text-secondary)]">
                           {min > 0 ? `Choose at least ${min}` : "Optional"}
                           {max ? ` · up to ${max}` : ""}
                         </p>
@@ -1045,8 +1049,8 @@ export default function MenuClient({
                             onClick={() => toggleDraftOption(group.id, option.id, multi)}
                             className={`flex items-center justify-between rounded-xl border px-3 py-3 text-left text-sm transition disabled:opacity-40 ${
                               checked
-                                ? "border-orange-600 bg-orange-50 text-zinc-950 dark:bg-orange-950/20 dark:text-zinc-50"
-                                : "border-zinc-200 bg-zinc-50 text-zinc-800 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-200"
+                                ? "border-orange-600 bg-orange-50 text-[var(--omlu-text-primary)] dark:bg-orange-950/20 dark:text-[var(--omlu-text-primary)]"
+                                : "border-[var(--omlu-border-strong)] bg-[var(--omlu-muted-surface)] text-[var(--omlu-text-primary)] dark:border-[var(--omlu-border)] dark:bg-[var(--omlu-page-background)] dark:text-[var(--omlu-text-secondary)]"
                             }`}
                           >
                             <span className="font-bold">{option.name}</span>
@@ -1059,9 +1063,9 @@ export default function MenuClient({
                 );
               })}
             </div>
-            <div className="border-t border-zinc-200 px-6 py-4 dark:border-zinc-800">
+            <div className="border-t border-[var(--omlu-border-strong)] px-6 py-4 dark:border-[var(--omlu-border)]">
               <div className="mb-3 flex items-center justify-between">
-                <span className="text-sm font-bold text-zinc-500">Item price</span>
+                <span className="text-sm font-bold text-[var(--omlu-text-secondary)]">Item price</span>
                 <span className="text-lg font-black text-orange-600">
                   ₹{optionPrice(customisingItem, draftSelectedOptions).toFixed(2)}
                 </span>
@@ -1073,7 +1077,7 @@ export default function MenuClient({
                   setCustomisingItem(null);
                   setDraftOptions({});
                 }}
-                className="w-full rounded-2xl bg-orange-600 px-5 py-3.5 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-50"
+                className="w-full rounded-2xl bg-orange-600 px-5 py-3.5 text-sm font-black text-[var(--omlu-primary-action-text)] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Add to cart
               </button>
@@ -1085,15 +1089,15 @@ export default function MenuClient({
       {/* Slide-over Cart Modal View */}
       {isCartOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center overscroll-contain bg-black/60 p-4 backdrop-blur-xs">
-          <div className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900" role="dialog" aria-modal="true" aria-labelledby="menu-cart-title">
+          <div className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] shadow-2xl dark:border-[var(--omlu-border)] dark:bg-[var(--omlu-primary-surface)]" role="dialog" aria-modal="true" aria-labelledby="menu-cart-title">
             {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 px-6 py-4">
-              <h2 id="menu-cart-title" className="break-words text-lg font-bold text-zinc-950 dark:text-zinc-50">
+            <div className="flex items-center justify-between border-b border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] px-6 py-4">
+              <h2 id="menu-cart-title" className="break-words text-lg font-bold text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-primary)]">
                 {t.yourCart} ({totalQty})
               </h2>
               <button
                 onClick={() => setIsCartOpen(false)}
-                className="text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 font-semibold cursor-pointer text-sm"
+                className="text-[var(--omlu-text-secondary)] hover:text-[var(--omlu-text-primary)] dark:hover:text-[var(--omlu-text-secondary)] font-semibold cursor-pointer text-sm"
               >
                 {t.close}
               </button>
@@ -1108,7 +1112,7 @@ export default function MenuClient({
               )}
 
               {Object.keys(cart).length === 0 ? (
-                <p className="text-center text-zinc-500 dark:text-zinc-400 font-medium py-8">
+                <p className="text-center text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)] font-medium py-8">
                   {t.emptyCartMsg}
                 </p>
               ) : (
@@ -1123,11 +1127,11 @@ export default function MenuClient({
                     return (
                       <div
                         key={line.key}
-                        className="flex flex-col gap-2 pb-4 border-b border-zinc-100 dark:border-zinc-800/50"
+                        className="flex flex-col gap-2 pb-4 border-b border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)]"
                       >
                         <div className="flex items-start justify-between gap-4">
                           <div>
-                            <h4 className="font-bold text-sm text-zinc-900 dark:text-zinc-50">
+                            <h4 className="font-bold text-sm text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-primary)]">
                               {getLocalizedText(item.name_en, item.name_ml)}
                             </h4>
                             <span className="text-xs text-orange-600 dark:text-orange-500 font-bold">
@@ -1136,7 +1140,7 @@ export default function MenuClient({
                             {labels.length > 0 && (
                               <div className="mt-1 flex flex-col gap-0.5">
                                 {labels.map((label) => (
-                                  <span key={label} className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                                  <span key={label} className="text-[11px] text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)]">
                                     {label}
                                   </span>
                                 ))}
@@ -1144,23 +1148,23 @@ export default function MenuClient({
                             )}
                           </div>
                           <div className="flex items-center gap-4">
-                            <span className="font-bold text-sm text-zinc-950 dark:text-zinc-50">
+                            <span className="font-bold text-sm text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-primary)]">
                               ₹{itemTotal.toFixed(2)}
                             </span>
                             {/* Qty controls */}
-                            <div className="flex items-center border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-hidden bg-zinc-50 dark:bg-zinc-800">
+                            <div className="flex items-center border border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] rounded-lg overflow-hidden bg-[var(--omlu-muted-surface)] dark:bg-[var(--omlu-muted-surface)]">
                               <button
                                 onClick={() => decrementQty(line.key)}
-                                className="px-2 py-0.5 text-zinc-600 dark:text-zinc-400 font-bold hover:bg-zinc-200 dark:hover:bg-zinc-700 cursor-pointer text-sm"
+                                className="px-2 py-0.5 text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)] font-bold hover:bg-[var(--omlu-muted-surface)] dark:hover:bg-[var(--omlu-muted-surface)] cursor-pointer text-sm"
                               >
                                 −
                               </button>
-                              <span className="px-2 text-xs font-bold text-zinc-900 dark:text-zinc-100">
+                              <span className="px-2 text-xs font-bold text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-secondary)]">
                                 {line.quantity}
                               </span>
                               <button
                                 onClick={() => incrementQty(line.key)}
-                                className="px-2 py-0.5 text-zinc-600 dark:text-zinc-400 font-bold hover:bg-zinc-200 dark:hover:bg-zinc-700 cursor-pointer text-sm"
+                                className="px-2 py-0.5 text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)] font-bold hover:bg-[var(--omlu-muted-surface)] dark:hover:bg-[var(--omlu-muted-surface)] cursor-pointer text-sm"
                               >
                                 +
                               </button>
@@ -1182,7 +1186,7 @@ export default function MenuClient({
                             handleItemNoteChange(line.key, e.target.value)
                           }
                           placeholder={t.itemNotePlaceholder}
-                          className="w-full px-3 py-1.5 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-100 dark:border-zinc-800/30 rounded-lg text-xs outline-none focus:ring-1 focus:ring-orange-600"
+                          className="w-full px-3 py-1.5 bg-[var(--omlu-muted-surface)] dark:bg-[var(--omlu-muted-surface)] border border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] rounded-lg text-xs outline-none focus:ring-1 focus:ring-orange-600"
                         />
                       </div>
                     );
@@ -1193,7 +1197,7 @@ export default function MenuClient({
               {/* General Order Instructions */}
               {Object.keys(cart).length > 0 && (
                 <div className="mt-2">
-                  <h4 className="font-bold text-xs text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
+                  <h4 className="font-bold text-xs text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)] uppercase tracking-wider mb-2">
                     {t.customerNote}
                   </h4>
                   <textarea
@@ -1201,7 +1205,7 @@ export default function MenuClient({
                     value={customerNote}
                     onChange={(e) => setCustomerNote(e.target.value)}
                     placeholder={t.customerNote}
-                    className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm outline-none focus:ring-2 focus:ring-orange-600 text-zinc-900 dark:text-zinc-100"
+                    className="w-full px-3 py-2 bg-[var(--omlu-muted-surface)] dark:bg-[var(--omlu-muted-surface)] border border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] rounded-xl text-sm outline-none focus:ring-2 focus:ring-orange-600 text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-secondary)]"
                   />
                 </div>
               )}
@@ -1209,9 +1213,9 @@ export default function MenuClient({
 
             {/* Modal Footer */}
             {Object.keys(cart).length > 0 && (
-              <div className="border-t border-zinc-200 dark:border-zinc-800 px-6 py-4 flex flex-col gap-4 bg-zinc-50 dark:bg-zinc-900/50">
+              <div className="border-t border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] px-6 py-4 flex flex-col gap-4 bg-[var(--omlu-muted-surface)] dark:bg-[var(--omlu-primary-surface)]">
                 <div className="flex items-center justify-between">
-                  <span className="text-zinc-500 dark:text-zinc-400 font-medium">
+                  <span className="text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)] font-medium">
                     {t.subtotal}
                   </span>
                   <span className="text-lg font-black text-orange-600 dark:text-orange-500">
@@ -1221,9 +1225,9 @@ export default function MenuClient({
                 <button
                   disabled={isPlacingOrder || (!!currentSession && currentSession.status !== "open")}
                   onClick={handlePlaceOrder}
-                  className={`w-full py-3.5 rounded-2xl font-bold text-white text-center shadow-md transition cursor-pointer flex items-center justify-center gap-2 ${
+                  className={`w-full py-3.5 rounded-2xl font-bold text-[var(--omlu-primary-action-text)] text-center shadow-md transition cursor-pointer flex items-center justify-center gap-2 ${
                     isPlacingOrder
-                      ? "bg-zinc-400 dark:bg-zinc-700 cursor-not-allowed"
+                      ? "bg-[var(--omlu-muted-surface)] dark:bg-[var(--omlu-muted-surface)] cursor-not-allowed"
                       : "bg-orange-600 hover:bg-orange-700 active:bg-orange-800"
                   }`}
                 >

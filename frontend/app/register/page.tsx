@@ -5,6 +5,7 @@ import React, { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FormToast } from "@/components/FormToast";
 import { PasswordInput } from "@/components/PasswordInput";
+import { PublicThemeControl } from "@/components/PublicThemeControl";
 import { ApiError, registerRestaurant, staffLogin } from "@/lib/api";
 import {
   backendFieldName,
@@ -112,7 +113,7 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-50 px-4 py-10 text-zinc-950">
+    <div className="min-h-screen bg-[var(--omlu-muted-surface)] px-4 py-10 text-[var(--omlu-text-primary)]">
       <FormToast message={toast} onDismiss={() => setToast(null)} />
       <main className="mx-auto w-full max-w-4xl">
         <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -122,9 +123,7 @@ export default function RegisterPage() {
             </Link>
             <h1 className="mt-3 text-3xl font-black tracking-tight">Create Restaurant</h1>
           </div>
-          <Link href="/login" className="text-sm font-bold text-zinc-700 underline underline-offset-4">
-            Back to Login
-          </Link>
+          <div className="flex items-center gap-3"><PublicThemeControl /><Link href="/login" className="text-sm font-bold text-[var(--omlu-text-primary)] underline underline-offset-4">Back to Login</Link></div>
         </div>
 
         {error && (
@@ -133,7 +132,7 @@ export default function RegisterPage() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
+        <form onSubmit={handleSubmit} className="rounded-lg border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-6 shadow-sm">
           <div className="grid gap-8 lg:grid-cols-2">
             <section>
               <h2 className="text-lg font-black">Restaurant</h2>
@@ -158,7 +157,7 @@ export default function RegisterPage() {
             </section>
           </div>
 
-          <label className="mt-6 flex items-start gap-3 text-sm font-semibold text-zinc-700">
+          <label className="mt-6 flex items-start gap-3 text-sm font-semibold text-[var(--omlu-text-primary)]">
             <input
               name="accept_terms"
               type="checkbox"
@@ -176,11 +175,11 @@ export default function RegisterPage() {
             <button
               type="submit"
               disabled={loading}
-              className="h-12 rounded-lg bg-zinc-950 px-6 text-sm font-bold text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-300"
+              className="h-12 rounded-lg bg-[var(--omlu-page-background)] px-6 text-sm font-bold text-[var(--omlu-primary-action-text)] transition hover:bg-[var(--omlu-muted-surface)] disabled:cursor-not-allowed disabled:bg-[var(--omlu-muted-surface)]"
             >
               {loading ? "Creating account..." : "Create account"}
             </button>
-            <p className="text-sm text-zinc-500">
+            <p className="text-sm text-[var(--omlu-text-secondary)]">
               Staff and kitchen users are added later by an owner or admin.
             </p>
           </div>
@@ -229,11 +228,11 @@ function TextField({
         autoComplete={autoComplete}
         aria-invalid={Boolean(error)}
         className={`h-12 rounded-lg border px-4 text-sm font-medium outline-none transition focus:border-orange-600 ${
-          error ? "border-red-500" : "border-zinc-300"
+          error ? "border-red-500" : "border-[var(--omlu-border-strong)]"
         } ${disabled ? "cursor-not-allowed opacity-70" : ""}`}
         required
       />
-      {helperText && <span className="text-xs font-medium text-zinc-500">{helperText}</span>}
+      {helperText && <span className="text-xs font-medium text-[var(--omlu-text-secondary)]">{helperText}</span>}
       {error && <span className="text-xs font-semibold text-red-600">{error}</span>}
     </label>
   );

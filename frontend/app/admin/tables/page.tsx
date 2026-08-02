@@ -280,7 +280,7 @@ export default function AdminTablesPage() {
               <button
                 type="submit"
                 disabled={saving}
-                className="min-h-11 self-start rounded-xl bg-orange-600 px-5 py-2.5 text-sm font-black text-[var(--omlu-text-primary)] transition hover:bg-orange-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)] sm:w-auto"
+                className="min-h-11 self-start rounded-xl bg-orange-600 px-5 py-2.5 text-sm font-black text-[var(--omlu-primary-action-text)] transition hover:bg-orange-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)] sm:w-auto"
               >
                 {saving ? "Creating..." : "Create Table"}
               </button>
@@ -361,7 +361,7 @@ export default function AdminTablesPage() {
                           href={t.public_menu_url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="min-h-11 rounded-xl bg-orange-600 px-4 py-3 text-center text-xs font-black text-[var(--omlu-text-primary)] transition hover:bg-orange-700 focus-visible:outline-2 focus-visible:outline-orange-500"
+                          className="min-h-11 rounded-xl bg-orange-600 px-4 py-3 text-center text-xs font-black text-[var(--omlu-primary-action-text)] transition hover:bg-orange-700 focus-visible:outline-2 focus-visible:outline-orange-500"
                         >
                           Open public menu
                         </a>
@@ -412,7 +412,7 @@ export default function AdminTablesPage() {
                 <button
                   type="submit"
                   disabled={editSaving}
-                  className="flex-1 py-2.5 bg-orange-600 hover:bg-orange-700 text-[var(--omlu-text-primary)] font-bold rounded-xl cursor-pointer text-xs disabled:cursor-not-allowed disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)]"
+                  className="flex-1 py-2.5 bg-orange-600 hover:bg-orange-700 text-[var(--omlu-primary-action-text)] font-bold rounded-xl cursor-pointer text-xs disabled:cursor-not-allowed disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)]"
                 >
                   {editSaving ? "Saving..." : "Save Changes"}
                 </button>

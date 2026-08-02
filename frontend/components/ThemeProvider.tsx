@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
 export const THEME_STORAGE_KEY = "omlu_theme";
 export const THEME_PREFERENCES = ["light", "dark", "system"] as const;
@@ -14,6 +14,7 @@ type ThemeContextValue = {
 };
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
+let inMemoryPreference: ThemePreference = "system";
 
 function isThemePreference(value: string | null): value is ThemePreference {
   return value === "light" || value === "dark" || value === "system";
@@ -23,16 +24,34 @@ function systemTheme(): ResolvedTheme {
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
+function getPreferenceSnapshot(): ThemePreference {
+  try {
+    const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+    inMemoryPreference = isThemePreference(stored) ? stored : inMemoryPreference;
+    return inMemoryPreference;
+  } catch {
+    return inMemoryPreference;
+  }
+}
+
+function getServerPreferenceSnapshot(): ThemePreference {
+  return "system";
+}
+
+function subscribePreference(onChange: () => void) {
+  const handleStorage = (event: StorageEvent) => {
+    if (event.key === THEME_STORAGE_KEY) onChange();
+  };
+  window.addEventListener("storage", handleStorage);
+  window.addEventListener("omlu-theme-change", onChange);
+  return () => {
+    window.removeEventListener("storage", handleStorage);
+    window.removeEventListener("omlu-theme-change", onChange);
+  };
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [preference, setPreferenceState] = useState<ThemePreference>(() => {
-    if (typeof window === "undefined") return "system";
-    try {
-      const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
-      return isThemePreference(stored) ? stored : "system";
-    } catch {
-      return "system";
-    }
-  });
+  const preference = useSyncExternalStore(subscribePreference, getPreferenceSnapshot, getServerPreferenceSnapshot);
   const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>(() => {
     if (typeof window === "undefined") return "light";
     return preference === "system" ? systemTheme() : preference;
@@ -53,12 +72,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, [preference]);
 
   const setPreference = useCallback((next: ThemePreference) => {
-    setPreferenceState(next);
+    inMemoryPreference = next;
     try {
       window.localStorage.setItem(THEME_STORAGE_KEY, next);
     } catch {
       // The selected theme still applies for this session when storage is unavailable.
     }
+    window.dispatchEvent(new Event("omlu-theme-change"));
   }, []);
 
   const value = useMemo(() => ({ preference, resolvedTheme, setPreference }), [preference, resolvedTheme, setPreference]);

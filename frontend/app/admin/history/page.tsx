@@ -46,7 +46,7 @@ export default async function HistoryPage({
                 aria-current={isActive ? "page" : undefined}
                 className={`min-h-11 flex-1 whitespace-nowrap rounded-lg px-5 py-2.5 text-center text-sm font-bold transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 sm:flex-none ${
                   isActive
-                    ? "bg-orange-600 text-[var(--omlu-text-primary)]"
+                    ? "bg-orange-600 text-[var(--omlu-primary-action-text)]"
                     : "text-[var(--omlu-text-secondary)] hover:bg-[var(--omlu-primary-surface)] hover:text-[var(--omlu-text-secondary)]"
                 }`}
               >

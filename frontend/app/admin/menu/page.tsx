@@ -430,7 +430,7 @@ export default function AdminMenuPage() {
       <header className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
         <div><h1 className="text-3xl font-black tracking-tight text-[var(--omlu-text-primary)]">Menu Management</h1><p className="mt-1.5 text-sm font-medium text-[var(--omlu-text-secondary)]">Organize categories and configure dishes served to customers.</p></div>
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-          <button onClick={() => openItemModal("create")} disabled={categories.length === 0} className="min-h-11 rounded-xl bg-orange-600 px-5 py-2.5 text-sm font-black text-[var(--omlu-text-primary)] transition hover:bg-orange-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)]">Add item</button>
+          <button onClick={() => openItemModal("create")} disabled={categories.length === 0} className="min-h-11 rounded-xl bg-orange-600 px-5 py-2.5 text-sm font-black text-[var(--omlu-primary-action-text)] transition hover:bg-orange-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)]">Add item</button>
           <button onClick={() => setImportMenuOpen(true)} className="min-h-11 rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-5 py-2.5 text-sm font-bold text-[var(--omlu-text-primary)] transition hover:bg-[var(--omlu-muted-surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500">Import menu</button>
         </div>
       </header>
@@ -655,7 +655,7 @@ export default function AdminMenuPage() {
             <p className="mt-3 text-sm leading-6 text-[var(--omlu-text-secondary)]">{categoryDeleteModal.mode === "delete_items" ? "These items will be permanently removed from the active menu. Historical orders, bills, Quick Sales, financial totals, and performance records will remain unchanged." : "All current items will move to the selected category. Their pricing, availability, options, and historical category snapshots will remain unchanged."}</p>
             {categoryDeleteError && <div className="mt-4 rounded-xl border border-red-900 bg-red-950/40 p-3 text-sm font-bold text-red-300">{categoryDeleteError}</div>}
             {categoryDeleteModal.mode === "delete_items" ? <label className="mt-5 block text-xs font-bold text-[var(--omlu-text-secondary)]">Type <span className="text-[var(--omlu-text-primary)]">{categoryDeleteModal.category.name_en}</span> to confirm<input value={categoryDeleteText} onChange={(event) => setCategoryDeleteText(event.target.value)} autoComplete="off" className="mt-2 min-h-11 w-full rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] px-3 text-sm text-[var(--omlu-text-primary)] outline-none focus:border-red-500" /></label> : <label className="mt-5 block text-xs font-bold text-[var(--omlu-text-secondary)]">Destination category<select value={destinationCategoryId} onChange={(event) => setDestinationCategoryId(event.target.value)} className="mt-2 min-h-11 w-full rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] px-3 text-sm text-[var(--omlu-text-primary)]"><option value="">Choose category…</option>{categories.filter((category) => category.id !== categoryDeleteModal.category.id).map((category) => <option key={category.id} value={category.id}>{category.name_en}</option>)}</select></label>}
-            <div className="mt-6 flex gap-3"><button type="button" disabled={categoryDeleting} onClick={() => setCategoryDeleteModal(null)} className="min-h-11 flex-1 rounded-xl bg-[var(--omlu-muted-surface)] px-4 text-sm font-bold text-[var(--omlu-text-secondary)]">Cancel</button><button type="button" disabled={categoryDeleting || (categoryDeleteModal.mode === "delete_items" ? categoryDeleteText !== categoryDeleteModal.category.name_en : !destinationCategoryId)} onClick={() => void handlePopulatedCategoryDelete()} className="min-h-11 flex-1 rounded-xl bg-red-700 px-4 text-sm font-black text-[var(--omlu-text-primary)] disabled:cursor-not-allowed disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)]">{categoryDeleting ? "Working…" : categoryDeleteModal.mode === "delete_items" ? "Delete category and items" : "Move items and delete"}</button></div>
+            <div className="mt-6 flex gap-3"><button type="button" disabled={categoryDeleting} onClick={() => setCategoryDeleteModal(null)} className="min-h-11 flex-1 rounded-xl bg-[var(--omlu-muted-surface)] px-4 text-sm font-bold text-[var(--omlu-text-secondary)]">Cancel</button><button type="button" disabled={categoryDeleting || (categoryDeleteModal.mode === "delete_items" ? categoryDeleteText !== categoryDeleteModal.category.name_en : !destinationCategoryId)} onClick={() => void handlePopulatedCategoryDelete()} className="min-h-11 flex-1 rounded-xl bg-red-700 px-4 text-sm font-black text-[var(--omlu-strong-action-text)] disabled:cursor-not-allowed disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)]">{categoryDeleting ? "Working…" : categoryDeleteModal.mode === "delete_items" ? "Delete category and items" : "Move items and delete"}</button></div>
           </div>
         </div>
       )}
@@ -684,7 +684,7 @@ export default function AdminMenuPage() {
                   value={catNameEn}
                   onChange={(e) => setCatNameEn(e.target.value)}
                   placeholder="e.g. Starters"
-                  className="w-full px-4 py-2.5 bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border)] focus:border-orange-600 rounded-xl text-sm outline-none transition text-[var(--omlu-text-primary)] placeholder-zinc-700"
+                  className="w-full px-4 py-2.5 bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border)] focus:border-orange-600 rounded-xl text-sm outline-none transition text-[var(--omlu-text-primary)]"
                 />
               </div>
 
@@ -697,7 +697,7 @@ export default function AdminMenuPage() {
                   value={catNameMl}
                   onChange={(e) => setCatNameMl(e.target.value)}
                   placeholder="e.g. സ്റ്റാർട്ടേഴ്സ്"
-                  className="w-full px-4 py-2.5 bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border)] focus:border-orange-600 rounded-xl text-sm outline-none transition text-[var(--omlu-text-primary)] placeholder-zinc-700"
+                  className="w-full px-4 py-2.5 bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border)] focus:border-orange-600 rounded-xl text-sm outline-none transition text-[var(--omlu-text-primary)]"
                 />
               </div>
 
@@ -711,7 +711,7 @@ export default function AdminMenuPage() {
                   onChange={(e) => setCatDisplayOrder(Number(e.target.value))}
                   placeholder="0"
                   min="0"
-                  className="w-full px-4 py-2.5 bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border)] focus:border-orange-600 rounded-xl text-sm outline-none transition text-[var(--omlu-text-primary)] placeholder-zinc-700"
+                  className="w-full px-4 py-2.5 bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border)] focus:border-orange-600 rounded-xl text-sm outline-none transition text-[var(--omlu-text-primary)]"
                 />
               </div>
 
@@ -739,7 +739,7 @@ export default function AdminMenuPage() {
                 <button
                   type="submit"
                   disabled={catSaving}
-                  className="flex-1 py-2.5 bg-orange-600 hover:bg-orange-700 text-[var(--omlu-text-primary)] font-bold rounded-xl cursor-pointer text-xs disabled:opacity-50"
+                  className="flex-1 py-2.5 bg-orange-600 hover:bg-orange-700 text-[var(--omlu-primary-action-text)] font-bold rounded-xl cursor-pointer text-xs disabled:opacity-50"
                 >
                   {catSaving ? "Saving..." : "Save Category"}
                 </button>
@@ -774,7 +774,7 @@ export default function AdminMenuPage() {
                     value={itemNameEn}
                     onChange={(e) => setItemNameEn(e.target.value)}
                     placeholder="e.g. Chicken Biriyani"
-                    className="w-full px-4 py-2.5 bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border)] focus:border-orange-600 rounded-xl text-xs outline-none transition text-[var(--omlu-text-primary)] placeholder-zinc-700"
+                    className="w-full px-4 py-2.5 bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border)] focus:border-orange-600 rounded-xl text-xs outline-none transition text-[var(--omlu-text-primary)]"
                   />
                 </div>
 
@@ -787,7 +787,7 @@ export default function AdminMenuPage() {
                     value={itemNameMl}
                     onChange={(e) => setItemNameMl(e.target.value)}
                     placeholder="e.g. ചിക്കൻ ബിരിയാണി"
-                    className="w-full px-4 py-2.5 bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border)] focus:border-orange-600 rounded-xl text-xs outline-none transition text-[var(--omlu-text-primary)] placeholder-zinc-700"
+                    className="w-full px-4 py-2.5 bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border)] focus:border-orange-600 rounded-xl text-xs outline-none transition text-[var(--omlu-text-primary)]"
                   />
                 </div>
               </div>
@@ -819,7 +819,7 @@ export default function AdminMenuPage() {
                     value={itemPrice}
                     onChange={(e) => setItemPrice(e.target.value)}
                     placeholder="0.00"
-                    className="w-full px-4 py-2.5 bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border)] focus:border-orange-600 rounded-xl text-xs outline-none transition text-[var(--omlu-text-primary)] placeholder-zinc-700"
+                    className="w-full px-4 py-2.5 bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border)] focus:border-orange-600 rounded-xl text-xs outline-none transition text-[var(--omlu-text-primary)]"
                   />
                 </div>
               </div>
@@ -834,7 +834,7 @@ export default function AdminMenuPage() {
                     onChange={(e) => setItemDescriptionEn(e.target.value)}
                     placeholder="Brief description in English..."
                     rows={2}
-                    className="w-full px-4 py-2.5 bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border)] focus:border-orange-600 rounded-xl text-xs outline-none transition text-[var(--omlu-text-primary)] placeholder-zinc-700 resize-none"
+                    className="w-full px-4 py-2.5 bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border)] focus:border-orange-600 rounded-xl text-xs outline-none transition text-[var(--omlu-text-primary)] resize-none"
                   />
                 </div>
 
@@ -847,7 +847,7 @@ export default function AdminMenuPage() {
                     onChange={(e) => setItemDescriptionMl(e.target.value)}
                     placeholder="വിവരണം മലയാളത്തിൽ..."
                     rows={2}
-                    className="w-full px-4 py-2.5 bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border)] focus:border-orange-600 rounded-xl text-xs outline-none transition text-[var(--omlu-text-primary)] placeholder-zinc-700 resize-none"
+                    className="w-full px-4 py-2.5 bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border)] focus:border-orange-600 rounded-xl text-xs outline-none transition text-[var(--omlu-text-primary)] resize-none"
                   />
                 </div>
               </div>
@@ -862,7 +862,7 @@ export default function AdminMenuPage() {
                     value={itemImageUrl}
                     onChange={(e) => setItemImageUrl(e.target.value)}
                     placeholder="e.g. http://images.com/dish.jpg"
-                    className="w-full px-4 py-2.5 bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border)] focus:border-orange-600 rounded-xl text-xs outline-none transition text-[var(--omlu-text-primary)] placeholder-zinc-700"
+                    className="w-full px-4 py-2.5 bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border)] focus:border-orange-600 rounded-xl text-xs outline-none transition text-[var(--omlu-text-primary)]"
                   />
                 </div>
 
@@ -876,7 +876,7 @@ export default function AdminMenuPage() {
                     onChange={(e) => setItemDisplayOrder(Number(e.target.value))}
                     placeholder="0"
                     min="0"
-                    className="w-full px-4 py-2.5 bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border)] focus:border-orange-600 rounded-xl text-xs outline-none transition text-[var(--omlu-text-primary)] placeholder-zinc-700"
+                    className="w-full px-4 py-2.5 bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border)] focus:border-orange-600 rounded-xl text-xs outline-none transition text-[var(--omlu-text-primary)]"
                   />
                 </div>
               </div>
@@ -905,7 +905,7 @@ export default function AdminMenuPage() {
                 <button
                   type="submit"
                   disabled={itemSaving}
-                  className="flex-1 py-2.5 bg-orange-600 hover:bg-orange-700 text-[var(--omlu-text-primary)] font-bold rounded-xl cursor-pointer text-xs disabled:opacity-50"
+                  className="flex-1 py-2.5 bg-orange-600 hover:bg-orange-700 text-[var(--omlu-primary-action-text)] font-bold rounded-xl cursor-pointer text-xs disabled:opacity-50"
                 >
                   {itemSaving ? "Saving..." : "Save Menu Item"}
                 </button>

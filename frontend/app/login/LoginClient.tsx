@@ -5,6 +5,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FormToast } from "@/components/FormToast";
 import { PasswordInput } from "@/components/PasswordInput";
+import { PublicThemeControl } from "@/components/PublicThemeControl";
 import { staffLogin, ApiError } from "@/lib/api";
 import { FieldErrors, firstError, focusField, validateLogin } from "@/lib/formValidation";
 import { roleHomePath } from "@/lib/roleRoutes";
@@ -101,10 +102,11 @@ export default function LoginClient() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 px-4 py-12 text-zinc-950">
+    <div className="flex min-h-screen items-center justify-center bg-[var(--omlu-muted-surface)] px-4 py-12 text-[var(--omlu-text-primary)]">
       <FormToast message={toast} onDismiss={() => setToast(null)} />
       <div className="flex w-full max-w-md flex-col gap-4 lg:max-w-4xl lg:flex-row lg:items-center">
-      <main className="w-full rounded-lg border border-zinc-200 bg-white p-8 shadow-sm lg:flex-1">
+      <main className="w-full rounded-lg border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-8 shadow-sm lg:flex-1">
+        <div className="mb-2 flex justify-end"><PublicThemeControl /></div>
         <div className="mb-8">
           <Link href="/" className="text-sm font-black uppercase tracking-widest text-orange-700">
             OMLU
@@ -134,7 +136,7 @@ export default function LoginClient() {
               autoComplete="organization"
               aria-invalid={Boolean(fieldErrors.restaurant_slug)}
               className={`h-12 rounded-lg border px-4 text-sm font-medium outline-none transition focus:border-orange-600 ${
-                fieldErrors.restaurant_slug ? "border-red-500" : "border-zinc-300"
+                fieldErrors.restaurant_slug ? "border-red-500" : "border-[var(--omlu-border-strong)]"
               }`}
             />
             {fieldErrors.restaurant_slug && <span className="text-xs font-semibold text-red-600">{fieldErrors.restaurant_slug}</span>}
@@ -155,7 +157,7 @@ export default function LoginClient() {
               autoComplete="username"
               aria-invalid={Boolean(fieldErrors.login)}
               className={`h-12 rounded-lg border px-4 text-sm font-medium outline-none transition focus:border-orange-600 ${
-                fieldErrors.login ? "border-red-500" : "border-zinc-300"
+                fieldErrors.login ? "border-red-500" : "border-[var(--omlu-border-strong)]"
               }`}
             />
             {fieldErrors.login && <span className="text-xs font-semibold text-red-600">{fieldErrors.login}</span>}
@@ -177,15 +179,15 @@ export default function LoginClient() {
           <button
             type="submit"
             disabled={loading}
-            className="mt-2 h-12 rounded-lg bg-orange-500 px-6 text-sm font-bold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-zinc-300"
+            className="mt-2 h-12 rounded-lg bg-orange-500 px-6 text-sm font-bold text-[var(--omlu-primary-action-text)] transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-[var(--omlu-muted-surface)]"
           >
             {loading ? "Signing in..." : "Login"}
           </button>
         </form>
 
-        <p className="mt-7 text-center text-sm text-zinc-600">
+        <p className="mt-7 text-center text-sm text-[var(--omlu-text-secondary)]">
           New to OMLU?{" "}
-          <Link href="/register" className="font-bold text-zinc-950 underline underline-offset-4">
+          <Link href="/register" className="font-bold text-[var(--omlu-text-primary)] underline underline-offset-4">
             Create Restaurant
           </Link>
         </p>

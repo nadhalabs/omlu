@@ -99,7 +99,7 @@ export default function PendingPaymentsClient() {
     {error && <div className="rounded-xl border border-red-800 bg-red-950/30 p-3 text-sm text-red-300">{error}</div>}
     <nav className="flex flex-wrap gap-2">{([
       ["all", "All"], ["bill_requested", "Bill Requested"], ["ready_for_payment", "Ready for Payment"], ["payment_pending", "Payment Pending"],
-    ] as const).map(([value, label]) => <button key={value} onClick={() => setTab(value)} className={`rounded-xl px-4 py-2 text-sm font-black ${tab === value ? "bg-orange-600 text-[var(--omlu-text-primary)]" : "bg-[var(--omlu-muted-surface)] text-[var(--omlu-text-secondary)]"}`}>{label}</button>)}</nav>
+    ] as const).map(([value, label]) => <button key={value} onClick={() => setTab(value)} className={`rounded-xl px-4 py-2 text-sm font-black ${tab === value ? "bg-orange-600 text-[var(--omlu-primary-action-text)]" : "bg-[var(--omlu-muted-surface)] text-[var(--omlu-text-secondary)]"}`}>{label}</button>)}</nav>
     {loading ? <div className="h-48 animate-pulse rounded-2xl bg-[var(--omlu-muted-surface)]" /> : items.length === 0 ?
       <div className="rounded-2xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-16 text-center"><p className="text-4xl">✓</p><h2 className="mt-3 font-black">No payments waiting</h2></div> :
       <div className="grid gap-4 xl:grid-cols-2">{visibleItems.map((item) => <article id={`bill-${item.bill_number}`} key={item.bill_id} className={`min-w-0 rounded-2xl border bg-[var(--omlu-primary-surface)] p-5 ${selectedBill === item.bill_number ? "border-orange-500 ring-2 ring-orange-500/20" : "border-[var(--omlu-border)]"}`}>
@@ -116,10 +116,10 @@ export default function PendingPaymentsClient() {
         </dl>
         <div className="mt-5 flex flex-wrap gap-2">
           <Link href={`/bill/${encodeURIComponent(item.session_token)}`} className="rounded-xl border border-[var(--omlu-border)] px-4 py-2 text-sm font-bold">View full bill</Link>
-          {item.stage === "bill_requested" && <button onClick={() => void issue(item)} className="rounded-xl bg-orange-600 px-4 py-2 text-sm font-black text-[var(--omlu-text-primary)]">Issue Bill</button>}
+          {item.stage === "bill_requested" && <button onClick={() => void issue(item)} className="rounded-xl bg-orange-600 px-4 py-2 text-sm font-black text-[var(--omlu-primary-action-text)]">Issue Bill</button>}
           {item.stage !== "bill_requested" && <>
-            <button onClick={() => void openPaymentDialog(item, "counter_cash")} className="rounded-xl bg-emerald-700 px-4 py-2 text-sm font-black text-[var(--omlu-text-primary)]">Confirm Cash</button>
-            <button onClick={() => void openPaymentDialog(item, "counter_upi")} className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-black text-[var(--omlu-text-primary)]">Confirm UPI</button>
+            <button onClick={() => void openPaymentDialog(item, "counter_cash")} className="rounded-xl bg-emerald-700 px-4 py-2 text-sm font-black text-[var(--omlu-strong-action-text)]">Confirm Cash</button>
+            <button onClick={() => void openPaymentDialog(item, "counter_upi")} className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-black text-[var(--omlu-strong-action-text)]">Confirm UPI</button>
           </>}
         </div>
       </article>)}</div>}
