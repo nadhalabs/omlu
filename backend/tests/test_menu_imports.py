@@ -653,3 +653,289 @@ async def test_extract_menu_end_to_end_with_mocked_gemini_empty_groups(monkeypat
     assert len(result.categories[0].items) == 6
     for item in result.categories[0].items:
         assert len(item.option_groups) == 0
+
+
+def test_normalize_extraction_payload_non_canonical_variant_canonicalization():
+    from app.services.menu_extraction import _normalize_extraction_payload
+    from app.schemas.menu_import import MenuExtractionResult
+
+    payload = {
+        "categories": [
+            {
+                "name": "Beverages",
+                "items": [
+                    {
+                        "name": "Tea",
+                        "price": None,
+                        "option_groups": [
+                            {
+                                "name": "Choice",
+                                "type": "variant",
+                                "required": False,
+                                "minimum_selections": 0,
+                                "maximum_selections": 1,
+                                "options": [
+                                    {"name": "Small", "final_price": 15.0},
+                                    {"name": "Large", "final_price": 25.0},
+                                ],
+                            }
+                        ],
+                    }
+                ],
+            }
+        ]
+    }
+
+    normalized = _normalize_extraction_payload(payload)
+    group = normalized["categories"][0]["items"][0]["option_groups"][0]
+    assert group["required"] is True
+    assert group["minimum_selections"] == 1
+    assert group["maximum_selections"] == 1
+
+    result = MenuExtractionResult.model_validate(normalized)
+    assert result.categories[0].items[0].option_groups[0].required is True
+    assert result.categories[0].items[0].option_groups[0].minimum_selections == 1
+    assert result.categories[0].items[0].option_groups[0].maximum_selections == 1
+
+
+def test_normalize_extraction_payload_canonical_variant_remains_unchanged():
+    from app.services.menu_extraction import _normalize_extraction_payload
+    from app.schemas.menu_import import MenuExtractionResult
+
+    payload = {
+        "categories": [
+            {
+                "name": "Beverages",
+                "items": [
+                    {
+                        "name": "Coffee",
+                        "price": None,
+                        "option_groups": [
+                            {
+                                "name": "Size",
+                                "type": "variant",
+                                "required": True,
+                                "minimum_selections": 1,
+                                "maximum_selections": 1,
+                                "options": [
+                                    {"name": "Regular", "final_price": 40.0},
+                                ],
+                            }
+                        ],
+                    }
+                ],
+            }
+        ]
+    }
+
+    normalized = _normalize_extraction_payload(payload)
+    result = MenuExtractionResult.model_validate(normalized)
+    og = result.categories[0].items[0].option_groups[0]
+    assert og.required is True
+    assert og.minimum_selections == 1
+    assert og.maximum_selections == 1
+
+
+def test_normalize_extraction_payload_optional_addon_remains_unchanged():
+    from app.services.menu_extraction import _normalize_extraction_payload
+    from app.schemas.menu_import import MenuExtractionResult
+
+    payload = {
+        "categories": [
+            {
+                "name": "Sides",
+                "items": [
+                    {
+                        "name": "Fries",
+                        "price": 80.0,
+                        "option_groups": [
+                            {
+                                "name": "Dips",
+                                "type": "addon",
+                                "required": False,
+                                "minimum_selections": 0,
+                                "maximum_selections": 1,
+                                "options": [
+                                    {"name": "Mayo", "price_delta": 20.0},
+                                ],
+                            }
+                        ],
+                    }
+                ],
+            }
+        ]
+    }
+
+    normalized = _normalize_extraction_payload(payload)
+    og = normalized["categories"][0]["items"][0]["option_groups"][0]
+    assert og["required"] is False
+    assert og["minimum_selections"] == 0
+    assert og["maximum_selections"] == 1
+
+    result = MenuExtractionResult.model_validate(normalized)
+    assert result.categories[0].items[0].option_groups[0].required is False
+    assert result.categories[0].items[0].option_groups[0].minimum_selections == 0
+
+
+def test_normalize_extraction_payload_mixed_empty_variant_addon():
+    from app.services.menu_extraction import _normalize_extraction_payload
+    from app.schemas.menu_import import MenuExtractionResult
+
+    payload = {
+        "categories": [
+            {
+                "name": "Food",
+                "items": [
+                    {
+                        "name": "Pizza",
+                        "price": 200.0,
+                        "option_groups": [
+                            {"name": "Empty Placeholder", "type": "variant", "options": []},
+                            {
+                                "name": "Size Choice",
+                                "type": "variant",
+                                "required": False,
+                                "minimum_selections": 0,
+                                "maximum_selections": 1,
+                                "options": [{"name": "Medium", "final_price": 200.0}],
+                            },
+                            {
+                                "name": "Extra Cheese",
+                                "type": "addon",
+                                "required": False,
+                                "minimum_selections": 0,
+                                "maximum_selections": 1,
+                                "options": [{"name": "Add Cheese", "price_delta": 50.0}],
+                            },
+                        ],
+                    }
+                ],
+            }
+        ]
+    }
+
+    normalized = _normalize_extraction_payload(payload)
+    groups = normalized["categories"][0]["items"][0]["option_groups"]
+    assert len(groups) == 2
+    assert groups[0]["name"] == "Size Choice"
+    assert groups[0]["required"] is True
+    assert groups[0]["minimum_selections"] == 1
+    assert groups[1]["name"] == "Extra Cheese"
+    assert groups[1]["required"] is False
+    assert groups[1]["minimum_selections"] == 0
+
+    result = MenuExtractionResult.model_validate(normalized)
+    assert len(result.categories[0].items[0].option_groups) == 2
+
+
+def test_normalize_extraction_payload_multiple_production_failure_items():
+    from app.services.menu_extraction import _normalize_extraction_payload
+    from app.schemas.menu_import import MenuExtractionResult
+
+    items_payload = [
+        {
+            "name": f"Item {i}",
+            "price": None,
+            "option_groups": [
+                {
+                    "name": "Choice",
+                    "type": "variant",
+                    "required": False,
+                    "minimum_selections": 0,
+                    "maximum_selections": 1,
+                    "options": [
+                        {"name": "Full", "final_price": 100.0 + i},
+                        {"name": "Half", "final_price": 60.0 + i},
+                    ],
+                }
+            ],
+        }
+        for i in range(6)
+    ]
+    payload = {"categories": [{"name": "Main Menu", "items": items_payload}]}
+
+    normalized = _normalize_extraction_payload(payload)
+    result = MenuExtractionResult.model_validate(normalized)
+    assert len(result.categories[0].items) == 6
+    for item in result.categories[0].items:
+        og = item.option_groups[0]
+        assert og.required is True
+        assert og.minimum_selections == 1
+        assert og.maximum_selections == 1
+
+
+@pytest.mark.asyncio
+async def test_extract_menu_end_to_end_with_mocked_gemini_optional_variants(monkeypatch):
+    import json
+    from app.config import settings
+    from app.services.menu_extraction import extract_menu
+
+    monkeypatch.setattr(settings, "gemini_api_key", "mock_key")
+    monkeypatch.setattr(settings, "gemini_model", "mock_model")
+
+    mock_json_response = json.dumps({
+        "categories": [
+            {
+                "name": "Meals",
+                "items": [
+                    {
+                        "name": "Biryani",
+                        "price": None,
+                        "option_groups": [
+                            {
+                                "name": "Choice",
+                                "type": "variant",
+                                "required": False,
+                                "minimum_selections": 0,
+                                "maximum_selections": 1,
+                                "options": [
+                                    {"name": "Half", "final_price": 150.0},
+                                    {"name": "Full", "final_price": 280.0},
+                                ],
+                            }
+                        ],
+                    }
+                ],
+            }
+        ],
+        "general_warnings": [],
+    })
+
+    class MockModelResponse:
+        text = mock_json_response
+
+    class MockModelsService:
+        def generate_content(self, **kwargs):
+            return MockModelResponse()
+
+    class MockGenAIClient:
+        def __init__(self, api_key=None):
+            self.models = MockModelsService()
+
+    import google.genai
+    monkeypatch.setattr(google.genai, "Client", MockGenAIClient)
+
+    result = await extract_menu([{"mime_type": "image/jpeg", "content": b"fake_image_bytes"}])
+    og = result.categories[0].items[0].option_groups[0]
+    assert og.required is True
+    assert og.minimum_selections == 1
+    assert og.maximum_selections == 1
+
+
+def test_schema_validator_independently_rejects_non_canonical_variants_without_normalization():
+    from pydantic import ValidationError
+    from app.schemas.menu_import import ExtractedMenuOptionGroup
+
+    invalid_variant_payload = {
+        "name": "Choice",
+        "type": "variant",
+        "required": False,
+        "minimum_selections": 0,
+        "maximum_selections": 1,
+        "options": [{"name": "Standard", "final_price": 50.0}],
+    }
+
+    with pytest.raises(ValidationError) as excinfo:
+        ExtractedMenuOptionGroup.model_validate(invalid_variant_payload)
+
+    assert "Variant option groups must be required" in str(excinfo.value)

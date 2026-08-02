@@ -212,6 +212,22 @@ Treat labels as separate items when:
 Do not create a group merely because several names are similar.
 
 ==================================================
+VARIANT SELECTION INVARIANT — STRICT
+==================================================
+
+- Every option group with type="variant" represents mutually exclusive final-price versions of the parent menu item.
+- Every variant group must always use:
+  - required=true
+  - min_selections=1
+  - max_selections=1
+- Never return a variant group with required=false.
+- Never return a variant group with min_selections=0.
+- Never allow more than one variant to be selected.
+- If selecting no option is valid, the structure is not a final-price variant group. Re-evaluate whether it is an add-on group or whether the possible structure is too ambiguous to extract.
+- Do not use ambiguity fallback defaults such as required=false, min_selections=0, max_selections=1 for type="variant".
+- Ambiguity fallback defaults apply only where compatible with the selected option-group type.
+
+==================================================
 EMPTY OPTION GROUPS — STRICTLY FORBIDDEN
 ==================================================
 
@@ -439,29 +455,24 @@ Never silently allow multiple selections when the menu does not visibly permit
 them.
 
 ==================================================
-14. AMBIGUITY FALLBACK RULES
+14. AMBIGUITY FALLBACK — TYPE AWARE
 ==================================================
 
-When a visible item or option structure is real but its exact configuration is
-unclear:
-
-- preserve the visible item and choice labels
-- do not invent missing prices
-- do not invent required status
-- do not invent multi-select behaviour
-- use required=false
-- use minimum_selections=0
-- use maximum_selections=1
-- lower option-group confidence
-- add a warning requiring owner review
-
-Never discard a clearly visible choice solely because its selection rules are
-unclear.
-
-Never silently make an extra paid option compulsory.
-
-Never silently allow multiple selections when the menu does not visibly permit
-them.
+- Never invent required or selection constraints from food knowledge.
+- For a clearly identified variant group:
+  - required=true
+  - min_selections=1
+  - max_selections=1
+- For an ambiguous add-on or zero-price preference group where no printed selection rule is visible:
+  - required=false
+  - min_selections=0
+  - max_selections=1
+- If the group type itself is uncertain, omit the group and lower confidence rather than returning a structurally invalid group.
+- Preserve visible item and choice labels.
+- Do not invent missing prices.
+- Never discard a clearly visible choice solely because its selection rules are unclear.
+- Never silently make an extra paid option compulsory.
+- Never silently allow multiple selections when the menu does not visibly permit them.
 
 ==================================================
 15. SHARED TABLE AND MATRIX RULES
@@ -588,6 +599,10 @@ Before returning JSON, verify:
 - no placeholder option groups exist
 - every generic "Choice" group contains real extracted options
 - unreadable option structures are omitted rather than returned as empty groups
+- every type="variant" group has required=true
+- every type="variant" group has min_selections=1
+- every type="variant" group has max_selections=1
+- no variant group uses optional-choice fallback defaults
 - every uncertainty has a warning
 - only schema-supported fields are returned
 - the response is valid JSON only
@@ -595,7 +610,7 @@ Before returning JSON, verify:
 
 
 def _normalize_extraction_payload(payload: dict) -> dict:
-    """Normalize extracted menu JSON payload by removing invalid empty option groups before schema validation."""
+    """Normalize extracted menu JSON payload by removing invalid empty option groups and canonicalizing variant selection rules before schema validation."""
     if not isinstance(payload, dict):
         return payload
 
@@ -604,7 +619,8 @@ def _normalize_extraction_payload(payload: dict) -> dict:
         return payload
 
     removed_groups_count = 0
-    affected_items_count = 0
+    canonicalized_variants_count = 0
+    affected_items_set = set()
 
     for cat in categories:
         if not isinstance(cat, dict):
@@ -621,30 +637,44 @@ def _normalize_extraction_payload(payload: dict) -> dict:
                 continue
 
             valid_groups = []
-            item_affected = False
+            item_id = id(item)
+
             for group in option_groups:
                 if not isinstance(group, dict):
                     removed_groups_count += 1
-                    item_affected = True
+                    affected_items_set.add(item_id)
                     continue
                 options = group.get("options")
                 if not isinstance(options, list) or len(options) == 0:
                     removed_groups_count += 1
-                    item_affected = True
+                    affected_items_set.add(item_id)
                     continue
+
+                if group.get("type") == "variant":
+                    is_canonical = (
+                        group.get("required") is True
+                        and group.get("minimum_selections") == 1
+                        and group.get("maximum_selections") == 1
+                    )
+                    if not is_canonical:
+                        group["required"] = True
+                        group["minimum_selections"] = 1
+                        group["maximum_selections"] = 1
+                        canonicalized_variants_count += 1
+                        affected_items_set.add(item_id)
 
                 valid_groups.append(group)
 
             item["option_groups"] = valid_groups
-            if item_affected:
-                affected_items_count += 1
 
-    if removed_groups_count > 0:
+    affected_items_count = len(affected_items_set)
+    if removed_groups_count > 0 or canonicalized_variants_count > 0:
         logger.info(
-            f"Normalized menu extraction payload: removed {removed_groups_count} empty option group(s) across {affected_items_count} item(s)."
+            f"Normalized menu extraction payload: removed {removed_groups_count} empty option group(s), canonicalized {canonicalized_variants_count} variant group(s) across {affected_items_count} item(s)."
         )
 
     return payload
+
 
 
 async def extract_menu(images: list[dict]) -> MenuExtractionResult:
