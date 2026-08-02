@@ -12,6 +12,7 @@ DINING_SESSION_STATUSES = (
     "open",
     "payment_requested",
     "payment_pending",
+    "detached_awaiting_payment",
     "paid",
     "closed",
     "cancelled",
@@ -46,6 +47,8 @@ class DiningSession(Base):
     closed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     opened_by_staff_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
     closed_by_staff_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
+    detached_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    detached_by_staff_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -60,7 +63,7 @@ class DiningSession(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('open', 'payment_requested', 'payment_pending', 'paid', 'closed', 'cancelled')",
+            "status IN ('open', 'payment_requested', 'payment_pending', 'detached_awaiting_payment', 'paid', 'closed', 'cancelled')",
             name="chk_dining_session_status_valid",
         ),
         UniqueConstraint("restaurant_id", "id", name="uq_dining_sessions_restaurant_id_id"),
@@ -69,6 +72,11 @@ class DiningSession(Base):
             ["restaurant_tables.restaurant_id", "restaurant_tables.id"],
             name="fk_dining_sessions_restaurant_table",
             ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["restaurant_id", "detached_by_staff_id"],
+            ["staff_users.restaurant_id", "staff_users.id"],
+            name="fk_dining_sessions_restaurant_detached_by_staff",
         ),
         Index("ix_dining_sessions_restaurant_status", "restaurant_id", "status"),
         Index("ix_dining_sessions_table_status", "table_id", "status"),

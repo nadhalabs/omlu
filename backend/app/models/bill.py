@@ -102,6 +102,11 @@ class Bill(Base):
     issue_idempotency_key: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     payment_idempotency_key: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     payment_request_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    payment_code_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    payment_code_ciphertext: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    payment_code_created_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    payment_code_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    payment_code_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
     paid_by_staff_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("staff_users.id", ondelete="SET NULL"),
         nullable=True,
@@ -149,6 +154,14 @@ class Bill(Base):
         Index("ix_bills_restaurant_bill_number", "restaurant_id", "bill_number"),
         Index("ix_bills_restaurant_generated_at", "restaurant_id", "generated_at"),
         Index("ix_bills_restaurant_status_generated_at", "restaurant_id", "status", "generated_at"),
+        Index(
+            "uq_bills_restaurant_unresolved_payment_code",
+            "restaurant_id",
+            "payment_code_hash",
+            unique=True,
+            postgresql_where=(payment_code_hash.is_not(None) & status.in_(("issued", "payment_pending"))),
+            sqlite_where=(payment_code_hash.is_not(None) & status.in_(("issued", "payment_pending"))),
+        ),
     )
 
     restaurant: Mapped["Restaurant"] = relationship("Restaurant", back_populates="bills", overlaps="bill")

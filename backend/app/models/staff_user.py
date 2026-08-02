@@ -54,6 +54,7 @@ class StaffUser(Base):
 
     # Table constraints and composite indexes
     __table_args__ = (
+        UniqueConstraint("restaurant_id", "id", name="uq_staff_users_restaurant_id_id"),
         UniqueConstraint("restaurant_id", "email", name="uq_staff_user_restaurant_email"),
         UniqueConstraint("restaurant_id", "username", name="uq_staff_user_restaurant_username"),
         Index(

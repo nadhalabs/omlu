@@ -17,6 +17,7 @@ from app.services.bills import (
     issue_bill,
     send_bill_to_counter,
 )
+from app.services.dining_sessions import find_current_open_session_for_table
 from app.services.table_participants import enforce_session_action_rate, load_participant, participant_token_header
 from app.services.table_participants import invalidate_session_participants
 from app.utils.auth import OperationalWriteChecker, RoleChecker
@@ -462,12 +463,18 @@ def confirm_staff_counter_payment(
         resource_id=paid.dining_session_id,
         state={"session_token": paid.dining_session.public_token, "status": "closed"},
     )
+    current_table_session = find_current_open_session_for_table(
+        db, paid.dining_session.table_id
+    )
     publish_event(
         EVENT_TABLE_STATUS_CHANGED,
         restaurant_id=current_user.restaurant_id,
         channels=staff_event_channels,
         resource_id=paid.dining_session.table_id,
-        state={"status": "free"},
+        state={
+            "status": current_table_session.status if current_table_session else "free",
+            "session_token": current_table_session.public_token if current_table_session else None,
+        },
     )
     return build_bill_response(db, paid)
 
