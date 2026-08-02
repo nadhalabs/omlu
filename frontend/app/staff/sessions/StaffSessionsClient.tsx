@@ -176,7 +176,7 @@ export default function StaffSessionsClient() {
             bill_status: issued.status,
             bill_total: issued.total_amount,
           } : item));
-          window.dispatchEvent(new Event("pending-payments-changed"));
+          window.dispatchEvent(new Event("admin-operational-counts-changed"));
           toast("Bill issued.", "success");
         } catch (err) {
           const message = err instanceof ApiError ? err.message : "Failed to issue bill.";

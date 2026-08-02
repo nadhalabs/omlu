@@ -8,9 +8,7 @@ test("admin sidebar uses the required navigation order without duplicate entries
   const nav = layout.match(/<nav[^>]*aria-label="Admin navigation"[^>]*>([\s\S]*?)<\/nav>/)?.[1];
   assert.ok(nav, "admin navigation should exist");
 
-  const labels = [...nav.matchAll(/label="(?:[^" ]+ )?([^"]+)"|<PendingPaymentsSidebarLink/g)].map(
-    (match) => match[0].startsWith("<PendingPaymentsSidebarLink") ? "Pending Payments" : match[1],
-  );
+  const labels = [...nav.matchAll(/label="(?:[^" ]+ )?([^"]+)"/g)].map((match) => match[1]);
 
   assert.deepEqual(labels, [
     "Dashboard",

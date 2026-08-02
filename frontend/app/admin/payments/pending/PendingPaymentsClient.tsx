@@ -73,7 +73,7 @@ export default function PendingPaymentsClient() {
   });
 
   async function openPaymentDialog(payment: PendingPaymentItem, method: "counter_cash" | "counter_upi") {
-    await confirmDialog({ title: "Confirm payment", message: "Confirm that the restaurant received this payment. Success will be shown only after backend confirmation.", details: [`Table: ${payment.table_name}`, `Bill: ${payment.bill_number}`, `Amount: ${money(payment.grand_total)}`, `Method: ${method === "counter_cash" ? "Cash" : "UPI"}`], confirmLabel: "Confirm payment", onConfirm: async () => { try { await confirmPendingPayment(payment.bill_number, method); await refresh(); window.dispatchEvent(new Event("pending-payments-changed")); toast("Payment confirmed.", "success"); } catch (err) { await refresh(); throw new Error(err instanceof ApiError ? err.message : "Payment confirmation failed."); } } });
+    await confirmDialog({ title: "Confirm payment", message: "Confirm that the restaurant received this payment. Success will be shown only after backend confirmation.", details: [`Table: ${payment.table_name}`, `Bill: ${payment.bill_number}`, `Amount: ${money(payment.grand_total)}`, `Method: ${method === "counter_cash" ? "Cash" : "UPI"}`], confirmLabel: "Confirm payment", onConfirm: async () => { try { await confirmPendingPayment(payment.bill_number, method); await refresh(); window.dispatchEvent(new Event("admin-operational-counts-changed")); toast("Payment confirmed.", "success"); } catch (err) { await refresh(); throw new Error(err instanceof ApiError ? err.message : "Payment confirmation failed."); } } });
   }
 
   async function issue(payment: PendingPaymentItem) {

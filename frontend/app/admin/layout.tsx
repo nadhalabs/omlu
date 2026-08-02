@@ -4,7 +4,7 @@ import React from "react";
 import AdminSidebarLink from "./AdminSidebarLink";
 import AdminLogoutButton from "./AdminLogoutButton";
 import { backendUrl } from "@/lib/backendUrl";
-import PendingPaymentsSidebarLink from "./PendingPaymentsSidebarLink";
+import { AdminOperationalCountsProvider, AdminOperationalSidebarLink, OperationalCounts } from "./AdminOperationalSidebar";
 import { WebAuthScope } from "@/components/WebAuthScope";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
@@ -22,7 +22,7 @@ export default async function AdminLayout({
   }
 
   let staffInfo = null;
-  let pendingPaymentCount = 0;
+  let operationalCounts: OperationalCounts = { pendingPayments: 0, activeTakeaways: 0, unresolvedRequests: 0 };
 
   try {
     const res = await fetch(backendUrl("/auth/staff/me"), {
@@ -40,14 +40,20 @@ export default async function AdminLayout({
 
     staffInfo = await res.json();
     if (["owner", "admin"].includes(staffInfo.role)) {
-      const pendingResponse = await fetch(backendUrl("/staff/bills/pending-payments"), {
-        headers: { Authorization: `Bearer ${tokenCookie.value}` },
-        cache: "no-store",
-      });
-      if (pendingResponse.ok) {
-        const pending = await pendingResponse.json();
-        pendingPaymentCount = Array.isArray(pending.items) ? pending.items.length : 0;
-      }
+      const options = { headers: { Authorization: `Bearer ${tokenCookie.value}` }, cache: "no-store" as const };
+      const [pendingResponse, quickSalesResponse, requestsResponse] = await Promise.all([
+        fetch(backendUrl("/staff/bills/pending-payments"), options),
+        fetch(backendUrl("/admin/quick-sales"), options),
+        fetch(backendUrl("/staff/service-requests?status_filter=pending"), options),
+      ]);
+      const pending = pendingResponse.ok ? await pendingResponse.json() : null;
+      const quickSales = quickSalesResponse.ok ? await quickSalesResponse.json() : null;
+      const requests = requestsResponse.ok ? await requestsResponse.json() : null;
+      operationalCounts = {
+        pendingPayments: Array.isArray(pending?.items) ? pending.items.length : 0,
+        activeTakeaways: Array.isArray(quickSales?.active_takeaways) ? quickSales.active_takeaways.filter((sale: { sale_type?: string; status?: string }) => sale.sale_type === "takeaway" && ["pending", "accepted", "preparing", "ready", "served"].includes(String(sale.status))).length : 0,
+        unresolvedRequests: Array.isArray(requests) ? requests.filter((request: { status?: string }) => request.status === "pending").length : 0,
+      };
     }
   } catch {
     // If backend connection fails, redirect to login
@@ -100,17 +106,19 @@ export default async function AdminLayout({
 
           {/* Navigation Links */}
           <nav className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 lg:mx-0 lg:flex-col lg:overflow-visible lg:px-0 lg:pb-0" aria-label="Admin navigation">
+            <AdminOperationalCountsProvider initialCounts={operationalCounts}>
             <AdminSidebarLink href="/admin/dashboard" label="📊 Dashboard" />
-            <AdminSidebarLink href="/admin/quick-sale" label="🧾 Quick Sale" />
-            <PendingPaymentsSidebarLink initialCount={pendingPaymentCount} />
+            <AdminOperationalSidebarLink href="/admin/quick-sale" label="🧾 Quick Sale" queue="activeTakeaways" />
+            <AdminOperationalSidebarLink href="/admin/payments/pending" label="💳 Pending Payments" queue="pendingPayments" />
             <AdminSidebarLink href={`/kitchen/${staffInfo.restaurant_slug}`} label="🧑‍🍳 Kitchen Dashboard" />
-            <AdminSidebarLink href="/admin/requests" label="🔔 Service Requests" />
+            <AdminOperationalSidebarLink href="/admin/requests" label="🔔 Service Requests" queue="unresolvedRequests" />
             <AdminSidebarLink href="/admin/history?view=orders" label="History" />
             <AdminSidebarLink href="/admin/tables" label="📋 Tables Map" />
             <AdminSidebarLink href="/admin/menu" label="🍔 Menu Items" />
             <AdminSidebarLink href="/admin/staff" label="👥 Staff Management" />
             <AdminSidebarLink href="/admin/performance" label="Performance" />
             <AdminSidebarLink href="/admin/settings" label="⚙️ Settings" />
+            </AdminOperationalCountsProvider>
           </nav>
         </div>
 

@@ -128,6 +128,7 @@ export default function AdminRequestsClient() {
           r.id === updated.id ? { ...r, ...updated } : r
         )
       );
+      window.dispatchEvent(new Event("admin-operational-counts-changed"));
     } catch (err) {
       if (err instanceof ApiError) setError(err.message);
       else setError("Failed to resolve request.");
