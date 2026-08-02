@@ -104,16 +104,17 @@ test("Only served Takeaways expose Cash and UPI payment actions", () => {
 });
 
 test("Kitchen renders a dedicated Takeaway label", () => {
-  const kitchen = read("app/kitchen/[restaurantSlug]/KitchenDashboardClient.tsx");
-  assert.match(kitchen, /sourceHeading/);
-  assert.match(kitchen, /TAKEAWAY/);
+  const kitchenCard = read("app/kitchen/[restaurantSlug]/KitchenOrderCard.tsx");
+  assert.match(kitchenCard, /sourceHeading/);
+  assert.match(kitchenCard, /TAKEAWAY/);
 });
 
 test("Kitchen cards prioritize source and item snapshots over internal metadata", () => {
-  const kitchen = read("app/kitchen/[restaurantSlug]/KitchenDashboardClient.tsx");
-  assert.match(kitchen, /text-2xl font-black/);
-  assert.match(kitchen, /item\.quantity\} ×/);
-  assert.match(kitchen, /option\.kitchen_display_name \|\| option\.option_name/);
-  assert.match(kitchen, /Order \{order\.order_number\}/);
-  assert.doesNotMatch(kitchen, /<span>Subtotal<\/span>/);
+  const kitchenCard = read("app/kitchen/[restaurantSlug]/KitchenOrderCard.tsx");
+  assert.match(kitchenCard, /text-2xl font-black/);
+  assert.match(kitchenCard, /item\.quantity\} ×/);
+  assert.match(kitchenCard, /option\.kitchen_display_name \|\| option\.option_name/);
+  assert.match(kitchenCard, /Order #\{order\.order_number\}/);
+  assert.doesNotMatch(kitchenCard, /<span>Subtotal<\/span>/);
 });
+

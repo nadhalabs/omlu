@@ -1,17 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
-import { AndroidDownloadCard } from "@/components/AndroidDownloadCard";
 import { useRouter } from "next/navigation";
+import { AndroidDownloadCard } from "@/components/AndroidDownloadCard";
 import { getKitchenOrders, updateKitchenOrderStatus, getStaffMe, ApiError } from "@/lib/api";
 import { KitchenOrderResponse, CurrentStaffResponse } from "@/lib/types";
 import { useRealtime } from "@/lib/realtime";
 import { registerAuthenticatedCleanup } from "@/lib/authRuntime.mjs";
 import { useOmluUi } from "@/components/OmluUiProvider";
 import { useConfirmedSignOut } from "@/components/useConfirmedSignOut";
+import { KitchenHeader } from "./KitchenHeader";
+import { KitchenBoard } from "./KitchenBoard";
 import { KitchenAvailabilityDialog } from "./KitchenAvailabilityDialog";
-import { ThemeToggle } from "@/components/ThemeToggle";
 
 interface KitchenDashboardClientProps {
   restaurantSlug: string;
@@ -35,12 +35,12 @@ export default function KitchenDashboardClient({
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
-  // Sound configuration
+  // Sound & Fullscreen configuration
   const [soundEnabled, setSoundEnabled] = useState<boolean>(false);
-  const [focusMode, setFocusMode] = useState(false);
-  const [availabilityOpen, setAvailabilityOpen] = useState(false);
+  const [focusMode, setFocusMode] = useState<boolean>(false);
+  const [availabilityOpen, setAvailabilityOpen] = useState<boolean>(false);
 
-  // Action status mapping to disable buttons (token -> boolean)
+  // Action status mapping to disable buttons while pending (token -> boolean)
   const [updatingTokens, setUpdatingTokens] = useState<Record<string, boolean>>({});
 
   // Track known order tokens locally to prevent double play or alerts for initial orders
@@ -49,7 +49,7 @@ export default function KitchenDashboardClient({
   const isFetchingRef = useRef<boolean>(false);
 
   // Keep a tick state to force elapsed durations to re-render every 10 seconds
-  const [tick, setTick] = useState<number>(0);
+  const [, setTick] = useState<number>(0);
 
   // Load sound preference
   useEffect(() => {
@@ -84,19 +84,18 @@ export default function KitchenDashboardClient({
       const AudioCtx = window.AudioContext || audioWindow.webkitAudioContext;
       if (!AudioCtx) return;
       const ctx = new AudioCtx();
-      
-      // Ring tone sequence using 2 oscillators
+
       const osc1 = ctx.createOscillator();
       const osc2 = ctx.createOscillator();
       const gainNode = ctx.createGain();
 
       osc1.type = "sine";
-      osc1.frequency.setValueAtTime(587.33, ctx.currentTime); // D5 note
-      osc1.frequency.setValueAtTime(880, ctx.currentTime + 0.15); // A5 note
+      osc1.frequency.setValueAtTime(587.33, ctx.currentTime);
+      osc1.frequency.setValueAtTime(880, ctx.currentTime + 0.15);
 
       osc2.type = "triangle";
-      osc2.frequency.setValueAtTime(440, ctx.currentTime); // A4 note
-      
+      osc2.frequency.setValueAtTime(440, ctx.currentTime);
+
       gainNode.gain.setValueAtTime(0.12, ctx.currentTime);
       gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.45);
 
@@ -113,7 +112,7 @@ export default function KitchenDashboardClient({
     }
   }, [soundEnabled]);
 
-  // Toggle sound and activate context (required by browser audio security model)
+  // Toggle sound and activate context (Correction #9)
   const handleToggleSound = () => {
     const nextVal = !soundEnabled;
     setSoundEnabled(nextVal);
@@ -128,16 +127,22 @@ export default function KitchenDashboardClient({
         if (AudioCtx) {
           const ctx = new AudioCtx();
           if (ctx.state === "suspended") {
-            ctx.resume();
+            void ctx.resume();
           }
         }
       } catch {}
+      toast("🔊 Sound notifications enabled", "success");
+    } else {
+      toast("🔇 Sound notifications muted", "information");
     }
   };
 
+  // Fullscreen handlers (Correction #11)
   const exitFocusMode = useCallback(() => {
     setFocusMode(false);
-    if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+    if (document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => undefined);
+    }
   }, []);
 
   const enterFocusMode = async () => {
@@ -145,7 +150,15 @@ export default function KitchenDashboardClient({
     try {
       await document.documentElement.requestFullscreen?.();
     } catch {
-      // The enlarged layout remains active when browser full-screen is denied.
+      // The enlarged layout remains active even if browser full-screen is denied.
+    }
+  };
+
+  const handleToggleFullscreen = () => {
+    if (focusMode) {
+      exitFocusMode();
+    } else {
+      void enterFocusMode();
     }
   };
 
@@ -166,69 +179,69 @@ export default function KitchenDashboardClient({
   }, [availabilityOpen, exitFocusMode, focusMode]);
 
   // Fetch kitchen orders
-  const fetchOrders = useCallback(async (showLoading = true) => {
-    if (isFetchingRef.current) return;
-    isFetchingRef.current = true;
+  const fetchOrders = useCallback(
+    async (showLoading = true) => {
+      if (isFetchingRef.current) return;
+      isFetchingRef.current = true;
 
-    if (showLoading) setLoading(true);
+      if (showLoading) setLoading(true);
 
-    try {
-      const fetched = await getKitchenOrders(restaurantSlug);
-      setOrders(fetched);
-      setError(null);
-      setLastUpdated(new Date());
+      try {
+        const fetched = await getKitchenOrders(restaurantSlug);
+        setOrders(fetched);
+        setError(null);
+        setLastUpdated(new Date());
 
-      const pendingTokens = fetched
-        .filter((o) => o.status === "pending")
-        .map((o) => o.public_token);
+        const pendingTokens = fetched
+          .filter((o) => o.status === "pending")
+          .map((o) => o.public_token);
 
-      if (isInitialLoadRef.current) {
-        pendingTokens.forEach((tok) => knownTokensRef.current.add(tok));
-        isInitialLoadRef.current = false;
-      } else {
-        let hasNew = false;
-        pendingTokens.forEach((tok) => {
-          if (!knownTokensRef.current.has(tok)) {
-            knownTokensRef.current.add(tok);
-            hasNew = true;
-          }
-        });
-
-        if (hasNew) {
-          playNewOrderBeep();
-        }
-      }
-    } catch (err) {
-      if (err instanceof ApiError) {
-        if (err.status === 401) {
-          // Token expired or invalid
-          router.replace("/login");
+        if (isInitialLoadRef.current) {
+          pendingTokens.forEach((tok) => knownTokensRef.current.add(tok));
+          isInitialLoadRef.current = false;
         } else {
-          setError(err.message);
+          let hasNew = false;
+          pendingTokens.forEach((tok) => {
+            if (!knownTokensRef.current.has(tok)) {
+              knownTokensRef.current.add(tok);
+              hasNew = true;
+            }
+          });
+
+          if (hasNew) {
+            playNewOrderBeep();
+          }
         }
-      } else {
-        setError("Connection issue. Showing loaded details.");
+      } catch (err) {
+        if (err instanceof ApiError) {
+          if (err.status === 401) {
+            router.replace("/login");
+          } else {
+            setError(err.message);
+          }
+        } else {
+          setError("Connection issue. Showing loaded details.");
+        }
+      } finally {
+        if (showLoading) setLoading(false);
+        isFetchingRef.current = false;
       }
-    } finally {
-      if (showLoading) setLoading(false);
-      isFetchingRef.current = false;
-    }
-  }, [playNewOrderBeep, restaurantSlug, router]);
+    },
+    [playNewOrderBeep, restaurantSlug, router]
+  );
 
   // Auth check on mount
   useEffect(() => {
     const checkAuth = async () => {
       try {
         const staff = await getStaffMe();
-        
-        // 1. Verify restaurant tenant isolation
+
         if (staff.restaurant_slug !== restaurantSlug) {
           setAuthError("Access Denied: You do not have permission for this restaurant.");
           setAuthLoading(false);
           return;
         }
 
-        // 2. Enforce allowed roles
         const allowedRoles = ["owner", "admin", "kitchen"];
         if (!allowedRoles.includes(staff.role)) {
           setAuthError(`Access Denied: Role '${staff.role}' is not permitted to view the kitchen dashboard.`);
@@ -238,33 +251,30 @@ export default function KitchenDashboardClient({
 
         setStaffInfo(staff);
         setAuthLoading(false);
-        
-        // Trigger initial data load
-        fetchOrders(true);
+        void fetchOrders(true);
       } catch {
-        // Redirect to login if unauthenticated or token expired
         router.replace("/login");
       }
     };
 
-    const timeout = window.setTimeout(() => checkAuth(), 0);
+    const timeout = window.setTimeout(() => void checkAuth(), 0);
     return () => window.clearTimeout(timeout);
   }, [fetchOrders, restaurantSlug, router]);
 
-  // Setup tab visible events and polling loop
+  // Setup tab visibility and polling loop
   useEffect(() => {
     if (authLoading || authError || !staffInfo) return;
 
     const handleVisibility = () => {
       if (document.visibilityState === "visible") {
-        fetchOrders(false);
+        void fetchOrders(false);
       }
     };
     document.addEventListener("visibilitychange", handleVisibility);
 
     const interval = setInterval(() => {
       if (document.visibilityState === "visible") {
-        fetchOrders(false);
+        void fetchOrders(false);
       }
     }, 5000);
     const unregister = registerAuthenticatedCleanup(() => {
@@ -279,6 +289,7 @@ export default function KitchenDashboardClient({
     };
   }, [authLoading, authError, fetchOrders, staffInfo]);
 
+  // Realtime Connection Subscription
   const realtimeStatus = useRealtime({
     enabled: Boolean(staffInfo && !authError),
     target: { kind: "staff", channel: "kitchen" },
@@ -291,14 +302,16 @@ export default function KitchenDashboardClient({
     if (updatingTokens[publicToken]) return;
     setUpdatingTokens((prev) => ({ ...prev, [publicToken]: true }));
     const previousOrders = orders;
+
+    // Optimistic UI update
     setOrders((current) =>
       nextStatus === "served" || nextStatus === "rejected"
         ? current.filter((order) => order.public_token !== publicToken)
         : current.map((order) =>
             order.public_token === publicToken
               ? { ...order, status: nextStatus }
-              : order,
-          ),
+              : order
+          )
     );
 
     try {
@@ -307,7 +320,7 @@ export default function KitchenDashboardClient({
         publicToken,
         nextStatus
       );
-      
+
       setOrders((prev) => {
         if (nextStatus === "served" || nextStatus === "rejected") {
           return prev.filter((o) => o.public_token !== publicToken);
@@ -331,39 +344,36 @@ export default function KitchenDashboardClient({
     }
   };
 
-  // Confirmation flow wrapper
+  // Confirmation dialog wrapper
   const triggerConfirm = async (token: string, action: "reject" | "served") => {
     const rejecting = action === "reject";
-    if (!await confirmDialog({ title: rejecting ? "Reject order?" : "Mark order as served?", message: rejecting ? "This will cancel the order and update the customer’s screen. It cannot be undone." : "Confirm the order was served. It will be removed from the active Kitchen view.", confirmLabel: rejecting ? "Reject order" : "Mark as served", cancelLabel: rejecting ? "Keep order" : "Cancel", tone: rejecting ? "destructive" : "default" })) return;
+    const confirmed = await confirmDialog({
+      title: rejecting ? "Reject order?" : "Mark order as served?",
+      message: rejecting
+        ? "This will cancel the order and update the customer’s screen. It cannot be undone."
+        : "Confirm the order was served. It will be removed from the active Kitchen view.",
+      confirmLabel: rejecting ? "Reject order" : "Mark as served",
+      cancelLabel: rejecting ? "Keep order" : "Cancel",
+      tone: rejecting ? "destructive" : "default",
+    });
+
+    if (!confirmed) return;
     await handleUpdateStatus(token, rejecting ? "rejected" : "served");
   };
 
-  // Render elapsed duration
-  const getElapsedTime = (createdStr: string) => {
-    void tick;
-    const created = new Date(createdStr);
-    const diffMs = new Date().getTime() - created.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    
-    if (diffMins < 1) return "Just now";
-    if (diffMins < 60) return `${diffMins}m ago`;
-    const diffHours = Math.floor(diffMins / 60);
-    return `${diffHours}h ${diffMins % 60}m ago`;
-  };
-
-  // Render Auth Loading State
+  // Auth loading state
   if (authLoading) {
     return (
       <div className="omlu-operational-shell flex flex-col flex-1 items-center justify-center min-h-screen px-4 py-8">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-orange-500"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-orange-500" />
         <p className="mt-4 text-[var(--omlu-text-secondary)] font-bold text-sm">
-          Verifying session credentials...
+          Verifying session credentials…
         </p>
       </div>
     );
   }
 
-  // Render Auth Authorization Errors
+  // Auth error state
   if (authError) {
     return (
       <div className="omlu-operational-shell flex flex-col flex-1 items-center justify-center min-h-screen p-6 text-center">
@@ -372,9 +382,10 @@ export default function KitchenDashboardClient({
           <h2 className="text-xl font-bold text-[var(--omlu-text-primary)] mb-2">Access Denied</h2>
           <p className="text-sm text-[var(--omlu-text-secondary)] mb-6">{authError}</p>
           <button
+            type="button"
             onClick={requestSignOut}
             disabled={signOutPending}
-            className="px-6 py-2.5 bg-red-700 text-[var(--omlu-strong-action-text)] font-semibold rounded-xl transition cursor-pointer disabled:cursor-not-allowed disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)]"
+            className="px-6 py-2.5 bg-red-700 text-[var(--omlu-strong-action-text)] font-semibold rounded-xl transition cursor-pointer disabled:opacity-50"
           >
             Return to Login
           </button>
@@ -384,330 +395,63 @@ export default function KitchenDashboardClient({
   }
 
   if (!staffInfo) return null;
+
   const dashboardHref =
     staffInfo.role === "owner" || staffInfo.role === "admin"
       ? "/admin/dashboard"
       : "/staff";
 
-  // Sort orders into columns
-  const cols = {
-    pending: orders.filter((o) => o.status === "pending"),
-    accepted: orders.filter((o) => o.status === "accepted"),
-    preparing: orders.filter((o) => o.status === "preparing"),
-    ready: orders.filter((o) => o.status === "ready"),
-  };
-
   return (
-    <div className={`omlu-operational-shell flex flex-col flex-1 min-h-screen ${focusMode ? "p-3 md:p-4" : "p-6"}`}>
-      {/* Top Header Banner displaying Staff name, role, restaurant and logout */}
-      <header className={`flex items-center justify-between gap-4 border-b border-[var(--omlu-border)] pb-4 ${focusMode ? "mb-4" : "mb-6 flex-col md:flex-row md:items-center"}`}>
-        <div>
-          <span className="text-xs font-normal text-[var(--omlu-text-secondary)]">Kitchen display</span>
-          {!focusMode && <><h1 className="text-3xl font-black tracking-tight text-[var(--omlu-text-primary)] mt-1">Active Orders</h1>
-          <p className="text-[var(--omlu-text-secondary)] text-xs mt-1.5 font-bold">
-            Logged in as <span className="text-[var(--omlu-text-secondary)] font-black">{staffInfo.name}</span> (Role: <span className="text-orange-500 font-black uppercase text-[10px] bg-orange-950/20 px-2 py-0.5 rounded border border-orange-900/30">{staffInfo.role}</span>)
-          </p>
-          <p className="mt-1 text-[11px] font-bold uppercase tracking-wide text-[var(--omlu-text-secondary)]">
-            Real-time: {realtimeStatus}
-            {lastUpdated ? ` • Updated ${lastUpdated.toLocaleTimeString()}` : ""}
-          </p></>}
-        </div>
+    <div className={`omlu-operational-shell flex flex-col flex-1 min-h-screen ${focusMode ? "p-3 md:p-4" : "p-4 md:p-6"}`}>
+      {/* Header Bar */}
+      <KitchenHeader
+        restaurantSlug={restaurantSlug}
+        realtimeStatus={realtimeStatus}
+        lastUpdated={lastUpdated}
+        soundEnabled={soundEnabled}
+        onToggleSound={handleToggleSound}
+        focusMode={focusMode}
+        onToggleFullscreen={handleToggleFullscreen}
+        onOpenAvailability={() => setAvailabilityOpen(true)}
+        dashboardHref={dashboardHref}
+        staffName={staffInfo.name}
+        staffRole={staffInfo.role}
+        onRefresh={() => void fetchOrders(true)}
+        onSignOut={requestSignOut}
+        signOutPending={signOutPending}
+        hasError={Boolean(error)}
+      />
 
-        {/* Action / Sync controls */}
-        <div className="flex flex-wrap items-center gap-3 self-stretch md:self-auto justify-between">
-          {!focusMode && <ThemeToggle className="w-full sm:w-64" />}
-          {!focusMode && <Link
-            href={dashboardHref}
-            className="px-4 py-2.5 rounded-xl text-sm font-bold bg-[var(--omlu-muted-surface)] hover:bg-[var(--omlu-muted-surface)] text-[var(--omlu-text-secondary)] transition"
-          >
-            Back to dashboard
-          </Link>}
-          <button onClick={() => setAvailabilityOpen(true)} className="cursor-pointer rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] px-3 py-2 text-sm font-normal text-[var(--omlu-text-secondary)] transition hover:border-[var(--omlu-border)] hover:bg-[var(--omlu-muted-surface)] hover:text-[var(--omlu-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--omlu-page-background)] disabled:cursor-not-allowed disabled:opacity-50">Manage availability</button>
-          <button onClick={focusMode ? exitFocusMode : enterFocusMode} aria-label={focusMode ? "Exit kitchen full screen" : "Enlarge kitchen display"} className="cursor-pointer rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] px-3 py-2 text-sm font-normal text-[var(--omlu-text-secondary)] transition hover:border-[var(--omlu-border)] hover:bg-[var(--omlu-muted-surface)] hover:text-[var(--omlu-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--omlu-page-background)] disabled:cursor-not-allowed disabled:opacity-50">
-            ⛶ {focusMode ? "Exit" : "Enlarge"}
-          </button>
-          {/* Sound Alert Toggle */}
-          {!focusMode && <button
-            onClick={handleToggleSound}
-            className={`px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 cursor-pointer transition ${
-              soundEnabled
-                ? "bg-orange-600 hover:bg-orange-700 text-[var(--omlu-primary-action-text)] shadow-md shadow-amber-900/30"
-                : "bg-[var(--omlu-muted-surface)] hover:bg-[var(--omlu-muted-surface)] text-[var(--omlu-text-secondary)]"
-            }`}
-          >
-            {soundEnabled ? "🔊 Sound Enabled" : "🔇 Sound Disabled"}
-          </button>}
+      {!focusMode && <AndroidDownloadCard variant="compact" dismissible className="mb-4" />}
 
-          {/* Manual Refresh */}
-          {!focusMode && <button
-            onClick={() => fetchOrders(true)}
-            className="p-2.5 bg-[var(--omlu-muted-surface)] hover:bg-[var(--omlu-muted-surface)] rounded-xl cursor-pointer text-sm font-bold text-[var(--omlu-text-secondary)] transition"
-            title="Refresh"
-          >
-            🔄
-          </button>}
-
-          {/* Logout Button */}
-          {!focusMode && <button
-            onClick={requestSignOut}
-            disabled={signOutPending}
-            className="px-4 py-2.5 bg-red-650/20 hover:bg-red-650/30 border border-red-900/40 text-red-400 text-sm font-bold rounded-xl cursor-pointer transition"
-          >
-            Sign Out
-          </button>}
-        </div>
-      </header>
-
-      {!focusMode && <AndroidDownloadCard variant="compact" dismissible className="mb-6" />}
-
-      {/* API Connection Indicator */}
+      {/* Connection & API Error Banner */}
       {error && (
-        <div className="bg-red-950/40 border border-red-900/50 text-red-400 px-4 py-3 rounded-2xl text-sm font-medium mb-6 flex justify-between items-center">
+        <div role="alert" className="bg-red-950/40 border border-red-900/50 text-red-300 px-4 py-3 rounded-2xl text-sm font-medium mb-4 flex justify-between items-center">
           <span>⚠️ {error}</span>
           <button
-            onClick={() => fetchOrders(false)}
-            className="underline hover:text-red-300 font-bold"
+            type="button"
+            onClick={() => void fetchOrders(false)}
+            className="underline hover:text-red-200 font-bold ml-3"
           >
             Retry Sync
           </button>
         </div>
       )}
 
-      {/* Main Grid View */}
-      {loading && orders.length === 0 ? (
-        <div className="flex-1 flex flex-col items-center justify-center py-20">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-orange-500"></div>
-          <span className="text-[var(--omlu-text-secondary)] text-sm font-bold mt-4">Loading active orders...</span>
-        </div>
-      ) : (
-        <div className={`grid flex-1 items-start overflow-x-auto ${focusMode ? "grid-cols-4 gap-3 min-w-[1050px]" : "grid-cols-1 gap-6 md:grid-cols-4"}`}>
-          {/* COLUMN 1: NEW */}
-          <div className="bg-[var(--omlu-page-background)] border border-[var(--omlu-border)] rounded-3xl p-4 flex flex-col gap-4 min-h-[70vh]">
-            <div className="flex items-center justify-between border-b border-[var(--omlu-border)] pb-2 mb-1">
-              <h2 className="text-sm font-black text-orange-500 uppercase tracking-wider">
-                New ({cols.pending.length})
-              </h2>
-              <span className="w-2.5 h-2.5 rounded-full bg-orange-500 animate-pulse"></span>
-            </div>
-            <div className="flex flex-col gap-4 overflow-y-auto max-h-[70vh] no-scrollbar">
-              {cols.pending.length === 0 ? (
-                <p className="text-center text-[var(--omlu-text-secondary)] text-xs py-8 font-semibold">No pending orders</p>
-              ) : (
-                cols.pending.map((order) => (
-                  <OrderCard
-                    key={order.public_token}
-                    order={order}
-                    elapsedTime={getElapsedTime(order.created_at)}
-                    isUpdating={!!updatingTokens[order.public_token]}
-                    onAccept={() => handleUpdateStatus(order.public_token, "accepted")}
-                    onReject={() => triggerConfirm(order.public_token, "reject")}
-                  />
-                ))
-              )}
-            </div>
-          </div>
+      {/* Board & Lanes */}
+      <KitchenBoard
+        orders={orders}
+        updatingTokens={updatingTokens}
+        onAccept={(tok) => void handleUpdateStatus(tok, "accepted")}
+        onReject={(tok) => void triggerConfirm(tok, "reject")}
+        onStartPrep={(tok) => void handleUpdateStatus(tok, "preparing")}
+        onMarkReady={(tok) => void handleUpdateStatus(tok, "ready")}
+        onMarkServed={(tok) => void triggerConfirm(tok, "served")}
+        loading={loading}
+      />
 
-          {/* COLUMN 2: ACCEPTED */}
-          <div className="bg-[var(--omlu-page-background)] border border-[var(--omlu-border)] rounded-3xl p-4 flex flex-col gap-4 min-h-[70vh]">
-            <div className="flex items-center justify-between border-b border-[var(--omlu-border)] pb-2 mb-1">
-              <h2 className="text-sm font-black text-cyan-500 uppercase tracking-wider">
-                Accepted ({cols.accepted.length})
-              </h2>
-            </div>
-            <div className="flex flex-col gap-4 overflow-y-auto max-h-[70vh] no-scrollbar">
-              {cols.accepted.length === 0 ? (
-                <p className="text-center text-[var(--omlu-text-secondary)] text-xs py-8 font-semibold">No accepted orders</p>
-              ) : (
-                cols.accepted.map((order) => (
-                  <OrderCard
-                    key={order.public_token}
-                    order={order}
-                    elapsedTime={getElapsedTime(order.created_at)}
-                    isUpdating={!!updatingTokens[order.public_token]}
-                    onStartPrep={() => handleUpdateStatus(order.public_token, "preparing")}
-                    onReject={() => triggerConfirm(order.public_token, "reject")}
-                  />
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* COLUMN 3: PREPARING */}
-          <div className="bg-[var(--omlu-page-background)] border border-[var(--omlu-border)] rounded-3xl p-4 flex flex-col gap-4 min-h-[70vh]">
-            <div className="flex items-center justify-between border-b border-[var(--omlu-border)] pb-2 mb-1">
-              <h2 className="text-sm font-black text-purple-500 uppercase tracking-wider">
-                Preparing ({cols.preparing.length})
-              </h2>
-            </div>
-            <div className="flex flex-col gap-4 overflow-y-auto max-h-[70vh] no-scrollbar">
-              {cols.preparing.length === 0 ? (
-                <p className="text-center text-[var(--omlu-text-secondary)] text-xs py-8 font-semibold">No preparing orders</p>
-              ) : (
-                cols.preparing.map((order) => (
-                  <OrderCard
-                    key={order.public_token}
-                    order={order}
-                    elapsedTime={getElapsedTime(order.created_at)}
-                    isUpdating={!!updatingTokens[order.public_token]}
-                    onMarkReady={() => handleUpdateStatus(order.public_token, "ready")}
-                  />
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* COLUMN 4: READY */}
-          <div className="bg-[var(--omlu-page-background)] border border-[var(--omlu-border)] rounded-3xl p-4 flex flex-col gap-4 min-h-[70vh]">
-            <div className="flex items-center justify-between border-b border-[var(--omlu-border)] pb-2 mb-1">
-              <h2 className="text-sm font-black text-green-500 uppercase tracking-wider">
-                Ready ({cols.ready.length})
-              </h2>
-            </div>
-            <div className="flex flex-col gap-4 overflow-y-auto max-h-[70vh] no-scrollbar">
-              {cols.ready.length === 0 ? (
-                <p className="text-center text-[var(--omlu-text-secondary)] text-xs py-8 font-semibold">No ready orders</p>
-              ) : (
-                cols.ready.map((order) => (
-                  <OrderCard
-                    key={order.public_token}
-                    order={order}
-                    elapsedTime={getElapsedTime(order.created_at)}
-                    isUpdating={!!updatingTokens[order.public_token]}
-                    onMarkServed={() => triggerConfirm(order.public_token, "served")}
-                  />
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
+      {/* Availability Drawer */}
       <KitchenAvailabilityDialog open={availabilityOpen} onClose={() => setAvailabilityOpen(false)} />
     </div>
-  );
-}
-
-// Internal Order Card component
-interface OrderCardProps {
-  order: KitchenOrderResponse;
-  elapsedTime: string;
-  isUpdating: boolean;
-  onAccept?: () => void;
-  onReject?: () => void;
-  onStartPrep?: () => void;
-  onMarkReady?: () => void;
-  onMarkServed?: () => void;
-}
-
-function OrderCard({
-  order,
-  elapsedTime,
-  isUpdating,
-  onAccept,
-  onReject,
-  onStartPrep,
-  onMarkReady,
-  onMarkServed,
-}: OrderCardProps) {
-  const tableDisplay = order.table_number.trim();
-  const sourceHeading = order.source === "takeaway" || tableDisplay.toLowerCase() === "takeaway"
-    ? "TAKEAWAY"
-    : tableDisplay.toLowerCase().startsWith("table ")
-      ? tableDisplay.toLocaleUpperCase()
-      : `TABLE ${tableDisplay}`;
-  return (
-    <article aria-label={`${sourceHeading}, order ${order.order_number}`} className="bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border)] rounded-2xl p-5 flex flex-col gap-4 shadow-sm hover:border-[var(--omlu-border)] transition">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-3 border-b border-[var(--omlu-border)] pb-3">
-        <h3 className="min-w-0 break-words text-2xl font-black leading-tight tracking-wide text-[var(--omlu-text-primary)]">{sourceHeading}</h3>
-        <span className="shrink-0 whitespace-nowrap rounded-lg border border-orange-900/40 bg-orange-950/30 px-2.5 py-1 text-sm font-black uppercase text-orange-400">
-          {elapsedTime}
-        </span>
-      </div>
-
-      {/* Items list */}
-      <div className="flex flex-col gap-4">
-        {order.items.map((item, idx) => (
-          <div key={idx} className="min-w-0">
-            <p className="break-words text-lg font-extrabold leading-snug text-[var(--omlu-text-secondary)]">
-              <span className="text-orange-400">{item.quantity} ×</span> {item.item_name}
-            </p>
-            {item.selected_options.map((option, optionIndex) => (
-              <p key={`${option.option_name}-${optionIndex}`} className="mt-1 break-words pl-7 text-sm font-bold leading-snug text-cyan-300">
-                {option.kitchen_display_name || option.option_name}
-                {option.quantity > 1 ? ` × ${option.quantity}` : ""}
-              </p>
-            ))}
-            {item.item_note && (
-              <p className="mt-2 break-words rounded-lg border border-amber-900/40 bg-amber-950/20 px-3 py-2 text-sm font-bold text-amber-300">
-                Note: {item.item_note}
-              </p>
-            )}
-          </div>
-        ))}
-      </div>
-
-      {/* Customer order note */}
-      {order.customer_note && (
-        <div className="bg-[var(--omlu-page-background)] p-2.5 rounded-xl border border-[var(--omlu-border)]">
-          <span className="text-[9px] font-black text-[var(--omlu-text-secondary)] uppercase tracking-wider block mb-0.5">
-            Customer Note
-          </span>
-          <p className="break-words text-sm font-medium text-[var(--omlu-text-secondary)]">{order.customer_note}</p>
-        </div>
-      )}
-
-      <p className="border-t border-[var(--omlu-border)] pt-3 text-xs font-semibold text-[var(--omlu-text-secondary)]">Order {order.order_number}</p>
-
-      {/* Actions */}
-      <div className="flex gap-2 mt-2">
-        {onReject && (
-          <button
-            disabled={isUpdating}
-            onClick={onReject}
-            aria-label={`Reject order ${order.order_number}`}
-            className="min-h-12 px-4 bg-[var(--omlu-muted-surface)] hover:bg-[var(--omlu-muted-surface)] text-red-500 hover:text-red-400 font-bold rounded-xl text-sm transition cursor-pointer disabled:opacity-50"
-          >
-            ✕
-          </button>
-        )}
-        {onAccept && (
-          <button
-            disabled={isUpdating}
-            onClick={onAccept}
-            className="min-h-12 flex-1 bg-orange-600 hover:bg-orange-700 text-[var(--omlu-primary-action-text)] font-bold rounded-xl text-sm transition cursor-pointer disabled:opacity-50"
-          >
-            Accept
-          </button>
-        )}
-        {onStartPrep && (
-          <button
-            disabled={isUpdating}
-            onClick={onStartPrep}
-            className="min-h-12 flex-1 bg-cyan-600 hover:bg-cyan-700 text-[var(--omlu-primary-action-text)] font-bold rounded-xl text-sm transition cursor-pointer disabled:opacity-50"
-          >
-            Start Preparing
-          </button>
-        )}
-        {onMarkReady && (
-          <button
-            disabled={isUpdating}
-            onClick={onMarkReady}
-            className="min-h-12 flex-1 bg-purple-600 hover:bg-purple-700 text-[var(--omlu-strong-action-text)] font-bold rounded-xl text-sm transition cursor-pointer disabled:opacity-50"
-          >
-            Mark Ready
-          </button>
-        )}
-        {onMarkServed && (
-          <button
-            disabled={isUpdating}
-            onClick={onMarkServed}
-            className="min-h-12 flex-1 bg-green-600 hover:bg-green-700 text-[var(--omlu-primary-action-text)] font-bold rounded-xl text-sm transition cursor-pointer disabled:opacity-50"
-          >
-            Mark Served
-          </button>
-        )}
-      </div>
-    </article>
   );
 }

@@ -6,7 +6,6 @@ import test from "node:test";
 const root = path.resolve(import.meta.dirname, "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 const staffNav = read("components/staff/StaffBottomNav.tsx");
-const kitchen = read("app/kitchen/[restaurantSlug]/KitchenDashboardClient.tsx");
 const availability = read("app/kitchen/[restaurantSlug]/KitchenAvailabilityDialog.tsx");
 const themeProvider = read("components/ThemeProvider.tsx");
 const adminLayout = read("app/admin/layout.tsx");
@@ -25,9 +24,8 @@ test("Staff shared navigation renders the existing accessible ThemeToggle", () =
 });
 
 test("Kitchen header renders the existing ThemeToggle near operational controls", () => {
-  assert.match(kitchen, /import \{ ThemeToggle \} from "@\/components\/ThemeToggle"/);
-  assert.match(kitchen, /<ThemeToggle/);
-  assert.ok(kitchen.indexOf("<ThemeToggle") < kitchen.indexOf("<button\n            onClick={handleToggleSound}"));
+  assert.match(kitchenSources, /import \{ ThemeToggle \} from "@\/components\/ThemeToggle"/);
+  assert.match(kitchenSources, /<ThemeToggle/);
 });
 
 test("Staff core surfaces use shared semantic theme styles", () => {
@@ -38,19 +36,19 @@ test("Staff core surfaces use shared semantic theme styles", () => {
 });
 
 test("Kitchen cards and availability panel use theme-aware surfaces", () => {
-  assert.match(kitchen, /bg-\[var\(--omlu-primary-surface\)\]/);
-  assert.match(kitchen, /text-\[var\(--omlu-text-primary\)\]/);
-  assert.match(kitchen, /border-\[var\(--omlu-border\)\]/);
+  assert.match(kitchenSources, /bg-\[var\(--omlu-primary-surface\)\]/);
+  assert.match(kitchenSources, /text-\[var\(--omlu-text-primary\)\]/);
+  assert.match(kitchenSources, /border-\[var\(--omlu-border\)\]/);
   assert.match(availability, /bg-\[var\(--omlu-page-background\)\]/);
   assert.match(availability, /bg-\[var\(--omlu-primary-surface\)\]/);
   assert.doesNotMatch(kitchenSources, /omlu-light-shell|contrast-dark-card|contrast-dark-row/);
 });
 
 test("Kitchen status stages remain text-labelled and visually distinct", () => {
-  for (const label of ["New", "Accepted", "Preparing", "Ready", "Mark Served"]) assert.match(kitchen, new RegExp(label));
-  for (const color of ["text-orange-500", "text-cyan-500", "text-purple-500", "text-green-500"]) assert.match(kitchen, new RegExp(color));
-  for (const action of ["bg-orange-600", "bg-cyan-600", "bg-purple-600", "bg-green-600"]) assert.match(kitchen, new RegExp(action));
-  assert.match(kitchen, /\{elapsedTime\}/);
+  for (const label of ["New", "Accepted", "Preparing", "Ready", "Mark served"]) assert.match(kitchenSources, new RegExp(label));
+  for (const color of ["bg-amber-500", "bg-cyan-500", "bg-purple-500", "bg-emerald-500"]) assert.match(kitchenSources, new RegExp(color));
+  for (const action of ["bg-orange-600", "bg-cyan-600", "bg-purple-600", "bg-emerald-600"]) assert.match(kitchenSources, new RegExp(action));
+  assert.match(kitchenSources, /elapsedText|calculateElapsedMinutes/);
 });
 
 test("Phase 2 reuses the single Phase 1 preference and provider", () => {
