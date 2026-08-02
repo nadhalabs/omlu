@@ -281,7 +281,7 @@ export default function StaffManagementClient() {
   };
 
   if (selfSessionRevoked) {
-    return <div className="fixed inset-0 z-[100] flex items-center justify-center bg-zinc-950 p-6 text-center" role="status" aria-live="polite"><p className="text-sm font-bold text-white">Signing out securely...</p></div>;
+    return <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[var(--omlu-primary-surface)] p-6 text-center" role="status" aria-live="polite"><p className="text-sm font-bold text-[var(--omlu-text-primary)]">Signing out securely...</p></div>;
   }
 
   return (
@@ -289,15 +289,15 @@ export default function StaffManagementClient() {
       <FormToast message={toast} onDismiss={() => setToast(null)} />
       <header className="flex flex-col items-start justify-between gap-4 sm:flex-row">
         <div>
-          <h1 className="text-2xl font-black text-zinc-950">Staff Management</h1>
-          <p className="mt-1 text-sm text-zinc-600">
+          <h1 className="text-2xl font-black text-[var(--omlu-text-primary)]">Staff Management</h1>
+          <p className="mt-1 text-sm text-[var(--omlu-text-secondary)]">
             Manage staff access, roles, sessions, and restaurant availability.
           </p>
         </div>
         <button
           onClick={loadStaff}
           disabled={loading}
-          className="min-h-11 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-bold text-zinc-800 shadow-sm transition hover:bg-zinc-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:border-zinc-200 disabled:bg-zinc-100 disabled:text-zinc-500"
+          className="min-h-11 rounded-lg border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-4 py-2 text-sm font-bold text-[var(--omlu-text-primary)] shadow-sm transition hover:bg-[var(--omlu-muted-surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:border-[var(--omlu-border-strong)] disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)]"
         >
           {loading ? "Refreshing..." : "Refresh"}
         </button>
@@ -310,38 +310,38 @@ export default function StaffManagementClient() {
       )}
 
       {operations && (
-        <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm sm:p-6">
+        <section className="rounded-2xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-5 shadow-sm sm:p-6">
           <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-start">
             <div>
-              <h2 className="text-lg font-black text-zinc-950">Restaurant Staff Access</h2>
+              <h2 className="text-lg font-black text-[var(--omlu-text-primary)]">Restaurant Staff Access</h2>
               <p className={`mt-2 inline-flex rounded-full px-3 py-1 text-sm font-bold ${operations.locked ? "bg-red-100 text-red-800" : "bg-emerald-100 text-emerald-800"}`}>
                 {operations.locked ? "All staff locked" : "All staff unlocked"}
               </p>
-              {operations.locked && <p className="mt-2 text-xs font-medium text-zinc-600">Locked by {operations.locked_by_name || "Admin"} · {fmt(operations.locked_at)}{operations.reason ? ` · ${operations.reason}` : ""}</p>}
+              {operations.locked && <p className="mt-2 text-xs font-medium text-[var(--omlu-text-secondary)]">Locked by {operations.locked_by_name || "Admin"} · {fmt(operations.locked_at)}{operations.reason ? ` · ${operations.reason}` : ""}</p>}
             </div>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-              <label className="text-xs font-bold text-zinc-700">Restaurant operational status
-              <select value={operations.operating_status} onChange={(e) => void changeRestaurantStatus(e.target.value as "open" | "closing" | "closed")} className="mt-1 block min-h-11 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-semibold text-zinc-900 focus-visible:outline-2 focus-visible:outline-orange-500">
+              <label className="text-xs font-bold text-[var(--omlu-text-primary)]">Restaurant operational status
+              <select value={operations.operating_status} onChange={(e) => void changeRestaurantStatus(e.target.value as "open" | "closing" | "closed")} className="mt-1 block min-h-11 w-full rounded-lg border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-3 py-2 text-sm font-semibold text-[var(--omlu-text-primary)] focus-visible:outline-2 focus-visible:outline-orange-500">
                 <option value="open">Open</option><option value="closing">Closing</option><option value="closed">Closed</option>
               </select>
               </label>
-              <button onClick={toggleAllStaff} className={`min-h-11 rounded-lg border px-4 py-2 text-sm font-black transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 ${operations.locked ? "border-emerald-700 bg-emerald-700 text-white hover:bg-emerald-800" : "border-red-300 bg-white text-red-700 hover:bg-red-50"}`}>
+              <button onClick={toggleAllStaff} className={`min-h-11 rounded-lg border px-4 py-2 text-sm font-black transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 ${operations.locked ? "border-emerald-700 bg-emerald-700 text-[var(--omlu-text-primary)] hover:bg-emerald-800" : "border-red-300 bg-[var(--omlu-primary-surface)] text-red-700 hover:bg-red-50"}`}>
                 {operations.locked ? "Unlock all staff" : "Lock all staff"}
               </button>
             </div>
           </div>
           <dl className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-            {[["Active tables", operations.occupied_tables], ["Unserved orders", operations.unserved_orders], ["Pending requests", operations.pending_requests], ["Bills awaiting payment", operations.bills_waiting_for_payment]].map(([label, value]) => <div key={label} className="rounded-xl bg-zinc-50 p-3"><dt className="text-xs font-bold text-zinc-600">{label}</dt><dd className="mt-1 text-xl font-black text-zinc-950">{value}</dd></div>)}
+            {[["Active tables", operations.occupied_tables], ["Unserved orders", operations.unserved_orders], ["Pending requests", operations.pending_requests], ["Bills awaiting payment", operations.bills_waiting_for_payment]].map(([label, value]) => <div key={label} className="rounded-xl bg-[var(--omlu-muted-surface)] p-3"><dt className="text-xs font-bold text-[var(--omlu-text-secondary)]">{label}</dt><dd className="mt-1 text-xl font-black text-[var(--omlu-text-primary)]">{value}</dd></div>)}
           </dl>
         </section>
       )}
 
-      <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm sm:p-6">
-        <h2 className="text-lg font-black text-zinc-950">Add staff member</h2>
+      <section className="rounded-2xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-5 shadow-sm sm:p-6">
+        <h2 className="text-lg font-black text-[var(--omlu-text-primary)]">Add staff member</h2>
         <form onSubmit={submitCreate} className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         <FieldInput name="name" label="Full name" placeholder="Full name" autoComplete="name" value={form.name} error={fieldErrors.name} disabled={saving} onChange={(value) => setForm({ ...form, name: value })} />
         <FieldInput name="username" label="Username" placeholder="e.g. nadha" autoComplete="username" value={form.username} error={fieldErrors.username} disabled={saving} onChange={(value) => setForm({ ...form, username: value.toLowerCase() })} />
-        <label className="flex flex-col gap-1.5 text-sm font-bold text-zinc-800">Role<select name="role" className="min-h-11 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-900 focus-visible:outline-2 focus-visible:outline-orange-500" value={form.role} disabled={saving} onChange={(e) => changeCreateRole(e.target.value as StaffAccountCreateRequest["role"])}>
+        <label className="flex flex-col gap-1.5 text-sm font-bold text-[var(--omlu-text-primary)]">Role<select name="role" className="min-h-11 rounded-lg border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-3 py-2 text-sm font-medium text-[var(--omlu-text-primary)] focus-visible:outline-2 focus-visible:outline-orange-500" value={form.role} disabled={saving} onChange={(e) => changeCreateRole(e.target.value as StaffAccountCreateRequest["role"])}>
           <option value="staff">Staff</option>
           <option value="kitchen">Kitchen</option>
           <option value="admin">Admin</option>
@@ -353,17 +353,17 @@ export default function StaffManagementClient() {
         </> : <>
           <PasswordInput name="temporary_password" label="Temporary password" value={form.temporary_password || ""} error={fieldErrors.temporary_password} disabled={saving} autoComplete="new-password" showChecklist onChange={(value) => setForm({ ...form, temporary_password: value })} />
         </>}
-        <button disabled={saving} className="min-h-11 self-end rounded-lg bg-orange-600 px-5 py-2 text-sm font-black text-white transition hover:bg-orange-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-600">
+        <button disabled={saving} className="min-h-11 self-end rounded-lg bg-orange-600 px-5 py-2 text-sm font-black text-[var(--omlu-text-primary)] transition hover:bg-orange-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)]">
           {saving ? "Adding staff..." : "Add Staff"}
         </button>
         </form>
       </section>
 
       <section>
-        <div className="mb-3 flex items-end justify-between gap-4"><div><h2 className="text-lg font-black text-zinc-950">Staff accounts</h2><p className="mt-1 text-sm text-zinc-600">{staff.length} {staff.length === 1 ? "account" : "accounts"}</p></div></div>
-        {loading && staff.length === 0 ? <div className="rounded-xl border border-zinc-200 bg-white p-6 text-sm font-medium text-zinc-600">Loading staff accounts...</div> : staff.length === 0 ? <div className="rounded-xl border border-dashed border-zinc-300 bg-white p-8 text-center text-sm font-medium text-zinc-600">No staff accounts yet.</div> : <>
-          <div className="hidden overflow-visible rounded-2xl border border-zinc-200 bg-white shadow-sm lg:block">
-            <table className="w-full table-fixed text-sm"><thead className="bg-zinc-950 text-left text-[11px] uppercase tracking-wider text-white"><tr><th className="w-[25%] p-4">Staff member</th><th className="w-[14%] p-4">Role</th><th className="w-[13%] p-4">Status</th><th className="w-[15%] p-4">Last active</th><th className="w-[13%] p-4">Sessions</th><th className="w-[20%] p-4">Actions</th></tr></thead>
+        <div className="mb-3 flex items-end justify-between gap-4"><div><h2 className="text-lg font-black text-[var(--omlu-text-primary)]">Staff accounts</h2><p className="mt-1 text-sm text-[var(--omlu-text-secondary)]">{staff.length} {staff.length === 1 ? "account" : "accounts"}</p></div></div>
+        {loading && staff.length === 0 ? <div className="rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-6 text-sm font-medium text-[var(--omlu-text-secondary)]">Loading staff accounts...</div> : staff.length === 0 ? <div className="rounded-xl border border-dashed border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-8 text-center text-sm font-medium text-[var(--omlu-text-secondary)]">No staff accounts yet.</div> : <>
+          <div className="hidden overflow-visible rounded-2xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] shadow-sm lg:block">
+            <table className="w-full table-fixed text-sm"><thead className="bg-[var(--omlu-primary-surface)] text-left text-[11px] uppercase tracking-wider text-[var(--omlu-text-primary)]"><tr><th className="w-[25%] p-4">Staff member</th><th className="w-[14%] p-4">Role</th><th className="w-[13%] p-4">Status</th><th className="w-[15%] p-4">Last active</th><th className="w-[13%] p-4">Sessions</th><th className="w-[20%] p-4">Actions</th></tr></thead>
             <tbody className="divide-y divide-zinc-200">{staff.map((member) => <StaffRow key={member.id} member={member} busy={busyMemberId === member.id} busyAction={busyAction} openMenu={openMenuId === member.id} setOpenMenu={(open) => setOpenMenuId(open ? member.id : null)} changeRole={changeRole} changeStatus={changeStatus} openResetPassword={openResetPassword} signOutAll={signOutAll} toggleMemberLock={toggleMemberLock} removeAccess={removeAccess} />)}</tbody></table>
           </div>
           <div className="grid gap-4 lg:hidden">{staff.map((member) => <StaffCard key={member.id} member={member} busy={busyMemberId === member.id} busyAction={busyAction} openMenu={openMenuId === member.id} setOpenMenu={(open) => setOpenMenuId(open ? member.id : null)} changeRole={changeRole} changeStatus={changeStatus} openResetPassword={openResetPassword} signOutAll={signOutAll} toggleMemberLock={toggleMemberLock} removeAccess={removeAccess} />)}</div>
@@ -371,9 +371,9 @@ export default function StaffManagementClient() {
       </section>
       {resetTarget && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto overscroll-contain bg-black/60 p-4">
-          <form onSubmit={submitResetPassword} className="my-auto max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-900 p-5 shadow-xl" role="dialog" aria-modal="true" aria-labelledby="reset-password-title">
-            <h2 id="reset-password-title" className="break-words text-lg font-black text-white">{resetTarget.role === "staff" || resetTarget.role === "kitchen" ? "Reset PIN" : "Reset Password"}</h2>
-            <p className="mt-1 text-sm text-zinc-500">{resetTarget.name}</p>
+          <form onSubmit={submitResetPassword} className="my-auto max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-5 shadow-xl" role="dialog" aria-modal="true" aria-labelledby="reset-password-title">
+            <h2 id="reset-password-title" className="break-words text-lg font-black text-[var(--omlu-text-primary)]">{resetTarget.role === "staff" || resetTarget.role === "kitchen" ? "Reset PIN" : "Reset Password"}</h2>
+            <p className="mt-1 text-sm text-[var(--omlu-text-secondary)]">{resetTarget.name}</p>
             <div className="mt-4">
               <PasswordInput
                 name="temporary_password"
@@ -391,10 +391,10 @@ export default function StaffManagementClient() {
               />
             </div>
             <div className="mt-5 flex justify-end gap-2">
-              <button type="button" disabled={resetSaving} onClick={() => setResetTarget(null)} className="rounded-lg bg-zinc-800 px-4 py-2 text-sm font-bold text-zinc-200">
+              <button type="button" disabled={resetSaving} onClick={() => setResetTarget(null)} className="rounded-lg bg-[var(--omlu-muted-surface)] px-4 py-2 text-sm font-bold text-[var(--omlu-text-secondary)]">
                 Cancel
               </button>
-              <button disabled={resetSaving} className="rounded-lg bg-orange-600 px-4 py-2 text-sm font-black text-white disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-600">
+              <button disabled={resetSaving} className="rounded-lg bg-orange-600 px-4 py-2 text-sm font-black text-[var(--omlu-text-primary)] disabled:cursor-not-allowed disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)]">
                 {resetSaving ? "Resetting..." : resetTarget.role === "staff" || resetTarget.role === "kitchen" ? "Reset PIN" : "Reset Password"}
               </button>
             </div>
@@ -426,7 +426,7 @@ function StatusBadge({ member }: { member: StaffAccountResponse }) {
 }
 
 function RoleControl({ member, busy, changeRole }: Pick<StaffPresentationProps, "member" | "busy" | "changeRole">) {
-  return <div><select aria-label={`Role for ${member.name}`} title={member.role === "owner" ? "The restaurant owner's role cannot be changed." : undefined} disabled={member.role === "owner" || busy} value={member.role} onChange={(event) => void changeRole(member, event.target.value)} className="min-h-10 w-full rounded-lg border border-zinc-300 bg-white px-2 text-sm font-semibold text-zinc-900 focus-visible:outline-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:border-zinc-200 disabled:bg-zinc-100 disabled:text-zinc-600"><option value="owner">Owner</option><option value="admin">Admin</option><option value="staff">Staff</option><option value="kitchen">Kitchen</option></select>{member.role === "owner" && <p className="mt-1 text-xs font-medium text-zinc-600">Owner role is protected.</p>}</div>;
+  return <div><select aria-label={`Role for ${member.name}`} title={member.role === "owner" ? "The restaurant owner's role cannot be changed." : undefined} disabled={member.role === "owner" || busy} value={member.role} onChange={(event) => void changeRole(member, event.target.value)} className="min-h-10 w-full rounded-lg border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-2 text-sm font-semibold text-[var(--omlu-text-primary)] focus-visible:outline-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:border-[var(--omlu-border-strong)] disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)]"><option value="owner">Owner</option><option value="admin">Admin</option><option value="staff">Staff</option><option value="kitchen">Kitchen</option></select>{member.role === "owner" && <p className="mt-1 text-xs font-medium text-[var(--omlu-text-secondary)]">Owner role is protected.</p>}</div>;
 }
 
 function MemberActions(props: StaffPresentationProps) {
@@ -447,33 +447,33 @@ function MemberActions(props: StaffPresentationProps) {
       ? { label: "Resume", action: () => changeStatus(member, "active"), positive: true }
       : { label: "Suspend", action: () => changeStatus(member, "suspended"), positive: false };
   return <div className="flex min-w-0 flex-wrap items-center gap-2">
-    {!owner && <button type="button" disabled={busy} onClick={() => void primary.action()} className={`min-h-10 whitespace-nowrap rounded-lg px-3 py-2 text-xs font-black transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-600 ${primary.positive ? "bg-emerald-700 text-white hover:bg-emerald-800" : "border border-zinc-300 bg-white text-zinc-800 hover:bg-zinc-50"}`}>{busy ? busyAction : primary.label}</button>}
-    <button type="button" disabled={busy || member.active_session_count === 0} onClick={() => void signOutAll(member)} className="min-h-10 whitespace-nowrap rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs font-bold text-zinc-800 hover:bg-zinc-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:border-zinc-200 disabled:bg-zinc-100 disabled:text-zinc-500">Sign out sessions</button>
-    <div className="relative" ref={menuRef}><button type="button" aria-label={`More actions for ${member.name}`} aria-haspopup="menu" aria-expanded={openMenu} disabled={busy} onClick={() => setOpenMenu(!openMenu)} className="min-h-10 min-w-10 rounded-lg border border-zinc-300 bg-white px-3 text-lg font-black text-zinc-800 hover:bg-zinc-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-500">⋮</button>
-      {openMenu && <div role="menu" aria-label={`More actions for ${member.name}`} className="absolute right-0 z-20 mt-2 w-56 rounded-xl border border-zinc-200 bg-white p-1.5 shadow-xl">
+    {!owner && <button type="button" disabled={busy} onClick={() => void primary.action()} className={`min-h-10 whitespace-nowrap rounded-lg px-3 py-2 text-xs font-black transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)] ${primary.positive ? "bg-emerald-700 text-[var(--omlu-text-primary)] hover:bg-emerald-800" : "border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-muted-surface)]"}`}>{busy ? busyAction : primary.label}</button>}
+    <button type="button" disabled={busy || member.active_session_count === 0} onClick={() => void signOutAll(member)} className="min-h-10 whitespace-nowrap rounded-lg border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-3 py-2 text-xs font-bold text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-muted-surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:border-[var(--omlu-border-strong)] disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)]">Sign out sessions</button>
+    <div className="relative" ref={menuRef}><button type="button" aria-label={`More actions for ${member.name}`} aria-haspopup="menu" aria-expanded={openMenu} disabled={busy} onClick={() => setOpenMenu(!openMenu)} className="min-h-10 min-w-10 rounded-lg border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-3 text-lg font-black text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-muted-surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)]">⋮</button>
+      {openMenu && <div role="menu" aria-label={`More actions for ${member.name}`} className="absolute right-0 z-20 mt-2 w-56 rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-1.5 shadow-xl">
         <MenuAction label={member.role === "staff" || member.role === "kitchen" ? "Reset PIN" : "Reset password"} onClick={() => run(() => openResetPassword(member))} />
         {member.active_session_count > 0 && <MenuAction label="Sign out active sessions" onClick={() => run(() => signOutAll(member))} />}
         {!owner && member.role === "staff" && <MenuAction label={member.status === "active" ? "Suspend account" : "Resume account"} onClick={() => run(() => changeStatus(member, member.status === "active" ? "suspended" : "active"))} />}
         {!owner && member.role === "staff" && <MenuAction label={member.operations_locked ? "Unlock account" : "Lock account"} onClick={() => run(() => toggleMemberLock(member))} />}
         {!owner && <MenuAction label="Remove staff member" destructive onClick={() => run(() => removeAccess(member))} />}
-        {owner && <p className="px-3 py-2 text-xs font-medium text-zinc-600">The restaurant owner cannot be suspended or removed.</p>}
+        {owner && <p className="px-3 py-2 text-xs font-medium text-[var(--omlu-text-secondary)]">The restaurant owner cannot be suspended or removed.</p>}
       </div>}
     </div>
   </div>;
 }
 
 function MenuAction({ label, onClick, destructive = false }: { label: string; onClick: () => void; destructive?: boolean }) {
-  return <button type="button" role="menuitem" onClick={onClick} className={`min-h-10 w-full rounded-lg px-3 py-2 text-left text-sm font-bold focus-visible:outline-2 focus-visible:outline-orange-500 ${destructive ? "text-red-700 hover:bg-red-50" : "text-zinc-800 hover:bg-zinc-100"}`}>{label}</button>;
+  return <button type="button" role="menuitem" onClick={onClick} className={`min-h-10 w-full rounded-lg px-3 py-2 text-left text-sm font-bold focus-visible:outline-2 focus-visible:outline-orange-500 ${destructive ? "text-red-700 hover:bg-red-50" : "text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-muted-surface)]"}`}>{label}</button>;
 }
 
 function StaffRow(props: StaffPresentationProps) {
   const { member, busy, changeRole } = props;
-  return <tr className="bg-white align-top text-zinc-900"><td className="p-4"><div className="font-black text-zinc-950">{member.name}</div><div className="mt-1 break-words text-xs font-semibold text-zinc-700">@{member.username || "no-username"}</div>{member.email && <div className="mt-0.5 break-words text-xs text-zinc-600">{member.email}</div>}<div className="mt-2 text-xs text-zinc-600">Added by {member.added_by_staff_id || "System"} · {fmt(member.created_at)}</div></td><td className="p-4"><RoleControl member={member} busy={busy} changeRole={changeRole} /></td><td className="p-4"><StatusBadge member={member} />{member.operations_locked && member.operations_lock_reason && <p className="mt-2 text-xs text-zinc-600">{member.operations_lock_reason}</p>}</td><td className="p-4 font-medium text-zinc-700" title={fmt(member.last_active_at)}>{relativeTime(member.last_active_at)}</td><td className="p-4 whitespace-nowrap font-medium text-zinc-700">{member.active_session_count ? `${member.active_session_count} active` : "No active sessions"}</td><td className="overflow-visible p-4"><MemberActions {...props} /></td></tr>;
+  return <tr className="bg-[var(--omlu-primary-surface)] align-top text-[var(--omlu-text-primary)]"><td className="p-4"><div className="font-black text-[var(--omlu-text-primary)]">{member.name}</div><div className="mt-1 break-words text-xs font-semibold text-[var(--omlu-text-primary)]">@{member.username || "no-username"}</div>{member.email && <div className="mt-0.5 break-words text-xs text-[var(--omlu-text-secondary)]">{member.email}</div>}<div className="mt-2 text-xs text-[var(--omlu-text-secondary)]">Added by {member.added_by_staff_id || "System"} · {fmt(member.created_at)}</div></td><td className="p-4"><RoleControl member={member} busy={busy} changeRole={changeRole} /></td><td className="p-4"><StatusBadge member={member} />{member.operations_locked && member.operations_lock_reason && <p className="mt-2 text-xs text-[var(--omlu-text-secondary)]">{member.operations_lock_reason}</p>}</td><td className="p-4 font-medium text-[var(--omlu-text-primary)]" title={fmt(member.last_active_at)}>{relativeTime(member.last_active_at)}</td><td className="p-4 whitespace-nowrap font-medium text-[var(--omlu-text-primary)]">{member.active_session_count ? `${member.active_session_count} active` : "No active sessions"}</td><td className="overflow-visible p-4"><MemberActions {...props} /></td></tr>;
 }
 
 function StaffCard(props: StaffPresentationProps) {
   const { member, busy, changeRole } = props;
-  return <article className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="truncate font-black text-zinc-950">{member.name}</h3><p className="mt-1 truncate text-sm font-semibold text-zinc-700">@{member.username || "no-username"}</p>{member.email && <p className="mt-0.5 break-all text-xs text-zinc-600">{member.email}</p>}</div><StatusBadge member={member} /></div><dl className="mt-5 grid grid-cols-2 gap-4 text-sm"><div><dt className="text-xs font-bold text-zinc-600">Last active</dt><dd className="mt-1 font-semibold text-zinc-900" title={fmt(member.last_active_at)}>{relativeTime(member.last_active_at)}</dd></div><div><dt className="text-xs font-bold text-zinc-600">Sessions</dt><dd className="mt-1 font-semibold text-zinc-900">{member.active_session_count ? `${member.active_session_count} active` : "No active sessions"}</dd></div></dl><div className="mt-4"><p className="mb-1.5 text-xs font-bold text-zinc-600">Role</p><RoleControl member={member} busy={busy} changeRole={changeRole} /></div><div className="mt-5 border-t border-zinc-200 pt-4"><MemberActions {...props} /></div></article>;
+  return <article className="rounded-2xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-5 shadow-sm"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="truncate font-black text-[var(--omlu-text-primary)]">{member.name}</h3><p className="mt-1 truncate text-sm font-semibold text-[var(--omlu-text-primary)]">@{member.username || "no-username"}</p>{member.email && <p className="mt-0.5 break-all text-xs text-[var(--omlu-text-secondary)]">{member.email}</p>}</div><StatusBadge member={member} /></div><dl className="mt-5 grid grid-cols-2 gap-4 text-sm"><div><dt className="text-xs font-bold text-[var(--omlu-text-secondary)]">Last active</dt><dd className="mt-1 font-semibold text-[var(--omlu-text-primary)]" title={fmt(member.last_active_at)}>{relativeTime(member.last_active_at)}</dd></div><div><dt className="text-xs font-bold text-[var(--omlu-text-secondary)]">Sessions</dt><dd className="mt-1 font-semibold text-[var(--omlu-text-primary)]">{member.active_session_count ? `${member.active_session_count} active` : "No active sessions"}</dd></div></dl><div className="mt-4"><p className="mb-1.5 text-xs font-bold text-[var(--omlu-text-secondary)]">Role</p><RoleControl member={member} busy={busy} changeRole={changeRole} /></div><div className="mt-5 border-t border-[var(--omlu-border-strong)] pt-4"><MemberActions {...props} /></div></article>;
 }
 
 function FieldInput({
@@ -506,13 +506,13 @@ function FieldInput({
   const errorId = `${name}-error`;
   const hintId = `${name}-hint`;
   return (
-    <label className="flex flex-col gap-1.5 text-sm font-bold text-zinc-800">
+    <label className="flex flex-col gap-1.5 text-sm font-bold text-[var(--omlu-text-primary)]">
       {label}
       <input
         name={name}
         type={type}
-        className={`min-h-11 rounded-lg border bg-white px-3 py-2 text-sm font-medium text-zinc-900 outline-none focus-visible:outline-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-500 ${
-          error ? "border-red-500" : "border-zinc-300"
+        className={`min-h-11 rounded-lg border bg-[var(--omlu-primary-surface)] px-3 py-2 text-sm font-medium text-[var(--omlu-text-primary)] outline-none focus-visible:outline-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)] ${
+          error ? "border-red-500" : "border-[var(--omlu-border-strong)]"
         }`}
         placeholder={placeholder}
         value={value}
@@ -524,7 +524,7 @@ function FieldInput({
         aria-describedby={error ? errorId : hint ? hintId : undefined}
         onChange={(event) => onChange(event.target.value)}
       />
-      {hint && !error && <span id={hintId} className="text-xs font-medium text-zinc-600">{hint}</span>}
+      {hint && !error && <span id={hintId} className="text-xs font-medium text-[var(--omlu-text-secondary)]">{hint}</span>}
       {error && <span id={errorId} className="text-xs font-semibold text-red-700">{error}</span>}
     </label>
   );

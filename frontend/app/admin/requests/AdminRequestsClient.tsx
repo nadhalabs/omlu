@@ -242,7 +242,7 @@ export default function AdminRequestsClient() {
   const dashboardHref = canRecordPayments ? "/admin/dashboard" : "/staff";
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 py-8 px-4 sm:px-6">
+    <div className="min-h-screen bg-[var(--omlu-primary-surface)] text-[var(--omlu-text-secondary)] py-8 px-4 sm:px-6">
       {/* Hidden audio element for alert sound */}
       <audio ref={audioRef} src="/notification.mp3" preload="auto" aria-hidden="true" />
 
@@ -250,15 +250,15 @@ export default function AdminRequestsClient() {
         {/* Header */}
         <div className="flex items-start justify-between flex-wrap gap-4">
           <div>
-            <h1 className="text-2xl font-black text-white">
+            <h1 className="text-2xl font-black text-[var(--omlu-text-primary)]">
               Service Requests
               {pendingCount > 0 && (
-                <span className="ml-3 bg-orange-600 text-white text-xs font-extrabold px-2.5 py-1 rounded-full align-middle animate-pulse">
+                <span className="ml-3 bg-orange-600 text-[var(--omlu-text-primary)] text-xs font-extrabold px-2.5 py-1 rounded-full align-middle animate-pulse">
                   {pendingCount}
                 </span>
               )}
             </h1>
-            <p className="text-zinc-500 text-sm mt-1">
+            <p className="text-[var(--omlu-text-secondary)] text-sm mt-1">
               {lastUpdated
                 ? `Updated: ${lastUpdated.toLocaleTimeString()} · Real-time: ${realtimeStatus}`
                 : "Loading…"}
@@ -267,12 +267,12 @@ export default function AdminRequestsClient() {
           <div className="flex gap-3 items-center flex-wrap">
             <Link
               href={dashboardHref}
-              className="text-xs text-zinc-400 hover:text-orange-400 font-semibold transition px-3 py-1.5 rounded-lg border border-zinc-800 hover:border-orange-700/50"
+              className="text-xs text-[var(--omlu-text-secondary)] hover:text-orange-400 font-semibold transition px-3 py-1.5 rounded-lg border border-[var(--omlu-border)] hover:border-orange-700/50"
             >
               Back to dashboard
             </Link>
             {/* Show resolved toggle */}
-            <label className="flex items-center gap-2 text-xs font-semibold text-zinc-400 cursor-pointer select-none">
+            <label className="flex items-center gap-2 text-xs font-semibold text-[var(--omlu-text-secondary)] cursor-pointer select-none">
               <input
                 type="checkbox"
                 checked={showResolved}
@@ -284,7 +284,7 @@ export default function AdminRequestsClient() {
             {/* Active Tables link */}
             <Link
               href="/staff/sessions"
-              className="text-xs text-zinc-400 hover:text-emerald-400 font-semibold transition px-3 py-1.5 rounded-lg border border-zinc-800 hover:border-emerald-700/50"
+              className="text-xs text-[var(--omlu-text-secondary)] hover:text-emerald-400 font-semibold transition px-3 py-1.5 rounded-lg border border-[var(--omlu-border)] hover:border-emerald-700/50"
             >
               Active Tables
             </Link>
@@ -319,7 +319,7 @@ export default function AdminRequestsClient() {
 
         {/* Empty State */}
         {!loading && requests.length === 0 && !error && (
-          <div className="text-center py-16 text-zinc-500">
+          <div className="text-center py-16 text-[var(--omlu-text-secondary)]">
             <div className="text-5xl mb-4">🔕</div>
             <p className="font-semibold">No service requests found.</p>
             <p className="text-sm mt-2">Requests will appear here when customers send them.</p>
@@ -331,7 +331,7 @@ export default function AdminRequestsClient() {
           <div className="flex flex-col gap-3">
             {requests.map((req) => {
               const isPending = req.status === "pending";
-              const typeColor = REQUEST_TYPE_COLORS[req.request_type] || "bg-zinc-900 border-zinc-700 text-zinc-300";
+              const typeColor = REQUEST_TYPE_COLORS[req.request_type] || "bg-[var(--omlu-primary-surface)] border-[var(--omlu-border)] text-[var(--omlu-text-secondary)]";
               const paidBill = paidBills[req.id];
 
               return (
@@ -340,8 +340,8 @@ export default function AdminRequestsClient() {
                   id={`request-${req.id}`}
                   className={`rounded-2xl border p-5 flex flex-col gap-3 transition-all duration-200 ${
                     isPending
-                      ? "bg-zinc-900 border-zinc-700 shadow-sm"
-                      : "bg-zinc-900/50 border-zinc-800 opacity-60"
+                      ? "bg-[var(--omlu-primary-surface)] border-[var(--omlu-border)] shadow-sm"
+                      : "bg-[var(--omlu-primary-surface)] border-[var(--omlu-border)] opacity-60"
                   }`}
                 >
                   {/* Top row */}
@@ -354,16 +354,16 @@ export default function AdminRequestsClient() {
                         {REQUEST_TYPE_LABELS[req.request_type] || req.request_type}
                       </span>
                       <div className="flex gap-3 mt-1">
-                        <span className="text-white font-bold text-sm">
+                        <span className="text-[var(--omlu-text-primary)] font-bold text-sm">
                           Table {req.table_number || "—"}
                         </span>
                         {req.order_number && (
-                          <span className="text-zinc-500 text-xs font-semibold self-center">
+                          <span className="text-[var(--omlu-text-secondary)] text-xs font-semibold self-center">
                             Order {req.order_number}
                           </span>
                         )}
                       </div>
-                      <span className="text-zinc-500 text-xs">
+                      <span className="text-[var(--omlu-text-secondary)] text-xs">
                         {timeAgo(req.created_at)}
                       </span>
                     </div>
@@ -391,14 +391,14 @@ export default function AdminRequestsClient() {
                                 href={`/bill/${encodeURIComponent(req.dining_session_token)}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="px-4 py-2 bg-zinc-100 hover:bg-white text-zinc-950 font-bold text-xs rounded-xl transition text-center"
+                                className="px-4 py-2 bg-[var(--omlu-muted-surface)] hover:bg-[var(--omlu-primary-surface)] text-[var(--omlu-text-primary)] font-bold text-xs rounded-xl transition text-center"
                               >
                                 Open Bill
                               </a>
                               <button
                                 onClick={() => handleIssueBill(req)}
                                 disabled={issuingId === req.id}
-                                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition cursor-pointer"
+                                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-[var(--omlu-text-primary)] font-bold text-xs rounded-xl transition cursor-pointer"
                               >
                                 {issuingId === req.id ? "Issuing…" : "Issue Bill"}
                               </button>
@@ -407,7 +407,7 @@ export default function AdminRequestsClient() {
                                   <button
                                     onClick={() => handleConfirmPayment(req, "counter_cash")}
                                     disabled={confirmingPayment !== null}
-                                    className="px-4 py-2 bg-zinc-100 hover:bg-white disabled:opacity-50 text-zinc-950 font-bold text-xs rounded-xl transition cursor-pointer"
+                                    className="px-4 py-2 bg-[var(--omlu-muted-surface)] hover:bg-[var(--omlu-primary-surface)] disabled:opacity-50 text-[var(--omlu-text-primary)] font-bold text-xs rounded-xl transition cursor-pointer"
                                   >
                                     {confirmingPayment === `${req.id}-counter_cash`
                                       ? "Confirming…"
@@ -416,7 +416,7 @@ export default function AdminRequestsClient() {
                                   <button
                                     onClick={() => handleConfirmPayment(req, "counter_upi")}
                                     disabled={confirmingPayment !== null}
-                                    className="px-4 py-2 bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition cursor-pointer"
+                                    className="px-4 py-2 bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-[var(--omlu-text-primary)] font-bold text-xs rounded-xl transition cursor-pointer"
                                   >
                                     {confirmingPayment === `${req.id}-counter_upi`
                                       ? "Confirming…"
@@ -431,7 +431,7 @@ export default function AdminRequestsClient() {
                                 <button
                                   onClick={() => handleRequestPaymentAssistance(req)}
                                   disabled={requestingAssistanceId !== null}
-                                  className="px-4 py-2 bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition cursor-pointer"
+                                  className="px-4 py-2 bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-[var(--omlu-text-primary)] font-bold text-xs rounded-xl transition cursor-pointer"
                                 >
                                   {requestingAssistanceId === req.id
                                     ? "Sending…"
@@ -444,7 +444,7 @@ export default function AdminRequestsClient() {
                             id={`resolve-btn-${req.id}`}
                             onClick={() => handleResolve(req.id)}
                             disabled={resolvingId === req.id}
-                            className="px-4 py-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition cursor-pointer"
+                            className="px-4 py-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-[var(--omlu-text-primary)] font-bold text-xs rounded-xl transition cursor-pointer"
                           >
                             {resolvingId === req.id ? "Resolving…" : "Mark Resolved"}
                           </button>
@@ -459,9 +459,9 @@ export default function AdminRequestsClient() {
 
                   {/* Resolver info (when resolved) */}
                   {req.status === "resolved" && (
-                    <div className="text-xs text-zinc-500 font-semibold border-t border-zinc-800 pt-2">
+                    <div className="text-xs text-[var(--omlu-text-secondary)] font-semibold border-t border-[var(--omlu-border)] pt-2">
                       Resolved by{" "}
-                      <span className="text-zinc-400">
+                      <span className="text-[var(--omlu-text-secondary)]">
                         {req.resolver_name || "Staff"}
                       </span>
                       {req.resolved_at && (

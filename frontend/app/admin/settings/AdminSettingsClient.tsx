@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { getRestaurantSettings, updateRestaurantSettings, ApiError } from "@/lib/api";
 import { RestaurantSettingsResponse, RestaurantSettingsUpdate } from "@/lib/types";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 const TIMEZONES = [
   "Asia/Kolkata",
@@ -112,7 +113,7 @@ export default function AdminSettingsClient() {
       <div className="flex flex-1 items-center justify-center py-20">
         <div className="flex flex-col items-center gap-4">
           <div className="w-10 h-10 border-t-2 border-b-2 border-orange-500 rounded-full animate-spin" />
-          <p className="text-zinc-400 font-semibold text-sm">Loading settings…</p>
+          <p className="text-[var(--omlu-text-secondary)] font-semibold text-sm">Loading settings…</p>
         </div>
       </div>
     );
@@ -121,11 +122,17 @@ export default function AdminSettingsClient() {
   return (
     <div className="flex flex-col gap-8 max-w-2xl">
       <div>
-        <h1 className="text-2xl font-black text-white">Restaurant Settings</h1>
-        <p className="text-zinc-500 text-sm mt-1">
+        <h1 className="text-2xl font-black text-[var(--omlu-text-primary)]">Restaurant Settings</h1>
+        <p className="text-[var(--omlu-text-secondary)] text-sm mt-1">
           Only owners can modify settings. Changes apply immediately.
         </p>
       </div>
+
+      <section className="rounded-2xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-6" aria-labelledby="appearance-heading">
+        <h2 id="appearance-heading" className="text-lg font-black text-[var(--omlu-text-primary)]">Appearance</h2>
+        <p className="mb-4 mt-1 text-xs text-[var(--omlu-text-secondary)]">Choose how OMLU Admin looks on this device.</p>
+        <ThemeToggle />
+      </section>
 
       {/* Error / Success Banner */}
       {error && (
@@ -140,20 +147,20 @@ export default function AdminSettingsClient() {
       )}
 
       {/* Form */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 flex flex-col gap-6">
+      <div className="bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border)] rounded-2xl p-6 flex flex-col gap-6">
 
         {/* Timezone */}
         <div className="flex flex-col gap-2">
-          <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
+          <label className="text-xs font-bold text-[var(--omlu-text-secondary)] uppercase tracking-wider">
             Timezone
           </label>
-          <p className="text-zinc-500 text-xs">
+          <p className="text-[var(--omlu-text-secondary)] text-xs">
             Used for dashboard metrics and daily revenue calculations.
           </p>
           <select
             value={timezone}
             onChange={(e) => setTimezone(e.target.value)}
-            className="bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-white text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-orange-500"
+            className="bg-[var(--omlu-muted-surface)] border border-[var(--omlu-border)] rounded-xl px-4 py-2.5 text-[var(--omlu-text-primary)] text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-orange-500"
           >
             {TIMEZONES.map((tz) => (
               <option key={tz} value={tz}>
@@ -169,13 +176,13 @@ export default function AdminSettingsClient() {
 
         {/* Currency (read-only for MVP) */}
         <div className="flex flex-col gap-2">
-          <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
+          <label className="text-xs font-bold text-[var(--omlu-text-secondary)] uppercase tracking-wider">
             Currency
           </label>
-          <p className="text-zinc-500 text-xs">
+          <p className="text-[var(--omlu-text-secondary)] text-xs">
             INR is the only supported currency for this MVP.
           </p>
-          <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-xl px-4 py-2.5 text-zinc-400 text-sm font-semibold">
+          <div className="bg-[var(--omlu-muted-surface)] border border-[var(--omlu-border)] rounded-xl px-4 py-2.5 text-[var(--omlu-text-secondary)] text-sm font-semibold">
             {settings?.currency || "INR"} (Indian Rupee ₹)
           </div>
         </div>
@@ -184,11 +191,11 @@ export default function AdminSettingsClient() {
         <div className="flex flex-col gap-2">
           <label
             htmlFor="order-prefix"
-            className="text-xs font-bold text-zinc-400 uppercase tracking-wider"
+            className="text-xs font-bold text-[var(--omlu-text-secondary)] uppercase tracking-wider"
           >
             Order Number Prefix
           </label>
-          <p className="text-zinc-500 text-xs">
+          <p className="text-[var(--omlu-text-secondary)] text-xs">
             2–6 uppercase letters/numbers. Orders will appear as:{" "}
             <strong className="text-orange-500">
               {(orderPrefix || "NS").toUpperCase()}-20260712-0001
@@ -201,17 +208,17 @@ export default function AdminSettingsClient() {
             onChange={(e) => setOrderPrefix(e.target.value.toUpperCase())}
             maxLength={6}
             placeholder="NS"
-            className="bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-white text-sm font-semibold uppercase focus:outline-none focus:ring-2 focus:ring-orange-500 w-40"
+            className="bg-[var(--omlu-muted-surface)] border border-[var(--omlu-border)] rounded-xl px-4 py-2.5 text-[var(--omlu-text-primary)] text-sm font-semibold uppercase focus:outline-none focus:ring-2 focus:ring-orange-500 w-40"
           />
         </div>
 
         {/* Service Requests Toggle */}
         <div className="flex items-start gap-4">
           <div className="flex-1">
-            <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
+            <label className="text-xs font-bold text-[var(--omlu-text-secondary)] uppercase tracking-wider">
               Customer Service Requests
             </label>
-            <p className="text-zinc-500 text-xs mt-1">
+            <p className="text-[var(--omlu-text-secondary)] text-xs mt-1">
               When enabled, customers can send waiter, water, and assistance requests from the tracking page. Billing uses Pending Payments.
             </p>
           </div>
@@ -220,25 +227,25 @@ export default function AdminSettingsClient() {
             type="button"
             onClick={() => setServiceRequestsEnabled(!serviceRequestsEnabled)}
             className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-orange-500 shrink-0 mt-1 cursor-pointer ${
-              serviceRequestsEnabled ? "bg-orange-600" : "bg-zinc-700"
+              serviceRequestsEnabled ? "bg-orange-600" : "bg-[var(--omlu-muted-surface)]"
             }`}
             aria-label={`Service requests ${serviceRequestsEnabled ? "enabled" : "disabled"}`}
           >
             <span
-              className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform duration-200 ${
+              className={`inline-block h-5 w-5 transform rounded-full bg-[var(--omlu-primary-surface)] shadow transition-transform duration-200 ${
                 serviceRequestsEnabled ? "translate-x-6" : "translate-x-1"
               }`}
             />
           </button>
         </div>
 
-        <section className="flex flex-col gap-5 border-t border-zinc-800 pt-6">
+        <section className="flex flex-col gap-5 border-t border-[var(--omlu-border)] pt-6">
           <div>
-            <h2 className="text-lg font-black text-white">Billing &amp; GST</h2>
-            <p className="mt-1 text-xs text-zinc-500">GST is calculated only by the backend when a bill is generated.</p>
+            <h2 className="text-lg font-black text-[var(--omlu-text-primary)]">Billing &amp; GST</h2>
+            <p className="mt-1 text-xs text-[var(--omlu-text-secondary)]">GST is calculated only by the backend when a bill is generated.</p>
           </div>
           <label className="flex items-center justify-between gap-4">
-            <span className="text-sm font-bold text-zinc-300">GST enabled</span>
+            <span className="text-sm font-bold text-[var(--omlu-text-secondary)]">GST enabled</span>
             <input type="checkbox" checked={gstEnabled} onChange={(event) => setGstEnabled(event.target.checked)} className="h-5 w-5 accent-orange-600" />
           </label>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -249,27 +256,27 @@ export default function AdminSettingsClient() {
             <SettingsInput label="Default GST rate (%)" value={gstRate} onChange={setGstRate} inputMode="decimal" required={gstEnabled} />
             <SettingsInput label="Invoice prefix" value={invoicePrefix} onChange={(value) => setInvoicePrefix(value.toUpperCase())} maxLength={10} required />
           </div>
-          <label className="flex flex-col gap-2 text-xs font-bold uppercase tracking-wider text-zinc-400">
+          <label className="flex flex-col gap-2 text-xs font-bold uppercase tracking-wider text-[var(--omlu-text-secondary)]">
             Tax mode
-            <select value={taxMode} onChange={(event) => setTaxMode(event.target.value as "inclusive" | "exclusive")} className="rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-sm font-semibold normal-case text-white">
+            <select value={taxMode} onChange={(event) => setTaxMode(event.target.value as "inclusive" | "exclusive")} className="rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] px-4 py-2.5 text-sm font-semibold normal-case text-[var(--omlu-text-primary)]">
               <option value="exclusive">Exclusive — GST added to menu prices</option>
               <option value="inclusive">Inclusive — GST included in menu prices</option>
             </select>
           </label>
-          <label className="flex flex-col gap-2 text-xs font-bold uppercase tracking-wider text-zinc-400">
+          <label className="flex flex-col gap-2 text-xs font-bold uppercase tracking-wider text-[var(--omlu-text-secondary)]">
             Registered billing address
-            <textarea value={billingAddress} onChange={(event) => setBillingAddress(event.target.value)} required={gstEnabled} rows={3} className="rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-sm font-semibold normal-case text-white" />
+            <textarea value={billingAddress} onChange={(event) => setBillingAddress(event.target.value)} required={gstEnabled} rows={3} className="rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] px-4 py-2.5 text-sm font-semibold normal-case text-[var(--omlu-text-primary)]" />
           </label>
         </section>
 
         {/* Save Button */}
-        <div className="flex items-center gap-4 pt-2 border-t border-zinc-800">
+        <div className="flex items-center gap-4 pt-2 border-t border-[var(--omlu-border)]">
           <button
             id="save-settings-btn"
             type="button"
             onClick={handleSave}
             disabled={saving}
-            className="px-6 py-2.5 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white font-bold rounded-xl transition cursor-pointer"
+            className="px-6 py-2.5 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-[var(--omlu-text-primary)] font-bold rounded-xl transition cursor-pointer"
           >
             {saving ? "Saving…" : "Save Settings"}
           </button>
@@ -285,7 +292,7 @@ export default function AdminSettingsClient() {
                 setSuccess(null);
               }
             }}
-            className="text-sm text-zinc-500 hover:text-zinc-300 transition font-semibold cursor-pointer"
+            className="text-sm text-[var(--omlu-text-secondary)] hover:text-[var(--omlu-text-secondary)] transition font-semibold cursor-pointer"
           >
             Reset
           </button>
@@ -297,9 +304,9 @@ export default function AdminSettingsClient() {
 
 function SettingsInput({ label, value, onChange, maxLength, required, inputMode }: { label: string; value: string; onChange: (value: string) => void; maxLength?: number; required?: boolean; inputMode?: "text" | "decimal" }) {
   return (
-    <label className="flex flex-col gap-2 text-xs font-bold uppercase tracking-wider text-zinc-400">
+    <label className="flex flex-col gap-2 text-xs font-bold uppercase tracking-wider text-[var(--omlu-text-secondary)]">
       {label}
-      <input value={value} onChange={(event) => onChange(event.target.value)} maxLength={maxLength} required={required} inputMode={inputMode} className="rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-sm font-semibold normal-case text-white" />
+      <input value={value} onChange={(event) => onChange(event.target.value)} maxLength={maxLength} required={required} inputMode={inputMode} className="rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] px-4 py-2.5 text-sm font-semibold normal-case text-[var(--omlu-text-primary)]" />
     </label>
   );
 }

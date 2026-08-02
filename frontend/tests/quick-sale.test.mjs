@@ -43,10 +43,10 @@ test("Quick Sale presents a responsive POS picker and sticky operational summary
   assert.match(client, /Search menu items/);
   assert.match(client, /aria-label="Search menu items"/);
   assert.match(client, /pointer-events-none absolute left-4 top-1\/2/);
-  assert.match(client, /h-12 w-full rounded-xl border border-zinc-300/);
+  assert.match(client, /h-12 w-full rounded-xl border border-\[var\(--omlu-border-strong\)\]/);
   assert.match(client, /pl-11/);
   assert.doesNotMatch(client, /focus-within:border-orange-500/);
-  assert.match(client, /bg-white/);
+  assert.match(client, /bg-\[var\(--omlu-primary-surface\)\]/);
 });
 
 test("Quick Sale specification dialog exposes required radio choices and an explained action", () => {
@@ -55,7 +55,7 @@ test("Quick Sale specification dialog exposes required radio choices and an expl
   assert.match(client, /role=\{multi \? "group" : "radiogroup"\}/);
   assert.match(client, /role=\{multi \? undefined : "radio"\}/);
   assert.match(client, /aria-checked=\{multi \? undefined : checked\}/);
-  assert.match(client, /checked \? "border-orange-500 bg-orange-50 text-zinc-950"/);
+  assert.match(client, /checked \? "border-orange-500 bg-orange-50 text-\[var\(--omlu-text-primary\)\]"/);
   assert.match(client, /Select all required options to continue\./);
   assert.match(client, /disabled=\{!requiredSelectionsComplete\(customisingItem, selectedOptionsFromDraft\(\)\)\}/);
   assert.match(client, /Add to order["'] : ["']Update order/);

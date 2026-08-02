@@ -7,7 +7,7 @@ export type ChartPoint = { label: string; value: number };
 export type RankedRow = { label: string; quantity: number; revenue: number };
 
 const card =
-  "rounded-2xl border border-zinc-200 bg-white p-5 shadow-[0_1px_2px_rgba(24,24,27,0.04),0_10px_28px_rgba(24,24,27,0.035)]";
+  "rounded-2xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-5 shadow-[0_1px_2px_rgba(24,24,27,0.04),0_10px_28px_rgba(24,24,27,0.035)]";
 
 function formatAxis(value: number, currency: boolean) {
   if (!currency) return Math.round(value).toLocaleString("en-IN");
@@ -52,8 +52,8 @@ export function TrendChart({
   return (
     <article className={card}>
       <div className="mb-4">
-        <h3 className="text-base font-extrabold text-zinc-900">{title}</h3>
-        {explanation && <p className="mt-1 text-xs text-zinc-500">{explanation}</p>}
+        <h3 className="text-base font-extrabold text-[var(--omlu-text-primary)]">{title}</h3>
+        {explanation && <p className="mt-1 text-xs text-[var(--omlu-text-secondary)]">{explanation}</p>}
       </div>
       <div className="relative h-[260px]" aria-label={accessibleSummary}>
         <svg viewBox={`0 0 ${width} ${height}`} className="h-full w-full overflow-visible" role="img">
@@ -97,10 +97,10 @@ export function TrendChart({
         </svg>
         {active !== null && (
           <div
-            className="pointer-events-none absolute top-2 z-10 rounded-xl border border-zinc-200 bg-zinc-950 px-3 py-2 text-xs text-white shadow-xl"
+            className="pointer-events-none absolute top-2 z-10 rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-3 py-2 text-xs text-[var(--omlu-text-primary)] shadow-xl"
             style={{ left: `${Math.min(82, Math.max(18, (points[active].x / width) * 100))}%`, transform: "translateX(-50%)" }}
           >
-            <div className="font-semibold text-zinc-400">{data[active].label}</div>
+            <div className="font-semibold text-[var(--omlu-text-secondary)]">{data[active].label}</div>
             <div className="mt-0.5 font-black">{isCurrency ? formatCurrency(data[active].value) : `${data[active].value} orders`}</div>
           </div>
         )}
@@ -141,8 +141,8 @@ export function HourBarChart({
     <article className={card}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="text-base font-extrabold text-zinc-900">{title}</h3>
-          <p className="mt-1 text-xs text-zinc-500">
+          <h3 className="text-base font-extrabold text-[var(--omlu-text-primary)]">{title}</h3>
+          <p className="mt-1 text-xs text-[var(--omlu-text-secondary)]">
             {multiDay ? "Total orders grouped by restaurant-local hour." : "Orders grouped by restaurant-local hour."}
           </p>
         </div>
@@ -164,14 +164,14 @@ export function HourBarChart({
               style={{ height: `${Math.max(3, (row.orders / max) * 100)}%`, minHeight: "3px" }}
             />
             {active === row.hour && (
-              <div className="pointer-events-none absolute bottom-[calc(100%+8px)] left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded-lg bg-zinc-950 px-2.5 py-1.5 text-[11px] font-bold text-white shadow-lg">
+              <div className="pointer-events-none absolute bottom-[calc(100%+8px)] left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded-lg bg-[var(--omlu-primary-surface)] px-2.5 py-1.5 text-[11px] font-bold text-[var(--omlu-text-primary)] shadow-lg">
                 {hourLabel(row.hour)} · {row.orders}
               </div>
             )}
           </div>
         ))}
       </div>
-      <div className="mt-2 flex justify-between text-[10px] font-semibold text-zinc-400">
+      <div className="mt-2 flex justify-between text-[10px] font-semibold text-[var(--omlu-text-secondary)]">
         <span>12 AM</span><span>6 AM</span><span>12 PM</span><span>6 PM</span><span>11 PM</span>
       </div>
       <div className="sr-only">{accessibleSummary}</div>
@@ -201,15 +201,15 @@ export function RankedList({
   return (
     <article className={card}>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="text-base font-extrabold text-zinc-900">{title}</h3>
-        <div className="flex rounded-lg bg-zinc-100 p-1" role="group" aria-label={`Sort ${title}`}>
+        <h3 className="text-base font-extrabold text-[var(--omlu-text-primary)]">{title}</h3>
+        <div className="flex rounded-lg bg-[var(--omlu-muted-surface)] p-1" role="group" aria-label={`Sort ${title}`}>
           {(["revenue", "quantity"] as const).map((value) => (
             <button
               key={value}
               type="button"
               onClick={() => setSort(value)}
               aria-pressed={sort === value}
-              className={`min-h-8 rounded-md px-2.5 text-[11px] font-bold capitalize ${sort === value ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"}`}
+              className={`min-h-8 rounded-md px-2.5 text-[11px] font-bold capitalize ${sort === value ? "bg-[var(--omlu-primary-surface)] text-[var(--omlu-text-primary)] shadow-sm" : "text-[var(--omlu-text-secondary)]"}`}
             >
               {value}
             </button>
@@ -220,19 +220,19 @@ export function RankedList({
         {sorted.slice(0, 10).map((row, index) => (
           <div key={`${row.label}-${index}`}>
             <div className="flex items-center gap-3">
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-zinc-100 text-xs font-black text-zinc-600">{index + 1}</span>
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--omlu-muted-surface)] text-xs font-black text-[var(--omlu-text-secondary)]">{index + 1}</span>
               <div className="min-w-0 flex-1">
                 <div className="flex justify-between gap-3 text-sm">
-                  <span className="truncate font-bold text-zinc-800" title={row.label}>{row.label}</span>
-                  <span className="shrink-0 font-black text-zinc-900">{formatCurrency(row.revenue)}</span>
+                  <span className="truncate font-bold text-[var(--omlu-text-primary)]" title={row.label}>{row.label}</span>
+                  <span className="shrink-0 font-black text-[var(--omlu-text-primary)]">{formatCurrency(row.revenue)}</span>
                 </div>
-                <div className="mt-1 flex justify-between text-[11px] text-zinc-500">
+                <div className="mt-1 flex justify-between text-[11px] text-[var(--omlu-text-secondary)]">
                   <span>{row.quantity} sold</span>
                   {totalRevenue > 0 && <span>{((row.revenue / totalRevenue) * 100).toFixed(1)}% of listed revenue</span>}
                 </div>
               </div>
             </div>
-            <div className="ml-10 mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-100">
+            <div className="ml-10 mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--omlu-muted-surface)]">
               <div className="h-full rounded-full bg-orange-500 motion-safe:transition-[width]" style={{ width: `${Math.max(2, (row[sort] / max) * 100)}%` }} />
             </div>
           </div>
@@ -262,8 +262,8 @@ export function HorizontalBarList({
 export function ChartEmptyState({ message }: { message: string }) {
   return (
     <div className={`${card} flex min-h-52 flex-col items-center justify-center text-center`}>
-      <span className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100 text-lg" aria-hidden>⌁</span>
-      <p className="max-w-sm text-sm font-semibold text-zinc-500">{message}</p>
+      <span className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--omlu-muted-surface)] text-lg" aria-hidden>⌁</span>
+      <p className="max-w-sm text-sm font-semibold text-[var(--omlu-text-secondary)]">{message}</p>
     </div>
   );
 }

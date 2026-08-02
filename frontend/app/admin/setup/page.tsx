@@ -19,32 +19,32 @@ export default async function AdminSetupPage() {
   const staff = await requireStaffRole(["owner", "admin"]);
 
   return (
-    <div className="min-h-screen bg-zinc-50 px-6 py-8 text-zinc-950">
+    <div className="min-h-screen bg-[var(--omlu-muted-surface)] px-6 py-8 text-[var(--omlu-text-primary)]">
       <div className="mx-auto w-full max-w-4xl">
         <div className="mb-8">
           <p className="text-sm font-black uppercase tracking-widest text-orange-700">
             {staff.restaurant_name}
           </p>
           <h1 className="mt-3 text-3xl font-black tracking-tight">Initial Setup</h1>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-600">
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--omlu-text-secondary)]">
             Work through these setup steps as your restaurant gets ready. You can
             leave this page and return any time.
           </p>
         </div>
 
-        <section className="rounded-lg border border-zinc-200 bg-white shadow-sm">
-          <div className="border-b border-zinc-200 px-5 py-4">
-            <p className="text-sm font-bold text-zinc-600">0 of {setupItems.length} marked complete</p>
+        <section className="rounded-lg border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] shadow-sm">
+          <div className="border-b border-[var(--omlu-border-strong)] px-5 py-4">
+            <p className="text-sm font-bold text-[var(--omlu-text-secondary)]">0 of {setupItems.length} marked complete</p>
           </div>
           <div className="divide-y divide-zinc-200">
             {setupItems.map((item, index) => (
               <Link
                 key={`${item.label}-${index}`}
                 href={item.href}
-                className="flex items-center justify-between gap-4 px-5 py-4 transition hover:bg-zinc-50"
+                className="flex items-center justify-between gap-4 px-5 py-4 transition hover:bg-[var(--omlu-muted-surface)]"
               >
-                <span className="font-semibold text-zinc-900">{item.label}</span>
-                <span className="text-sm font-bold text-zinc-500">Open</span>
+                <span className="font-semibold text-[var(--omlu-text-primary)]">{item.label}</span>
+                <span className="text-sm font-bold text-[var(--omlu-text-secondary)]">Open</span>
               </Link>
             ))}
           </div>

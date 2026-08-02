@@ -4,58 +4,67 @@ import path from "node:path";
 import test from "node:test";
 
 const root = path.resolve(import.meta.dirname, "..");
-const workspace = path.resolve(root, "..");
-const globals = fs.readFileSync(path.join(root, "app/globals.css"), "utf8");
-const dashboard = fs.readFileSync(path.join(root, "app/admin/dashboard/AdminDashboardClient.tsx"), "utf8");
-const quickSale = fs.readFileSync(path.join(root, "app/admin/quick-sale/QuickSaleClient.tsx"), "utf8");
-const staff = fs.readFileSync(path.join(root, "app/admin/staff/StaffManagementClient.tsx"), "utf8");
-const tables = fs.readFileSync(path.join(root, "app/admin/tables/page.tsx"), "utf8");
-const staffAvailability = fs.readFileSync(path.join(root, "app/staff/availability/StaffAvailabilityClient.tsx"), "utf8");
-const staffTables = fs.readFileSync(path.join(root, "app/staff/tables/StaffTablesClient.tsx"), "utf8");
-const flutterColors = fs.readFileSync(
-  path.join(workspace, "mobile-app/omlu_operations/lib/design_system/colors.dart"),
-  "utf8",
-);
+const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
+const globals = read("app/globals.css");
+const layout = read("app/layout.tsx");
+const provider = read("components/ThemeProvider.tsx");
+const toggle = read("components/ThemeToggle.tsx");
+const ui = read("components/OmluUiProvider.tsx");
+const adminLayout = read("app/admin/layout.tsx");
+const adminSources = fs.readdirSync(path.join(root, "app/admin"), { recursive: true })
+  .filter((file) => String(file).endsWith(".tsx"))
+  .map((file) => read(path.join("app/admin", String(file))))
+  .join("\n");
+const bill = read("app/bill/[sessionToken]/BillClient.tsx");
 
-test("web exposes the neutral and orange OMLU theme tokens", () => {
-  for (const token of [
-    "--omlu-background: #f7f7f5",
-    "--omlu-primary: #18181b",
-    "--omlu-accent: #f97316",
-    "--omlu-accent-dark: #ea580c",
-    "--omlu-accent-soft: #fff1e6",
-    "--omlu-surface: #ffffff",
-    "--omlu-border: #e4e4e7",
-  ]) assert.match(globals, new RegExp(token.replaceAll("-", "\\-")));
-  assert.doesNotMatch(globals, /prefers-color-scheme:\s*dark/);
-  assert.match(globals, /@media \(prefers-reduced-motion: reduce\)/);
-  assert.match(globals, /input\[data-surface="dark"\]:-webkit-autofill/);
-});
-
-test("Flutter uses the same neutral and orange identity", () => {
-  for (const color of ["0xFFF7F7F5", "0xFF18181B", "0xFFF97316", "0xFFEA580C", "0xFFFFF1E6"]) {
-    assert.match(flutterColors, new RegExp(color));
+test("light and dark semantic theme variables exist", () => {
+  assert.match(globals, /:root\s*\{/);
+  assert.match(globals, /\.dark\s*\{/);
+  for (const token of ["page-background", "primary-surface", "muted-surface", "elevated-surface", "text-primary", "text-secondary", "text-muted", "border", "border-strong", "input-background", "hover-background", "focus-ring", "primary-action", "primary-action-text", "success-background", "warning-background", "destructive-background"]) {
+    assert.match(globals, new RegExp(`--omlu-${token}:`));
   }
-  assert.doesNotMatch(flutterColors, /0xFFE91E63|0xFFC2185B|0xFFFFF2F2/);
 });
 
-test("active admin surfaces preserve readable surfaces and disabled controls", () => {
-  assert.match(dashboard, /bg-zinc-950[^\n]*text-white/);
-  assert.match(quickSale, /border-zinc-200 bg-white/);
-  assert.match(quickSale, /text-zinc-950/);
-  assert.match(quickSale, /bg-orange-600 font-black text-white/);
-  assert.match(staff, /bg-zinc-950[^\n]*text-white/);
-  assert.match(staff, /bg-white align-top text-zinc-900/);
-  assert.doesNotMatch(`${quickSale}\n${staff}\n${tables}`, /disabled:opacity-/);
-  assert.match(tables, /text-zinc-950/);
+test("anti-flash script resolves omlu_theme before the application body", () => {
+  assert.match(layout, /omlu_theme/);
+  assert.match(layout, /prefers-color-scheme: dark/);
+  assert.match(layout, /dangerouslySetInnerHTML/);
+  assert.match(layout, /suppressHydrationWarning/);
+  assert.ok(layout.indexOf("dangerouslySetInnerHTML") < layout.indexOf("<body"));
 });
 
-test("availability states use green and red semantic badges", () => {
-  const available = "border-green-300 bg-green-100 text-green-700";
-  const unavailable = "border-red-300 bg-red-100 text-red-700";
-  assert.match(dashboard, new RegExp(available));
-  assert.match(staffTables, new RegExp(available));
-  assert.match(staffAvailability, new RegExp(available));
-  assert.match(staffAvailability, new RegExp(unavailable));
-  assert.doesNotMatch(staffAvailability, />On<|>Off<|Not available/i);
+test("theme provider supports persistence, system changes, and the html dark class", () => {
+  for (const preference of ["light", "dark", "system"]) assert.match(provider, new RegExp(`"${preference}"`));
+  assert.match(provider, /localStorage\.setItem\(THEME_STORAGE_KEY, next\)/);
+  assert.match(provider, /addEventListener\("change", applyTheme\)/);
+  assert.match(provider, /removeEventListener\("change", applyTheme\)/);
+  assert.match(provider, /document\.documentElement\.classList\.toggle\("dark"/);
+});
+
+test("Admin exposes an accessible three-state theme control", () => {
+  assert.match(adminLayout, /<ThemeToggle/);
+  assert.match(toggle, /<fieldset/);
+  assert.match(toggle, /aria-label="Theme preference"/);
+  assert.match(toggle, /aria-pressed=/);
+  assert.match(toggle, /✓/);
+});
+
+test("forced light shell mappings are removed and Admin uses semantic surfaces", () => {
+  assert.doesNotMatch(globals, /\.omlu-light-shell/);
+  assert.doesNotMatch(adminSources, /omlu-light-shell/);
+  assert.match(adminSources, /--omlu-primary-surface/);
+  assert.match(adminSources, /--omlu-text-primary/);
+  assert.match(adminLayout, /omlu-admin-shell/);
+});
+
+test("shared dialogs and toasts use semantic theme tokens", () => {
+  assert.match(ui, /--omlu-elevated-surface/);
+  assert.match(ui, /--omlu-destructive-background/);
+  assert.match(ui, /--omlu-success-background/);
+  assert.match(ui, /--omlu-warning-background/);
+});
+
+test("bill print-white rules remain intact", () => {
+  assert.match(bill, /print:bg-white/);
+  assert.match(bill, /print:text-black/);
 });

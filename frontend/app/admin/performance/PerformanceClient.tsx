@@ -34,7 +34,7 @@ const tabs: { value: AnalyticsTab; label: string }[] = [
   { value: "menu", label: "Menu" },
   { value: "kitchen", label: "Kitchen" },
 ];
-const card = "rounded-2xl border border-zinc-200 bg-white shadow-[0_1px_2px_rgba(24,24,27,0.04),0_10px_28px_rgba(24,24,27,0.035)]";
+const card = "rounded-2xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] shadow-[0_1px_2px_rgba(24,24,27,0.04),0_10px_28px_rgba(24,24,27,0.035)]";
 
 function numberMetric(metrics: Record<string, string | number>, key: string) {
   const value = Number(metrics[key] ?? 0);
@@ -77,9 +77,9 @@ function MetricCard({
           </svg>
         )}
       </div>
-      <p className="mt-4 text-xs font-bold uppercase tracking-[0.12em] text-zinc-500">{label}</p>
-      <p className="mt-1 text-3xl font-black tracking-tight text-zinc-950">{value}</p>
-      <p className="mt-3 text-xs font-semibold text-zinc-400" title="The current API does not return the previous equivalent period.">
+      <p className="mt-4 text-xs font-bold uppercase tracking-[0.12em] text-[var(--omlu-text-secondary)]">{label}</p>
+      <p className="mt-1 text-3xl font-black tracking-tight text-[var(--omlu-text-primary)]">{value}</p>
+      <p className="mt-3 text-xs font-semibold text-[var(--omlu-text-secondary)]" title="The current API does not return the previous equivalent period.">
         No comparison available
       </p>
     </article>
@@ -99,16 +99,16 @@ function OperationalStrip({ metrics }: { metrics: Record<string, string | number
     <section aria-labelledby="operational-summary" className={`${card} p-5`}>
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h2 id="operational-summary" className="text-base font-extrabold text-zinc-900">Operational summary</h2>
-          <p className="mt-1 text-xs text-zinc-500">Service health for the selected period</p>
+          <h2 id="operational-summary" className="text-base font-extrabold text-[var(--omlu-text-primary)]">Operational summary</h2>
+          <p className="mt-1 text-xs text-[var(--omlu-text-secondary)]">Service health for the selected period</p>
         </div>
-        <span className="rounded-full bg-zinc-100 px-3 py-1 text-[11px] font-bold text-zinc-500">Live data</span>
+        <span className="rounded-full bg-[var(--omlu-muted-surface)] px-3 py-1 text-[11px] font-bold text-[var(--omlu-text-secondary)]">Live data</span>
       </div>
       <div className="mt-5 grid grid-cols-2 gap-y-5 sm:grid-cols-3 xl:grid-cols-6">
         {values.map(([label, value, help], index) => (
-          <div key={label} className={`px-3 first:pl-0 ${index > 0 ? "border-l border-zinc-100" : ""}`} title={help}>
-            <div className="text-[11px] font-semibold text-zinc-500">{label}</div>
-            <div className="mt-1 text-xl font-black text-zinc-900">{value}</div>
+          <div key={label} className={`px-3 first:pl-0 ${index > 0 ? "border-l border-[var(--omlu-border-strong)]" : ""}`} title={help}>
+            <div className="text-[11px] font-semibold text-[var(--omlu-text-secondary)]">{label}</div>
+            <div className="mt-1 text-xl font-black text-[var(--omlu-text-primary)]">{value}</div>
           </div>
         ))}
       </div>
@@ -141,13 +141,13 @@ function Insights({ data }: { data: PerformanceSummary }) {
       <div className="flex items-center gap-3">
         <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50 text-amber-700" aria-hidden>✦</span>
         <div>
-          <h2 id="performance-insights" className="font-extrabold text-zinc-900">Performance insights</h2>
-          <p className="text-xs text-zinc-500">Deterministic highlights from this report</p>
+          <h2 id="performance-insights" className="font-extrabold text-[var(--omlu-text-primary)]">Performance insights</h2>
+          <p className="text-xs text-[var(--omlu-text-secondary)]">Deterministic highlights from this report</p>
         </div>
       </div>
       <div className="mt-5 grid gap-3 lg:grid-cols-3">
         {insights.map((insight, index) => (
-          <div key={insight} className="rounded-xl bg-orange-50/70 p-4 text-sm font-semibold leading-6 text-zinc-700">
+          <div key={insight} className="rounded-xl bg-orange-50/70 p-4 text-sm font-semibold leading-6 text-[var(--omlu-text-primary)]">
             <span className="mr-2 font-black text-orange-600">0{index + 1}</span>{insight}
           </div>
         ))}
@@ -159,23 +159,23 @@ function Insights({ data }: { data: PerformanceSummary }) {
 function StaffActivity({ data }: { data: PerformanceSummary["staff_activity"] }) {
   return (
     <section aria-labelledby="staff-activity" className={`${card} overflow-hidden`}>
-      <div className="border-b border-zinc-100 p-5">
-        <h2 id="staff-activity" className="font-extrabold text-zinc-900">Staff activity</h2>
-        <p className="mt-1 text-xs text-zinc-500">Operational actions only; this is not a staff ranking.</p>
+      <div className="border-b border-[var(--omlu-border-strong)] p-5">
+        <h2 id="staff-activity" className="font-extrabold text-[var(--omlu-text-primary)]">Staff activity</h2>
+        <p className="mt-1 text-xs text-[var(--omlu-text-secondary)]">Operational actions only; this is not a staff ranking.</p>
       </div>
-      {!data.length ? <div className="p-8 text-center text-sm font-semibold text-zinc-500">No staff activity recorded.</div> : (
+      {!data.length ? <div className="p-8 text-center text-sm font-semibold text-[var(--omlu-text-secondary)]">No staff activity recorded.</div> : (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[620px] text-left text-sm">
-            <thead className="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500">
+            <thead className="bg-[var(--omlu-muted-surface)] text-xs uppercase tracking-wide text-[var(--omlu-text-secondary)]">
               <tr><th className="px-5 py-3">Staff member</th><th className="px-5 py-3 text-right">Orders accepted</th><th className="px-5 py-3 text-right">Orders served</th><th className="px-5 py-3 text-right">Status changes</th></tr>
             </thead>
             <tbody>
               {data.map((staff) => (
-                <tr key={staff.staff_name} className="border-t border-zinc-100 hover:bg-zinc-50/70">
-                  <td className="px-5 py-4"><span className="mr-3 inline-flex h-8 w-8 items-center justify-center rounded-full bg-orange-100 text-xs font-black text-orange-700">{staff.staff_name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</span><span className="font-bold text-zinc-800">{staff.staff_name}</span></td>
-                  <td className="px-5 py-4 text-right font-semibold text-zinc-600">{staff.accepted}</td>
-                  <td className="px-5 py-4 text-right font-semibold text-zinc-600">{staff.served}</td>
-                  <td className="px-5 py-4 text-right font-semibold text-zinc-600">{staff.status_changes}</td>
+                <tr key={staff.staff_name} className="border-t border-[var(--omlu-border-strong)] hover:bg-[var(--omlu-muted-surface)]">
+                  <td className="px-5 py-4"><span className="mr-3 inline-flex h-8 w-8 items-center justify-center rounded-full bg-orange-100 text-xs font-black text-orange-700">{staff.staff_name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</span><span className="font-bold text-[var(--omlu-text-primary)]">{staff.staff_name}</span></td>
+                  <td className="px-5 py-4 text-right font-semibold text-[var(--omlu-text-secondary)]">{staff.accepted}</td>
+                  <td className="px-5 py-4 text-right font-semibold text-[var(--omlu-text-secondary)]">{staff.served}</td>
+                  <td className="px-5 py-4 text-right font-semibold text-[var(--omlu-text-secondary)]">{staff.status_changes}</td>
                 </tr>
               ))}
             </tbody>
@@ -274,16 +274,16 @@ export default function PerformanceClient({ initialState }: { initialState: Perf
   const tableRows = data?.table_usage.map((row) => ({ label: `Table ${row.table_number}`, quantity: row.sessions, revenue: Number(row.revenue) })) ?? [];
 
   return (
-    <div className="min-w-0 space-y-6 pb-10 text-zinc-950">
-      <header className="rounded-2xl border border-zinc-200 bg-white/95 p-5 shadow-sm backdrop-blur md:p-6">
+    <div className="min-w-0 space-y-6 pb-10 text-[var(--omlu-text-primary)]">
+      <header className="rounded-2xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)]/95 p-5 shadow-sm backdrop-blur md:p-6">
         <div className="flex flex-col justify-between gap-5 xl:flex-row xl:items-center">
           <div>
             <div className="mb-2 flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-orange-600"><span className="h-2 w-2 rounded-full bg-orange-500" />Restaurant analytics</div>
-            <h1 className="text-3xl font-black tracking-tight text-zinc-950">Performance</h1>
-            <p className="mt-2 max-w-xl text-sm text-zinc-500">Revenue, demand, menu mix, and operating activity for this restaurant.</p>
+            <h1 className="text-3xl font-black tracking-tight text-[var(--omlu-text-primary)]">Performance</h1>
+            <p className="mt-2 max-w-xl text-sm text-[var(--omlu-text-secondary)]">Revenue, demand, menu mix, and operating activity for this restaurant.</p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <div className="flex max-w-full overflow-x-auto rounded-xl border border-zinc-200 bg-zinc-50 p-1" role="tablist" aria-label="Filter report period">
+            <div className="flex max-w-full overflow-x-auto rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-muted-surface)] p-1" role="tablist" aria-label="Filter report period">
               {presetsList.map((preset, index) => (
                 <button
                   key={preset.value}
@@ -293,21 +293,21 @@ export default function PerformanceClient({ initialState }: { initialState: Perf
                   tabIndex={filters.preset === preset.value ? 0 : -1}
                   onClick={() => setPreset(preset.value)}
                   onKeyDown={(event) => handlePresetKeyDown(event, index)}
-                  className={`min-h-9 shrink-0 rounded-lg px-3 text-xs font-bold ${filters.preset === preset.value ? "bg-white text-orange-700 shadow-sm ring-1 ring-zinc-200" : "text-zinc-500 hover:text-zinc-900"}`}
+                  className={`min-h-9 shrink-0 rounded-lg px-3 text-xs font-bold ${filters.preset === preset.value ? "bg-[var(--omlu-primary-surface)] text-orange-700 shadow-sm ring-1 ring-zinc-200" : "text-[var(--omlu-text-secondary)] hover:text-[var(--omlu-text-primary)]"}`}
                 >
                   {preset.value === "custom" && <span aria-hidden className="mr-1.5">▣</span>}{preset.label}
                 </button>
               ))}
             </div>
             <div className="relative" ref={exportContainerRef}>
-              <button id="export-menu-trigger" aria-haspopup="menu" aria-expanded={exportOpen} onClick={() => setExportOpen((open) => !open)} className="flex min-h-11 w-full items-center justify-center rounded-xl bg-zinc-950 px-4 text-xs font-black text-white shadow-sm hover:bg-zinc-800">
+              <button id="export-menu-trigger" aria-haspopup="menu" aria-expanded={exportOpen} onClick={() => setExportOpen((open) => !open)} className="flex min-h-11 w-full items-center justify-center rounded-xl bg-[var(--omlu-primary-surface)] px-4 text-xs font-black text-[var(--omlu-text-primary)] shadow-sm hover:bg-[var(--omlu-muted-surface)]">
                 <span aria-hidden className="mr-2">⇩</span>Export<span aria-hidden className="ml-2 text-[9px]">▼</span>
               </button>
               {exportOpen && (
-                <div role="menu" className="absolute right-0 z-50 mt-2 w-56 overflow-hidden rounded-xl border border-zinc-200 bg-white p-1.5 shadow-xl">
-                  <button role="menuitem" onClick={() => { exportHistory("performance", filters); setExportOpen(false); }} className="w-full rounded-lg px-3 py-2 text-left text-xs font-bold text-zinc-700 hover:bg-zinc-50">Export CSV</button>
+                <div role="menu" className="absolute right-0 z-50 mt-2 w-56 overflow-hidden rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-1.5 shadow-xl">
+                  <button role="menuitem" onClick={() => { exportHistory("performance", filters); setExportOpen(false); }} className="w-full rounded-lg px-3 py-2 text-left text-xs font-bold text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-muted-surface)]">Export CSV</button>
                   {(["daily", "monthly", "range"] as const).map((kind) => (
-                    <button key={kind} role="menuitem" disabled={Boolean(pdfLoading)} onClick={async () => { setExportOpen(false); await downloadSelectedPdf(kind); }} className="w-full rounded-lg px-3 py-2 text-left text-xs font-bold text-zinc-700 hover:bg-zinc-50 disabled:opacity-50">
+                    <button key={kind} role="menuitem" disabled={Boolean(pdfLoading)} onClick={async () => { setExportOpen(false); await downloadSelectedPdf(kind); }} className="w-full rounded-lg px-3 py-2 text-left text-xs font-bold text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-muted-surface)] disabled:opacity-50">
                       {pdfLoading === kind ? "Generating…" : `Export ${kind === "range" ? "Active Range" : kind[0].toUpperCase() + kind.slice(1)} PDF`}
                     </button>
                   ))}
@@ -317,16 +317,16 @@ export default function PerformanceClient({ initialState }: { initialState: Perf
           </div>
         </div>
         {filters.preset === "custom" && (
-          <div className="mt-5 flex flex-wrap gap-3 border-t border-zinc-100 pt-5">
-            <label className="text-xs font-bold text-zinc-600">Start date<input aria-label="Custom range start date" type="date" value={filters.start_date || ""} onChange={(event) => setFilters((current) => ({ ...current, start_date: event.target.value, page: 1 }))} className="ml-2 rounded-xl border border-zinc-200 px-3 text-sm" /></label>
-            <label className="text-xs font-bold text-zinc-600">End date<input aria-label="Custom range end date" type="date" value={filters.end_date || ""} onChange={(event) => setFilters((current) => ({ ...current, end_date: event.target.value, page: 1 }))} className="ml-2 rounded-xl border border-zinc-200 px-3 text-sm" /></label>
+          <div className="mt-5 flex flex-wrap gap-3 border-t border-[var(--omlu-border-strong)] pt-5">
+            <label className="text-xs font-bold text-[var(--omlu-text-secondary)]">Start date<input aria-label="Custom range start date" type="date" value={filters.start_date || ""} onChange={(event) => setFilters((current) => ({ ...current, start_date: event.target.value, page: 1 }))} className="ml-2 rounded-xl border border-[var(--omlu-border-strong)] px-3 text-sm" /></label>
+            <label className="text-xs font-bold text-[var(--omlu-text-secondary)]">End date<input aria-label="Custom range end date" type="date" value={filters.end_date || ""} onChange={(event) => setFilters((current) => ({ ...current, end_date: event.target.value, page: 1 }))} className="ml-2 rounded-xl border border-[var(--omlu-border-strong)] px-3 text-sm" /></label>
           </div>
         )}
       </header>
 
-      <nav className="flex overflow-x-auto border-b border-zinc-200" aria-label="Performance sections">
+      <nav className="flex overflow-x-auto border-b border-[var(--omlu-border-strong)]" aria-label="Performance sections">
         {tabs.map((tab) => (
-          <button key={tab.value} onClick={() => setActiveTab(tab.value)} aria-current={activeTab === tab.value ? "page" : undefined} className={`relative min-h-12 shrink-0 px-5 text-sm font-bold ${activeTab === tab.value ? "text-orange-700 after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:bg-orange-500" : "text-zinc-500 hover:text-zinc-900"}`}>{tab.label}</button>
+          <button key={tab.value} onClick={() => setActiveTab(tab.value)} aria-current={activeTab === tab.value ? "page" : undefined} className={`relative min-h-12 shrink-0 px-5 text-sm font-bold ${activeTab === tab.value ? "text-orange-700 after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:bg-orange-500" : "text-[var(--omlu-text-secondary)] hover:text-[var(--omlu-text-primary)]"}`}>{tab.label}</button>
         ))}
       </nav>
 
@@ -390,8 +390,8 @@ export default function PerformanceClient({ initialState }: { initialState: Perf
             <section className={`${card} p-8 md:p-12`}>
               <div className="mx-auto max-w-2xl text-center">
                 <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-50 text-xl text-amber-700" aria-hidden>◷</span>
-                <h2 className="mt-5 text-xl font-black text-zinc-900">Kitchen timing analytics are not available yet</h2>
-                <p className="mt-3 text-sm leading-6 text-zinc-500">The existing performance API does not return accepted, ready, or preparation-duration aggregates. OMLU will not infer preparation speed from incomplete timestamps. Existing order and realtime behavior remains unchanged.</p>
+                <h2 className="mt-5 text-xl font-black text-[var(--omlu-text-primary)]">Kitchen timing analytics are not available yet</h2>
+                <p className="mt-3 text-sm leading-6 text-[var(--omlu-text-secondary)]">The existing performance API does not return accepted, ready, or preparation-duration aggregates. OMLU will not infer preparation speed from incomplete timestamps. Existing order and realtime behavior remains unchanged.</p>
               </div>
             </section>
           )}

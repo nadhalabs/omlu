@@ -52,15 +52,15 @@ export default function PendingPaymentsSidebarLink({ initialCount }: { initialCo
   const state = notice?.state || {};
   const billNumber = String(state.bill_number || "");
   return <>
-    <Link aria-current={active ? "page" : undefined} href="/admin/payments/pending" className={`flex min-h-11 shrink-0 items-center justify-between gap-2 whitespace-nowrap rounded-xl px-4 py-3 text-sm font-bold transition lg:w-full ${active ? "bg-orange-600 text-white" : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"}`}>
+    <Link aria-current={active ? "page" : undefined} href="/admin/payments/pending" className={`flex min-h-11 shrink-0 items-center justify-between gap-2 whitespace-nowrap rounded-xl px-4 py-3 text-sm font-bold transition lg:w-full ${active ? "bg-orange-600 text-[var(--omlu-text-primary)]" : "text-[var(--omlu-text-secondary)] hover:bg-[var(--omlu-primary-surface)] hover:text-[var(--omlu-text-secondary)]"}`}>
       <span>💳 Pending Payments</span>
-      {count > 0 && <span className="rounded-full bg-red-600 px-2 py-0.5 text-[10px] text-white">{count}</span>}
+      {count > 0 && <span className="rounded-full bg-red-600 px-2 py-0.5 text-[10px] text-[var(--omlu-text-primary)]">{count}</span>}
     </Link>
-    {notice && <div role="status" className="fixed inset-x-4 top-[max(1rem,env(safe-area-inset-top))] z-[55] mx-auto w-auto max-w-sm rounded-2xl border border-orange-700 bg-zinc-950 p-4 shadow-2xl sm:right-6 sm:left-auto sm:mx-0 sm:w-80">
-      <button aria-label="Dismiss notification" onClick={() => setNotice(null)} className="float-right text-zinc-500">×</button>
-      <p className="font-black text-white">Payment pending</p>
-      <p className="mt-1 text-sm text-zinc-300">{String(state.table_name || "Table")} · ₹{Number(state.grand_total || 0).toFixed(2)}</p>
-      <p className="text-xs text-zinc-500">Sent by {String(state.sent_by_name || "Staff")}</p>
+    {notice && <div role="status" className="fixed inset-x-4 top-[max(1rem,env(safe-area-inset-top))] z-[55] mx-auto w-auto max-w-sm rounded-2xl border border-orange-700 bg-[var(--omlu-primary-surface)] p-4 shadow-2xl sm:right-6 sm:left-auto sm:mx-0 sm:w-80">
+      <button aria-label="Dismiss notification" onClick={() => setNotice(null)} className="float-right text-[var(--omlu-text-secondary)]">×</button>
+      <p className="font-black text-[var(--omlu-text-primary)]">Payment pending</p>
+      <p className="mt-1 text-sm text-[var(--omlu-text-secondary)]">{String(state.table_name || "Table")} · ₹{Number(state.grand_total || 0).toFixed(2)}</p>
+      <p className="text-xs text-[var(--omlu-text-secondary)]">Sent by {String(state.sent_by_name || "Staff")}</p>
       <Link onClick={() => setNotice(null)} href={`/admin/payments/pending${billNumber ? `?bill=${encodeURIComponent(billNumber)}` : ""}`} className="mt-3 inline-block text-xs font-bold text-orange-400">Tap to review →</Link>
     </div>}
   </>;

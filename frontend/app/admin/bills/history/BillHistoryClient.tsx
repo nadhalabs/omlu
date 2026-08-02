@@ -30,45 +30,45 @@ export default function BillHistoryClient() {
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black text-white">Bill History</h1>
-          <p className="mt-1 text-sm text-zinc-500">Historical bills and payment status.</p>
+          <h1 className="text-2xl font-black text-[var(--omlu-text-primary)]">Bill History</h1>
+          <p className="mt-1 text-sm text-[var(--omlu-text-secondary)]">Historical bills and payment status.</p>
         </div>
         <DateFilters filters={filters} setFilters={setFilters} exportPath="bills" />
       </div>
       <div className="flex flex-wrap gap-3">
-        <label className="text-xs font-bold text-zinc-600">Payment status<select value={filters.status_filter || ""} onChange={(event) => setFilters({ ...filters, status_filter: event.target.value, page: 1 })} className="mt-1 block rounded-xl border border-zinc-300 bg-white px-3 text-sm">
+        <label className="text-xs font-bold text-[var(--omlu-text-secondary)]">Payment status<select value={filters.status_filter || ""} onChange={(event) => setFilters({ ...filters, status_filter: event.target.value, page: 1 })} className="mt-1 block rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-3 text-sm">
           <option value="">All statuses</option>
           {["paid", "unpaid", "payment_pending", "void"].map((status) => <option key={status} value={status}>{status}</option>)}
         </select></label>
-        <label className="text-xs font-bold text-zinc-600">Payment method<select value={filters.payment_method || ""} onChange={(event) => setFilters({ ...filters, payment_method: event.target.value, page: 1 })} className="mt-1 block rounded-xl border border-zinc-300 bg-white px-3 text-sm">
+        <label className="text-xs font-bold text-[var(--omlu-text-secondary)]">Payment method<select value={filters.payment_method || ""} onChange={(event) => setFilters({ ...filters, payment_method: event.target.value, page: 1 })} className="mt-1 block rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-3 text-sm">
           <option value="">All methods</option>
           {["counter_cash", "counter_upi", "counter_card", "online"].map((method) => <option key={method} value={method}>{method}</option>)}
         </select></label>
-        <label className="text-xs font-bold text-zinc-600">Table ID<input inputMode="numeric" placeholder="Table ID" value={filters.table_id || ""} onChange={(event) => setFilters({ ...filters, table_id: event.target.value, page: 1 })} className="mt-1 block rounded-xl border border-zinc-300 bg-white px-3 text-sm" /></label>
+        <label className="text-xs font-bold text-[var(--omlu-text-secondary)]">Table ID<input inputMode="numeric" placeholder="Table ID" value={filters.table_id || ""} onChange={(event) => setFilters({ ...filters, table_id: event.target.value, page: 1 })} className="mt-1 block rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-3 text-sm" /></label>
       </div>
       {error && <div className="border border-red-900 bg-red-950/30 p-3 text-sm text-red-200">{error}</div>}
       {loading && !data ? <HistorySkeleton /> : !data || data.items.length === 0 ? (
         <EmptyState message="No bills found for this period" />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-zinc-200">
+        <div className="overflow-x-auto rounded-xl border border-[var(--omlu-border-strong)]">
           <table className="w-full min-w-[1100px] text-sm">
-            <thead className="contrast-dark-header bg-zinc-950 text-left text-[10px] uppercase tracking-wider text-white">
+            <thead className="contrast-dark-header bg-[var(--omlu-primary-surface)] text-left text-[10px] uppercase tracking-wider text-[var(--omlu-text-primary)]">
               <tr>{["Bill number", "Date", "Table", "Session", "Subtotal", "Tax", "Discount", "Grand total", "Payment status", "Payment method", "Paid time"].map((heading) => <th key={heading} className="p-3">{heading}</th>)}</tr>
             </thead>
             <tbody className="divide-y divide-zinc-800">
               {data.items.map((bill) => (
-                <tr key={bill.id} className="bg-white hover:bg-zinc-50">
+                <tr key={bill.id} className="bg-[var(--omlu-primary-surface)] hover:bg-[var(--omlu-muted-surface)]">
                   <td className="p-3 font-black text-orange-400">
                     {bill.invoice_number || bill.bill_number}
-                    {bill.gst_enabled && <span className="block text-[10px] font-semibold text-zinc-500">GSTIN {bill.gstin}</span>}
+                    {bill.gst_enabled && <span className="block text-[10px] font-semibold text-[var(--omlu-text-secondary)]">GSTIN {bill.gstin}</span>}
                   </td>
                   <td className="p-3">{formatDateTime(bill.date)}</td>
                   <td className="p-3">{bill.table_number || "-"}</td>
-                  <td className="max-w-48 break-all p-3 text-xs text-zinc-600">{bill.session_token || "-"}</td>
+                  <td className="max-w-48 break-all p-3 text-xs text-[var(--omlu-text-secondary)]">{bill.session_token || "-"}</td>
                   <td className="p-3">₹{bill.subtotal}</td>
                   <td className="p-3">
                     ₹{bill.tax_amount}
-                    {bill.gst_enabled && <span className="block text-[10px] text-zinc-500">CGST ₹{bill.cgst_amount} · SGST ₹{bill.sgst_amount}</span>}
+                    {bill.gst_enabled && <span className="block text-[10px] text-[var(--omlu-text-secondary)]">CGST ₹{bill.cgst_amount} · SGST ₹{bill.sgst_amount}</span>}
                   </td>
                   <td className="p-3">₹{bill.discount_amount}</td>
                   <td className="p-3 font-bold">₹{bill.grand_total}</td>

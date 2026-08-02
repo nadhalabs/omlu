@@ -428,22 +428,22 @@ export default function AdminMenuPage() {
   return (
     <div className="flex flex-col gap-6">
       <header className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
-        <div><h1 className="text-3xl font-black tracking-tight text-zinc-950">Menu Management</h1><p className="mt-1.5 text-sm font-medium text-zinc-600">Organize categories and configure dishes served to customers.</p></div>
+        <div><h1 className="text-3xl font-black tracking-tight text-[var(--omlu-text-primary)]">Menu Management</h1><p className="mt-1.5 text-sm font-medium text-[var(--omlu-text-secondary)]">Organize categories and configure dishes served to customers.</p></div>
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-          <button onClick={() => openItemModal("create")} disabled={categories.length === 0} className="min-h-11 rounded-xl bg-orange-600 px-5 py-2.5 text-sm font-black text-white transition hover:bg-orange-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-600">Add item</button>
-          <button onClick={() => setImportMenuOpen(true)} className="min-h-11 rounded-xl border border-zinc-300 bg-white px-5 py-2.5 text-sm font-bold text-zinc-800 transition hover:bg-zinc-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500">Import menu</button>
+          <button onClick={() => openItemModal("create")} disabled={categories.length === 0} className="min-h-11 rounded-xl bg-orange-600 px-5 py-2.5 text-sm font-black text-[var(--omlu-text-primary)] transition hover:bg-orange-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)]">Add item</button>
+          <button onClick={() => setImportMenuOpen(true)} className="min-h-11 rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-5 py-2.5 text-sm font-bold text-[var(--omlu-text-primary)] transition hover:bg-[var(--omlu-muted-surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500">Import menu</button>
         </div>
       </header>
 
       {/* Grid Layout for Categories and Menu Items */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
         {/* LEFT COLUMN: Categories list */}
-        <section className="flex flex-col gap-4 rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm lg:col-span-1">
-          <div className="flex items-center justify-between border-b border-zinc-200 pb-3">
-            <div><h2 className="text-lg font-black text-zinc-950">Categories</h2><p className="text-xs font-medium text-zinc-600">{categories.length} {categories.length === 1 ? "category" : "categories"}</p></div>
+        <section className="flex flex-col gap-4 rounded-3xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-5 shadow-sm lg:col-span-1">
+          <div className="flex items-center justify-between border-b border-[var(--omlu-border-strong)] pb-3">
+            <div><h2 className="text-lg font-black text-[var(--omlu-text-primary)]">Categories</h2><p className="text-xs font-medium text-[var(--omlu-text-secondary)]">{categories.length} {categories.length === 1 ? "category" : "categories"}</p></div>
             <button
               onClick={() => openCategoryModal("create")}
-              className="min-h-11 rounded-xl border border-zinc-300 bg-white px-4 py-2 text-sm font-bold text-zinc-800 transition hover:bg-zinc-50 focus-visible:outline-2 focus-visible:outline-orange-500"
+              className="min-h-11 rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-4 py-2 text-sm font-bold text-[var(--omlu-text-primary)] transition hover:bg-[var(--omlu-muted-surface)] focus-visible:outline-2 focus-visible:outline-orange-500"
             >
               Add category
             </button>
@@ -456,7 +456,7 @@ export default function AdminMenuPage() {
           ) : catError ? (
             <p className="text-xs text-red-400 py-4 font-semibold">{catError}</p>
           ) : categories.length === 0 ? (
-            <p className="text-xs text-zinc-600 text-center py-6 font-semibold">
+            <p className="text-xs text-[var(--omlu-text-secondary)] text-center py-6 font-semibold">
               No categories defined.
             </p>
           ) : (
@@ -464,11 +464,11 @@ export default function AdminMenuPage() {
               {categories.map((cat) => (
                 <div
                   key={cat.id}
-                  className="flex items-center justify-between gap-4 rounded-xl border border-zinc-200 bg-zinc-50 p-4"
+                  className="flex items-center justify-between gap-4 rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-muted-surface)] p-4"
                 >
                   <div className="truncate">
                     <div className="flex items-center gap-2">
-                      <span className="truncate text-sm font-extrabold text-zinc-950">
+                      <span className="truncate text-sm font-extrabold text-[var(--omlu-text-primary)]">
                         {cat.name_en}
                       </span>
                       {!cat.is_active && (
@@ -478,16 +478,16 @@ export default function AdminMenuPage() {
                       )}
                     </div>
                     {cat.name_ml && (
-                      <span className="mt-0.5 block text-xs font-medium text-zinc-600">
+                      <span className="mt-0.5 block text-xs font-medium text-[var(--omlu-text-secondary)]">
                         {cat.name_ml}
                       </span>
                     )}
-                    <span className="mt-1 block text-xs font-bold text-zinc-600">
+                    <span className="mt-1 block text-xs font-bold text-[var(--omlu-text-secondary)]">
                       {cat.item_count} {cat.item_count === 1 ? "menu item" : "menu items"} · Sort order {cat.display_order}
                     </span>
                   </div>
 
-                  <details className="relative shrink-0"><summary aria-label={`More actions for ${cat.name_en}`} className="flex min-h-11 min-w-11 cursor-pointer list-none items-center justify-center rounded-xl border border-zinc-300 bg-white text-xl font-black text-zinc-800 hover:bg-zinc-100 focus-visible:outline-2 focus-visible:outline-orange-500">⋮</summary><div className="absolute right-0 z-20 mt-2 w-56 rounded-xl border border-zinc-200 bg-white p-1.5 shadow-xl"><button onClick={() => openCategoryModal("edit", cat)} className="min-h-10 w-full rounded-lg px-3 text-left text-sm font-bold text-zinc-800 hover:bg-zinc-100">Edit category</button>{cat.item_count === 0 ? <button onClick={() => handleDeleteCategory(cat.id)} className="min-h-10 w-full rounded-lg px-3 text-left text-sm font-bold text-red-700 hover:bg-red-50">Delete category</button> : <><button onClick={() => openPopulatedCategoryDelete(cat, "move_items")} className="min-h-10 w-full rounded-lg px-3 text-left text-sm font-bold text-zinc-800 hover:bg-zinc-100">Move items and delete</button><button onClick={() => openPopulatedCategoryDelete(cat, "delete_items")} className="min-h-10 w-full rounded-lg px-3 text-left text-sm font-bold text-red-700 hover:bg-red-50">Delete category and items</button></>}</div></details>
+                  <details className="relative shrink-0"><summary aria-label={`More actions for ${cat.name_en}`} className="flex min-h-11 min-w-11 cursor-pointer list-none items-center justify-center rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] text-xl font-black text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-muted-surface)] focus-visible:outline-2 focus-visible:outline-orange-500">⋮</summary><div className="absolute right-0 z-20 mt-2 w-56 rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-1.5 shadow-xl"><button onClick={() => openCategoryModal("edit", cat)} className="min-h-10 w-full rounded-lg px-3 text-left text-sm font-bold text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-muted-surface)]">Edit category</button>{cat.item_count === 0 ? <button onClick={() => handleDeleteCategory(cat.id)} className="min-h-10 w-full rounded-lg px-3 text-left text-sm font-bold text-red-700 hover:bg-red-50">Delete category</button> : <><button onClick={() => openPopulatedCategoryDelete(cat, "move_items")} className="min-h-10 w-full rounded-lg px-3 text-left text-sm font-bold text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-muted-surface)]">Move items and delete</button><button onClick={() => openPopulatedCategoryDelete(cat, "delete_items")} className="min-h-10 w-full rounded-lg px-3 text-left text-sm font-bold text-red-700 hover:bg-red-50">Delete category and items</button></>}</div></details>
                 </div>
               ))}
             </div>
@@ -495,9 +495,9 @@ export default function AdminMenuPage() {
         </section>
 
         {/* RIGHT COLUMN: Menu items list with Search/Filters */}
-        <section className="flex flex-col gap-4 rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm lg:col-span-2">
+        <section className="flex flex-col gap-4 rounded-3xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-5 shadow-sm lg:col-span-2">
           {/* Header */}
-          <div className="border-b border-zinc-200 pb-3"><h2 className="text-lg font-black text-zinc-950">Menu items</h2><p className="text-xs font-medium text-zinc-600">Showing {filteredItems.length} of {items.length} items</p></div>
+          <div className="border-b border-[var(--omlu-border-strong)] pb-3"><h2 className="text-lg font-black text-[var(--omlu-text-primary)]">Menu items</h2><p className="text-xs font-medium text-[var(--omlu-text-secondary)]">Showing {filteredItems.length} of {items.length} items</p></div>
 
           {/* Filters Panel */}
           <div className="flex flex-col sm:flex-row gap-3">
@@ -506,7 +506,7 @@ export default function AdminMenuPage() {
               <select
                 value={selectedCategoryId}
                 onChange={(e) => setSelectedCategoryId(e.target.value)}
-                aria-label="Filter by category" className="min-h-11 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2.5 text-sm text-zinc-900 outline-none focus-visible:outline-2 focus-visible:outline-orange-500"
+                aria-label="Filter by category" className="min-h-11 w-full rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-3 py-2.5 text-sm text-[var(--omlu-text-primary)] outline-none focus-visible:outline-2 focus-visible:outline-orange-500"
               >
                 <option value="all">All Categories</option>
                 {categories.map((c) => (
@@ -524,7 +524,7 @@ export default function AdminMenuPage() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search dish by English or Malayalam name..."
-                aria-label="Search menu items" className="min-h-11 w-full rounded-xl border border-zinc-300 bg-white px-4 py-2.5 text-sm text-zinc-900 outline-none focus-visible:outline-2 focus-visible:outline-orange-500"
+                aria-label="Search menu items" className="min-h-11 w-full rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-4 py-2.5 text-sm text-[var(--omlu-text-primary)] outline-none focus-visible:outline-2 focus-visible:outline-orange-500"
               />
             </div>
           </div>
@@ -537,7 +537,7 @@ export default function AdminMenuPage() {
           ) : itemsError ? (
             <p className="text-xs text-red-400 py-6 font-semibold">{itemsError}</p>
           ) : filteredItems.length === 0 ? (
-            <div className="text-center py-12 text-zinc-500">
+            <div className="text-center py-12 text-[var(--omlu-text-secondary)]">
               <span className="text-3xl block mb-2">🍽️</span>
               <p className="text-xs font-bold">No dishes found matching search parameters.</p>
             </div>
@@ -546,11 +546,11 @@ export default function AdminMenuPage() {
               {filteredItems.map((item) => (
                 <div
                   key={item.id}
-                  className="flex min-h-48 flex-col justify-between gap-4 rounded-2xl border border-zinc-200 bg-zinc-50 p-4 transition hover:border-zinc-300"
+                  className="flex min-h-48 flex-col justify-between gap-4 rounded-2xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-muted-surface)] p-4 transition hover:border-[var(--omlu-border-strong)]"
                 >
                   <div className="flex gap-3">
                     {/* Item Image Preview or Placeholder */}
-                    <div className="w-16 h-16 rounded-xl bg-zinc-955 border border-zinc-800 shrink-0 overflow-hidden flex items-center justify-center text-lg text-zinc-500 font-bold relative">
+                    <div className="w-16 h-16 rounded-xl bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border)] shrink-0 overflow-hidden flex items-center justify-center text-lg text-[var(--omlu-text-secondary)] font-bold relative">
                       {item.image_url ? (
                         <Image
                           src={item.image_url}
@@ -567,7 +567,7 @@ export default function AdminMenuPage() {
 
                     <div className="truncate flex-1">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="truncate text-sm font-extrabold text-zinc-950">
+                        <span className="truncate text-sm font-extrabold text-[var(--omlu-text-primary)]">
                           {item.name_en}
                         </span>
                         {!item.is_available && (
@@ -577,7 +577,7 @@ export default function AdminMenuPage() {
                         )}
                       </div>
                       {item.name_ml && (
-                        <span className="mt-0.5 block text-xs font-medium text-zinc-600">
+                        <span className="mt-0.5 block text-xs font-medium text-[var(--omlu-text-secondary)]">
                           {item.name_ml}
                         </span>
                       )}
@@ -588,12 +588,12 @@ export default function AdminMenuPage() {
                   </div>
 
                   {/* Pricing and Details */}
-                  <div className="flex flex-col justify-between gap-3 border-t border-zinc-200 pt-3 sm:flex-row sm:items-center">
+                  <div className="flex flex-col justify-between gap-3 border-t border-[var(--omlu-border-strong)] pt-3 sm:flex-row sm:items-center">
                     <div>
-                      <span className="text-[10px] text-zinc-500 font-semibold block uppercase">
+                      <span className="text-[10px] text-[var(--omlu-text-secondary)] font-semibold block uppercase">
                         Price
                       </span>
-                      <span className="text-sm font-black text-zinc-950">
+                      <span className="text-sm font-black text-[var(--omlu-text-primary)]">
                         ₹{Number(item.price).toFixed(2)}
                       </span>
                     </div>
@@ -603,7 +603,7 @@ export default function AdminMenuPage() {
                       <button
                         onClick={() => handleToggleAvailability(item)}
                         disabled={updatingAvail[item.id]}
-                        className={`min-h-11 rounded-lg px-3 py-2 text-xs font-bold transition focus-visible:outline-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-600 ${
+                        className={`min-h-11 rounded-lg px-3 py-2 text-xs font-bold transition focus-visible:outline-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)] ${
                           item.is_available
                             ? "border border-green-300 bg-green-100 text-green-700"
                             : "border border-red-300 bg-red-100 text-red-700"
@@ -615,11 +615,11 @@ export default function AdminMenuPage() {
                       {/* Edit */}
                       <button
                         onClick={() => openItemModal("edit", item)}
-                        className="min-h-11 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-xs font-bold text-zinc-800 transition hover:bg-zinc-100 focus-visible:outline-2 focus-visible:outline-orange-500"
+                        className="min-h-11 rounded-lg border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-4 py-2 text-xs font-bold text-[var(--omlu-text-primary)] transition hover:bg-[var(--omlu-muted-surface)] focus-visible:outline-2 focus-visible:outline-orange-500"
                       >
                         Edit
                       </button>
-                      <details className="relative"><summary aria-label={`More actions for ${item.name_en}`} className="flex min-h-11 min-w-11 cursor-pointer list-none items-center justify-center rounded-lg border border-zinc-300 bg-white text-xl font-black text-zinc-800 hover:bg-zinc-100 focus-visible:outline-2 focus-visible:outline-orange-500">⋮</summary><div className="absolute right-0 z-20 mt-2 w-48 rounded-xl border border-zinc-200 bg-white p-1.5 shadow-xl"><button onClick={() => handleDeleteItem(item)} className="min-h-10 w-full rounded-lg px-3 text-left text-sm font-bold text-red-700 hover:bg-red-50">Delete permanently</button></div></details>
+                      <details className="relative"><summary aria-label={`More actions for ${item.name_en}`} className="flex min-h-11 min-w-11 cursor-pointer list-none items-center justify-center rounded-lg border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] text-xl font-black text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-muted-surface)] focus-visible:outline-2 focus-visible:outline-orange-500">⋮</summary><div className="absolute right-0 z-20 mt-2 w-48 rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-1.5 shadow-xl"><button onClick={() => handleDeleteItem(item)} className="min-h-10 w-full rounded-lg px-3 text-left text-sm font-bold text-red-700 hover:bg-red-50">Delete permanently</button></div></details>
                     </div>
                   </div>
                 </div>
@@ -650,12 +650,12 @@ export default function AdminMenuPage() {
 
       {categoryDeleteModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center overscroll-contain bg-black/75 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-lg rounded-3xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="category-delete-title">
-            <h3 id="category-delete-title" className="text-xl font-black text-white">{categoryDeleteModal.mode === "delete_items" ? `Delete “${categoryDeleteModal.category.name_en}” and ${categoryDeleteModal.category.item_count} menu items?` : `Move ${categoryDeleteModal.category.item_count} items and delete “${categoryDeleteModal.category.name_en}”?`}</h3>
-            <p className="mt-3 text-sm leading-6 text-zinc-300">{categoryDeleteModal.mode === "delete_items" ? "These items will be permanently removed from the active menu. Historical orders, bills, Quick Sales, financial totals, and performance records will remain unchanged." : "All current items will move to the selected category. Their pricing, availability, options, and historical category snapshots will remain unchanged."}</p>
+          <div className="w-full max-w-lg rounded-3xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-6 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="category-delete-title">
+            <h3 id="category-delete-title" className="text-xl font-black text-[var(--omlu-text-primary)]">{categoryDeleteModal.mode === "delete_items" ? `Delete “${categoryDeleteModal.category.name_en}” and ${categoryDeleteModal.category.item_count} menu items?` : `Move ${categoryDeleteModal.category.item_count} items and delete “${categoryDeleteModal.category.name_en}”?`}</h3>
+            <p className="mt-3 text-sm leading-6 text-[var(--omlu-text-secondary)]">{categoryDeleteModal.mode === "delete_items" ? "These items will be permanently removed from the active menu. Historical orders, bills, Quick Sales, financial totals, and performance records will remain unchanged." : "All current items will move to the selected category. Their pricing, availability, options, and historical category snapshots will remain unchanged."}</p>
             {categoryDeleteError && <div className="mt-4 rounded-xl border border-red-900 bg-red-950/40 p-3 text-sm font-bold text-red-300">{categoryDeleteError}</div>}
-            {categoryDeleteModal.mode === "delete_items" ? <label className="mt-5 block text-xs font-bold text-zinc-300">Type <span className="text-white">{categoryDeleteModal.category.name_en}</span> to confirm<input value={categoryDeleteText} onChange={(event) => setCategoryDeleteText(event.target.value)} autoComplete="off" className="mt-2 min-h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-sm text-white outline-none focus:border-red-500" /></label> : <label className="mt-5 block text-xs font-bold text-zinc-300">Destination category<select value={destinationCategoryId} onChange={(event) => setDestinationCategoryId(event.target.value)} className="mt-2 min-h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-sm text-white"><option value="">Choose category…</option>{categories.filter((category) => category.id !== categoryDeleteModal.category.id).map((category) => <option key={category.id} value={category.id}>{category.name_en}</option>)}</select></label>}
-            <div className="mt-6 flex gap-3"><button type="button" disabled={categoryDeleting} onClick={() => setCategoryDeleteModal(null)} className="min-h-11 flex-1 rounded-xl bg-zinc-800 px-4 text-sm font-bold text-zinc-200">Cancel</button><button type="button" disabled={categoryDeleting || (categoryDeleteModal.mode === "delete_items" ? categoryDeleteText !== categoryDeleteModal.category.name_en : !destinationCategoryId)} onClick={() => void handlePopulatedCategoryDelete()} className="min-h-11 flex-1 rounded-xl bg-red-700 px-4 text-sm font-black text-white disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400">{categoryDeleting ? "Working…" : categoryDeleteModal.mode === "delete_items" ? "Delete category and items" : "Move items and delete"}</button></div>
+            {categoryDeleteModal.mode === "delete_items" ? <label className="mt-5 block text-xs font-bold text-[var(--omlu-text-secondary)]">Type <span className="text-[var(--omlu-text-primary)]">{categoryDeleteModal.category.name_en}</span> to confirm<input value={categoryDeleteText} onChange={(event) => setCategoryDeleteText(event.target.value)} autoComplete="off" className="mt-2 min-h-11 w-full rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] px-3 text-sm text-[var(--omlu-text-primary)] outline-none focus:border-red-500" /></label> : <label className="mt-5 block text-xs font-bold text-[var(--omlu-text-secondary)]">Destination category<select value={destinationCategoryId} onChange={(event) => setDestinationCategoryId(event.target.value)} className="mt-2 min-h-11 w-full rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] px-3 text-sm text-[var(--omlu-text-primary)]"><option value="">Choose category…</option>{categories.filter((category) => category.id !== categoryDeleteModal.category.id).map((category) => <option key={category.id} value={category.id}>{category.name_en}</option>)}</select></label>}
+            <div className="mt-6 flex gap-3"><button type="button" disabled={categoryDeleting} onClick={() => setCategoryDeleteModal(null)} className="min-h-11 flex-1 rounded-xl bg-[var(--omlu-muted-surface)] px-4 text-sm font-bold text-[var(--omlu-text-secondary)]">Cancel</button><button type="button" disabled={categoryDeleting || (categoryDeleteModal.mode === "delete_items" ? categoryDeleteText !== categoryDeleteModal.category.name_en : !destinationCategoryId)} onClick={() => void handlePopulatedCategoryDelete()} className="min-h-11 flex-1 rounded-xl bg-red-700 px-4 text-sm font-black text-[var(--omlu-text-primary)] disabled:cursor-not-allowed disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)]">{categoryDeleting ? "Working…" : categoryDeleteModal.mode === "delete_items" ? "Delete category and items" : "Move items and delete"}</button></div>
           </div>
         </div>
       )}
@@ -663,8 +663,8 @@ export default function AdminMenuPage() {
       {/* CATEGORY FORM MODAL */}
       {categoryModal.open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center overscroll-contain bg-black/75 p-4 backdrop-blur-xs">
-          <div className="relative flex max-h-[calc(100dvh-2rem)] w-full max-w-md flex-col gap-4 overflow-y-auto rounded-3xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="category-modal-title">
-            <h3 id="category-modal-title" className="text-lg font-black text-white">
+          <div className="relative flex max-h-[calc(100dvh-2rem)] w-full max-w-md flex-col gap-4 overflow-y-auto rounded-3xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-6 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="category-modal-title">
+            <h3 id="category-modal-title" className="text-lg font-black text-[var(--omlu-text-primary)]">
               {categoryModal.mode === "create" ? "Add Category" : "Edit Category"}
             </h3>
 
@@ -676,7 +676,7 @@ export default function AdminMenuPage() {
 
             <form onSubmit={handleCategorySubmit} className="flex flex-col gap-4">
               <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] font-black text-zinc-400 uppercase tracking-wider">
+                <label className="text-[10px] font-black text-[var(--omlu-text-secondary)] uppercase tracking-wider">
                   English Name *
                 </label>
                 <input
@@ -684,12 +684,12 @@ export default function AdminMenuPage() {
                   value={catNameEn}
                   onChange={(e) => setCatNameEn(e.target.value)}
                   placeholder="e.g. Starters"
-                  className="w-full px-4 py-2.5 bg-zinc-950 border border-zinc-800 focus:border-orange-600 rounded-xl text-sm outline-none transition text-white placeholder-zinc-700"
+                  className="w-full px-4 py-2.5 bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border)] focus:border-orange-600 rounded-xl text-sm outline-none transition text-[var(--omlu-text-primary)] placeholder-zinc-700"
                 />
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] font-black text-zinc-400 uppercase tracking-wider">
+                <label className="text-[10px] font-black text-[var(--omlu-text-secondary)] uppercase tracking-wider">
                   Malayalam Name (Optional)
                 </label>
                 <input
@@ -697,12 +697,12 @@ export default function AdminMenuPage() {
                   value={catNameMl}
                   onChange={(e) => setCatNameMl(e.target.value)}
                   placeholder="e.g. സ്റ്റാർട്ടേഴ്സ്"
-                  className="w-full px-4 py-2.5 bg-zinc-950 border border-zinc-800 focus:border-orange-600 rounded-xl text-sm outline-none transition text-white placeholder-zinc-700"
+                  className="w-full px-4 py-2.5 bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border)] focus:border-orange-600 rounded-xl text-sm outline-none transition text-[var(--omlu-text-primary)] placeholder-zinc-700"
                 />
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] font-black text-zinc-400 uppercase tracking-wider">
+                <label className="text-[10px] font-black text-[var(--omlu-text-secondary)] uppercase tracking-wider">
                   Display Order
                 </label>
                 <input
@@ -711,7 +711,7 @@ export default function AdminMenuPage() {
                   onChange={(e) => setCatDisplayOrder(Number(e.target.value))}
                   placeholder="0"
                   min="0"
-                  className="w-full px-4 py-2.5 bg-zinc-950 border border-zinc-800 focus:border-orange-600 rounded-xl text-sm outline-none transition text-white placeholder-zinc-700"
+                  className="w-full px-4 py-2.5 bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border)] focus:border-orange-600 rounded-xl text-sm outline-none transition text-[var(--omlu-text-primary)] placeholder-zinc-700"
                 />
               </div>
 
@@ -721,9 +721,9 @@ export default function AdminMenuPage() {
                   id="catIsActive"
                   checked={catIsActive}
                   onChange={(e) => setCatIsActive(e.target.checked)}
-                  className="rounded border-zinc-800 text-orange-600 focus:ring-0 focus:ring-offset-0 bg-zinc-950 w-4 h-4 cursor-pointer"
+                  className="rounded border-[var(--omlu-border)] text-orange-600 focus:ring-0 focus:ring-offset-0 bg-[var(--omlu-primary-surface)] w-4 h-4 cursor-pointer"
                 />
-                <label htmlFor="catIsActive" className="text-xs font-bold text-zinc-300 cursor-pointer select-none">
+                <label htmlFor="catIsActive" className="text-xs font-bold text-[var(--omlu-text-secondary)] cursor-pointer select-none">
                   Category is Active
                 </label>
               </div>
@@ -732,14 +732,14 @@ export default function AdminMenuPage() {
                 <button
                   type="button"
                   onClick={() => setCategoryModal({ open: false, mode: "create" })}
-                  className="flex-1 py-2.5 bg-zinc-800 hover:bg-zinc-750 text-zinc-300 font-bold rounded-xl cursor-pointer text-xs"
+                  className="flex-1 py-2.5 bg-[var(--omlu-muted-surface)] hover:bg-[var(--omlu-muted-surface)] text-[var(--omlu-text-secondary)] font-bold rounded-xl cursor-pointer text-xs"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={catSaving}
-                  className="flex-1 py-2.5 bg-orange-600 hover:bg-orange-700 text-white font-bold rounded-xl cursor-pointer text-xs disabled:opacity-50"
+                  className="flex-1 py-2.5 bg-orange-600 hover:bg-orange-700 text-[var(--omlu-text-primary)] font-bold rounded-xl cursor-pointer text-xs disabled:opacity-50"
                 >
                   {catSaving ? "Saving..." : "Save Category"}
                 </button>
@@ -752,8 +752,8 @@ export default function AdminMenuPage() {
       {/* DISH FORM MODAL */}
       {itemModal.open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center overscroll-contain bg-black/75 p-4 backdrop-blur-xs">
-          <div className="relative flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col gap-4 overflow-y-auto rounded-3xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="item-modal-title">
-            <h3 id="item-modal-title" className="text-lg font-black text-white">
+          <div className="relative flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col gap-4 overflow-y-auto rounded-3xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-6 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="item-modal-title">
+            <h3 id="item-modal-title" className="text-lg font-black text-[var(--omlu-text-primary)]">
               {itemModal.mode === "create" ? "Add Menu Item" : "Edit Menu Item"}
             </h3>
 
@@ -766,7 +766,7 @@ export default function AdminMenuPage() {
             <form onSubmit={handleItemSubmit} className="flex flex-col gap-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-[10px] font-black text-zinc-400 uppercase tracking-wider">
+                  <label className="text-[10px] font-black text-[var(--omlu-text-secondary)] uppercase tracking-wider">
                     English Name *
                   </label>
                   <input
@@ -774,12 +774,12 @@ export default function AdminMenuPage() {
                     value={itemNameEn}
                     onChange={(e) => setItemNameEn(e.target.value)}
                     placeholder="e.g. Chicken Biriyani"
-                    className="w-full px-4 py-2.5 bg-zinc-950 border border-zinc-800 focus:border-orange-600 rounded-xl text-xs outline-none transition text-white placeholder-zinc-700"
+                    className="w-full px-4 py-2.5 bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border)] focus:border-orange-600 rounded-xl text-xs outline-none transition text-[var(--omlu-text-primary)] placeholder-zinc-700"
                   />
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-[10px] font-black text-zinc-400 uppercase tracking-wider">
+                  <label className="text-[10px] font-black text-[var(--omlu-text-secondary)] uppercase tracking-wider">
                     Malayalam Name (Optional)
                   </label>
                   <input
@@ -787,20 +787,20 @@ export default function AdminMenuPage() {
                     value={itemNameMl}
                     onChange={(e) => setItemNameMl(e.target.value)}
                     placeholder="e.g. ചിക്കൻ ബിരിയാണി"
-                    className="w-full px-4 py-2.5 bg-zinc-950 border border-zinc-800 focus:border-orange-600 rounded-xl text-xs outline-none transition text-white placeholder-zinc-700"
+                    className="w-full px-4 py-2.5 bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border)] focus:border-orange-600 rounded-xl text-xs outline-none transition text-[var(--omlu-text-primary)] placeholder-zinc-700"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-[10px] font-black text-zinc-400 uppercase tracking-wider">
+                  <label className="text-[10px] font-black text-[var(--omlu-text-secondary)] uppercase tracking-wider">
                     Category *
                   </label>
                   <select
                     value={itemCategoryId}
                     onChange={(e) => setItemCategoryId(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-zinc-950 border border-zinc-800 focus:border-orange-600 rounded-xl text-xs outline-none transition text-white"
+                    className="w-full px-4 py-2.5 bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border)] focus:border-orange-600 rounded-xl text-xs outline-none transition text-[var(--omlu-text-primary)]"
                   >
                     {categories.map((c) => (
                       <option key={c.id} value={c.id}>
@@ -811,7 +811,7 @@ export default function AdminMenuPage() {
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-[10px] font-black text-zinc-400 uppercase tracking-wider">
+                  <label className="text-[10px] font-black text-[var(--omlu-text-secondary)] uppercase tracking-wider">
                     Price (INR) *
                   </label>
                   <input
@@ -819,14 +819,14 @@ export default function AdminMenuPage() {
                     value={itemPrice}
                     onChange={(e) => setItemPrice(e.target.value)}
                     placeholder="0.00"
-                    className="w-full px-4 py-2.5 bg-zinc-950 border border-zinc-800 focus:border-orange-600 rounded-xl text-xs outline-none transition text-white placeholder-zinc-700"
+                    className="w-full px-4 py-2.5 bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border)] focus:border-orange-600 rounded-xl text-xs outline-none transition text-[var(--omlu-text-primary)] placeholder-zinc-700"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-[10px] font-black text-zinc-400 uppercase tracking-wider">
+                  <label className="text-[10px] font-black text-[var(--omlu-text-secondary)] uppercase tracking-wider">
                     Description (EN)
                   </label>
                   <textarea
@@ -834,12 +834,12 @@ export default function AdminMenuPage() {
                     onChange={(e) => setItemDescriptionEn(e.target.value)}
                     placeholder="Brief description in English..."
                     rows={2}
-                    className="w-full px-4 py-2.5 bg-zinc-950 border border-zinc-800 focus:border-orange-600 rounded-xl text-xs outline-none transition text-white placeholder-zinc-700 resize-none"
+                    className="w-full px-4 py-2.5 bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border)] focus:border-orange-600 rounded-xl text-xs outline-none transition text-[var(--omlu-text-primary)] placeholder-zinc-700 resize-none"
                   />
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-[10px] font-black text-zinc-400 uppercase tracking-wider">
+                  <label className="text-[10px] font-black text-[var(--omlu-text-secondary)] uppercase tracking-wider">
                     Description (ML)
                   </label>
                   <textarea
@@ -847,14 +847,14 @@ export default function AdminMenuPage() {
                     onChange={(e) => setItemDescriptionMl(e.target.value)}
                     placeholder="വിവരണം മലയാളത്തിൽ..."
                     rows={2}
-                    className="w-full px-4 py-2.5 bg-zinc-950 border border-zinc-800 focus:border-orange-600 rounded-xl text-xs outline-none transition text-white placeholder-zinc-700 resize-none"
+                    className="w-full px-4 py-2.5 bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border)] focus:border-orange-600 rounded-xl text-xs outline-none transition text-[var(--omlu-text-primary)] placeholder-zinc-700 resize-none"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-[10px] font-black text-zinc-400 uppercase tracking-wider">
+                  <label className="text-[10px] font-black text-[var(--omlu-text-secondary)] uppercase tracking-wider">
                     Image URL (Optional)
                   </label>
                   <input
@@ -862,12 +862,12 @@ export default function AdminMenuPage() {
                     value={itemImageUrl}
                     onChange={(e) => setItemImageUrl(e.target.value)}
                     placeholder="e.g. http://images.com/dish.jpg"
-                    className="w-full px-4 py-2.5 bg-zinc-950 border border-zinc-800 focus:border-orange-600 rounded-xl text-xs outline-none transition text-white placeholder-zinc-700"
+                    className="w-full px-4 py-2.5 bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border)] focus:border-orange-600 rounded-xl text-xs outline-none transition text-[var(--omlu-text-primary)] placeholder-zinc-700"
                   />
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-[10px] font-black text-zinc-400 uppercase tracking-wider">
+                  <label className="text-[10px] font-black text-[var(--omlu-text-secondary)] uppercase tracking-wider">
                     Display Order
                   </label>
                   <input
@@ -876,7 +876,7 @@ export default function AdminMenuPage() {
                     onChange={(e) => setItemDisplayOrder(Number(e.target.value))}
                     placeholder="0"
                     min="0"
-                    className="w-full px-4 py-2.5 bg-zinc-950 border border-zinc-800 focus:border-orange-600 rounded-xl text-xs outline-none transition text-white placeholder-zinc-700"
+                    className="w-full px-4 py-2.5 bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border)] focus:border-orange-600 rounded-xl text-xs outline-none transition text-[var(--omlu-text-primary)] placeholder-zinc-700"
                   />
                 </div>
               </div>
@@ -887,9 +887,9 @@ export default function AdminMenuPage() {
                   id="itemIsAvailable"
                   checked={itemIsAvailable}
                   onChange={(e) => setItemIsAvailable(e.target.checked)}
-                  className="rounded border-zinc-800 text-orange-600 focus:ring-0 focus:ring-offset-0 bg-zinc-950 w-4 h-4 cursor-pointer"
+                  className="rounded border-[var(--omlu-border)] text-orange-600 focus:ring-0 focus:ring-offset-0 bg-[var(--omlu-primary-surface)] w-4 h-4 cursor-pointer"
                 />
-                <label htmlFor="itemIsAvailable" className="text-xs font-bold text-zinc-300 cursor-pointer select-none">
+                <label htmlFor="itemIsAvailable" className="text-xs font-bold text-[var(--omlu-text-secondary)] cursor-pointer select-none">
                   Item is Available in Stock
                 </label>
               </div>
@@ -898,14 +898,14 @@ export default function AdminMenuPage() {
                 <button
                   type="button"
                   onClick={() => setItemModal({ open: false, mode: "create" })}
-                  className="flex-1 py-2.5 bg-zinc-800 hover:bg-zinc-750 text-zinc-300 font-bold rounded-xl cursor-pointer text-xs"
+                  className="flex-1 py-2.5 bg-[var(--omlu-muted-surface)] hover:bg-[var(--omlu-muted-surface)] text-[var(--omlu-text-secondary)] font-bold rounded-xl cursor-pointer text-xs"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={itemSaving}
-                  className="flex-1 py-2.5 bg-orange-600 hover:bg-orange-700 text-white font-bold rounded-xl cursor-pointer text-xs disabled:opacity-50"
+                  className="flex-1 py-2.5 bg-orange-600 hover:bg-orange-700 text-[var(--omlu-text-primary)] font-bold rounded-xl cursor-pointer text-xs disabled:opacity-50"
                 >
                   {itemSaving ? "Saving..." : "Save Menu Item"}
                 </button>

@@ -29,10 +29,10 @@ export default async function HistoryPage({
   return (
     <div className="flex min-w-0 flex-col gap-5">
       <div>
-        <h1 className="text-2xl font-black text-white">History</h1>
+        <h1 className="text-2xl font-black text-[var(--omlu-text-primary)]">History</h1>
         <nav
           aria-label="History views"
-          className="mt-4 flex w-full gap-1 overflow-x-auto rounded-xl border border-zinc-800 bg-zinc-950 p-1 sm:w-fit"
+          className="mt-4 flex w-full gap-1 overflow-x-auto rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-1 sm:w-fit"
           role="tablist"
         >
           {tabs.map((tab) => {
@@ -46,8 +46,8 @@ export default async function HistoryPage({
                 aria-current={isActive ? "page" : undefined}
                 className={`min-h-11 flex-1 whitespace-nowrap rounded-lg px-5 py-2.5 text-center text-sm font-bold transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 sm:flex-none ${
                   isActive
-                    ? "bg-orange-600 text-white"
-                    : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
+                    ? "bg-orange-600 text-[var(--omlu-text-primary)]"
+                    : "text-[var(--omlu-text-secondary)] hover:bg-[var(--omlu-primary-surface)] hover:text-[var(--omlu-text-secondary)]"
                 }`}
               >
                 {tab.label}

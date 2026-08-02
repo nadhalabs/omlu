@@ -1,22 +1,81 @@
 @import "tailwindcss";
 
 :root {
+  color-scheme: light;
+  --omlu-page-background: #f7f7f5;
   --omlu-background: #f7f7f5;
   --omlu-primary: #18181b;
   --omlu-accent: #f97316;
   --omlu-accent-dark: #ea580c;
   --omlu-accent-soft: #fff1e6;
   --omlu-surface: #ffffff;
+  --omlu-primary-surface: #ffffff;
   --omlu-surface-muted: #fafaf9;
+  --omlu-muted-surface: #fafaf9;
+  --omlu-elevated-surface: #ffffff;
   --omlu-border: #e4e4e7;
   --omlu-border-strong: #d4d4d8;
   --omlu-text: #18181b;
+  --omlu-text-primary: #18181b;
   --omlu-text-secondary: #71717a;
   --omlu-text-muted: #a1a1aa;
+  --omlu-input-background: #ffffff;
+  --omlu-hover-background: #f4f4f5;
+  --omlu-focus-ring: #f97316;
+  --omlu-primary-action: #ea580c;
+  --omlu-primary-action-text: #ffffff;
+  --omlu-success-background: #ecfdf5;
+  --omlu-success-text: #047857;
+  --omlu-success-border: #6ee7b7;
+  --omlu-warning-background: #fff7ed;
+  --omlu-warning-text: #c2410c;
+  --omlu-warning-border: #fdba74;
+  --omlu-destructive-background: #fef2f2;
+  --omlu-destructive-text: #b91c1c;
+  --omlu-destructive-border: #fca5a5;
   --omlu-disabled: #f4f4f5;
   --omlu-backdrop: rgba(24, 24, 27, 0.45);
   --background: var(--omlu-background);
   --foreground: var(--omlu-text);
+}
+
+.dark {
+  color-scheme: dark;
+  --omlu-page-background: #09090b;
+  --omlu-background: #09090b;
+  --omlu-primary: #fafafa;
+  --omlu-accent: #fb923c;
+  --omlu-accent-dark: #f97316;
+  --omlu-accent-soft: #431407;
+  --omlu-surface: #18181b;
+  --omlu-primary-surface: #18181b;
+  --omlu-surface-muted: #27272a;
+  --omlu-muted-surface: #27272a;
+  --omlu-elevated-surface: #27272a;
+  --omlu-border: #3f3f46;
+  --omlu-border-strong: #52525b;
+  --omlu-text: #fafafa;
+  --omlu-text-primary: #fafafa;
+  --omlu-text-secondary: #d4d4d8;
+  --omlu-text-muted: #a1a1aa;
+  --omlu-input-background: #18181b;
+  --omlu-hover-background: #3f3f46;
+  --omlu-focus-ring: #fb923c;
+  --omlu-primary-action: #f97316;
+  --omlu-primary-action-text: #18181b;
+  --omlu-success-background: #052e16;
+  --omlu-success-text: #6ee7b7;
+  --omlu-success-border: #047857;
+  --omlu-warning-background: #431407;
+  --omlu-warning-text: #fdba74;
+  --omlu-warning-border: #c2410c;
+  --omlu-destructive-background: #450a0a;
+  --omlu-destructive-text: #fca5a5;
+  --omlu-destructive-border: #b91c1c;
+  --omlu-disabled: #27272a;
+  --omlu-backdrop: rgba(0, 0, 0, 0.72);
+  --background: var(--omlu-page-background);
+  --foreground: var(--omlu-text-primary);
 }
 
 @theme inline {
@@ -52,7 +111,7 @@ textarea {
 input,
 select,
 textarea {
-  background: var(--omlu-surface);
+  background: var(--omlu-input-background);
   color: var(--omlu-text);
   border-color: var(--omlu-border-strong);
   caret-color: var(--omlu-accent-dark);
@@ -63,7 +122,7 @@ select:focus-visible,
 textarea:focus-visible,
 button:focus-visible,
 a:focus-visible {
-  outline: 2px solid var(--omlu-accent);
+  outline: 2px solid var(--omlu-focus-ring);
   outline-offset: 2px;
   box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.18);
 }
@@ -166,95 +225,9 @@ a.text-white[aria-disabled="true"] {
   }
 }
 
-/* Light compatibility skin for the established Admin and Kitchen layouts. */
-.omlu-light-shell {
-  background: var(--omlu-background) !important;
-  color: var(--omlu-text) !important;
-}
-
-.omlu-light-shell :is(div, section, article, main, aside, header, nav)[class~="bg-zinc-950"],
-.omlu-light-shell :is(div, section, article, main, aside, header, nav)[class~="bg-zinc-900"] {
-  background-color: var(--omlu-surface) !important;
-}
-
-.omlu-light-shell :is(div, section, article, main, aside, header, nav)[class~="bg-zinc-800"] {
-  background-color: var(--omlu-surface-muted) !important;
-}
-
-.omlu-light-shell :is(div, section, article, main, aside, header, nav, tr)[class*="bg-zinc-950/"],
-.omlu-light-shell :is(div, section, article, main, aside, header, nav, tr)[class*="bg-zinc-900/"],
-.omlu-light-shell :is(div, section, article, main, aside, header, nav, tr)[class*="bg-zinc-800/"] {
-  background-color: var(--omlu-surface-muted) !important;
-}
-
-.omlu-light-shell :is(input, select, textarea) {
-  background-color: var(--omlu-surface) !important;
-  color: var(--omlu-text) !important;
-  -webkit-text-fill-color: var(--omlu-text);
-}
-
-.omlu-light-shell [class~="border-zinc-850"],
-.omlu-light-shell [class~="border-zinc-800"],
-.omlu-light-shell [class~="border-zinc-700"] {
-  border-color: var(--omlu-border) !important;
-}
-
-.omlu-light-shell :is(.text-white, .text-zinc-50, .text-zinc-100, .text-zinc-200) {
-  color: var(--omlu-text) !important;
-}
-
-.omlu-light-shell :is(.text-zinc-300, .text-zinc-400, .text-zinc-500) {
-  color: var(--omlu-text-secondary) !important;
-}
-
-.omlu-light-shell :is(.text-orange-300, .text-orange-400, .text-orange-500) {
-  color: #c2410c !important;
-}
-
-.omlu-light-shell :is(.text-red-200, .text-red-300, .text-red-400, .text-red-500) {
-  color: #b91c1c !important;
-}
-
-.omlu-light-shell :is(.text-emerald-300, .text-emerald-400, .text-emerald-500) {
-  color: #047857 !important;
-}
-
-.omlu-light-shell :is(.text-sky-300, .text-sky-400, .text-sky-500) {
-  color: #0369a1 !important;
-}
-
-.omlu-light-shell :is(.text-blue-300, .text-blue-400, .text-blue-500) {
-  color: #1d4ed8 !important;
-}
-
-.omlu-light-shell :is(.text-purple-300, .text-purple-400, .text-purple-500) {
-  color: #7e22ce !important;
-}
-
-.omlu-light-shell button:is(.text-white, .text-zinc-50, .text-zinc-100),
-.omlu-light-shell a:is(.bg-zinc-950, .bg-zinc-900, .bg-zinc-800).text-white,
-.omlu-light-shell :is(.bg-orange-500, .bg-orange-600, .bg-orange-700, .bg-red-600, .bg-red-700, .bg-green-600, .bg-blue-600, .bg-purple-600).text-white {
-  color: #fff !important;
-}
-
-.omlu-light-shell .contrast-dark-card .text-white,
-.omlu-light-shell .contrast-dark-header,
-.omlu-light-shell .contrast-dark-row,
-.omlu-light-shell .contrast-dark-row .text-white {
-  color: #fff !important;
-}
-
-.omlu-light-shell .contrast-dark-card[class~="bg-zinc-950"],
-.omlu-light-shell .contrast-dark-card[class*="bg-zinc-950/"],
-.omlu-light-shell .contrast-dark-card[class*="bg-orange-950/"],
-.omlu-light-shell .contrast-dark-row {
-  background-color: #18181b !important;
-  color: #fff !important;
-}
-
-.omlu-light-shell .contrast-dark-card .text-zinc-400,
-.omlu-light-shell .contrast-dark-row :is(.text-zinc-400, .text-zinc-500, .text-zinc-600) {
-  color: #a1a1aa !important;
+.omlu-admin-shell {
+  background: var(--omlu-page-background);
+  color: var(--omlu-text-primary);
 }
 
 @media print {

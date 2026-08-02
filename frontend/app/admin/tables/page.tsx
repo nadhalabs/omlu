@@ -190,19 +190,19 @@ export default function AdminTablesPage() {
         {activeTables.map((t) => (
           <div
             key={t.id}
-            className="border-4 border-double border-zinc-400 rounded-3xl p-8 flex flex-col items-center justify-between gap-4 text-center bg-white page-break-inside-avoid min-h-[360px]"
+            className="border-4 border-double border-[var(--omlu-border-strong)] rounded-3xl p-8 flex flex-col items-center justify-between gap-4 text-center bg-[var(--omlu-primary-surface)] page-break-inside-avoid min-h-[360px]"
           >
             <div>
-              <h2 className="text-xl font-black uppercase tracking-widest text-zinc-500">
+              <h2 className="text-xl font-black uppercase tracking-widest text-[var(--omlu-text-secondary)]">
                 {restaurantName}
               </h2>
-              <h1 className="text-4xl font-extrabold tracking-tight mt-1 text-black">
+              <h1 className="text-4xl font-extrabold tracking-tight mt-1 text-[var(--omlu-text-primary)]">
                 TABLE {t.table_number}
               </h1>
             </div>
 
             {/* Render dynamically via proxy PNG URL */}
-            <div className="relative w-48 h-48 border border-zinc-200 p-2 rounded-xl flex items-center justify-center bg-white">
+            <div className="relative w-48 h-48 border border-[var(--omlu-border-strong)] p-2 rounded-xl flex items-center justify-center bg-[var(--omlu-primary-surface)]">
               <Image
                 src={`/api/admin/tables/${t.id}/qr`}
                 alt={`Table ${t.table_number} QR Code`}
@@ -214,10 +214,10 @@ export default function AdminTablesPage() {
             </div>
 
             <div>
-              <p className="text-sm font-bold text-zinc-800">
+              <p className="text-sm font-bold text-[var(--omlu-text-primary)]">
                 Scan to view menu & order
               </p>
-              <p className="text-[10px] text-zinc-400 font-bold mt-1 uppercase">
+              <p className="text-[10px] text-[var(--omlu-text-secondary)] font-bold mt-1 uppercase">
                 OMLU QR Menu
               </p>
             </div>
@@ -230,10 +230,10 @@ export default function AdminTablesPage() {
         {/* Header Title Block */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-black tracking-tight text-zinc-950">
+            <h1 className="text-3xl font-black tracking-tight text-[var(--omlu-text-primary)]">
               Tables Management
             </h1>
-            <p className="mt-1.5 text-sm font-medium text-zinc-600">
+            <p className="mt-1.5 text-sm font-medium text-[var(--omlu-text-secondary)]">
               Create tables, manage public access, and print QR codes.
             </p>
           </div>
@@ -241,7 +241,7 @@ export default function AdminTablesPage() {
           <button
             onClick={handlePrint}
             disabled={activeTables.length === 0}
-            className="flex min-h-11 items-center gap-2 rounded-xl border border-zinc-300 bg-white px-5 py-2.5 text-sm font-bold text-zinc-800 transition hover:bg-zinc-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-500"
+            className="flex min-h-11 items-center gap-2 rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-5 py-2.5 text-sm font-bold text-[var(--omlu-text-primary)] transition hover:bg-[var(--omlu-muted-surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)]"
           >
             <span aria-hidden="true">⎙</span> Print all QR codes ({activeTables.length})
           </button>
@@ -250,8 +250,8 @@ export default function AdminTablesPage() {
         {/* Form and List Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
           {/* Add Table Column Form */}
-          <section className="flex flex-col gap-4 rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm lg:col-span-1">
-            <h2 className="border-b border-zinc-200 pb-3 text-lg font-black text-zinc-950">
+          <section className="flex flex-col gap-4 rounded-3xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-5 shadow-sm lg:col-span-1">
+            <h2 className="border-b border-[var(--omlu-border-strong)] pb-3 text-lg font-black text-[var(--omlu-text-primary)]">
               Add new table
             </h2>
 
@@ -263,7 +263,7 @@ export default function AdminTablesPage() {
 
             <form onSubmit={handleCreateTable} className="flex flex-col gap-4">
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="new-table-number" className="text-sm font-bold text-zinc-800">
+                <label htmlFor="new-table-number" className="text-sm font-bold text-[var(--omlu-text-primary)]">
                   Table number or identifier
                 </label>
                 <input
@@ -272,15 +272,15 @@ export default function AdminTablesPage() {
                   value={tableNumber}
                   onChange={(e) => setTableNumber(e.target.value)}
                   placeholder="e.g. 6 or T6"
-                  aria-describedby="new-table-help" className="min-h-11 w-full rounded-xl border border-zinc-300 bg-white px-4 py-2.5 text-sm text-zinc-900 outline-none focus-visible:outline-2 focus-visible:outline-orange-500"
+                  aria-describedby="new-table-help" className="min-h-11 w-full rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-4 py-2.5 text-sm text-[var(--omlu-text-primary)] outline-none focus-visible:outline-2 focus-visible:outline-orange-500"
                 />
-                <p id="new-table-help" className="text-xs font-medium text-zinc-600">Use the label guests and staff recognize, such as 6 or T6.</p>
+                <p id="new-table-help" className="text-xs font-medium text-[var(--omlu-text-secondary)]">Use the label guests and staff recognize, such as 6 or T6.</p>
               </div>
 
               <button
                 type="submit"
                 disabled={saving}
-                className="min-h-11 self-start rounded-xl bg-orange-600 px-5 py-2.5 text-sm font-black text-white transition hover:bg-orange-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-600 sm:w-auto"
+                className="min-h-11 self-start rounded-xl bg-orange-600 px-5 py-2.5 text-sm font-black text-[var(--omlu-text-primary)] transition hover:bg-orange-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)] sm:w-auto"
               >
                 {saving ? "Creating..." : "Create Table"}
               </button>
@@ -288,9 +288,9 @@ export default function AdminTablesPage() {
           </section>
 
           {/* Tables Mappings List */}
-          <section className="flex flex-col gap-4 rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm lg:col-span-2">
-            <h2 className="border-b border-zinc-200 pb-3 text-lg font-black text-zinc-950">
-              Registered tables <span className="text-sm font-bold text-zinc-600">({tables.length})</span>
+          <section className="flex flex-col gap-4 rounded-3xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-5 shadow-sm lg:col-span-2">
+            <h2 className="border-b border-[var(--omlu-border-strong)] pb-3 text-lg font-black text-[var(--omlu-text-primary)]">
+              Registered tables <span className="text-sm font-bold text-[var(--omlu-text-secondary)]">({tables.length})</span>
             </h2>
 
             {loading ? (
@@ -300,7 +300,7 @@ export default function AdminTablesPage() {
             ) : error ? (
               <p className="text-xs text-red-400 py-6 font-semibold">{error}</p>
             ) : tables.length === 0 ? (
-              <div className="text-center py-12 text-zinc-500">
+              <div className="text-center py-12 text-[var(--omlu-text-secondary)]">
                 <span className="text-3xl block mb-2">📋</span>
                 <p className="text-xs font-bold">No tables registered yet.</p>
               </div>
@@ -309,13 +309,13 @@ export default function AdminTablesPage() {
                 {tables.map((t) => (
                   <div
                     key={t.id}
-                    className="flex flex-col gap-4 rounded-2xl border border-zinc-200 bg-zinc-50 p-4 shadow-sm transition hover:border-zinc-300"
+                    className="flex flex-col gap-4 rounded-2xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-muted-surface)] p-4 shadow-sm transition hover:border-[var(--omlu-border-strong)]"
                   >
                     {/* Header */}
-                    <div className="flex items-start justify-between gap-2 border-b border-zinc-200 pb-3">
+                    <div className="flex items-start justify-between gap-2 border-b border-[var(--omlu-border-strong)] pb-3">
                       <div>
                         <div className="flex items-center gap-2">
-                          <h3 className="text-base font-extrabold text-zinc-950">
+                          <h3 className="text-base font-extrabold text-[var(--omlu-text-primary)]">
                             Table {t.table_number}
                           </h3>
                           {!t.is_active && (
@@ -324,19 +324,19 @@ export default function AdminTablesPage() {
                             </span>
                           )}
                         </div>
-                        <span className="mt-1 block break-all font-mono text-xs font-semibold text-zinc-600" title={t.table_code}>
+                        <span className="mt-1 block break-all font-mono text-xs font-semibold text-[var(--omlu-text-secondary)]" title={t.table_code}>
                           Public code: {t.table_code}
                         </span>
                       </div>
 
-                      <span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-black ${t.is_active ? "border border-green-300 bg-green-100 text-green-800" : "border border-zinc-300 bg-zinc-200 text-zinc-700"}`}>{t.is_active ? "Active" : "Inactive"}</span>
+                      <span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-black ${t.is_active ? "border border-green-300 bg-green-100 text-green-800" : "border border-[var(--omlu-border-strong)] bg-[var(--omlu-muted-surface)] text-[var(--omlu-text-primary)]"}`}>{t.is_active ? "Active" : "Inactive"}</span>
                     </div>
 
                     {/* QR Code and Actions */}
                     <div className="flex flex-col sm:flex-row gap-4 items-center sm:items-start justify-between">
                       {/* Interactive Preview & Download */}
                       <div className="flex flex-col items-center gap-2">
-                        <div className="relative w-32 h-32 border border-zinc-800 p-1.5 rounded-xl bg-white flex items-center justify-center">
+                        <div className="relative w-32 h-32 border border-[var(--omlu-border)] p-1.5 rounded-xl bg-[var(--omlu-primary-surface)] flex items-center justify-center">
                           <Image
                             src={`/api/admin/tables/${t.id}/qr`}
                             alt={`Table ${t.table_number} QR Preview`}
@@ -349,7 +349,7 @@ export default function AdminTablesPage() {
                         {/* Download link through binary proxy route */}
                         <a
                           href={`/api/admin/tables/${t.id}/qr`}
-                          download className="min-h-11 rounded-xl border border-zinc-300 bg-white px-4 py-3 text-center text-xs font-bold text-zinc-800 transition hover:bg-zinc-100 focus-visible:outline-2 focus-visible:outline-orange-500"
+                          download className="min-h-11 rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-4 py-3 text-center text-xs font-bold text-[var(--omlu-text-primary)] transition hover:bg-[var(--omlu-muted-surface)] focus-visible:outline-2 focus-visible:outline-orange-500"
                         >
                           Download QR
                         </a>
@@ -361,11 +361,11 @@ export default function AdminTablesPage() {
                           href={t.public_menu_url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="min-h-11 rounded-xl bg-orange-600 px-4 py-3 text-center text-xs font-black text-white transition hover:bg-orange-700 focus-visible:outline-2 focus-visible:outline-orange-500"
+                          className="min-h-11 rounded-xl bg-orange-600 px-4 py-3 text-center text-xs font-black text-[var(--omlu-text-primary)] transition hover:bg-orange-700 focus-visible:outline-2 focus-visible:outline-orange-500"
                         >
                           Open public menu
                         </a>
-                        <details className="relative"><summary aria-label={`More actions for Table ${t.table_number}`} className="flex min-h-11 cursor-pointer list-none items-center justify-center rounded-xl border border-zinc-300 bg-white px-4 text-xs font-bold text-zinc-800 hover:bg-zinc-100 focus-visible:outline-2 focus-visible:outline-orange-500">More actions</summary><div className="absolute right-0 z-20 mt-2 w-52 rounded-xl border border-zinc-200 bg-white p-1.5 shadow-xl"><button onClick={() => startEditing(t)} className="min-h-10 w-full rounded-lg px-3 text-left text-sm font-bold text-zinc-800 hover:bg-zinc-100">Edit table</button><button onClick={() => handleToggleActive(t)} disabled={updatingIds[t.id]} className="min-h-10 w-full rounded-lg px-3 text-left text-sm font-bold text-zinc-800 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-500">{t.is_active ? "Deactivate table" : "Activate table"}</button><button onClick={() => handleRegenerateCode(t)} disabled={updatingIds[t.id]} className="min-h-10 w-full rounded-lg px-3 text-left text-sm font-bold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-500">Regenerate code</button></div></details>
+                        <details className="relative"><summary aria-label={`More actions for Table ${t.table_number}`} className="flex min-h-11 cursor-pointer list-none items-center justify-center rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-4 text-xs font-bold text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-muted-surface)] focus-visible:outline-2 focus-visible:outline-orange-500">More actions</summary><div className="absolute right-0 z-20 mt-2 w-52 rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-1.5 shadow-xl"><button onClick={() => startEditing(t)} className="min-h-10 w-full rounded-lg px-3 text-left text-sm font-bold text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-muted-surface)]">Edit table</button><button onClick={() => handleToggleActive(t)} disabled={updatingIds[t.id]} className="min-h-10 w-full rounded-lg px-3 text-left text-sm font-bold text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-muted-surface)] disabled:cursor-not-allowed disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)]">{t.is_active ? "Deactivate table" : "Activate table"}</button><button onClick={() => handleRegenerateCode(t)} disabled={updatingIds[t.id]} className="min-h-10 w-full rounded-lg px-3 text-left text-sm font-bold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)]">Regenerate code</button></div></details>
                       </div>
                     </div>
                   </div>
@@ -379,8 +379,8 @@ export default function AdminTablesPage() {
       {/* EDIT TABLE MODAL */}
       {editingTable && (
         <div className="fixed inset-0 z-50 flex items-center justify-center overscroll-contain bg-black/75 p-4 backdrop-blur-xs">
-          <div className="relative flex max-h-[calc(100dvh-2rem)] w-full max-w-sm flex-col gap-4 overflow-y-auto rounded-3xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="rename-table-title">
-            <h3 id="rename-table-title" className="text-lg font-black text-white">Rename Table</h3>
+          <div className="relative flex max-h-[calc(100dvh-2rem)] w-full max-w-sm flex-col gap-4 overflow-y-auto rounded-3xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-6 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="rename-table-title">
+            <h3 id="rename-table-title" className="text-lg font-black text-[var(--omlu-text-primary)]">Rename Table</h3>
 
             {editFormError && (
               <div className="bg-red-950/40 border border-red-900/50 text-red-400 text-xs font-semibold p-3 rounded-xl">
@@ -390,14 +390,14 @@ export default function AdminTablesPage() {
 
             <form onSubmit={handleEditTableSubmit} className="flex flex-col gap-4">
               <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] font-black text-zinc-400 uppercase tracking-wider">
+                <label className="text-[10px] font-black text-[var(--omlu-text-secondary)] uppercase tracking-wider">
                   Table Number / Identifier *
                 </label>
                 <input
                   type="text"
                   value={editTableNumber}
                   onChange={(e) => setEditTableNumber(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-zinc-950 border border-zinc-800 focus:border-orange-600 rounded-xl text-sm outline-none transition text-white"
+                  className="w-full px-4 py-2.5 bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border)] focus:border-orange-600 rounded-xl text-sm outline-none transition text-[var(--omlu-text-primary)]"
                 />
               </div>
 
@@ -405,14 +405,14 @@ export default function AdminTablesPage() {
                 <button
                   type="button"
                   onClick={() => setEditingTable(null)}
-                  className="flex-1 py-2.5 bg-zinc-800 hover:bg-zinc-750 text-zinc-300 font-bold rounded-xl cursor-pointer text-xs"
+                  className="flex-1 py-2.5 bg-[var(--omlu-muted-surface)] hover:bg-[var(--omlu-muted-surface)] text-[var(--omlu-text-secondary)] font-bold rounded-xl cursor-pointer text-xs"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={editSaving}
-                  className="flex-1 py-2.5 bg-orange-600 hover:bg-orange-700 text-white font-bold rounded-xl cursor-pointer text-xs disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-600"
+                  className="flex-1 py-2.5 bg-orange-600 hover:bg-orange-700 text-[var(--omlu-text-primary)] font-bold rounded-xl cursor-pointer text-xs disabled:cursor-not-allowed disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)]"
                 >
                   {editSaving ? "Saving..." : "Save Changes"}
                 </button>

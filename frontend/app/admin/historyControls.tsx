@@ -22,12 +22,12 @@ export function DateFilters({
   const preset = filters.preset || "today";
   return (
     <div className="flex max-w-full flex-wrap items-end gap-3">
-      <label className="flex flex-col gap-1 text-xs font-bold text-zinc-400">
+      <label className="flex flex-col gap-1 text-xs font-bold text-[var(--omlu-text-secondary)]">
         Period
         <select
           value={preset}
           onChange={(event) => setFilters({ ...filters, preset: event.target.value as DatePreset, page: 1 })}
-          className="min-w-32 rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900"
+          className="min-w-32 rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-3 text-sm text-[var(--omlu-text-primary)]"
         >
           {presets.map((item) => (
             <option key={item.value} value={item.value}>
@@ -38,22 +38,22 @@ export function DateFilters({
       </label>
       {preset === "custom" && (
         <>
-          <label className="flex flex-col gap-1 text-xs font-bold text-zinc-400">
+          <label className="flex flex-col gap-1 text-xs font-bold text-[var(--omlu-text-secondary)]">
             Start
             <input
               type="date"
               value={filters.start_date || ""}
               onChange={(event) => setFilters({ ...filters, start_date: event.target.value, page: 1 })}
-              className="max-w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900"
+              className="max-w-full rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-3 text-sm text-[var(--omlu-text-primary)]"
             />
           </label>
-          <label className="flex flex-col gap-1 text-xs font-bold text-zinc-400">
+          <label className="flex flex-col gap-1 text-xs font-bold text-[var(--omlu-text-secondary)]">
             End
             <input
               type="date"
               value={filters.end_date || ""}
               onChange={(event) => setFilters({ ...filters, end_date: event.target.value, page: 1 })}
-              className="max-w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-900"
+              className="max-w-full rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-3 text-sm text-[var(--omlu-text-primary)]"
             />
           </label>
         </>
@@ -61,7 +61,7 @@ export function DateFilters({
       <button
         type="button"
         onClick={() => exportHistory(exportPath, filters)}
-        className="rounded-xl border border-zinc-300 bg-white px-4 text-sm font-bold text-zinc-800 hover:bg-zinc-50"
+        className="rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-4 text-sm font-bold text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-muted-surface)]"
       >
         Export CSV
       </button>
@@ -82,7 +82,7 @@ export function Pager({
 }) {
   const pages = Math.max(Math.ceil(total / pageSize), 1);
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-200 px-3 py-3 text-sm text-zinc-600">
+    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--omlu-border-strong)] px-3 py-3 text-sm text-[var(--omlu-text-secondary)]">
       <span>
         Page {page} of {pages} · {total} total
       </span>
@@ -90,14 +90,14 @@ export function Pager({
         <button
           disabled={page <= 1}
           onClick={() => setPage(page - 1)}
-          className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 font-bold text-zinc-800 hover:bg-zinc-50 disabled:bg-zinc-100 disabled:text-zinc-500"
+          className="rounded-lg border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-3 py-1.5 font-bold text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-muted-surface)] disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)]"
         >
           Previous
         </button>
         <button
           disabled={page >= pages}
           onClick={() => setPage(page + 1)}
-          className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 font-bold text-zinc-800 hover:bg-zinc-50 disabled:bg-zinc-100 disabled:text-zinc-500"
+          className="rounded-lg border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-3 py-1.5 font-bold text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-muted-surface)] disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)]"
         >
           Next
         </button>
@@ -107,12 +107,12 @@ export function Pager({
 }
 
 export function EmptyState({ message }: { message: string }) {
-  return <div className="rounded-2xl border border-dashed border-zinc-300 bg-white p-8 text-center text-sm font-semibold text-zinc-600">{message}</div>;
+  return <div className="rounded-2xl border border-dashed border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-8 text-center text-sm font-semibold text-[var(--omlu-text-secondary)]">{message}</div>;
 }
 
 export function HistorySkeleton() {
   return (
-    <div aria-label="Loading history" className="overflow-hidden rounded-2xl border border-zinc-200 bg-white p-4">
+    <div aria-label="Loading history" className="overflow-hidden rounded-2xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-4">
       <div className="omlu-skeleton h-10 w-full rounded-lg" />
       <div className="mt-3 space-y-3">
         {[1, 2, 3, 4].map((row) => <div key={row} className="omlu-skeleton h-12 w-full rounded-lg" />)}
