@@ -4,11 +4,63 @@ from app.models.restaurant import Restaurant
 from app.models.restaurant_table import RestaurantTable
 from app.models.menu import MenuCategory, MenuItem
 from app.models.staff_user import StaffUser
+from app.models.platform_user import PlatformUser
 from app.utils.auth import hash_password
 
+from app.config import settings
+
+def seed_platform_users(db: SessionLocal = None) -> None:
+    """Seed platform operator accounts for local development and test environments only.
+    Refuses to execute in non-development environments.
+    """
+    if getattr(settings, "app_environment", "development") not in {"development", "test"}:
+        print(f"Skipping platform user seeding in non-development environment ({getattr(settings, 'app_environment', '')}).")
+        return
+
+    should_close = False
+    if db is None:
+        db = SessionLocal()
+        should_close = True
+
+    try:
+        platform_users_data = [
+            ("Platform Owner", "owner@omlu.platform", "platform_owner", "platform_owner", "PlatformOwner123!"),
+            ("Platform Admin", "admin@omlu.platform", "platform_admin", "platform_admin", "PlatformAdmin123!"),
+            ("Platform Support", "support@omlu.platform", "platform_support", "platform_support", "PlatformSupport123!"),
+            ("Platform ReadOnly", "readonly@omlu.platform", "platform_readonly", "platform_readonly", "PlatformReadOnly123!"),
+        ]
+        for full_name, email, username, role, password in platform_users_data:
+            existing = db.query(PlatformUser).filter(PlatformUser.email == email).first()
+            if not existing:
+                print(f"Creating platform user {username} ({role})...")
+                db.add(PlatformUser(
+                    email=email,
+                    username=username,
+                    password_hash=hash_password(password),
+                    full_name=full_name,
+                    role=role,
+                    status="active",
+                    is_active=True,
+                ))
+        db.commit()
+    finally:
+        if should_close:
+            db.close()
+
+
 def seed_database():
+    """Seed demo restaurant data and platform users for development/testing.
+    Refuses to run in production.
+    """
+    if getattr(settings, "app_environment", "development") not in {"development", "test"}:
+        print(f"Skipping database seeding in non-development environment ({getattr(settings, 'app_environment', '')}).")
+        return
+
     db = SessionLocal()
     try:
+        # 0. Seed Platform Operators if missing
+        seed_platform_users(db)
+
         # Check if demo restaurant already exists
         restaurant = db.query(Restaurant).filter(
             Restaurant.slug == "nadha-demo-cafe"

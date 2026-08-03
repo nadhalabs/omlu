@@ -1,5 +1,5 @@
 import pytest
-
+from app.database import SessionLocal
 from app.routes.auth import reset_login_rate_limit
 from app.routes.orders import reset_order_rate_limit
 from app.routes.registration import reset_registration_rate_limit
@@ -17,3 +17,12 @@ def reset_rate_limits():
     reset_order_rate_limit()
     reset_login_rate_limit()
     reset_registration_rate_limit()
+
+
+@pytest.fixture
+def db_session():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()

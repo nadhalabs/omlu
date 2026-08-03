@@ -12,6 +12,7 @@ from app.models.menu_import import MenuImportJob, MenuImportDraftItem
 from app.models.table_session_participant import TableSessionCreationAttempt, TableSessionJoinAttempt, TableSessionParticipant
 from app.models.empty_table_report import EmptyTableReport
 from app.models.payment import Payment, RevenueEntry
+from app.models.platform_user import PlatformUser, PlatformSession, PlatformAuditLog
 
 __all__ = [
     "Restaurant",
@@ -47,4 +48,7 @@ __all__ = [
     "EmptyTableReport",
     "Payment",
     "RevenueEntry",
+    "PlatformUser",
+    "PlatformSession",
+    "PlatformAuditLog",
 ]

@@ -114,9 +114,11 @@ from app.routes import (
     quick_sales_router,
     menu_imports_router,
     table_participants_router,
+    platform_router,
 )
 
 app.include_router(health_router)
+app.include_router(platform_router)
 app.include_router(public_menu_router)
 app.include_router(orders_router)
 app.include_router(service_request_router)
