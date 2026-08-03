@@ -84,7 +84,7 @@ test("payment collection requires method selection and explicit confirmation", (
   const pending = read("app/admin/payments/pending/PendingPaymentsClient.tsx");
   assert.match(pending, /counter_cash/);
   assert.match(pending, /counter_upi/);
-  assert.match(pending, /Confirm payment collection/);
+  assert.match(pending, /Confirm (cash|UPI) payment/);
   assert.match(pending, /confirmPendingPayment/);
 });
 
