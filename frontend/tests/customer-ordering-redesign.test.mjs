@@ -6,7 +6,7 @@ const read = (path) => fs.readFileSync(new URL(`../${path}`, import.meta.url), "
 const menu = read("app/menu/[restaurantSlug]/[tableCode]/MenuClient.tsx");
 const session = read("app/session/[sessionToken]/SessionClient.tsx");
 
-test("menu provides compact, accessible discovery and a safe-area cart action", () => {
+test("menu provides compact discovery, header table context, and sticky cart action", () => {
   assert.match(menu, /id="menu-search"/);
   assert.match(menu, /type="search"/);
   assert.match(menu, /htmlFor="menu-search"/);
@@ -14,10 +14,10 @@ test("menu provides compact, accessible discovery and a safe-area cart action", 
   assert.match(menu, /overflow-x-auto no-scrollbar/);
   assert.match(menu, /min-h-\[104px\]/);
   assert.match(menu, /env\(safe-area-inset-bottom\)/);
-  assert.match(menu, /totalQty > 0 && !orderingDisabled/);
+  assert.match(menu, /totalQty > 0/);
   assert.equal((menu.match(/id="menu-search"/g) || []).length, 1);
   assert.match(menu, /aria-label=\{`\$\{t\.cart\}: \$\{totalQty\}/);
-  assert.doesNotMatch(menu, /Ready to order\?|Start secure ordering for this table|>Start ordering</);
+  assert.match(menu, /\{t\.dineIn\}/);
 });
 
 test("fresh QR load and refresh only load status and validate saved access", () => {
@@ -25,26 +25,38 @@ test("fresh QR load and refresh only load status and validate saved access", () 
   assert.match(beforeCheckout, /fetchMenu\(true\)/);
   assert.match(beforeCheckout, /getTableSessionStatus\(restaurantSlug, tableCode\)/);
   assert.match(beforeCheckout, /validateSavedSession\(\)/);
-  assert.doesNotMatch(beforeCheckout, /startSecureTableSession\(/);
-  assert.doesNotMatch(menu, /handleStartOrdering|autoStartAttemptedRef|occupancyChecked|savedSessionChecked/);
   assert.match(menu, /pageshow/);
   assert.match(menu, /validateSavedSession\(\{ clearCachedStateFirst: true \}\)/);
 });
 
-test("local cart actions never create table access", () => {
-  const cartActions = menu.slice(menu.indexOf("const addLineToCart"), menu.indexOf("// Search filtering"));
-  assert.match(cartActions, /setCart/);
-  assert.match(cartActions, /setCustomisingItem/);
-  assert.doesNotMatch(cartActions, /startSecureTableSession|joinSecureTableSession|addOrderToDiningSession/);
+test("unified session entry is shared by start ordering and item cart actions", () => {
+  assert.match(menu, /const ensureActiveSession = useCallback/);
+  assert.match(menu, /isStartingSession/);
+  assert.match(menu, /handleStartOrdering=\{/);
+  assert.match(menu, /const active = await ensureActiveSession\(\)/);
 });
 
-test("first order submission creates secure access before placing the order", () => {
-  const checkout = menu.slice(menu.indexOf("const handlePlaceOrder"), menu.indexOf("const handleJoinTable"));
-  assert.match(checkout, /if \(!activeSession && !tableOccupied\)/);
-  assert.match(checkout, /await startSecureTableSession\(restaurantSlug, tableCode\)/);
-  assert.ok(checkout.indexOf("await startSecureTableSession") < checkout.indexOf("await addOrderToDiningSession"));
-  assert.match(checkout, /saveParticipantToken/);
-  assert.match(checkout, /saveSessionParticipantToken/);
+test("409 session conflict transitions UI to join_required state", () => {
+  assert.match(menu, /err\.status === 409/);
+  assert.match(menu, /setTableOccupied\(true\)/);
+  assert.match(menu, /Table already has an active session/);
+});
+
+test("single CustomerMenuState resolves all 7 table and session lifecycle states", () => {
+  assert.match(menu, /type CustomerMenuState =/);
+  for (const state of ["ready", "join_required", "ordering_active", "bill_requested", "payment_pending", "completed", "expired"]) {
+    assert.match(menu, new RegExp(`"${state}"`));
+  }
+});
+
+test("completed session renders receipt action instead of start new table order", () => {
+  assert.match(menu, /orderCompletedTitle/);
+  assert.match(menu, /viewReceipt/);
+  assert.doesNotMatch(menu, /Start a new table order/);
+});
+
+test("payment pending copy instructs showing payment code at counter", () => {
+  assert.match(menu, /Show your payment code at the counter/);
 });
 
 test("saved sessions restore while occupied tables still require an explicit code", () => {

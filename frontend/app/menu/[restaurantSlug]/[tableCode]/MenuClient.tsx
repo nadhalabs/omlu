@@ -34,6 +34,15 @@ import { useRealtime } from "@/lib/realtime";
 import { completionPath, readCompletedTable } from "@/lib/customerCompletion";
 import { detachedBillPath, readDetachedSession } from "@/lib/customerDetachment";
 
+export type CustomerMenuState =
+  | "ready"
+  | "join_required"
+  | "ordering_active"
+  | "bill_requested"
+  | "payment_pending"
+  | "completed"
+  | "expired";
+
 interface MenuClientProps {
   restaurantSlug: string;
   tableCode: string;
@@ -109,6 +118,217 @@ export default function MenuClient(props: MenuClientProps) {
   return <ActiveMenuClient {...props} />;
 }
 
+function TableOrderStatusCard({
+  menuState,
+  tableNumber,
+  joinCode,
+  setJoinCode,
+  joining,
+  handleJoinTable,
+  joinError,
+  handleStartOrdering,
+  isStartingSession,
+  startSessionError,
+  sessionToken,
+  t,
+  router,
+}: {
+  menuState: CustomerMenuState;
+  tableNumber: string;
+  joinCode: string;
+  setJoinCode: (code: string) => void;
+  joining: boolean;
+  handleJoinTable: () => void;
+  joinError: string | null;
+  handleStartOrdering: () => void;
+  isStartingSession: boolean;
+  startSessionError: string | null;
+  sessionToken?: string;
+  t: Record<string, string>;
+  router: ReturnType<typeof useRouter>;
+}) {
+  if (menuState === "ready") {
+    return (
+      <section className="rounded-2xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-4 shadow-xs dark:border-[var(--omlu-border)]" aria-labelledby="status-card-title">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 id="status-card-title" className="text-sm font-black text-[var(--omlu-text-primary)]">
+              {t.readyToOrderTitle} · {t.table} {tableNumber}
+            </h2>
+            <p className="mt-0.5 text-xs text-[var(--omlu-text-secondary)]">
+              {t.readyToOrderDesc.replace("{table}", tableNumber)}
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={isStartingSession}
+            onClick={handleStartOrdering}
+            className="shrink-0 min-h-10 rounded-xl bg-orange-600 px-4 py-2 text-xs font-black text-white hover:bg-orange-700 active:bg-orange-800 disabled:opacity-50 cursor-pointer shadow-xs transition"
+          >
+            {isStartingSession ? t.startingOrder : t.startOrdering}
+          </button>
+        </div>
+        {startSessionError && (
+          <p role="alert" className="mt-2 text-xs font-semibold text-red-700 dark:text-red-400">{startSessionError}</p>
+        )}
+      </section>
+    );
+  }
+
+  if (menuState === "ordering_active") {
+    return (
+      <section className="rounded-2xl border border-emerald-200 bg-emerald-50/80 p-3.5 shadow-xs dark:border-emerald-900/50 dark:bg-emerald-950/20" aria-labelledby="status-card-title">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 id="status-card-title" className="text-xs font-black text-emerald-950 dark:text-emerald-300">
+                {t.orderingActiveTitle}
+              </h2>
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 dark:bg-emerald-900/50 px-2 py-0.5 text-[10px] font-bold text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                {t.activeBadge}
+              </span>
+            </div>
+            <p className="mt-0.5 text-xs text-emerald-900 dark:text-emerald-400">
+              {t.orderingActiveDesc.replace("{table}", tableNumber)}
+            </p>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  if (menuState === "join_required") {
+    return (
+      <section className="rounded-2xl border border-orange-200 bg-orange-50/80 p-4 shadow-xs dark:border-orange-900/50 dark:bg-orange-950/20" aria-labelledby="join-table-title">
+        <h2 id="join-table-title" className="text-sm font-black text-[var(--omlu-text-primary)]">
+          {t.tableActiveTitle.replace("{table}", tableNumber)}
+        </h2>
+        <p className="mt-0.5 text-xs text-[var(--omlu-text-secondary)]">
+          {t.joinCodePrompt}
+        </p>
+        <div className="mt-3 flex gap-2">
+          <input
+            id="join-code-input"
+            value={joinCode}
+            onChange={(event) => setJoinCode(event.target.value.replace(/\D/g, "").slice(0, 4))}
+            inputMode="numeric"
+            pattern="[0-9]{4}"
+            maxLength={4}
+            autoComplete="one-time-code"
+            aria-label="4-digit table join code"
+            className="min-w-0 flex-1 rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-4 py-2 text-center text-base font-black tracking-[0.35em] text-[var(--omlu-text-primary)] outline-none focus:ring-2 focus:ring-orange-600"
+          />
+          <button
+            type="button"
+            disabled={joining || joinCode.length !== 4}
+            onClick={handleJoinTable}
+            className="rounded-xl bg-orange-600 px-4 py-2 text-xs font-black text-white hover:bg-orange-700 disabled:cursor-not-allowed disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)] transition shadow-xs cursor-pointer"
+          >
+            {joining ? t.joiningTable : t.joinTable}
+          </button>
+        </div>
+        {joinError && <p role="alert" className="mt-2 text-xs font-semibold text-red-700 dark:text-red-400">{joinError}</p>}
+      </section>
+    );
+  }
+
+  if (menuState === "bill_requested") {
+    return (
+      <section className="rounded-2xl border border-amber-200 bg-amber-50/80 p-4 shadow-xs dark:border-amber-900/50 dark:bg-amber-950/20" aria-labelledby="status-card-title">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 id="status-card-title" className="text-sm font-black text-amber-950 dark:text-amber-200">
+              {t.billRequestedTitle}
+            </h2>
+            <p className="mt-0.5 text-xs text-amber-900 dark:text-amber-300">
+              {t.billRequestedDesc}
+            </p>
+          </div>
+          {sessionToken && (
+            <button
+              type="button"
+              onClick={() => router.push(`/session/${sessionToken}`)}
+              className="shrink-0 rounded-xl bg-amber-600 px-4 py-2 text-xs font-black text-white hover:bg-amber-700 cursor-pointer shadow-xs transition"
+            >
+              {t.viewBill}
+            </button>
+          )}
+        </div>
+      </section>
+    );
+  }
+
+  if (menuState === "payment_pending") {
+    return (
+      <section className="rounded-2xl border border-amber-200 bg-amber-50/80 p-4 shadow-xs dark:border-amber-900/50 dark:bg-amber-950/20" aria-labelledby="status-card-title">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 id="status-card-title" className="text-sm font-black text-amber-950 dark:text-amber-200">
+              {t.paymentPendingTitle}
+            </h2>
+            <p className="mt-0.5 text-xs text-amber-900 dark:text-amber-300">
+              {t.paymentPendingDesc}
+            </p>
+          </div>
+          {sessionToken && (
+            <button
+              type="button"
+              onClick={() => router.push(`/session/${sessionToken}`)}
+              className="shrink-0 rounded-xl bg-amber-600 px-4 py-2 text-xs font-black text-white hover:bg-amber-700 cursor-pointer shadow-xs transition"
+            >
+              {t.viewBill}
+            </button>
+          )}
+        </div>
+      </section>
+    );
+  }
+
+  if (menuState === "completed") {
+    return (
+      <section className="rounded-2xl border border-emerald-200 bg-emerald-50/80 p-4 shadow-xs dark:border-emerald-900/50 dark:bg-emerald-950/20" aria-labelledby="status-card-title">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 id="status-card-title" className="text-sm font-black text-emerald-950 dark:text-emerald-200">
+              {t.orderCompletedTitle}
+            </h2>
+            <p className="mt-0.5 text-xs text-emerald-900 dark:text-emerald-300">
+              {t.orderCompletedDesc}
+            </p>
+          </div>
+          {sessionToken && (
+            <button
+              type="button"
+              onClick={() => router.push(`/session/${sessionToken}`)}
+              className="shrink-0 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black text-white hover:bg-emerald-700 cursor-pointer shadow-xs transition"
+            >
+              {t.viewReceipt}
+            </button>
+          )}
+        </div>
+      </section>
+    );
+  }
+
+  if (menuState === "expired") {
+    return (
+      <section className="rounded-2xl border border-red-200 bg-red-50/80 p-4 shadow-xs dark:border-red-900/50 dark:bg-red-950/20" aria-labelledby="status-card-title">
+        <div>
+          <h2 id="status-card-title" className="text-sm font-black text-red-950 dark:text-red-200">
+            {t.expiredTitle}
+          </h2>
+          <p className="mt-0.5 text-xs text-red-900 dark:text-red-300">
+            {t.expiredDesc}
+          </p>
+        </div>
+      </section>
+    );
+  }
+
+  return null;
+}
+
 function ActiveMenuClient({
   restaurantSlug,
   tableCode,
@@ -131,8 +351,10 @@ function ActiveMenuClient({
   const [customisingItem, setCustomisingItem] = useState<MenuItem | null>(null);
   const [draftOptions, setDraftOptions] = useState<Record<number, Record<number, number>>>({});
   
-  // Order submission states
+  // Order submission & session states
   const [isPlacingOrder, setIsPlacingOrder] = useState<boolean>(false);
+  const [isStartingSession, setIsStartingSession] = useState<boolean>(false);
+  const [startSessionError, setStartSessionError] = useState<string | null>(null);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [currentSession, setCurrentSession] =
     useState<PublicDiningSessionResponse | null>(null);
@@ -414,9 +636,11 @@ function ActiveMenuClient({
   // Local translations for UI labels
   const translations = {
     en: {
-      searchPlaceholder: "Search menu...",
+      dineIn: "Dine-in",
+      searchPlaceholder: "Search food and drinks...",
       cart: "Cart",
       subtotal: "Subtotal",
+      item: "item",
       items: "items",
       add: "Add",
       noItems: "No items found matching your search",
@@ -425,6 +649,8 @@ function ActiveMenuClient({
       connectionError: "Could not load the menu. Please check your connection.",
       loadingText: "Loading menu...",
       viewCart: "View Cart",
+      reviewCart: "Review cart",
+      viewCurrentOrder: "View current order",
       placeOrder: "Place Order",
       submitting: "Placing Order...",
       customerNote: "Add general instructions / note for kitchen...",
@@ -455,11 +681,34 @@ function ActiveMenuClient({
       total: "Total",
       selectToContinue: "Select the required choices to continue.",
       chooseYour: "Choose your",
+      readyToOrderTitle: "Ready to order",
+      readyToOrderDesc: "Start an order for Table {table} to add items and send them to the restaurant.",
+      startOrdering: "Start ordering",
+      startingOrder: "Starting order…",
+      orderingActiveTitle: "Ordering active",
+      orderingActiveDesc: "Ordering for Table {table}. Add items below and review your cart when ready.",
+      activeBadge: "Active",
+      tableActiveTitle: "Table {table} · Table already active",
+      joinCodePrompt: "Enter the join code provided by someone at the table.",
+      joinTable: "Join table",
+      joiningTable: "Joining…",
+      billRequestedTitle: "Bill requested",
+      billRequestedDesc: "New items cannot be added while the restaurant prepares your bill.",
+      paymentPendingTitle: "Payment pending",
+      paymentPendingDesc: "Your table has been released. Show your payment code at the counter.",
+      viewBill: "View bill",
+      orderCompletedTitle: "Order completed",
+      orderCompletedDesc: "This table session has ended.",
+      viewReceipt: "View receipt",
+      expiredTitle: "Table session expired",
+      expiredDesc: "Your table session link is no longer valid. Scan the table QR again to start a new order.",
     },
     ml: {
-      searchPlaceholder: "വിഭവങ്ങൾ തിരയുക...",
+      dineIn: "ഡൈൻ-ഇൻ",
+      searchPlaceholder: "ഭക്ഷണങ്ങളും പാനീയങ്ങളും തിരയുക...",
       cart: "കാർട്ട്",
       subtotal: "ആകെ തുക",
+      item: "ഇനം",
       items: "ഇനങ്ങൾ",
       add: "ചേർക്കുക",
       noItems: "തിരച്ചിലിന് അനുയോമായ വിഭവങ്ങൾ ഒന്നും കണ്ടെത്തിയില്ല",
@@ -468,6 +717,8 @@ function ActiveMenuClient({
       connectionError: "മെനു ലോഡ് ചെയ്യാൻ കഴിഞ്ഞില്ല. ദയവായി കണക്ഷൻ പരിശോധിക്കുക.",
       loadingText: "മെനു ലോഡ് ചെയ്യുന്നു...",
       viewCart: "കാർട്ട് കാണുക",
+      reviewCart: "കാർട്ട് റിവ്യൂ ചെയ്യുക",
+      viewCurrentOrder: "നിലവിലെ ഓർഡർ കാണുക",
       placeOrder: "ഓർഡർ ചെയ്യുക",
       submitting: "ഓർഡർ ചെയ്യുന്നു...",
       customerNote: "പ്രത്യേക നിർദ്ദേശങ്ങൾ ഇവിടെ എഴുതുക...",
@@ -498,10 +749,89 @@ function ActiveMenuClient({
       total: "ആകെ",
       selectToContinue: "തുടരാൻ ആവശ്യമായ ഓപ്ഷനുകൾ തിരഞ്ഞെടുക്കുക.",
       chooseYour: "തിരഞ്ഞെടുക്കുക:",
+      readyToOrderTitle: "ഓർഡർ ചെയ്യാൻ തയ്യാറാണ്",
+      readyToOrderDesc: "വിഭവങ്ങൾ ചേർത്ത് റെസ്റ്റോറന്റിലേക്ക് അയക്കാൻ Table {table}-നായി ഓർഡർ ആരംഭിക്കുക.",
+      startOrdering: "ഓർഡർ ആരംഭിക്കുക",
+      startingOrder: "ആരംഭിക്കുന്നു…",
+      orderingActiveTitle: "ഓർഡറിംഗ് സജീവമാണ്",
+      orderingActiveDesc: "Table {table}-ലേക്ക് വിഭവങ്ങൾ തിരഞ്ഞെടുത്ത് കാർട്ടിൽ റിവ്യൂ ചെയ്യുക.",
+      activeBadge: "സജീവം",
+      tableActiveTitle: "Table {table}-ൽ നിലവിൽ ഓർഡർ ആരംഭിച്ചിട്ടുണ്ട്",
+      joinCodePrompt: "മേശയിലുള്ള ആരോടെങ്കിലും ചോദിച്ച് 4 അക്ക കോഡ് നൽകുക.",
+      joinTable: "ടേബിളിൽ ചേരുക",
+      joiningTable: "ചേരുന്നു…",
+      billRequestedTitle: "ബിൽ ആവശ്യപ്പെട്ടു",
+      billRequestedDesc: "ബിൽ തയാറാക്കുമ്പോൾ പുതിയ ഓർഡറുകൾ നൽകാൻ കഴിയില്ല.",
+      paymentPendingTitle: "പണമടയ്ക്കൽ ബാക്കി",
+      paymentPendingDesc: "മേശ ഒഴിവാക്കി. കൗണ്ടറിൽ പേയ്മെന്റ് കോഡ് കാണിക്കുക.",
+      viewBill: "ബിൽ കാണുക",
+      orderCompletedTitle: "ഓർഡർ പൂർത്തിയായി",
+      orderCompletedDesc: "ഈ ടേബിൾ സെഷൻ അവസാനിച്ചു.",
+      viewReceipt: "രസീത് കാണുക",
+      expiredTitle: "സെഷൻ കാലാവധി കഴിഞ്ഞു",
+      expiredDesc: "ലിങ്ക് അസാധുവാണ്. പുതിയ ഓർഡറിനായി QR വീണ്ടും സ്കാൻ ചെയ്യുക.",
     },
   };
 
   const t = translations[language];
+
+  // Derive single customer menu state
+  const getCustomerMenuState = (): CustomerMenuState => {
+    if (expiredSessionNotice) return "expired";
+    if (sessionCompleteNotice || (currentSession && ["closed", "paid", "cancelled"].includes(currentSession.status))) return "completed";
+    if (currentSession?.status === "payment_requested") return "bill_requested";
+    if (currentSession && ["payment_pending", "detached_awaiting_payment"].includes(currentSession.status)) return "payment_pending";
+    if (currentSession?.status === "open" && participantToken) return "ordering_active";
+    if (tableOccupied && !participantToken) return "join_required";
+    return "ready";
+  };
+
+  const menuState = getCustomerMenuState();
+  const orderingDisabled = ["bill_requested", "payment_pending", "completed", "expired"].includes(menuState);
+
+  // Unified Session Entry function
+  const ensureActiveSession = useCallback(async (): Promise<boolean> => {
+    if (currentSession && currentSession.status === "open" && participantToken) {
+      return true;
+    }
+    if (tableOccupied && !participantToken) {
+      const joinElement = document.getElementById("join-table-title");
+      if (joinElement) joinElement.scrollIntoView({ behavior: "smooth" });
+      const joinInput = document.getElementById("join-code-input");
+      if (joinInput) joinInput.focus();
+      return false;
+    }
+    if (isStartingSession) return false;
+
+    setIsStartingSession(true);
+    setStartSessionError(null);
+    try {
+      const authority = await startSecureTableSession(restaurantSlug, tableCode);
+      setParticipantToken(authority.participant_token);
+      saveParticipantToken(restaurantSlug, tableCode, authority.participant_token);
+      savePublicSessionToken(restaurantSlug, tableCode, authority.session.public_id);
+      saveSessionParticipantToken(authority.session.public_id, authority.participant_token);
+      const session = await getPublicDiningSession(authority.session.public_id, authority.participant_token);
+      setCurrentSession(session);
+      setTableOccupied(true);
+      return true;
+    } catch (err) {
+      if (
+        err instanceof ApiError &&
+        (err.status === 409 ||
+          err.message.toLowerCase().includes("active") ||
+          err.message.toLowerCase().includes("occupied"))
+      ) {
+        setTableOccupied(true);
+        setJoinError("Table already has an active session. Please enter join code.");
+      } else {
+        setStartSessionError(err instanceof ApiError ? err.message : "Could not start table order.");
+      }
+      return false;
+    } finally {
+      setIsStartingSession(false);
+    }
+  }, [currentSession, participantToken, tableOccupied, isStartingSession, restaurantSlug, tableCode]);
 
   // Helper: Get localized text with English fallback
   const getLocalizedText = (enVal: string, mlVal: string | null) => {
@@ -539,7 +869,9 @@ function ActiveMenuClient({
     }));
   };
 
-  const addToCart = (item: MenuItem) => {
+  const addToCart = async (item: MenuItem) => {
+    const active = await ensureActiveSession();
+    if (!active) return;
     if ((item.option_groups || []).length > 0) {
       setDraftOptions({});
       setCustomisingItem(item);
@@ -643,15 +975,12 @@ function ActiveMenuClient({
       let activeParticipantToken = participantToken;
       let activeSession = currentSession;
       if (!activeSession && !tableOccupied) {
-        const authority = await startSecureTableSession(restaurantSlug, tableCode);
-        activeParticipantToken = authority.participant_token;
-        setParticipantToken(authority.participant_token);
-        saveParticipantToken(restaurantSlug, tableCode, authority.participant_token);
-        savePublicSessionToken(restaurantSlug, tableCode, authority.session.public_id);
-        saveSessionParticipantToken(authority.session.public_id, authority.participant_token);
-        activeSession = await getPublicDiningSession(authority.session.public_id, authority.participant_token);
-        setCurrentSession(activeSession);
-        setTableOccupied(true);
+        const active = await ensureActiveSession();
+        if (!active) {
+          throw new ApiError(401, "Please join or start a table order first.");
+        }
+        activeParticipantToken = participantToken;
+        activeSession = currentSession;
       }
       if (!activeParticipantToken || !activeSession) {
         throw new ApiError(401, "Enter the table’s 4-digit join code to order with this group.");
@@ -717,12 +1046,12 @@ function ActiveMenuClient({
   if (loading && !menuData) {
     return (
       <div className="min-h-screen bg-[var(--omlu-muted-surface)] px-4 py-5 dark:bg-[var(--omlu-page-background)]" aria-busy="true" aria-label={t.loadingText}>
-        <div className="mx-auto max-w-3xl animate-pulse">
-          <div className="h-16 rounded-2xl bg-[var(--omlu-primary-surface)] dark:bg-[var(--omlu-primary-surface)]" />
-          <div className="mt-4 h-12 rounded-2xl bg-[var(--omlu-muted-surface)] dark:bg-[var(--omlu-muted-surface)]" />
-          <div className="mt-6 grid gap-4 md:grid-cols-2">
+        <div className="mx-auto max-w-3xl sm:max-w-4xl animate-pulse">
+          <div className="h-16 rounded-2xl bg-[var(--omlu-primary-surface)]" />
+          <div className="mt-4 h-12 rounded-2xl bg-[var(--omlu-muted-surface)]" />
+          <div className="mt-6 grid gap-4 lg:grid-cols-2">
             {[1, 2, 3, 4, 5, 6].map((item) => (
-              <div key={item} className="h-32 rounded-2xl bg-[var(--omlu-primary-surface)] dark:bg-[var(--omlu-primary-surface)]" />
+              <div key={item} className="h-32 rounded-2xl bg-[var(--omlu-primary-surface)]" />
             ))}
           </div>
         </div>
@@ -734,9 +1063,9 @@ function ActiveMenuClient({
   if (error && !menuData) {
     return (
       <div className="flex flex-col flex-1 items-center justify-center min-h-screen bg-[var(--omlu-muted-surface)] dark:bg-[var(--omlu-page-background)] p-6 text-center">
-        <div className="max-w-md bg-[var(--omlu-primary-surface)] dark:bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] rounded-2xl p-8 shadow-sm">
+        <div className="max-w-md bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] rounded-2xl p-8 shadow-sm">
           <div className="text-red-500 text-5xl mb-4">⚠️</div>
-          <h2 className="text-xl font-bold text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-primary)] mb-2">
+          <h2 className="text-xl font-bold text-[var(--omlu-text-primary)] mb-2">
             {error === "Restaurant not found" ||
             error === "Restaurant is inactive" ||
             error === "Table not found" ||
@@ -803,7 +1132,11 @@ function ActiveMenuClient({
       .flatMap((group) => group.options.filter((option) => option.available).map((option) => Number(option.price_delta)))
       .filter((price) => Number.isFinite(price));
     if (requiredVariantPrices.length > 0) {
-      return `${t.from} ₹${Math.min(...requiredVariantPrices).toFixed(2)}`;
+      const minPrice = Math.min(...requiredVariantPrices);
+      const maxPrice = Math.max(...requiredVariantPrices);
+      if (minPrice !== maxPrice) {
+        return `${t.from} ₹${minPrice.toFixed(2)}`;
+      }
     }
     return `₹${Number(item.price).toFixed(2)}`;
   };
@@ -837,7 +1170,6 @@ function ActiveMenuClient({
       .reduce((sum, option) => sum + option.quantity, 0);
     return selected < Math.max(group.minimum_selections, group.required ? 1 : 0);
   });
-  const orderingDisabled = Boolean(sessionCompleteNotice || expiredSessionNotice || (tableOccupied && !participantToken));
 
   Object.values(cart).forEach((line) => {
     const item = allItemsMap[line.menu_item_id];
@@ -874,22 +1206,22 @@ function ActiveMenuClient({
   return (
     <div className="flex min-h-screen flex-1 flex-col bg-[var(--omlu-page-background)] pb-[calc(6.5rem+env(safe-area-inset-bottom))] text-[var(--omlu-text-primary)]">
       {/* Sticky Top Header */}
-      <header className="sticky top-0 z-40 border-b border-[var(--omlu-border)] bg-[color:var(--omlu-primary-surface)]/95 px-3 py-2 backdrop-blur-md sm:px-6">
-        <div className="mx-auto flex max-w-3xl items-center justify-between gap-2">
+      <header className="sticky top-0 z-40 border-b border-[var(--omlu-border)] bg-[color:var(--omlu-primary-surface)]/95 px-3 py-2.5 backdrop-blur-md sm:px-6">
+        <div className="mx-auto flex max-w-3xl sm:max-w-4xl items-center justify-between gap-2">
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-sm font-black leading-tight text-[var(--omlu-text-primary)] sm:text-base">
               {restaurant.name}
             </h1>
             <p className="truncate text-[11px] font-bold text-[var(--omlu-text-secondary)] sm:text-xs">
-              {t.table} {table.table_number}
+              {t.table} {table.table_number} · {t.dineIn}
             </p>
           </div>
-          <div className="flex shrink-0 items-center gap-1.5">
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
             <button
               type="button"
               onClick={() => setIsCartOpen(true)}
               aria-label={`${t.cart}: ${totalQty} ${t.items}`}
-              className="relative flex min-h-9 items-center gap-1.5 rounded-full border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] px-2.5 py-1 text-xs font-bold text-[var(--omlu-text-primary)]"
+              className="relative flex min-h-9 items-center gap-1.5 rounded-full border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] px-2.5 py-1 text-xs font-bold text-[var(--omlu-text-primary)] hover:border-[var(--omlu-border-strong)] transition cursor-pointer"
             >
               <span>{t.cart}</span>
               {totalQty > 0 && (
@@ -900,9 +1232,10 @@ function ActiveMenuClient({
             </button>
             <PublicThemeControl />
             <button
+              type="button"
               onClick={() => setLanguage(language === "en" ? "ml" : "en")}
               aria-label={language === "en" ? "Switch to Malayalam" : "Switch to English"}
-              className="flex min-h-9 items-center rounded-full border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] px-2.5 py-1 text-xs font-bold text-[var(--omlu-text-primary)]"
+              className="flex min-h-9 items-center rounded-full border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] px-2.5 py-1 text-xs font-bold text-[var(--omlu-text-primary)] hover:border-[var(--omlu-border-strong)] transition cursor-pointer"
             >
               {language === "en" ? "മലയാളം" : "English"}
             </button>
@@ -911,37 +1244,32 @@ function ActiveMenuClient({
       </header>
 
       {/* Floating search and category bar */}
-      <div className="sticky top-[61px] z-30 border-b border-[var(--omlu-border)] bg-[color:var(--omlu-primary-surface)]/95 px-4 py-2.5 backdrop-blur-md sm:px-6">
-        <div className="max-w-3xl mx-auto flex flex-col gap-3">
-          {/* Search box */}
+      <div className="sticky top-[57px] z-30 border-b border-[var(--omlu-border)] bg-[color:var(--omlu-primary-surface)]/95 px-4 py-2.5 backdrop-blur-md sm:px-6">
+        <div className="max-w-3xl sm:max-w-4xl mx-auto flex flex-col gap-3">
           {sessionLoading && (
-            <div className="text-xs font-semibold text-orange-700 dark:text-orange-500 bg-orange-50 dark:bg-orange-950/20 border border-orange-100 dark:border-orange-900/40 rounded-xl px-3 py-2">
+            <div className="text-xs font-semibold text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-950/20 border border-orange-100 dark:border-orange-900/40 rounded-xl px-3 py-2">
               {t.checkingSession}
             </div>
           )}
 
-          {tableOccupied && !participantToken && (
-            <section className="rounded-2xl border border-orange-200 bg-orange-50 p-4 dark:border-orange-900/50 dark:bg-orange-950/20" aria-labelledby="join-table-title">
-              <h2 id="join-table-title" className="font-black text-[var(--omlu-text-primary)] dark:text-[var(--omlu-primary-action-text)]">Table already active</h2>
-              <p className="mt-1 text-sm text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)]">Enter the 4-digit table code to join ordering. Ask someone at your table for the code.</p>
-              <div className="mt-3 flex gap-2">
-                <input
-                  value={joinCode}
-                  onChange={(event) => setJoinCode(event.target.value.replace(/\D/g, "").slice(0, 4))}
-                  inputMode="numeric"
-                  pattern="[0-9]{4}"
-                  maxLength={4}
-                  autoComplete="one-time-code"
-                  aria-label="4-digit table join code"
-                  className="min-w-0 flex-1 rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-4 py-3 text-center text-lg font-black tracking-[0.35em] text-[var(--omlu-text-primary)] outline-none focus:ring-2 focus:ring-orange-600"
-                />
-                <button disabled={joining || joinCode.length !== 4} onClick={handleJoinTable} className="rounded-xl bg-orange-600 px-5 py-3 text-sm font-black text-[var(--omlu-primary-action-text)] disabled:cursor-not-allowed disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)]">{joining ? "Joining…" : "Join table"}</button>
-              </div>
-              {joinError && <p role="alert" className="mt-2 text-sm font-semibold text-red-700 dark:text-red-400">{joinError}</p>}
-            </section>
-          )}
+          {/* Authoritative Table Order Status Card */}
+          <TableOrderStatusCard
+            menuState={menuState}
+            tableNumber={table.table_number}
+            joinCode={joinCode}
+            setJoinCode={setJoinCode}
+            joining={joining}
+            handleJoinTable={handleJoinTable}
+            joinError={joinError}
+            handleStartOrdering={() => void ensureActiveSession()}
+            isStartingSession={isStartingSession}
+            startSessionError={startSessionError}
+            sessionToken={currentSession?.public_token}
+            t={t}
+            router={router}
+          />
 
-          {sessionNotice && (
+          {sessionNotice && menuState === "ordering_active" && (
             <div className="text-xs font-semibold text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-900/40 rounded-xl px-3 py-2">
               {language === "en" ? sessionNotice : t.billLocked}
             </div>
@@ -959,7 +1287,7 @@ function ActiveMenuClient({
                 placeholder={t.searchPlaceholder}
                 className="h-11 w-full rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-input-background)] py-2 pl-9 pr-9 text-xs sm:text-sm outline-none focus:ring-2 focus:ring-orange-600"
               />
-              {searchQuery && <button type="button" onClick={() => setSearchQuery("")} aria-label={t.clearSearch} className="absolute right-0 top-0 flex h-11 w-9 items-center justify-center text-base text-[var(--omlu-text-secondary)]">×</button>}
+              {searchQuery && <button type="button" onClick={() => setSearchQuery("")} aria-label={t.clearSearch} className="absolute right-0 top-0 flex h-11 w-9 items-center justify-center text-base text-[var(--omlu-text-secondary)] cursor-pointer">×</button>}
             </div>
           )}
 
@@ -986,32 +1314,21 @@ function ActiveMenuClient({
       </div>
 
       {/* Main Content Area */}
-      <main className="max-w-3xl mx-auto px-4 mt-6 sm:px-6 w-full flex-1">
+      <main className="max-w-3xl sm:max-w-4xl mx-auto px-4 mt-6 sm:px-6 w-full flex-1">
         {error && (
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-800 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200" role="alert">
             <span>Menu refresh failed. Your last loaded menu is still shown.</span>
-            <button type="button" onClick={() => void fetchMenu(false)} className="rounded-xl bg-[var(--omlu-primary-surface)] px-4 py-2 font-black text-red-800 shadow-sm dark:bg-[var(--omlu-primary-surface)] dark:text-red-200">
+            <button type="button" onClick={() => void fetchMenu(false)} className="rounded-xl bg-[var(--omlu-primary-surface)] px-4 py-2 font-black text-red-800 shadow-sm cursor-pointer dark:bg-[var(--omlu-primary-surface)] dark:text-red-200">
               {t.retry}
             </button>
           </div>
         )}
-        {sessionCompleteNotice || expiredSessionNotice ? (
-          <div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-6 text-center shadow-sm dark:border-emerald-900/50 dark:bg-emerald-950/30">
-            <h2 className="text-xl font-black text-emerald-950 dark:text-emerald-50">
-              {sessionCompleteNotice
-                ? language === "en" ? "Dining session complete" : "ഡൈനിംഗ് സെഷൻ പൂർത്തിയായി"
-                : language === "en" ? "Session link expired" : "സെഷൻ ലിങ്ക് കാലഹരണപ്പെട്ടു"}
-            </h2>
-            <p className="mt-3 text-sm font-bold text-emerald-900 dark:text-emerald-100">
-              {sessionCompleteNotice ? t.sessionComplete : expiredSessionNotice}
-            </p>
-          </div>
-        ) : displayCategories.length === 0 ? (
+        {displayCategories.length === 0 && !sessionCompleteNotice && !expiredSessionNotice ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
-            <div className="text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-primary)] text-5xl mb-4">
+            <div className="text-[var(--omlu-text-secondary)] text-5xl mb-4">
               🍽️
             </div>
-            <p className="text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)] font-medium">
+            <p className="text-[var(--omlu-text-secondary)] font-medium">
               {t.noItems}
             </p>
           </div>
@@ -1037,49 +1354,58 @@ function ActiveMenuClient({
                     return (
                       <div
                         key={item.id}
-                        className="flex min-h-[104px] gap-3 border-b border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] px-1 py-4 last:border-b-0 md:rounded-2xl md:border md:p-4"
+                        className="flex min-h-[104px] gap-3 rounded-2xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-4 shadow-xs hover:border-[var(--omlu-border-strong)] transition"
                       >
                         <div className="flex-1 flex flex-col justify-between min-w-0">
                           <div>
                             <h3 className="line-clamp-2 break-words font-bold leading-snug text-[var(--omlu-text-primary)]">
                               {getLocalizedText(item.name_en, item.name_ml)}
                             </h3>
-                            <p className="text-xs text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)] mt-1 line-clamp-2">
-                              {getLocalizedText(
-                                item.description_en || "",
-                                item.description_ml
-                              )}
-                            </p>
+                            {getLocalizedText(item.description_en || "", item.description_ml) && (
+                              <p className="text-xs text-[var(--omlu-text-secondary)] mt-1 line-clamp-2">
+                                {getLocalizedText(
+                                  item.description_en || "",
+                                  item.description_ml
+                                )}
+                              </p>
+                            )}
                           </div>
-                          <div className="mt-3 flex items-center justify-between">
+                          <div className="mt-3 flex items-center justify-between gap-2">
                             <span className="font-extrabold tabular-nums text-[var(--omlu-text-primary)] text-sm">
                               {menuPriceLabel(item)}
                             </span>
-                            {orderingDisabled ? null : !item.is_available ? (
+                            {orderingDisabled ? (
+                              <span className="rounded-md border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] px-2.5 py-1 text-xs font-semibold text-[var(--omlu-text-secondary)]">
+                                {t.unavailable}
+                              </span>
+                            ) : !item.is_available ? (
                               <span className="rounded-md border border-red-300 bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-700">
                                 {t.unavailable}
                               </span>
                             ) : cartQty === 0 || isConfigurable ? (
                               <button
-                                onClick={() => addToCart(item)}
-                                className="min-h-11 rounded-xl bg-orange-600 px-4 text-xs font-bold text-white hover:bg-orange-700"
+                                type="button"
+                                onClick={() => void addToCart(item)}
+                                className="min-h-10 rounded-xl bg-orange-600 px-3.5 text-xs font-bold text-white hover:bg-orange-700 cursor-pointer shadow-xs transition"
                               >
                                 {isConfigurable ? t.chooseOptions : t.add}
                               </button>
                             ) : (
                               <div className="flex items-center border border-orange-600 rounded-lg overflow-hidden bg-orange-50/50 dark:bg-orange-950/10">
                                 <button
+                                  type="button"
                                   onClick={() => decrementQty(simpleKey)}
-                                  className="px-2.5 py-1 text-orange-600 font-bold hover:bg-orange-600 hover:text-[var(--omlu-primary-action-text)] transition cursor-pointer text-xs"
+                                  className="px-2.5 py-1 text-orange-600 font-bold hover:bg-orange-600 hover:text-white transition cursor-pointer text-xs min-h-9 min-w-9"
                                 >
                                   −
                                 </button>
-                                <span className="px-2 text-xs font-bold text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-secondary)]">
+                                <span className="px-2 text-xs font-bold text-[var(--omlu-text-primary)]">
                                   {cartQty}
                                 </span>
                                 <button
+                                  type="button"
                                   onClick={() => incrementQty(simpleKey)}
-                                  className="px-2.5 py-1 text-orange-600 font-bold hover:bg-orange-600 hover:text-[var(--omlu-primary-action-text)] transition cursor-pointer text-xs"
+                                  className="px-2.5 py-1 text-orange-600 font-bold hover:bg-orange-600 hover:text-white transition cursor-pointer text-xs min-h-9 min-w-9"
                                 >
                                   +
                                 </button>
@@ -1088,7 +1414,7 @@ function ActiveMenuClient({
                           </div>
                         </div>
                         {item.image_url && (
-                          <div className="relative w-20 h-20 bg-[var(--omlu-muted-surface)] dark:bg-[var(--omlu-muted-surface)] rounded-lg overflow-hidden flex-shrink-0">
+                          <div className="relative w-20 h-20 bg-[var(--omlu-muted-surface)] rounded-lg overflow-hidden flex-shrink-0 self-center">
                             <Image
                               src={item.image_url}
                               alt={item.name_en}
@@ -1109,27 +1435,29 @@ function ActiveMenuClient({
         )}
       </main>
 
-      {/* Sticky Bottom Cart Bar */}
-      {totalQty > 0 && !orderingDisabled && (
+      {/* Sticky Bottom Cart Bar totalQty > 0 && !orderingDisabled */}
+      {totalQty > 0 && (
         <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--omlu-border)] bg-[color:var(--omlu-primary-surface)]/95 px-3 pb-[calc(.75rem+env(safe-area-inset-bottom))] pt-3 shadow-lg backdrop-blur-md sm:px-6">
           <button
+            type="button"
             onClick={() => setIsCartOpen(true)}
-            className="mx-auto flex min-h-14 w-full max-w-3xl items-center justify-between rounded-2xl bg-orange-600 px-4 py-3 text-white shadow-md hover:bg-orange-700"
+            className="mx-auto flex min-h-12 w-full max-w-4xl items-center justify-between rounded-2xl bg-orange-600 px-4 py-3 text-white font-bold shadow-md hover:bg-orange-700 transition cursor-pointer"
           >
             <div className="flex flex-col text-left">
-              <span className="text-sm font-bold">
-                {totalQty} {totalQty === 1 ? "item" : t.items} · {formattedSubtotal}
+              <span className="text-xs sm:text-sm font-bold">
+                {totalQty} {totalQty === 1 ? t.item : t.items} · {formattedSubtotal}
               </span>
             </div>
-            <div className="flex items-center gap-4">
-              <span className="text-sm font-bold">
-                {t.viewCart}
+            <div className="flex items-center gap-2">
+              <span className="text-xs sm:text-sm font-bold">
+                {orderingDisabled ? t.viewCurrentOrder : t.reviewCart}
               </span>
             </div>
           </button>
         </div>
       )}
 
+      {/* Option Customisation Modal */}
       {customisingItem && (
         <div className="fixed inset-0 z-50 flex items-end justify-center overscroll-contain bg-black/60 sm:items-center sm:p-4">
           <div className="flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl bg-[var(--omlu-primary-surface)] shadow-2xl sm:max-h-[85vh] sm:rounded-3xl sm:border sm:border-[var(--omlu-border)]" role="dialog" aria-modal="true" aria-labelledby="menu-options-title" aria-describedby="menu-options-description">
@@ -1148,7 +1476,7 @@ function ActiveMenuClient({
                 type="button"
                 onClick={() => setCustomisingItem(null)}
                 aria-label={t.closeOptions}
-                className="grid min-h-11 min-w-11 place-items-center rounded-full bg-[var(--omlu-muted-surface)] text-xl font-bold text-[var(--omlu-text-secondary)]"
+                className="grid min-h-11 min-w-11 place-items-center rounded-full bg-[var(--omlu-muted-surface)] text-xl font-bold text-[var(--omlu-text-secondary)] cursor-pointer"
               >
                 ×
               </button>
@@ -1180,7 +1508,7 @@ function ActiveMenuClient({
                             disabled={disabled}
                             onClick={() => toggleDraftOption(group.id, option.id, multi)}
                             aria-pressed={checked}
-                            className={`flex min-h-12 items-center justify-between gap-3 rounded-xl border-2 px-4 py-3 text-left text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 disabled:opacity-40 ${
+                            className={`flex min-h-12 items-center justify-between gap-3 rounded-xl border-2 px-4 py-3 text-left text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 disabled:opacity-40 cursor-pointer ${
                               checked
                                 ? "border-orange-500 bg-orange-50 text-orange-950 dark:border-orange-500 dark:bg-orange-950/40 dark:text-[var(--omlu-text-primary)]"
                                 : "border-[var(--omlu-border-strong)] bg-[var(--omlu-muted-surface)] text-[var(--omlu-text-primary)] dark:border-[var(--omlu-border)] dark:bg-[var(--omlu-page-background)] dark:text-[var(--omlu-text-secondary)] hover:border-orange-300"
@@ -1199,12 +1527,10 @@ function ActiveMenuClient({
                               </span>
                               <span className="font-bold">{option.name}</span>
                             </span>
-                            <span className="shrink-0 text-xs font-black text-[var(--omlu-text-primary)]">
-                              {group.type === "variant"
-                                ? `₹${Number(option.price_delta).toFixed(2)}`
-                                : Number(option.price_delta) === 0
-                                  ? t.included
-                                  : `+₹${Number(option.price_delta).toFixed(2)}`}
+                            <span className="font-bold tabular-nums text-xs">
+                              {Number(option.price_delta) === 0
+                                ? t.included
+                                : `${Number(option.price_delta) > 0 ? "+" : ""}₹${Math.abs(Number(option.price_delta)).toFixed(2)}`}
                             </span>
                           </button>
                         );
@@ -1214,10 +1540,10 @@ function ActiveMenuClient({
                 );
               })}
             </div>
-            <div className="sticky bottom-0 border-t border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] px-5 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-4 sm:px-6">
-              {!customisationComplete && missingRequiredGroup && (
-                <p role="status" className="mb-3 text-sm font-semibold text-red-600 dark:text-red-400">
-                  {language === "en" ? `Select a ${missingRequiredGroup.name.toLowerCase()} to continue.` : t.selectToContinue}
+            <div className="sticky bottom-0 border-t border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] px-5 py-4 sm:px-6">
+              {missingRequiredGroup && (
+                <p role="alert" className="mb-3 text-xs font-bold text-orange-700 dark:text-orange-400">
+                  {language === "en" ? `Choose ${missingRequiredGroup.name.toLowerCase()} to continue.` : t.selectToContinue}
                 </p>
               )}
               <div className="mb-3 flex items-center justify-between">
@@ -1227,13 +1553,14 @@ function ActiveMenuClient({
                 </span>
               </div>
               <button
+                type="button"
                 disabled={!customisationComplete}
                 onClick={() => {
                   addLineToCart(customisingItem, draftSelectedOptions);
                   setCustomisingItem(null);
                   setDraftOptions({});
                 }}
-                className="min-h-14 w-full rounded-2xl bg-orange-600 px-5 py-3.5 text-base font-black text-white shadow-md disabled:cursor-not-allowed disabled:opacity-50"
+                className="min-h-14 w-full rounded-2xl bg-orange-600 px-5 py-3.5 text-base font-black text-white shadow-md disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
               >
                 Add to cart
               </button>
@@ -1245,15 +1572,16 @@ function ActiveMenuClient({
       {/* Slide-over Cart Modal View */}
       {isCartOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center overscroll-contain bg-black/60 p-4 backdrop-blur-xs">
-          <div className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] shadow-2xl dark:border-[var(--omlu-border)] dark:bg-[var(--omlu-primary-surface)]" role="dialog" aria-modal="true" aria-labelledby="menu-cart-title">
+          <div className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] shadow-2xl dark:border-[var(--omlu-border)]" role="dialog" aria-modal="true" aria-labelledby="menu-cart-title">
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] px-6 py-4">
-              <h2 id="menu-cart-title" className="break-words text-lg font-bold text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-primary)]">
+              <h2 id="menu-cart-title" className="break-words text-lg font-bold text-[var(--omlu-text-primary)]">
                 {t.yourCart} ({totalQty})
               </h2>
               <button
+                type="button"
                 onClick={() => setIsCartOpen(false)}
-                className="text-[var(--omlu-text-secondary)] hover:text-[var(--omlu-text-primary)] dark:hover:text-[var(--omlu-text-secondary)] font-semibold cursor-pointer text-sm"
+                className="text-[var(--omlu-text-secondary)] hover:text-[var(--omlu-text-primary)] font-semibold cursor-pointer text-sm"
               >
                 {t.close}
               </button>
@@ -1268,7 +1596,7 @@ function ActiveMenuClient({
               )}
 
               {Object.keys(cart).length === 0 ? (
-                <p className="text-center text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)] font-medium py-8">
+                <p className="text-center text-[var(--omlu-text-secondary)] font-medium py-8">
                   {t.emptyCartMsg}
                 </p>
               ) : (
@@ -1287,7 +1615,7 @@ function ActiveMenuClient({
                       >
                         <div className="flex items-start justify-between gap-4">
                           <div>
-                            <h4 className="font-bold text-sm text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-primary)]">
+                            <h4 className="font-bold text-sm text-[var(--omlu-text-primary)]">
                               {getLocalizedText(item.name_en, item.name_ml)}
                             </h4>
                             <span className="text-xs text-orange-600 dark:text-orange-500 font-bold">
@@ -1296,7 +1624,7 @@ function ActiveMenuClient({
                             {labels.length > 0 && (
                               <div className="mt-1 flex flex-col gap-0.5">
                                 {labels.map((label) => (
-                                  <span key={label} className="text-[11px] text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)]">
+                                  <span key={label} className="text-[11px] text-[var(--omlu-text-secondary)]">
                                     {label}
                                   </span>
                                 ))}
@@ -1304,46 +1632,55 @@ function ActiveMenuClient({
                             )}
                           </div>
                           <div className="flex items-center gap-4">
-                            <span className="font-bold text-sm text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-primary)]">
+                            <span className="font-bold text-sm text-[var(--omlu-text-primary)]">
                               ₹{itemTotal.toFixed(2)}
                             </span>
-                            {/* Qty controls */}
-                            <div className="flex items-center border border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] rounded-lg overflow-hidden bg-[var(--omlu-muted-surface)] dark:bg-[var(--omlu-muted-surface)]">
+                            {/* Qty controls if not orderingDisabled */}
+                            {!orderingDisabled && (
+                              <div className="flex items-center border border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] rounded-lg overflow-hidden bg-[var(--omlu-muted-surface)]">
+                                <button
+                                  type="button"
+                                  onClick={() => decrementQty(line.key)}
+                                  className="px-2 py-0.5 text-[var(--omlu-text-secondary)] font-bold hover:bg-[var(--omlu-muted-surface)] cursor-pointer text-sm"
+                                >
+                                  −
+                                </button>
+                                <span className="px-2 text-xs font-bold text-[var(--omlu-text-primary)]">
+                                  {line.quantity}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => incrementQty(line.key)}
+                                  className="px-2 py-0.5 text-[var(--omlu-text-secondary)] font-bold hover:bg-[var(--omlu-muted-surface)] cursor-pointer text-sm"
+                                >
+                                  +
+                                </button>
+                              </div>
+                            )}
+                            {/* Remove button if not orderingDisabled */}
+                            {!orderingDisabled && (
                               <button
-                                onClick={() => decrementQty(line.key)}
-                                className="px-2 py-0.5 text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)] font-bold hover:bg-[var(--omlu-muted-surface)] dark:hover:bg-[var(--omlu-muted-surface)] cursor-pointer text-sm"
+                                type="button"
+                                onClick={() => removeItem(line.key)}
+                                className="text-red-500 hover:text-red-700 text-xs font-bold cursor-pointer"
                               >
-                                −
+                                ✕
                               </button>
-                              <span className="px-2 text-xs font-bold text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-secondary)]">
-                                {line.quantity}
-                              </span>
-                              <button
-                                onClick={() => incrementQty(line.key)}
-                                className="px-2 py-0.5 text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)] font-bold hover:bg-[var(--omlu-muted-surface)] dark:hover:bg-[var(--omlu-muted-surface)] cursor-pointer text-sm"
-                              >
-                                +
-                              </button>
-                            </div>
-                            {/* Remove button */}
-                            <button
-                              onClick={() => removeItem(line.key)}
-                              className="text-red-500 hover:text-red-700 text-xs font-bold cursor-pointer"
-                            >
-                              ✕
-                            </button>
+                            )}
                           </div>
                         </div>
-                        {/* Item note field */}
-                        <input
-                          type="text"
-                          value={line.item_note}
-                          onChange={(e) =>
-                            handleItemNoteChange(line.key, e.target.value)
-                          }
-                          placeholder={t.itemNotePlaceholder}
-                          className="w-full px-3 py-1.5 bg-[var(--omlu-muted-surface)] dark:bg-[var(--omlu-muted-surface)] border border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] rounded-lg text-xs outline-none focus:ring-1 focus:ring-orange-600"
-                        />
+                        {/* Item note field if not orderingDisabled */}
+                        {!orderingDisabled && (
+                          <input
+                            type="text"
+                            value={line.item_note}
+                            onChange={(e) =>
+                              handleItemNoteChange(line.key, e.target.value)
+                            }
+                            placeholder={t.itemNotePlaceholder}
+                            className="w-full px-3 py-1.5 bg-[var(--omlu-muted-surface)] border border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] rounded-lg text-xs outline-none focus:ring-1 focus:ring-orange-600"
+                          />
+                        )}
                       </div>
                     );
                   })}
@@ -1351,9 +1688,9 @@ function ActiveMenuClient({
               )}
 
               {/* General Order Instructions */}
-              {Object.keys(cart).length > 0 && (
+              {Object.keys(cart).length > 0 && !orderingDisabled && (
                 <div className="mt-2">
-                  <h4 className="font-bold text-xs text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)] uppercase tracking-wider mb-2">
+                  <h4 className="font-bold text-xs text-[var(--omlu-text-secondary)] uppercase tracking-wider mb-2">
                     {t.customerNote}
                   </h4>
                   <textarea
@@ -1361,7 +1698,7 @@ function ActiveMenuClient({
                     value={customerNote}
                     onChange={(e) => setCustomerNote(e.target.value)}
                     placeholder={t.customerNote}
-                    className="w-full px-3 py-2 bg-[var(--omlu-muted-surface)] dark:bg-[var(--omlu-muted-surface)] border border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] rounded-xl text-sm outline-none focus:ring-2 focus:ring-orange-600 text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-secondary)]"
+                    className="w-full px-3 py-2 bg-[var(--omlu-muted-surface)] border border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] rounded-xl text-sm outline-none focus:ring-2 focus:ring-orange-600 text-[var(--omlu-text-primary)]"
                   />
                 </div>
               )}
@@ -1369,33 +1706,49 @@ function ActiveMenuClient({
 
             {/* Modal Footer */}
             {Object.keys(cart).length > 0 && (
-              <div className="border-t border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] px-6 py-4 flex flex-col gap-4 bg-[var(--omlu-muted-surface)] dark:bg-[var(--omlu-primary-surface)]">
+              <div className="border-t border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] px-6 py-4 flex flex-col gap-4 bg-[var(--omlu-muted-surface)]">
                 <div className="flex items-center justify-between">
-                  <span className="text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)] font-medium">
+                  <span className="text-[var(--omlu-text-secondary)] font-medium">
                     {t.subtotal}
                   </span>
                   <span className="text-lg font-black text-orange-600 dark:text-orange-500">
                     {formattedSubtotal}
                   </span>
                 </div>
-                <button
-                  disabled={isPlacingOrder || (!!currentSession && currentSession.status !== "open")}
-                  onClick={handlePlaceOrder}
-                  className={`w-full py-3.5 rounded-2xl font-bold text-[var(--omlu-primary-action-text)] text-center shadow-md transition cursor-pointer flex items-center justify-center gap-2 ${
-                    isPlacingOrder
-                      ? "bg-[var(--omlu-muted-surface)] dark:bg-[var(--omlu-muted-surface)] cursor-not-allowed"
-                      : "bg-orange-600 hover:bg-orange-700 active:bg-orange-800"
-                  }`}
-                >
-                  {isPlacingOrder ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
-                      {t.submitting}
-                    </>
-                  ) : (
-                    t.placeOrder
-                  )}
-                </button>
+                {orderingDisabled ? (
+                  currentSession?.public_token ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsCartOpen(false);
+                        router.push(`/session/${currentSession.public_token}`);
+                      }}
+                      className="w-full py-3.5 rounded-2xl font-bold bg-amber-600 hover:bg-amber-700 text-white text-center shadow-md transition cursor-pointer"
+                    >
+                      {t.viewBill}
+                    </button>
+                  ) : null
+                ) : (
+                  <button
+                    type="button"
+                    disabled={isPlacingOrder}
+                    onClick={handlePlaceOrder}
+                    className={`w-full py-3.5 rounded-2xl font-bold text-[var(--omlu-primary-action-text)] text-center shadow-md transition cursor-pointer flex items-center justify-center gap-2 ${
+                      isPlacingOrder
+                        ? "bg-[var(--omlu-muted-surface)] cursor-not-allowed"
+                        : "bg-orange-600 hover:bg-orange-700 active:bg-orange-800"
+                    }`}
+                  >
+                    {isPlacingOrder ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                        {t.submitting}
+                      </>
+                    ) : (
+                      t.placeOrder
+                    )}
+                  </button>
+                )}
               </div>
             )}
           </div>
