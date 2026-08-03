@@ -62,6 +62,11 @@ class RealtimeMetrics:
     redis_publish_failures: int = 0
     redis_subscribe_failures: int = 0
     redis_reconnect_total: int = 0
+    # redis_available: None = no check completed yet
+    #                  True  = last operation succeeded
+    #                  False = last operation failed (configured but unavailable)
+    # This field captures transient publish/subscribe outcomes only.
+    # For authoritative health status use check_redis_health() directly.
     redis_available: bool | None = None
 
     @property
@@ -84,6 +89,7 @@ class RealtimeMetrics:
             "redis_publish_failures": self.redis_publish_failures,
             "redis_subscribe_failures": self.redis_subscribe_failures,
             "redis_reconnect_total": self.redis_reconnect_total,
+            # Retained for backward compat; precise meanings documented above.
             "redis_available": self.redis_available,
         }
 
@@ -120,6 +126,20 @@ def record_delivery(event: "RealtimeEvent", *, success: bool) -> None:
 
 
 def realtime_metrics_snapshot() -> dict[str, Any]:
+    """Return a snapshot of in-process realtime counters.
+
+    This function reads the metrics collected by ongoing broker operations.
+    It does NOT perform a live Redis ping; for authoritative health use
+    ``check_redis_health()`` from ``app.services.redis_health``.
+
+    The ``redis_available`` field in the snapshot has three precise meanings:
+        None  – no publish/subscribe operation has completed yet
+        True  – the last operation succeeded
+        False – the last operation failed (Redis may be configured but unavailable)
+
+    Callers must not treat ``None`` or ``False`` as equivalent to
+    "Redis is not configured".
+    """
     with _metrics_lock:
         return metrics.snapshot(broker_name=broker.__class__.__name__)
 

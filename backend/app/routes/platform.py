@@ -44,6 +44,7 @@ from app.services.platform_recovery import (
     detect_duplicate_active_sessions as service_detect_duplicate_active_sessions,
 )
 from app.services.realtime import realtime_metrics_snapshot
+from app.services.redis_health import check_redis_health
 from app.services.push_notifications import push_health
 
 router = APIRouter(prefix="/api/v1/platform", tags=["Platform Operations"])
@@ -187,7 +188,7 @@ def platform_me(ctx: PlatformContext = Depends(get_platform_context)):
 # --- OMLU OBSERVABILITY OVERVIEW ---
 
 @router.get("/overview")
-def platform_overview(
+async def platform_overview(
     days: int = Query(default=1, ge=1, le=90),
     restaurant_id: Optional[int] = Query(default=None),
     ctx: PlatformContext = Depends(get_platform_context),
@@ -224,6 +225,7 @@ def platform_overview(
     visualizations = generate_operational_visualizations(db, days=days, restaurant_id=restaurant_id, now=now)
     coverage = monitoring_coverage_metadata()
     realtime_snap = realtime_metrics_snapshot()
+    redis_health = await check_redis_health()
     insights = generate_plain_language_insights(db, restaurant_id=restaurant_id, days=days, now=now)
 
     # Determine Overall Platform Operational Status
@@ -256,8 +258,10 @@ def platform_overview(
         },
         "current_realtime_snapshot": {
             "active_websocket_connections": realtime_snap.get("active_websocket_connections", 0),
-            "redis_available": realtime_snap.get("redis_available", True),
-            "mode": "live_websocket" if realtime_snap.get("redis_available", True) else "polling_fallback",
+            "redis_available": redis_health["redis_status"] == "healthy",
+            "redis_status": redis_health["redis_status"],
+            "broker_status": redis_health["broker_status"],
+            "mode": "live_websocket" if redis_health["broker_status"] == "healthy" else "polling_fallback",
         },
         "health_summary": dict(health_counts),
         "operational_attention_panel": stuck_issues[:10],
@@ -528,7 +532,7 @@ def platform_stale_session_close(
 # --- SYSTEM TELEMETRY & HEALTH ---
 
 @router.get("/system-health")
-def platform_system_health(
+async def platform_system_health(
     ctx: PlatformContext = Depends(get_platform_context),
     db: Session = Depends(get_db)
 ):
@@ -539,16 +543,22 @@ def platform_system_health(
     except Exception:
         db_status = "unavailable"
 
-    realtime_snap = realtime_metrics_snapshot()
+    redis_health = await check_redis_health()
+    redis_status = redis_health["redis_status"]
+    broker_status = redis_health["broker_status"]
+
+    overall_status = "Healthy"
+    if db_status != "healthy" or redis_status == "unavailable" or broker_status == "unavailable":
+        overall_status = "Degraded"
 
     return {
-        "status": "Healthy" if db_status == "healthy" else "Degraded",
+        "status": overall_status,
         "timestamp": now.isoformat(),
         "components": {
             "api_server": "healthy",
             "postgresql": db_status,
-            "redis": "healthy" if realtime_snap.get("redis_available", True) else "not_configured",
-            "realtime_broker": "healthy" if realtime_snap.get("redis_available", True) else "degraded",
+            "redis": redis_status,
+            "realtime_broker": broker_status,
             "push_service": push_health().get("status", "unknown"),
         },
         "version": {
