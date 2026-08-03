@@ -37,17 +37,38 @@ def join_code_digest(session: DiningSession, code: str) -> str:
     return hmac.new(_secret(), material.encode(), hashlib.sha256).hexdigest()
 
 
-def _encrypt_code(code: str) -> str:
-    key = hashlib.sha256(_secret() + b":join-code-encryption").digest()
+def _encrypt_authority(value: str, purpose: bytes) -> str:
+    key = hashlib.sha256(_secret() + purpose).digest()
     nonce = secrets.token_bytes(12)
-    encrypted = AESGCM(key).encrypt(nonce, code.encode(), None)
+    encrypted = AESGCM(key).encrypt(nonce, value.encode(), None)
     return base64.urlsafe_b64encode(nonce + encrypted).decode()
 
 
-def decrypt_join_code(ciphertext: str) -> str:
+def _decrypt_authority(ciphertext: str, purpose: bytes) -> str:
     raw = base64.urlsafe_b64decode(ciphertext.encode())
-    key = hashlib.sha256(_secret() + b":join-code-encryption").digest()
+    key = hashlib.sha256(_secret() + purpose).digest()
     return AESGCM(key).decrypt(raw[:12], raw[12:], None).decode()
+
+
+def _encrypt_code(code: str) -> str:
+    return _encrypt_authority(code, b":join-code-encryption")
+
+
+def decrypt_join_code(ciphertext: str) -> str:
+    return _decrypt_authority(ciphertext, b":join-code-encryption")
+
+
+def store_participant_authority_for_replay(participant: TableSessionParticipant, token: str) -> None:
+    participant.authority_ciphertext = _encrypt_authority(token, b":participant-replay-encryption")
+
+
+def recover_participant_authority(participant: TableSessionParticipant) -> str:
+    if not participant.authority_ciphertext:
+        raise HTTPException(status_code=409, detail="Original participant authority is unavailable for replay.")
+    token = _decrypt_authority(participant.authority_ciphertext, b":participant-replay-encryption")
+    if not hmac.compare_digest(participant.token_hash, token_hash(token)):
+        raise HTTPException(status_code=409, detail="Original participant authority is invalid.")
+    return token
 
 
 def rotate_join_code(session: DiningSession) -> str:
@@ -73,7 +94,12 @@ def ensure_join_authority(session: DiningSession) -> str:
     return decrypt_join_code(session.join_code_ciphertext)
 
 
-def create_participant(db: Session, session: DiningSession, ip_value: str | None, fingerprint: str | None = None):
+def create_participant(
+    db: Session,
+    session: DiningSession,
+    ip_value: str | None,
+    fingerprint: str | None = None,
+):
     raw_token = secrets.token_urlsafe(48)
     next_label = (db.query(func.max(TableSessionParticipant.label_number)).filter(
         TableSessionParticipant.session_id == session.id

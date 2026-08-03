@@ -11,6 +11,8 @@ from app.models.restaurant_table import RestaurantTable
 from app.models.menu import MenuCategory, MenuItem
 from app.models.order import Order, OrderItem, OrderStatusHistory, RestaurantDailySequence
 from app.models.service_request import ServiceRequest
+from app.models.table_session_participant import TableSessionParticipant
+from app.services.table_participants import authority_hash, token_hash
 
 from tests.participant_helpers import ParticipantTestClient
 
@@ -146,6 +148,150 @@ def create_test_table(data, table_number="S"):
     table_code = table.table_code
     db.close()
     return table_code
+
+
+def post_first_order(data, table_code, *, key=None, item_id=None):
+    return client.post(
+        f"/public/restaurants/{data['restaurant_slug']}/tables/{table_code}/first-order",
+        json=create_order_payload(item_id or data["item_id"]),
+        headers={"Idempotency-Key": key or f"idemp-{uuid.uuid4().hex}"},
+    )
+
+
+def test_first_checkout_atomically_creates_session_participant_and_order(setup_test_data):
+    data = setup_test_data
+    table_code = create_test_table(data, "FC1")
+
+    response = post_first_order(data, table_code)
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["participant_token"]
+    key = response.request.headers["Idempotency-Key"]
+    assert body["participant_token"] != key
+    assert body["participant_token"] != authority_hash(key)
+    assert body["participant_token"] != authority_hash(
+        f"first-order:{data['restaurant_id']}:{key}"
+    )
+    assert body["session"]["order_count"] == 1
+    assert body["session"]["table_code"] == table_code
+
+
+def test_failed_first_checkout_leaves_table_available(setup_test_data):
+    data = setup_test_data
+    table_code = create_test_table(data, "FC2")
+
+    response = post_first_order(data, table_code, item_id=data["unavailable_item_id"])
+
+    assert response.status_code == 400
+    status_response = client.get(
+        f"/public/restaurants/{data['restaurant_slug']}/tables/{table_code}/session-status"
+    )
+    assert status_response.json() == {"occupied": False}
+    db = SessionLocal()
+    table = db.query(RestaurantTable).filter(RestaurantTable.table_code == table_code).one()
+    assert db.query(DiningSession).filter(DiningSession.table_id == table.id).count() == 0
+    assert db.query(TableSessionParticipant).filter(TableSessionParticipant.table_id == table.id).count() == 0
+    assert db.query(Order).filter(Order.table_id == table.id).count() == 0
+    db.close()
+
+
+def test_first_checkout_idempotency_replays_authority_without_duplicates(setup_test_data):
+    data = setup_test_data
+    table_code = create_test_table(data, "FC3")
+    key = f"idemp-{uuid.uuid4().hex}"
+
+    first = post_first_order(data, table_code, key=key)
+    db = SessionLocal()
+    table = db.query(RestaurantTable).filter(RestaurantTable.table_code == table_code).one()
+    counts_before = (
+        db.query(DiningSession).filter(DiningSession.table_id == table.id).count(),
+        db.query(TableSessionParticipant).filter(TableSessionParticipant.table_id == table.id).count(),
+        db.query(Order).filter(Order.table_id == table.id).count(),
+    )
+    participant = db.query(TableSessionParticipant).filter(TableSessionParticipant.table_id == table.id).one()
+    raw_token = first.json()["participant_token"]
+    assert participant.token_hash == token_hash(raw_token)
+    assert participant.token_hash != raw_token
+    assert participant.authority_ciphertext
+    assert participant.authority_ciphertext != raw_token
+    assert raw_token not in participant.authority_ciphertext
+    db.close()
+    replay = post_first_order(data, table_code, key=key)
+
+    assert first.status_code == replay.status_code == 201
+    assert replay.json()["participant_token"] == first.json()["participant_token"]
+    assert replay.json()["session"]["public_token"] == first.json()["session"]["public_token"]
+    assert replay.json()["session"]["order_count"] == 1
+    db = SessionLocal()
+    assert counts_before == (
+        db.query(DiningSession).filter(DiningSession.table_id == table.id).count(),
+        db.query(TableSessionParticipant).filter(TableSessionParticipant.table_id == table.id).count(),
+        db.query(Order).filter(Order.table_id == table.id).count(),
+    )
+    db.close()
+
+
+def test_first_checkout_changed_payload_conflicts_without_authority(setup_test_data):
+    data = setup_test_data
+    table_code = create_test_table(data, "FC3B")
+    key = f"idemp-{uuid.uuid4().hex}"
+    first = post_first_order(data, table_code, key=key)
+    assert first.status_code == 201
+
+    changed = client.post(
+        f"/public/restaurants/{data['restaurant_slug']}/tables/{table_code}/first-order",
+        json=create_order_payload(data["item_id"], quantity=2),
+        headers={"Idempotency-Key": key},
+    )
+
+    assert changed.status_code == 409
+    assert "participant_token" not in changed.text
+    assert "authority" not in changed.text.lower()
+
+
+def test_different_first_checkout_key_cannot_recover_existing_authority(setup_test_data):
+    data = setup_test_data
+    table_code = create_test_table(data, "FC3C")
+    first = post_first_order(data, table_code)
+    original_token = first.json()["participant_token"]
+
+    different = post_first_order(data, table_code)
+
+    assert different.status_code == 409
+    assert original_token not in different.text
+    assert "participant_token" not in different.text
+
+
+def test_first_checkout_does_not_bypass_existing_session_join_code(setup_test_data):
+    data = setup_test_data
+    table_code = create_test_table(data, "FC4")
+    first = post_first_order(data, table_code)
+    assert first.status_code == 201
+
+    blocked = post_first_order(data, table_code)
+
+    assert blocked.status_code == 409
+    assert "join code" in blocked.json()["detail"].lower()
+
+
+def test_authorized_second_order_reuses_first_checkout_session(setup_test_data):
+    data = setup_test_data
+    table_code = create_test_table(data, "FC5")
+    first = post_first_order(data, table_code).json()
+
+    second = client.post(
+        f"/public/sessions/{first['session']['public_token']}/orders",
+        json=create_order_payload(data["item_id"]),
+        headers={
+            "Idempotency-Key": f"idemp-{uuid.uuid4().hex}",
+            "X-Participant-Token": first["participant_token"],
+        },
+    )
+
+    assert second.status_code == 201
+    assert second.json()["public_token"] == first["session"]["public_token"]
+    assert second.json()["order_count"] == 2
 
 
 def test_first_order_creates_session(setup_test_data):

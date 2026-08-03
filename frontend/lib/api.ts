@@ -167,6 +167,32 @@ export async function createPublicOrder(
   }
 }
 
+export async function createFirstTableOrder(
+  restaurantSlug: string,
+  tableCode: string,
+  body: PublicOrderCreateRequest,
+  idempotencyKey: string,
+): Promise<{ participant_token: string; session: PublicDiningSessionResponse }> {
+  try {
+    const response = await fetch(
+      `${publicBackendBaseUrl()}/public/restaurants/${encodeURIComponent(restaurantSlug)}/tables/${encodeURIComponent(tableCode)}/first-order`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify(body),
+      },
+    );
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => null);
+      throw new ApiError(response.status, parseApiError(errorData, "An error occurred while placing the order.").message);
+    }
+    return await response.json();
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError(500, "Could not connect to the backend server.");
+  }
+}
+
 export async function getPublicDiningSession(
   sessionToken: string,
   participantToken: string

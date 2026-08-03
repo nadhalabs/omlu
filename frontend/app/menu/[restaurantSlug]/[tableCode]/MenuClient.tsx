@@ -8,9 +8,9 @@ import {
   getPublicMenu,
   getPublicDiningSession,
   addOrderToDiningSession,
+  createFirstTableOrder,
   getTableSessionStatus,
   joinSecureTableSession,
-  startSecureTableSession,
   ApiError,
 } from "@/lib/api";
 import {
@@ -353,8 +353,6 @@ function ActiveMenuClient({
   
   // Order submission & session states
   const [isPlacingOrder, setIsPlacingOrder] = useState<boolean>(false);
-  const [isStartingSession, setIsStartingSession] = useState<boolean>(false);
-  const [startSessionError, setStartSessionError] = useState<string | null>(null);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [currentSession, setCurrentSession] =
     useState<PublicDiningSessionResponse | null>(null);
@@ -789,50 +787,6 @@ function ActiveMenuClient({
   const menuState = getCustomerMenuState();
   const orderingDisabled = ["bill_requested", "payment_pending", "completed", "expired"].includes(menuState);
 
-  // Unified Session Entry function
-  const ensureActiveSession = useCallback(async (): Promise<boolean> => {
-    if (currentSession && currentSession.status === "open" && participantToken) {
-      return true;
-    }
-    if (tableOccupied && !participantToken) {
-      const joinElement = document.getElementById("join-table-title");
-      if (joinElement) joinElement.scrollIntoView({ behavior: "smooth" });
-      const joinInput = document.getElementById("join-code-input");
-      if (joinInput) joinInput.focus();
-      return false;
-    }
-    if (isStartingSession) return false;
-
-    setIsStartingSession(true);
-    setStartSessionError(null);
-    try {
-      const authority = await startSecureTableSession(restaurantSlug, tableCode);
-      setParticipantToken(authority.participant_token);
-      saveParticipantToken(restaurantSlug, tableCode, authority.participant_token);
-      savePublicSessionToken(restaurantSlug, tableCode, authority.session.public_id);
-      saveSessionParticipantToken(authority.session.public_id, authority.participant_token);
-      const session = await getPublicDiningSession(authority.session.public_id, authority.participant_token);
-      setCurrentSession(session);
-      setTableOccupied(true);
-      return true;
-    } catch (err) {
-      if (
-        err instanceof ApiError &&
-        (err.status === 409 ||
-          err.message.toLowerCase().includes("active") ||
-          err.message.toLowerCase().includes("occupied"))
-      ) {
-        setTableOccupied(true);
-        setJoinError("Table already has an active session. Please enter join code.");
-      } else {
-        setStartSessionError(err instanceof ApiError ? err.message : "Could not start table order.");
-      }
-      return false;
-    } finally {
-      setIsStartingSession(false);
-    }
-  }, [currentSession, participantToken, tableOccupied, isStartingSession, restaurantSlug, tableCode]);
-
   // Helper: Get localized text with English fallback
   const getLocalizedText = (enVal: string, mlVal: string | null) => {
     if (language === "ml" && mlVal && mlVal.trim() !== "") {
@@ -869,9 +823,7 @@ function ActiveMenuClient({
     }));
   };
 
-  const addToCart = async (item: MenuItem) => {
-    const active = await ensureActiveSession();
-    if (!active) return;
+  const addToCart = (item: MenuItem) => {
     if ((item.option_groups || []).length > 0) {
       setDraftOptions({});
       setCustomisingItem(item);
@@ -975,17 +927,26 @@ function ActiveMenuClient({
       let activeParticipantToken = participantToken;
       let activeSession = currentSession;
       if (!activeSession && !tableOccupied) {
-        const active = await ensureActiveSession();
-        if (!active) {
-          throw new ApiError(401, "Please join or start a table order first.");
-        }
-        activeParticipantToken = participantToken;
-        activeSession = currentSession;
-      }
-      if (!activeParticipantToken || !activeSession) {
+        const authority = await createFirstTableOrder(
+          restaurantSlug,
+          tableCode,
+          payload,
+          idempotencyKey,
+        );
+        activeParticipantToken = authority.participant_token;
+        activeSession = authority.session;
+        saveParticipantToken(restaurantSlug, tableCode, authority.participant_token);
+        saveSessionParticipantToken(authority.session.public_token, authority.participant_token);
+        savePublicSessionToken(restaurantSlug, tableCode, authority.session.public_token);
+        setParticipantToken(authority.participant_token);
+        setCurrentSession(authority.session);
+        setTableOccupied(true);
+      } else if (!activeParticipantToken || !activeSession) {
         throw new ApiError(401, "Enter the table’s 4-digit join code to order with this group.");
       }
-      const sessionResponse = activeSession.status === "open"
+      const sessionResponse = activeSession.order_count === 1 && !currentSession
+        ? activeSession
+        : activeSession.status === "open"
         ? await addOrderToDiningSession(
             activeSession.public_token,
             payload,
@@ -1013,6 +974,7 @@ function ActiveMenuClient({
       router.replace(`/session/${sessionToken}`);
     } catch (err) {
       if (err instanceof ApiError) {
+        if (err.status === 409) setTableOccupied(true);
         setCheckoutError(err.message);
       } else {
         setCheckoutError(t.checkoutFailed);
@@ -1261,9 +1223,9 @@ function ActiveMenuClient({
             joining={joining}
             handleJoinTable={handleJoinTable}
             joinError={joinError}
-            handleStartOrdering={() => void ensureActiveSession()}
-            isStartingSession={isStartingSession}
-            startSessionError={startSessionError}
+            handleStartOrdering={() => setIsCartOpen(true)}
+            isStartingSession={false}
+            startSessionError={null}
             sessionToken={currentSession?.public_token}
             t={t}
             router={router}

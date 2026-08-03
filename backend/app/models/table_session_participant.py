@@ -16,6 +16,7 @@ class TableSessionParticipant(Base):
     table_id: Mapped[int] = mapped_column(ForeignKey("restaurant_tables.id", ondelete="CASCADE"), nullable=False, index=True)
     session_id: Mapped[int] = mapped_column(ForeignKey("dining_sessions.id", ondelete="CASCADE"), nullable=False, index=True)
     token_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    authority_ciphertext: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     label_number: Mapped[int] = mapped_column(Integer, nullable=False)
     display_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)

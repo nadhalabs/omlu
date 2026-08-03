@@ -15,17 +15,27 @@ from app.models.restaurant_table import RestaurantTable
 from app.models.dining_session import DiningSession
 from app.models.order import Order, OrderItem, OrderItemSelectedOption, OrderStatusHistory, RestaurantDailySequence
 from app.models.service_request import ServiceRequest
+from app.models.table_session_participant import TableSessionParticipant
 from app.schemas.order import PublicOrderCreateRequest, PublicOrderResponse
 from app.schemas.dining_session import PublicDiningSessionResponse
 from app.services.dining_sessions import (
     calculate_session_subtotal,
+    create_session_safely,
     find_current_open_session_for_table,
     get_or_create_open_session,
 )
 from app.services.order_pricing import validate_and_price_order_items
 from app.services.idempotency import ensure_same_request, request_hash
 from app.utils.business_date import restaurant_business_date
-from app.services.table_participants import enforce_session_action_rate, load_participant, participant_token_header
+from app.services.table_participants import (
+    create_participant,
+    enforce_session_action_rate,
+    ensure_join_authority,
+    load_participant,
+    participant_token_header,
+    recover_participant_authority,
+    store_participant_authority_for_replay,
+)
 from app.services.realtime import (
     EVENT_ORDER_CREATED,
     EVENT_SESSION_UPDATED,
@@ -165,6 +175,13 @@ def build_session_response(db: Session, dining_session: DiningSession):
         "can_order_more": dining_session.status == "open",
         "bill": dining_session.bill,
         "service_requests": service_requests,
+    }
+
+
+def build_first_order_response(db: Session, dining_session: DiningSession, participant_token: str):
+    return {
+        "participant_token": participant_token,
+        "session": build_session_response(db, dining_session),
     }
 
 
@@ -416,6 +433,110 @@ def create_public_order(
         state={"order_number": new_order.order_number, "status": new_order.status, "table_id": table.id, "session_token": dining_session.public_token},
     )
     return build_order_response(db, load_order_for_response(db, new_order.id))
+
+
+@router.post(
+    "/public/restaurants/{restaurant_slug}/tables/{table_code}/first-order",
+    status_code=status.HTTP_201_CREATED,
+)
+def create_first_public_order(
+    restaurant_slug: str,
+    table_code: str,
+    order_req: PublicOrderCreateRequest,
+    request: Request,
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
+    device_id: str | None = Header(None, alias="X-Device-ID"),
+    db: Session = Depends(get_db),
+):
+    """Atomically create the first table session, participant, and order."""
+    client_ip = request.client.host if request.client else "127.0.0.1"
+    if not check_rate_limit(client_ip):
+        raise HTTPException(status_code=429, detail="Too many order submissions. Please wait a moment.")
+    key_clean = validate_idempotency_key(idempotency_key)
+
+    try:
+        restaurant = db.query(Restaurant).filter(Restaurant.slug == restaurant_slug).first()
+        if not restaurant or not restaurant.is_active:
+            raise HTTPException(status_code=404, detail="Restaurant not found")
+        if restaurant.operating_status != "open":
+            raise HTTPException(status_code=403, detail="Restaurant is not accepting new customer orders.")
+
+        table = db.query(RestaurantTable).filter(
+            RestaurantTable.restaurant_id == restaurant.id,
+            RestaurantTable.table_code == table_code,
+        ).first()
+        if not table or not table.is_active:
+            raise HTTPException(status_code=404, detail="Table not found")
+
+        locked_table = db.query(RestaurantTable).filter(RestaurantTable.id == table.id).with_for_update().one()
+        existing_order = db.query(Order).filter(
+            Order.restaurant_id == restaurant.id,
+            Order.idempotency_key == key_clean,
+        ).first()
+        if existing_order:
+            ensure_same_request(existing_order.idempotency_request_hash, request_hash(order_req.model_dump(mode="json")))
+            if existing_order.table_id != locked_table.id or not existing_order.dining_session_id:
+                raise HTTPException(status_code=409, detail="Idempotency-Key was already used for another table.")
+            dining_session = db.query(DiningSession).filter(DiningSession.id == existing_order.dining_session_id).one()
+            participant = db.query(TableSessionParticipant).filter(
+                TableSessionParticipant.id == existing_order.created_by_participant_id,
+                TableSessionParticipant.session_id == dining_session.id,
+            ).one_or_none()
+            if not participant:
+                raise HTTPException(status_code=409, detail="Original participant authority is unavailable for replay.")
+            participant_token = recover_participant_authority(participant)
+            load_participant(db, participant_token, session_token=dining_session.public_token)
+            db.rollback()
+            return build_first_order_response(db, dining_session, participant_token)
+        # Validate and price before taking occupancy. Invalid orders must never
+        # leave an empty active session behind.
+        validate_public_order_items(db, restaurant, order_req)
+        if find_current_open_session_for_table(db, locked_table.id):
+            raise HTTPException(
+                status_code=409,
+                detail="This table already has an active order. Enter the table join code.",
+            )
+
+        dining_session = create_session_safely(db, restaurant, locked_table)
+        ensure_join_authority(dining_session)
+        participant, participant_token = create_participant(db, dining_session, client_ip, device_id)
+        store_participant_authority_for_replay(participant, participant_token)
+        new_order = create_order_in_session(
+            db,
+            restaurant,
+            locked_table,
+            dining_session,
+            order_req,
+            key_clean,
+            created_by_participant_id=participant.id,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    publish_event(
+        EVENT_ORDER_CREATED,
+        restaurant_id=restaurant.id,
+        channels=[
+            restaurant_channel(restaurant.id, "operations"),
+            restaurant_channel(restaurant.id, "kitchen"),
+            restaurant_channel(restaurant.id, "staff"),
+            session_channel(dining_session.public_token),
+            table_channel(restaurant.id, locked_table.id),
+            order_channel(new_order.public_token),
+        ],
+        resource_id=new_order.id,
+        state={"order_number": new_order.order_number, "status": new_order.status, "table_id": locked_table.id, "session_token": dining_session.public_token},
+    )
+    publish_event(
+        EVENT_SESSION_UPDATED,
+        restaurant_id=restaurant.id,
+        channels=[session_channel(dining_session.public_token), table_channel(restaurant.id, locked_table.id)],
+        resource_id=dining_session.id,
+        state={"session_token": dining_session.public_token},
+    )
+    return build_first_order_response(db, dining_session, participant_token)
 
 
 @router.get(

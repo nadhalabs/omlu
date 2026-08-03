@@ -18,7 +18,7 @@ test("occupied QR visitors remain menu-only until the four-digit code succeeds",
 });
 
 test("joined authority is table and session scoped and unlocks ordering", () => {
-  assert.match(menu, /startSecureTableSession/);
+  assert.match(menu, /createFirstTableOrder/);
   assert.match(menu, /joinSecureTableSession/);
   assert.match(menu, /saveParticipantToken/);
   assert.match(menu, /saveSessionParticipantToken/);

@@ -29,17 +29,28 @@ test("fresh QR load and refresh only load status and validate saved access", () 
   assert.match(menu, /validateSavedSession\(\{ clearCachedStateFirst: true \}\)/);
 });
 
-test("unified session entry is shared by start ordering and item cart actions", () => {
-  assert.match(menu, /const ensureActiveSession = useCallback/);
-  assert.match(menu, /isStartingSession/);
-  assert.match(menu, /handleStartOrdering=\{/);
-  assert.match(menu, /const active = await ensureActiveSession\(\)/);
+test("browsing and cart changes remain local until first order placement", () => {
+  const beforeCheckout = menu.slice(0, menu.indexOf("const handlePlaceOrder"));
+  assert.doesNotMatch(beforeCheckout, /startSecureTableSession/);
+  assert.doesNotMatch(beforeCheckout, /createFirstTableOrder\(/);
+  assert.match(menu, /const addToCart = \(item: MenuItem\)/);
+  assert.match(menu, /handleStartOrdering=\{\(\) => setIsCartOpen\(true\)\}/);
+  assert.match(menu, /createFirstTableOrder\(/);
+});
+
+test("opening an item and editing or removing cart lines do not start a session", () => {
+  const beforeCheckout = menu.slice(0, menu.indexOf("const handlePlaceOrder"));
+  for (const action of ["setCustomisingItem(item)", "incrementQty", "decrementQty", "removeItem"]) {
+    assert.ok(beforeCheckout.includes(action), action);
+  }
+  assert.doesNotMatch(beforeCheckout, /\/sessions["`]/);
+  assert.doesNotMatch(beforeCheckout, /createFirstTableOrder\(/);
 });
 
 test("409 session conflict transitions UI to join_required state", () => {
   assert.match(menu, /err\.status === 409/);
   assert.match(menu, /setTableOccupied\(true\)/);
-  assert.match(menu, /Table already has an active session/);
+  assert.match(menu, /tableOccupied && !participantToken/);
 });
 
 test("single CustomerMenuState resolves all 7 table and session lifecycle states", () => {
