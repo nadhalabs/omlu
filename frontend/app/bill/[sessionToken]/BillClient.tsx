@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { PublicThemeControl } from "@/components/PublicThemeControl";
 import { ApiError, getPublicBill, getPublicDiningSession } from "@/lib/api";
 import { BillResponse, PublicDiningSessionResponse } from "@/lib/types";
@@ -24,7 +24,59 @@ interface BillClientProps {
   receiptToken?: string;
 }
 
-export default function BillClient({ sessionToken, receiptToken = "" }: BillClientProps) {
+function CompletedSessionRedirect({ sessionToken }: { sessionToken: string }) {
+  const router = useRouter();
+  useEffect(() => {
+    router.replace(completionPath(sessionToken));
+  }, [router, sessionToken]);
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-[var(--omlu-page-background)] px-4 py-8">
+      <p className="text-sm font-semibold text-[var(--omlu-text-secondary)]">Finishing your visit…</p>
+    </div>
+  );
+}
+
+function FinishingVisitLoader() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-[var(--omlu-page-background)] px-4 py-8">
+      <div className="flex items-center gap-3">
+        <div className="h-5 w-5 animate-spin rounded-full border-2 border-orange-600 border-t-transparent" />
+        <p className="text-sm font-semibold text-[var(--omlu-text-secondary)]">Finishing your visit…</p>
+      </div>
+    </div>
+  );
+}
+
+export default function BillClient(props: BillClientProps) {
+  const searchParams = useSearchParams();
+  const receiptTokenFromQuery = searchParams.get("receipt") || props.receiptToken || "";
+  const [completionState, setCompletionState] = useState<"checking" | "completed" | "active">("checking");
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      const completed = readCompletedSession(props.sessionToken);
+      if (completed && !receiptTokenFromQuery) {
+        setCompletionState("completed");
+      } else {
+        setCompletionState("active");
+      }
+    }, 0);
+    return () => clearTimeout(timeout);
+  }, [props.sessionToken, receiptTokenFromQuery]);
+
+  if (completionState === "checking") {
+    return <FinishingVisitLoader />;
+  }
+
+  if (completionState === "completed") {
+    return <CompletedSessionRedirect sessionToken={props.sessionToken} />;
+  }
+
+  return <ActiveBillClient {...props} receiptToken={receiptTokenFromQuery} />;
+}
+
+function ActiveBillClient({ sessionToken, receiptToken = "" }: BillClientProps) {
   const router = useRouter();
   const [bill, setBill] = useState<BillResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -40,6 +92,19 @@ export default function BillClient({ sessionToken, receiptToken = "" }: BillClie
   const [receiptAccessToken, setReceiptAccessToken] = useState(receiptToken);
   const hasLoadedBillRef = useRef(false);
   const paidStatusRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !sessionToken) return;
+    window.history.replaceState(
+      {
+        ...window.history.state,
+        omluCustomerSessionToken: sessionToken,
+      },
+      "",
+      window.location.href
+    );
+  }, [sessionToken]);
+
   useEffect(() => {
     const enforce = () => { if (!receiptToken && readCompletedSession(sessionToken)) router.replace(completionPath(sessionToken)); };
     enforce();
@@ -470,7 +535,7 @@ export default function BillClient({ sessionToken, receiptToken = "" }: BillClie
           <PublicThemeControl />
           {!isPaid && !isDetached && (
             <button
-              onClick={() => router.push(`/session/${bill.session_token}`)}
+              onClick={() => router.replace(`/session/${bill.session_token}`)}
               className="min-h-11 rounded-2xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-4 py-2 text-sm font-bold text-[var(--omlu-text-primary)] shadow-2xs dark:border-[var(--omlu-border)] dark:bg-[var(--omlu-primary-surface)] dark:text-[var(--omlu-text-secondary)]"
             >
               {t.back}

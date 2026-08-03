@@ -335,7 +335,7 @@ export default function OrderTrackingClient({
                         orderData.dining_session_token
                       );
                     }
-                    router.push(`/session/${orderData.dining_session_token}`);
+                    router.replace(`/session/${orderData.dining_session_token}`);
                   }}
                   className="min-h-12 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-black text-[var(--omlu-primary-action-text)] transition hover:bg-emerald-700"
                 >

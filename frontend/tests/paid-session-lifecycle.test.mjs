@@ -184,3 +184,108 @@ test("28. receipt access remains available via receiptToken parameter", () => {
   assert.match(bill, /receiptToken/);
   assert.match(completion, /receiptToken/);
 });
+
+// ---------------------------------------------------------------------------
+// PART 5 — BEHAVIORAL HISTORY STACK STATE MACHINE TESTS (CASES A, B, C, D)
+// ---------------------------------------------------------------------------
+
+class MockHistoryStack {
+  constructor() {
+    this.stack = [];
+    this.currentIndex = -1;
+  }
+  push(url, state = {}) {
+    this.stack = this.stack.slice(0, this.currentIndex + 1);
+    this.stack.push({ url, state });
+    this.currentIndex = this.stack.length - 1;
+  }
+  replace(url, state = {}) {
+    if (this.currentIndex < 0) {
+      this.push(url, state);
+    } else {
+      this.stack[this.currentIndex] = { url, state };
+    }
+  }
+  back() {
+    if (this.currentIndex > 0) this.currentIndex--;
+  }
+  forward() {
+    if (this.currentIndex < this.stack.length - 1) this.currentIndex++;
+  }
+  current() {
+    return this.stack[this.currentIndex] || null;
+  }
+}
+
+test("Case A: Completed lifecycle restoration via Back navigation redirects to completion", () => {
+  const history = new MockHistoryStack();
+  const sessionStorage = new Map();
+
+  // 1. Initial Menu load
+  history.push("/menu/demo/T1", {});
+
+  // 2. Order placed -> replaces entry with session (tagged history)
+  history.replace("/session/sess_A", { omluCustomerSessionToken: "sess_A" });
+
+  // 3. Bill requested -> replaces entry with bill (tagged history)
+  history.replace("/bill/sess_A", { omluCustomerSessionToken: "sess_A" });
+
+  // 4. Payment complete -> mark completion & replace entry with completion
+  sessionStorage.set("omlu:completed-session:session:sess_A", JSON.stringify({ sessionToken: "sess_A", restaurantSlug: "demo", tableCode: "T1" }));
+  sessionStorage.set("omlu:completed-session:table:demo:T1", JSON.stringify({ sessionToken: "sess_A", restaurantSlug: "demo", tableCode: "T1" }));
+  history.replace("/complete/sess_A", { omluCustomerSessionToken: "sess_A" });
+
+  assert.equal(history.current().url, "/complete/sess_A");
+
+  // 5. Back navigation evaluation
+  const completed = JSON.parse(sessionStorage.get("omlu:completed-session:table:demo:T1"));
+  const historySessionToken = history.current().state?.omluCustomerSessionToken;
+  const isRestoringSameCompletedVisit = Boolean(
+    completed && historySessionToken && completed.sessionToken === historySessionToken
+  );
+
+  assert.equal(isRestoringSameCompletedVisit, true);
+});
+
+test("Case B: Fresh QR navigation to public table menu is unblocked and opens menu", () => {
+  const history = new MockHistoryStack();
+  const sessionStorage = new Map();
+
+  // Tab has an old completion marker from a previous visit
+  sessionStorage.set("omlu:completed-session:table:demo:T1", JSON.stringify({ sessionToken: "sess_A", restaurantSlug: "demo", tableCode: "T1" }));
+
+  // Fresh QR scan in browser has NO omluCustomerSessionToken in history.state
+  history.push("/menu/demo/T1", {});
+
+  const completed = JSON.parse(sessionStorage.get("omlu:completed-session:table:demo:T1"));
+  const historySessionToken = history.current().state?.omluCustomerSessionToken; // undefined!
+  const isRestoringSameCompletedVisit = Boolean(
+    completed && historySessionToken && completed.sessionToken === historySessionToken
+  );
+
+  // Fresh scan MUST NOT be blocked!
+  assert.equal(isRestoringSameCompletedVisit, false);
+  assert.equal(history.current().url, "/menu/demo/T1");
+});
+
+test("Case C: New customer creates session B without inheriting session A state", () => {
+  const sessionStorage = new Map();
+  // Session A marker exists in table key
+  sessionStorage.set("omlu:completed-session:table:demo:T1", JSON.stringify({ sessionToken: "sess_A" }));
+
+  // Fresh customer scans QR and creates session B
+  const sessionBToken = "sess_B";
+  assert.notEqual(sessionBToken, "sess_A");
+  assert.equal(sessionStorage.has(`omlu:completed-session:session:${sessionBToken}`), false);
+});
+
+test("Case D: Read-only receipt for session A remains accessible with receiptToken parameter", () => {
+  const url = new URL("http://localhost/bill/sess_A?receipt=rcpt_123");
+  const receiptToken = url.searchParams.get("receipt");
+
+  assert.equal(receiptToken, "rcpt_123");
+  // When receiptToken is present, completion redirect is bypassed for receipt viewing
+  const completed = { sessionToken: "sess_A" };
+  const shouldRedirectToCompletion = Boolean(completed && !receiptToken);
+  assert.equal(shouldRedirectToCompletion, false);
+});

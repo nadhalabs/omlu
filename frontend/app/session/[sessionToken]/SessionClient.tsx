@@ -31,7 +31,57 @@ interface SessionClientProps {
 
 type ServiceStatus = "idle" | "loading" | "success" | "error";
 
-export default function SessionClient({ sessionToken }: SessionClientProps) {
+function CompletedSessionRedirect({ sessionToken }: { sessionToken: string }) {
+  const router = useRouter();
+  useEffect(() => {
+    router.replace(completionPath(sessionToken));
+  }, [router, sessionToken]);
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-[var(--omlu-page-background)] px-4 py-8">
+      <p className="text-sm font-semibold text-[var(--omlu-text-secondary)]">Finishing your visit…</p>
+    </div>
+  );
+}
+
+function FinishingVisitLoader() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-[var(--omlu-page-background)] px-4 py-8">
+      <div className="flex items-center gap-3">
+        <div className="h-5 w-5 animate-spin rounded-full border-2 border-orange-600 border-t-transparent" />
+        <p className="text-sm font-semibold text-[var(--omlu-text-secondary)]">Finishing your visit…</p>
+      </div>
+    </div>
+  );
+}
+
+export default function SessionClient(props: SessionClientProps) {
+  const [completionState, setCompletionState] = useState<"checking" | "completed" | "active">("checking");
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      const completed = readCompletedSession(props.sessionToken);
+      if (completed) {
+        setCompletionState("completed");
+      } else {
+        setCompletionState("active");
+      }
+    }, 0);
+    return () => clearTimeout(timeout);
+  }, [props.sessionToken]);
+
+  if (completionState === "checking") {
+    return <FinishingVisitLoader />;
+  }
+
+  if (completionState === "completed") {
+    return <CompletedSessionRedirect sessionToken={props.sessionToken} />;
+  }
+
+  return <ActiveSessionClient {...props} />;
+}
+
+function ActiveSessionClient({ sessionToken }: SessionClientProps) {
   const router = useRouter();
   const [session, setSession] = useState<PublicDiningSessionResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -49,6 +99,18 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
   const [joinCodeCopied, setJoinCodeCopied] = useState(false);
   const fetchInFlightRef = useRef(false);
   const pendingFetchRef = useRef(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !sessionToken) return;
+    window.history.replaceState(
+      {
+        ...window.history.state,
+        omluCustomerSessionToken: sessionToken,
+      },
+      "",
+      window.location.href
+    );
+  }, [sessionToken]);
 
   const [expandedOrders, setExpandedOrders] = useState<Record<string, boolean>>({});
   const [animatedStages, setAnimatedStages] = useState<Record<string, string>>({});
@@ -374,7 +436,7 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
       if (!participantToken) throw new Error("Your access to this table has ended.");
       const prepared = await createOrRefreshPublicBill(session.public_token, participantToken);
       markDetachedSession({ sessionToken: session.public_token, restaurantSlug: session.restaurant_slug, restaurantName: session.restaurant_name, tableCode: session.table_code, receiptToken: prepared.receipt_token });
-      router.push(detachedBillPath({ sessionToken: session.public_token, receiptToken: prepared.receipt_token }));
+      router.replace(detachedBillPath({ sessionToken: session.public_token, receiptToken: prepared.receipt_token }));
     } catch (err) {
       setBillActionError(err instanceof Error ? err.message : "Failed to prepare bill.");
     } finally {
@@ -392,7 +454,7 @@ export default function SessionClient({ sessionToken }: SessionClientProps) {
       markDetachedSession({ sessionToken: session.public_token, restaurantSlug: session.restaurant_slug, restaurantName: session.restaurant_name, tableCode: session.table_code, receiptToken: prepared.receipt_token });
       setBillActionError(null);
       setServiceMessage((prev) => ({ ...prev, bill: t.billRequestSent }));
-      router.push(detachedBillPath({ sessionToken: session.public_token, receiptToken: prepared.receipt_token }));
+      router.replace(detachedBillPath({ sessionToken: session.public_token, receiptToken: prepared.receipt_token }));
     } catch (err) {
       setBillActionError(err instanceof Error ? err.message : "Failed to request bill.");
     } finally {

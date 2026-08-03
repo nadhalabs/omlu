@@ -16,7 +16,7 @@ test("payment-requested session without an issued bill retains a recovery-only w
 test("normal customer transition routes directly to the bill-ready receipt", () => {
   const session = read("app/session/[sessionToken]/SessionClient.tsx");
   assert.match(session, /requestPublicSessionBill/);
-  assert.match(session, /router\.push\(detachedBillPath/);
+  assert.match(session, /router\.replace\(detachedBillPath/);
   assert.match(bill, /billReadyTitle: "Bill ready"/);
   assert.match(bill, /billReadyMessage: "Your ordering session has ended\."/);
   assert.match(bill, /showCodeAtCounter: "Show this payment code at the counter:"/);

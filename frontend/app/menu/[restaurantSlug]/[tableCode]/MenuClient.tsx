@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { PublicThemeControl } from "@/components/PublicThemeControl";
 import Image from "next/image";
 import {
@@ -47,7 +47,69 @@ type CartLine = {
   selected_options: SelectedOptionRequest[];
 };
 
-export default function MenuClient({
+function CompletedSessionRedirect({ sessionToken }: { sessionToken: string }) {
+  const router = useRouter();
+  useEffect(() => {
+    router.replace(completionPath(sessionToken));
+  }, [router, sessionToken]);
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-[var(--omlu-page-background)] px-4 py-8">
+      <p className="text-sm font-semibold text-[var(--omlu-text-secondary)]">Finishing your visit…</p>
+    </div>
+  );
+}
+
+function FinishingVisitLoader() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-[var(--omlu-page-background)] px-4 py-8">
+      <div className="flex items-center gap-3">
+        <div className="h-5 w-5 animate-spin rounded-full border-2 border-orange-600 border-t-transparent" />
+        <p className="text-sm font-semibold text-[var(--omlu-text-secondary)]">Finishing your visit…</p>
+      </div>
+    </div>
+  );
+}
+
+export default function MenuClient(props: MenuClientProps) {
+  const searchParams = useSearchParams();
+  const queryToken = searchParams.get("session");
+  const [completionState, setCompletionState] = useState<"checking" | "completed" | "active">("checking");
+  const [completedToken, setCompletedToken] = useState<string | null>(null);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      const completed = readCompletedTable(props.restaurantSlug, props.tableCode);
+      const historySessionToken = typeof window !== "undefined" ? window.history.state?.omluCustomerSessionToken : null;
+      const isRestoringSameCompletedVisit = Boolean(
+        completed &&
+        historySessionToken &&
+        completed.sessionToken === historySessionToken &&
+        (!queryToken || queryToken === completed.sessionToken)
+      );
+
+      if (isRestoringSameCompletedVisit && completed) {
+        setCompletedToken(completed.sessionToken);
+        setCompletionState("completed");
+      } else {
+        setCompletionState("active");
+      }
+    }, 0);
+    return () => clearTimeout(timeout);
+  }, [props.restaurantSlug, props.tableCode, queryToken]);
+
+  if (completionState === "checking") {
+    return <FinishingVisitLoader />;
+  }
+
+  if (completionState === "completed" && completedToken) {
+    return <CompletedSessionRedirect sessionToken={completedToken} />;
+  }
+
+  return <ActiveMenuClient {...props} />;
+}
+
+function ActiveMenuClient({
   restaurantSlug,
   tableCode,
 }: MenuClientProps) {
@@ -83,6 +145,18 @@ export default function MenuClient({
   const [joinCode, setJoinCode] = useState("");
   const [joinError, setJoinError] = useState<string | null>(null);
   const [joining, setJoining] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !currentSession?.public_token) return;
+    window.history.replaceState(
+      {
+        ...window.history.state,
+        omluCustomerSessionToken: currentSession.public_token,
+      },
+      "",
+      window.location.href
+    );
+  }, [currentSession?.public_token]);
 
   // Fetch menu data
   const fetchMenu = useCallback(async (showInitialLoader = false) => {
@@ -607,7 +681,7 @@ export default function MenuClient({
       localStorage.setItem(`omlu:order-draft:${restaurantSlug}:${tableCode}`, nextKey);
       setIdempotencyKey(nextKey);
       
-      router.push(`/session/${sessionToken}`);
+      router.replace(`/session/${sessionToken}`);
     } catch (err) {
       if (err instanceof ApiError) {
         setCheckoutError(err.message);
