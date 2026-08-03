@@ -1,4 +1,5 @@
 import 'api_client.dart';
+import 'api_exceptions.dart';
 import '../models/operations_models.dart';
 import '../storage/operations_data_cache.dart';
 
@@ -135,6 +136,62 @@ class OperationsApi {
 
   Future<Map<String, Object?>> fetchBill(String billNumber) {
     return _client.getJson('/staff/bills/$billNumber');
+  }
+
+  Future<BillDetail> fetchBillDetail(String billNumber) async {
+    final json = await fetchBill(billNumber);
+    return BillDetail.fromJson(json);
+  }
+
+  Future<PaymentCodeLookupResult> lookupPendingPaymentCode(String code) async {
+    final normalized = code
+        .replaceAll(
+          RegExp(r'[^2346789ABCDEFGHJKLMNPQRTUVWXYZ]', caseSensitive: false),
+          '',
+        )
+        .toUpperCase();
+
+    if (!RegExp(r'^[2346789ABCDEFGHJKLMNPQRTUVWXYZ]{6}$')
+        .hasMatch(normalized)) {
+      throw const ValidationException(
+        'Enter a valid 6-character payment code.',
+      );
+    }
+
+    try {
+      final json = await _client.postJson(
+        '/staff/bills/payment-code/lookup',
+        body: <String, Object?>{'payment_code': normalized},
+      );
+      return PaymentCodeLookupResult.fromJson(json);
+    } on NotFoundException catch (e) {
+      throw NotFoundException(
+        'We could not find an unpaid bill with this code. Check the code and try again.',
+        statusCode: e.statusCode,
+      );
+    } on RateLimitException catch (e) {
+      throw RateLimitException(
+        'Too many payment-code lookup attempts. Please wait a moment and try again.',
+        statusCode: e.statusCode,
+      );
+    } on PermissionDeniedException catch (e) {
+      throw PermissionDeniedException(
+        'You can view this bill, but only an owner or admin can confirm payment.',
+        statusCode: e.statusCode,
+      );
+    } on ApiException catch (e) {
+      if (e.statusCode == 400 || e.statusCode == 404) {
+        throw NotFoundException(
+          'We could not find an unpaid bill with this code. Check the code and try again.',
+          statusCode: e.statusCode,
+        );
+      }
+      rethrow;
+    } catch (e) {
+      throw ApiException(
+        'Could not connect to OMLU. Check the internet connection and try again.',
+      );
+    }
   }
 
   Future<Map<String, Object?>> confirmCounterPayment({

@@ -458,3 +458,319 @@ class KitchenOrder {
     );
   }
 }
+
+class PaymentCodeLookupResult {
+  const PaymentCodeLookupResult({
+    required this.billNumber,
+    required this.restaurantName,
+    required this.originalTable,
+    required this.originalTableId,
+    required this.sessionId,
+    required this.billStatus,
+    required this.sessionStatus,
+    required this.amountDue,
+    required this.currency,
+    this.issuedAt,
+    this.detachedAt,
+    this.paymentCodeExpiresAt,
+    this.waitingSeconds = 0,
+    this.orderCount = 0,
+    this.itemCount = 0,
+    this.orderSummaryItems = const [],
+    this.canConfirmPayment = false,
+  });
+
+  factory PaymentCodeLookupResult.fromJson(Map<String, Object?> json) {
+    final summary = json['order_summary'] as Map<String, Object?>? ?? const {};
+    return PaymentCodeLookupResult(
+      billNumber: readString(json['bill_number']),
+      restaurantName: readString(json['restaurant_name']),
+      originalTable: readString(json['original_table']),
+      originalTableId: readInt(json['original_table_id']),
+      sessionId: readInt(json['session_id']),
+      billStatus: readString(json['bill_status']),
+      sessionStatus: readString(json['session_status']),
+      amountDue: readDouble(json['amount_due']),
+      currency: readString(json['currency'], fallback: 'INR'),
+      issuedAt: json['issued_at'] == null
+          ? null
+          : DateTime.tryParse(readString(json['issued_at']))?.toUtc(),
+      detachedAt: json['detached_at'] == null
+          ? null
+          : DateTime.tryParse(readString(json['detached_at']))?.toUtc(),
+      paymentCodeExpiresAt: json['payment_code_expires_at'] == null
+          ? null
+          : DateTime.tryParse(readString(json['payment_code_expires_at']))?.toUtc(),
+      waitingSeconds: readInt(json['waiting_seconds']),
+      orderCount: readInt(summary['order_count']),
+      itemCount: readInt(summary['item_count']),
+      orderSummaryItems: [
+        for (final item in (summary['items'] as List? ?? const []))
+          readString(item),
+      ],
+      canConfirmPayment: json['can_confirm_payment'] as bool? ?? false,
+    );
+  }
+
+  final String billNumber;
+  final String restaurantName;
+  final String originalTable;
+  final int originalTableId;
+  final int sessionId;
+  final String billStatus;
+  final String sessionStatus;
+  final double amountDue;
+  final String currency;
+  final DateTime? issuedAt;
+  final DateTime? detachedAt;
+  final DateTime? paymentCodeExpiresAt;
+  final int waitingSeconds;
+  final int orderCount;
+  final int itemCount;
+  final List<String> orderSummaryItems;
+  final bool canConfirmPayment;
+
+  bool get isExpired {
+    if (paymentCodeExpiresAt == null) return false;
+    return DateTime.now().toUtc().isAfter(paymentCodeExpiresAt!);
+  }
+}
+
+class BillDetailItemOption {
+  const BillDetailItemOption({
+    required this.optionName,
+    this.kitchenDisplayName,
+    this.priceAdjustment = 0.0,
+  });
+
+  factory BillDetailItemOption.fromJson(Map<String, Object?> json) {
+    return BillDetailItemOption(
+      optionName: readString(
+        json['kitchen_display_name'] ??
+            json['option_name'] ??
+            json['name'],
+      ),
+      kitchenDisplayName: json['kitchen_display_name'] == null
+          ? null
+          : readString(json['kitchen_display_name']),
+      priceAdjustment: readDouble(json['price_adjustment']),
+    );
+  }
+
+  final String optionName;
+  final String? kitchenDisplayName;
+  final double priceAdjustment;
+
+  String get displayName => kitchenDisplayName ?? optionName;
+}
+
+class BillDetailItem {
+  const BillDetailItem({
+    required this.itemName,
+    required this.quantity,
+    required this.unitPrice,
+    required this.lineTotal,
+    this.selectedOptions = const [],
+    this.itemNote,
+  });
+
+  factory BillDetailItem.fromJson(Map<String, Object?> json) {
+    final rawOptions = json['selected_options'] as List? ?? const [];
+    return BillDetailItem(
+      itemName: readString(json['item_name'] ?? json['name']),
+      quantity: readInt(json['quantity'], fallback: 1),
+      unitPrice: readDouble(json['unit_price']),
+      lineTotal: readDouble(json['line_total'] ?? json['total_price']),
+      selectedOptions: [
+        for (final opt in rawOptions)
+          if (opt is Map)
+            BillDetailItemOption.fromJson(Map<String, Object?>.from(opt)),
+      ],
+      itemNote: json['item_note'] == null || readString(json['item_note']).isEmpty
+          ? (json['note'] == null ? null : readString(json['note']))
+          : readString(json['item_note']),
+    );
+  }
+
+  final String itemName;
+  final int quantity;
+  final double unitPrice;
+  final double lineTotal;
+  final List<BillDetailItemOption> selectedOptions;
+  final String? itemNote;
+}
+
+class BillDetailOrder {
+  const BillDetailOrder({
+    required this.orderNumber,
+    required this.status,
+    required this.subtotal,
+    this.items = const [],
+    this.customerNote,
+  });
+
+  factory BillDetailOrder.fromJson(Map<String, Object?> json) {
+    final rawItems = json['items'] as List? ?? const [];
+    return BillDetailOrder(
+      orderNumber: readString(json['order_number']),
+      status: readString(json['status']),
+      subtotal: readDouble(json['subtotal']),
+      items: [
+        for (final item in rawItems)
+          if (item is Map)
+            BillDetailItem.fromJson(Map<String, Object?>.from(item)),
+      ],
+      customerNote: json['customer_note'] == null
+          ? null
+          : readString(json['customer_note']),
+    );
+  }
+
+  final String orderNumber;
+  final String status;
+  final double subtotal;
+  final List<BillDetailItem> items;
+  final String? customerNote;
+}
+
+class BillDetail {
+  const BillDetail({
+    required this.billNumber,
+    required this.restaurantName,
+    required this.tableNumber,
+    required this.status,
+    required this.subtotal,
+    required this.taxAmount,
+    required this.discountAmount,
+    required this.totalAmount,
+    required this.currency,
+    this.receiptToken,
+    this.restaurantSlug,
+    this.tableCode,
+    this.sessionToken,
+    this.orders = const [],
+    this.generatedAt,
+    this.paidAt,
+    this.paymentMethod,
+    this.paymentReference,
+    this.paidByStaffId,
+    this.generatedByRole,
+    this.sentToCounterByRole,
+    this.gstEnabled = false,
+    this.invoiceNumber,
+    this.invoiceDate,
+    this.taxableAmount,
+    this.gstRate,
+    this.cgstAmount,
+    this.sgstAmount,
+    this.igstAmount,
+    this.gstin,
+    this.legalBusinessName,
+    this.registeredBillingAddress,
+    this.sessionStatus = 'open',
+    this.paymentRequestedAt,
+    this.detachedAt,
+    this.paymentCode,
+    this.paymentCodeExpiresAt,
+  });
+
+  factory BillDetail.fromJson(Map<String, Object?> json) {
+    final rawOrders = json['orders'] as List? ?? const [];
+    return BillDetail(
+      billNumber: readString(json['bill_number']),
+      receiptToken: json['receipt_token'] == null ? null : readString(json['receipt_token']),
+      restaurantName: readString(json['restaurant_name']),
+      restaurantSlug: json['restaurant_slug'] == null ? null : readString(json['restaurant_slug']),
+      tableNumber: readString(json['table_number'] ?? json['original_table']),
+      tableCode: json['table_code'] == null ? null : readString(json['table_code']),
+      sessionToken: json['session_token'] == null ? null : readString(json['session_token']),
+      status: readString(json['status'] ?? json['bill_status'], fallback: 'draft'),
+      orders: [
+        for (final ord in rawOrders)
+          if (ord is Map)
+            BillDetailOrder.fromJson(Map<String, Object?>.from(ord)),
+      ],
+      subtotal: readDouble(json['subtotal']),
+      taxAmount: readDouble(json['tax_amount']),
+      discountAmount: readDouble(json['discount_amount']),
+      totalAmount: readDouble(json['total_amount'] ?? json['amount_due']),
+      currency: readString(json['currency'], fallback: 'INR'),
+      generatedAt: json['generated_at'] == null
+          ? (json['issued_at'] == null ? null : DateTime.tryParse(readString(json['issued_at']))?.toUtc())
+          : DateTime.tryParse(readString(json['generated_at']))?.toUtc(),
+      paidAt: json['paid_at'] == null
+          ? null
+          : DateTime.tryParse(readString(json['paid_at']))?.toUtc(),
+      paymentMethod: json['payment_method'] == null ? null : readString(json['payment_method']),
+      paymentReference: json['payment_reference'] == null ? null : readString(json['payment_reference']),
+      paidByStaffId: json['paid_by_staff_id'] == null ? null : readInt(json['paid_by_staff_id']),
+      generatedByRole: json['generated_by_role'] == null ? null : readString(json['generated_by_role']),
+      sentToCounterByRole: json['sent_to_counter_by_role'] == null ? null : readString(json['sent_to_counter_by_role']),
+      gstEnabled: json['gst_enabled'] as bool? ?? false,
+      invoiceNumber: json['invoice_number'] == null ? null : readString(json['invoice_number']),
+      invoiceDate: json['invoice_date'] == null ? null : DateTime.tryParse(readString(json['invoice_date']))?.toUtc(),
+      taxableAmount: json['taxable_amount'] == null ? null : readDouble(json['taxable_amount']),
+      gstRate: json['gst_rate'] == null ? null : readDouble(json['gst_rate']),
+      cgstAmount: json['cgst_amount'] == null ? null : readDouble(json['cgst_amount']),
+      sgstAmount: json['sgst_amount'] == null ? null : readDouble(json['sgst_amount']),
+      igstAmount: json['igst_amount'] == null ? null : readDouble(json['igst_amount']),
+      gstin: json['gstin'] == null ? null : readString(json['gstin']),
+      legalBusinessName: json['legal_business_name'] == null ? null : readString(json['legal_business_name']),
+      registeredBillingAddress: json['registered_billing_address'] == null ? null : readString(json['registered_billing_address']),
+      sessionStatus: readString(json['session_status'], fallback: 'open'),
+      paymentRequestedAt: json['payment_requested_at'] == null ? null : DateTime.tryParse(readString(json['payment_requested_at']))?.toUtc(),
+      detachedAt: json['detached_at'] == null ? null : DateTime.tryParse(readString(json['detached_at']))?.toUtc(),
+      paymentCode: json['payment_code'] == null ? null : readString(json['payment_code']),
+      paymentCodeExpiresAt: json['payment_code_expires_at'] == null
+          ? null
+          : DateTime.tryParse(readString(json['payment_code_expires_at']))?.toUtc(),
+    );
+  }
+
+  final String billNumber;
+  final String? receiptToken;
+  final String restaurantName;
+  final String? restaurantSlug;
+  final String tableNumber;
+  final String? tableCode;
+  final String? sessionToken;
+  final String status;
+  final List<BillDetailOrder> orders;
+  final double subtotal;
+  final double taxAmount;
+  final double discountAmount;
+  final double totalAmount;
+  final String currency;
+  final DateTime? generatedAt;
+  final DateTime? paidAt;
+  final String? paymentMethod;
+  final String? paymentReference;
+  final int? paidByStaffId;
+  final String? generatedByRole;
+  final String? sentToCounterByRole;
+  final bool gstEnabled;
+  final String? invoiceNumber;
+  final DateTime? invoiceDate;
+  final double? taxableAmount;
+  final double? gstRate;
+  final double? cgstAmount;
+  final double? sgstAmount;
+  final double? igstAmount;
+  final String? gstin;
+  final String? legalBusinessName;
+  final String? registeredBillingAddress;
+  final String sessionStatus;
+  final DateTime? paymentRequestedAt;
+  final DateTime? detachedAt;
+  final String? paymentCode;
+  final DateTime? paymentCodeExpiresAt;
+
+  bool get isPaid => status == 'paid';
+  bool get isPaymentPending => status == 'payment_pending';
+  bool get isDetached => sessionStatus == 'detached_awaiting_payment';
+
+  bool get isCodeExpired {
+    if (paymentCodeExpiresAt == null) return false;
+    return DateTime.now().toUtc().isAfter(paymentCodeExpiresAt!);
+  }
+}
