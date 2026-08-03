@@ -13,18 +13,38 @@ export default function PlatformLayout({ children }: { children: React.ReactNode
     return <>{children}</>;
   }
 
-  const navItems = [
-    { label: "Overview", href: "/platform", icon: "📊" },
-    { label: "Live Operations", href: "/platform/live", icon: "⚡" },
-    { label: "Restaurants Fleet", href: "/platform/restaurants", icon: "🏬" },
-    { label: "Orders Analytics", href: "/platform/orders", icon: "🧾" },
-    { label: "Table Sessions", href: "/platform/sessions", icon: "🪑" },
-    { label: "Pending Payments", href: "/platform/payments", icon: "💳" },
-    { label: "Revenue & Reconciliation", href: "/platform/revenue", icon: "💰" },
-    { label: "Incidents & Alerts", href: "/platform/incidents", icon: "🚨" },
-    { label: "System Health", href: "/platform/system", icon: "🖥️" },
-    { label: "Platform Audit Log", href: "/platform/audit-log", icon: "📜" },
-    { label: "Platform Settings", href: "/platform/settings", icon: "⚙️" },
+  const navGroups = [
+    {
+      group: "OBSERVE",
+      items: [
+        { label: "OMLU Observability", href: "/platform", icon: "📊" },
+        { label: "System Health", href: "/platform/system", icon: "🖥️" },
+        { label: "Live Operations", href: "/platform/live", icon: "⚡" },
+      ],
+    },
+    {
+      group: "RESTAURANT OPERATIONS",
+      items: [
+        { label: "Restaurants Fleet", href: "/platform/restaurants", icon: "🏬" },
+        { label: "Session Reliability", href: "/platform/sessions", icon: "🪑" },
+        { label: "Pending Payments", href: "/platform/payments", icon: "💳" },
+        { label: "Orders Analytics", href: "/platform/orders", icon: "🧾" },
+        { label: "Revenue & Reconciliation", href: "/platform/revenue", icon: "💰" },
+      ],
+    },
+    {
+      group: "INVESTIGATE",
+      items: [
+        { label: "Incidents & Alerts", href: "/platform/incidents", icon: "🚨" },
+        { label: "Platform Audit Log", href: "/platform/audit-log", icon: "📜" },
+      ],
+    },
+    {
+      group: "CONFIGURE",
+      items: [
+        { label: "Platform Settings", href: "/platform/settings", icon: "⚙️" },
+      ],
+    },
   ];
 
   const handleLogout = async () => {
@@ -44,34 +64,41 @@ export default function PlatformLayout({ children }: { children: React.ReactNode
               Ω
             </div>
             <div>
-              <h2 className="font-bold text-sm text-slate-100 tracking-tight">OMLU Platform</h2>
+              <h2 className="font-bold text-sm text-slate-100 tracking-tight">OMLU Observability</h2>
               <span className="text-[10px] text-indigo-400 font-semibold uppercase tracking-wider">
                 Nadha Labs Console
               </span>
             </div>
           </div>
 
-          {/* Nav items */}
-          <nav className="p-3 space-y-1">
-            {navItems.map((item) => {
-              const isActive =
-                pathname === item.href ||
-                (item.href !== "/platform" && pathname.startsWith(item.href));
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-all duration-150 ${
-                    isActive
-                      ? "bg-indigo-600/20 text-indigo-300 border border-indigo-500/30"
-                      : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
-                  }`}
-                >
-                  <span className="text-sm">{item.icon}</span>
-                  <span>{item.label}</span>
-                </Link>
-              );
-            })}
+          {/* Nav groups */}
+          <nav className="p-3 space-y-4">
+            {navGroups.map((group) => (
+              <div key={group.group} className="space-y-1">
+                <div className="px-3 text-[10px] font-mono font-bold tracking-wider text-slate-500 uppercase">
+                  {group.group}
+                </div>
+                {group.items.map((item) => {
+                  const isActive =
+                    pathname === item.href ||
+                    (item.href !== "/platform" && pathname.startsWith(item.href));
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={`flex items-center space-x-3 px-3 py-2 rounded-xl text-xs font-medium transition-all duration-150 ${
+                        isActive
+                          ? "bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 font-semibold"
+                          : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
+                      }`}
+                    >
+                      <span className="text-sm">{item.icon}</span>
+                      <span>{item.label}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            ))}
           </nav>
         </div>
 
@@ -98,11 +125,11 @@ export default function PlatformLayout({ children }: { children: React.ReactNode
         <header className="sticky top-0 z-10 bg-slate-950/80 backdrop-blur-md border-b border-slate-800/80 px-6 py-3.5 flex justify-between items-center">
           <div className="flex items-center space-x-3">
             <span className="text-xs font-mono text-slate-400 uppercase tracking-widest bg-slate-900 border border-slate-800 px-2.5 py-1 rounded-md">
-              SCOPE: PLATFORM-ADMIN
+              SCOPE: PLATFORM-OBSERVABILITY
             </span>
           </div>
           <div className="flex items-center space-x-4">
-            <span className="text-xs text-slate-400">Timezone: UTC / Normalized</span>
+            <span className="text-xs text-slate-400 font-mono">Timezone: UTC / Normalized</span>
           </div>
         </header>
 

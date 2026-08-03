@@ -17,7 +17,6 @@ from app.models.menu import MenuCategory, MenuItem
 from app.models.order import Order, OrderItem
 from app.models.dining_session import DiningSession, ACTIVE_DINING_SESSION_STATUSES
 from app.models.bill import Bill
-from app.models.payment import Payment, RevenueEntry
 from app.models.quick_sale import QuickSale
 from app.models.staff_user import StaffUser, StaffSession
 from app.models.platform_user import PlatformUser, PlatformSession, PlatformAuditLog
@@ -35,14 +34,23 @@ from app.services.platform_analytics import (
     detect_stuck_sessions,
     generate_operational_alerts,
     generate_plain_language_insights,
+    calculate_separated_billing_metrics,
+    generate_operational_visualizations,
+    monitoring_coverage_metadata,
 )
-from app.services.realtime import broker, realtime_metrics_snapshot
+from app.services.platform_recovery import (
+    finalize_paid_session as service_finalize_paid_session,
+    recover_abandoned_empty_session as service_recover_abandoned_empty_session,
+    detect_duplicate_active_sessions as service_detect_duplicate_active_sessions,
+)
+from app.services.realtime import realtime_metrics_snapshot
 from app.services.push_notifications import push_health
 
 router = APIRouter(prefix="/api/v1/platform", tags=["Platform Operations"])
 
 # Login rate limiter for platform
 platform_login_attempts = defaultdict(list)
+
 
 def _check_platform_login_rate_limit(client_ip: str) -> bool:
     now = time.time()
@@ -51,6 +59,7 @@ def _check_platform_login_rate_limit(client_ip: str) -> bool:
         return False
     platform_login_attempts[client_ip].append(now)
     return True
+
 
 def _client_ip(request: Request) -> str:
     return request.client.host if request.client else "127.0.0.1"
@@ -175,7 +184,7 @@ def platform_me(ctx: PlatformContext = Depends(get_platform_context)):
     }
 
 
-# --- PLATFORM OVERVIEW DASHBOARD ---
+# --- OMLU OBSERVABILITY OVERVIEW ---
 
 @router.get("/overview")
 def platform_overview(
@@ -194,14 +203,13 @@ def platform_overview(
 
     total_restaurants = len(restaurants)
     active_restaurants = sum(1 for r in restaurants if r.is_active)
-
     health_counts = defaultdict(int)
     attention_restaurants = []
 
     for r in restaurants:
         h = evaluate_restaurant_health(db, r, now=now)
         health_counts[h["status"]] += 1
-        if h["status"] in {"Attention", "Degraded", "Offline"}:
+        if h["status"] in {"Attention Required", "Critical Inconsistency"}:
             attention_restaurants.append({
                 "restaurant_id": r.id,
                 "restaurant_name": r.name,
@@ -209,45 +217,21 @@ def platform_overview(
                 "reasons": h["reasons"],
             })
 
-    order_query = db.query(Order).filter(Order.created_at >= period_start)
-    if restaurant_id:
-        order_query = order_query.filter(Order.restaurant_id == restaurant_id)
-    orders_in_period = order_query.all()
-
-    total_orders_today = len(orders_in_period)
-    active_orders_today = sum(1 for o in orders_in_period if o.status in {"pending", "accepted", "preparing", "ready"})
-
-    gross_order_value = sum(o.subtotal for o in orders_in_period)
-    
-    bill_query = db.query(Bill).filter(Bill.created_at >= period_start)
-    if restaurant_id:
-        bill_query = bill_query.filter(Bill.restaurant_id == restaurant_id)
-    bills = bill_query.all()
-
-    collected_revenue = sum(b.total_amount for b in bills if b.status == "paid")
-    pending_collection = sum(b.total_amount for b in bills if b.status == "payment_pending")
-
-    quick_sales = db.query(QuickSale).filter(
-        QuickSale.created_at >= period_start,
-        QuickSale.status.in_(["completed", "paid", "served"])
-    )
-    if restaurant_id:
-        quick_sales = quick_sales.filter(QuickSale.restaurant_id == restaurant_id)
-    completed_quick_sale_revenue = sum(qs.total_amount for qs in quick_sales.all())
-
-    open_sessions = db.query(func.count(DiningSession.id)).filter(
-        DiningSession.status.in_(ACTIVE_DINING_SESSION_STATUSES),
-        *( [DiningSession.restaurant_id == restaurant_id] if restaurant_id else [] )
-    ).scalar() or 0
-
-    pending_payments_count = db.query(func.count(Bill.id)).filter(
-        Bill.status == "payment_pending",
-        *( [Bill.restaurant_id == restaurant_id] if restaurant_id else [] )
-    ).scalar() or 0
-
-    alerts = generate_operational_alerts(db, now=now)
-    insights = generate_plain_language_insights(db, restaurant_id=restaurant_id, days=days, now=now)
+    # Operational metrics
+    stuck_issues = detect_stuck_sessions(db, restaurant_id=restaurant_id, now=now)
+    duplicate_violations = service_detect_duplicate_active_sessions(db)
+    separated_billing = calculate_separated_billing_metrics(db, days=days, restaurant_id=restaurant_id, now=now)
+    visualizations = generate_operational_visualizations(db, days=days, restaurant_id=restaurant_id, now=now)
+    coverage = monitoring_coverage_metadata()
     realtime_snap = realtime_metrics_snapshot()
+    insights = generate_plain_language_insights(db, restaurant_id=restaurant_id, days=days, now=now)
+
+    # Determine Overall Platform Operational Status
+    platform_status = "Healthy"
+    if len(duplicate_violations) > 0 or health_counts["Critical Inconsistency"] > 0:
+        platform_status = "Critical Inconsistency Detected"
+    elif health_counts["Attention Required"] > 0 or len(stuck_issues) > 0:
+        platform_status = "Operational Attention Required"
 
     return {
         "metadata": {
@@ -256,23 +240,30 @@ def platform_overview(
             "scope": f"Restaurant {restaurant_id}" if restaurant_id else "All Platform Restaurants",
             "timezone_normalized": "UTC / Restaurant Local",
         },
+        "platform_status": platform_status,
         "kpis": {
             "total_restaurants": total_restaurants,
+            "total_restaurants_monitored": total_restaurants,
             "active_restaurants": active_restaurants,
-            "restaurants_online": health_counts["Healthy"],
+            "restaurants_healthy": health_counts["Healthy"],
             "restaurants_requiring_attention": len(attention_restaurants),
-            "orders_today": total_orders_today,
-            "active_orders": active_orders_today,
-            "gross_order_value": float(gross_order_value),
-            "collected_revenue": float(collected_revenue),
-            "pending_collection": float(pending_collection),
-            "completed_quick_sale_revenue": float(completed_quick_sale_revenue),
-            "open_table_sessions": open_sessions,
-            "pending_payments": pending_payments_count,
-            "realtime_connected_clients": realtime_snap.get("active_websocket_connections", 0),
+            "stuck_sessions_count": len(stuck_issues),
+            "duplicate_active_sessions_count": len(duplicate_violations),
+            "billing_initiation_rate_pct": separated_billing["billing_initiation_rate"]["rate_pct"],
+            "billing_completion_rate_pct": separated_billing["billing_completion_rate"]["rate_pct"],
+            "post_payment_closure_rate_pct": separated_billing["post_payment_closure_rate"]["rate_pct"],
+            "workflow_inconsistencies_count": separated_billing["workflow_inconsistencies_count"],
+        },
+        "current_realtime_snapshot": {
+            "active_websocket_connections": realtime_snap.get("active_websocket_connections", 0),
+            "redis_available": realtime_snap.get("redis_available", True),
+            "mode": "live_websocket" if realtime_snap.get("redis_available", True) else "polling_fallback",
         },
         "health_summary": dict(health_counts),
-        "operational_attention_panel": alerts[:10],
+        "operational_attention_panel": stuck_issues[:10],
+        "duplicate_active_sessions_panel": duplicate_violations[:10],
+        "visualizations": visualizations,
+        "monitoring_coverage": coverage,
         "plain_language_insights": insights,
     }
 
@@ -309,7 +300,6 @@ def platform_restaurants(
             continue
 
         orders_today = db.query(func.count(Order.id)).filter(Order.restaurant_id == r.id, Order.created_at >= cutoff_24h).scalar() or 0
-        collected_today = db.query(func.coalesce(func.sum(Bill.total_amount), 0)).filter(Bill.restaurant_id == r.id, Bill.status == "paid", Bill.paid_at >= cutoff_24h).scalar() or 0
         open_tables = db.query(func.count(DiningSession.id)).filter(DiningSession.restaurant_id == r.id, DiningSession.status.in_(ACTIVE_DINING_SESSION_STATUSES)).scalar() or 0
         pending_payments = db.query(func.count(Bill.id)).filter(Bill.restaurant_id == r.id, Bill.status == "payment_pending").scalar() or 0
         active_staff = db.query(func.count(StaffUser.id)).filter(StaffUser.restaurant_id == r.id, StaffUser.status == "active").scalar() or 0
@@ -327,7 +317,6 @@ def platform_restaurants(
             "health_status": health["status"],
             "health_reasons": health["reasons"],
             "orders_today": orders_today,
-            "collected_revenue_today": float(collected_today),
             "open_tables": open_tables,
             "pending_payments": pending_payments,
             "active_staff_count": active_staff,
@@ -355,14 +344,9 @@ def platform_restaurant_detail(
     cutoff_24h = now - datetime.timedelta(hours=24)
 
     orders_today = db.query(func.count(Order.id)).filter(Order.restaurant_id == restaurant.id, Order.created_at >= cutoff_24h).scalar() or 0
-    collected_today = db.query(func.coalesce(func.sum(Bill.total_amount), 0)).filter(Bill.restaurant_id == restaurant.id, Bill.status == "paid", Bill.paid_at >= cutoff_24h).scalar() or 0
-    pending_today = db.query(func.coalesce(func.sum(Bill.total_amount), 0)).filter(Bill.restaurant_id == restaurant.id, Bill.status == "payment_pending").scalar() or 0
-
     open_sessions = db.query(func.count(DiningSession.id)).filter(DiningSession.restaurant_id == restaurant.id, DiningSession.status.in_(ACTIVE_DINING_SESSION_STATUSES)).scalar() or 0
     pending_payments = db.query(func.count(Bill.id)).filter(Bill.restaurant_id == restaurant.id, Bill.status == "payment_pending").scalar() or 0
     active_staff = db.query(func.count(StaffUser.id)).filter(StaffUser.restaurant_id == restaurant.id, StaffUser.status == "active").scalar() or 0
-
-    insights = generate_plain_language_insights(db, restaurant_id=restaurant_id, days=7, now=now)
 
     return {
         "header": {
@@ -375,18 +359,13 @@ def platform_restaurant_detail(
             "plan": restaurant.plan,
             "health_status": health["status"],
             "health_reasons": health["reasons"],
-            "contact_email": restaurant.contact_email if ctx.can_access("platform_support") else None,
-            "phone_number": restaurant.phone_number if ctx.can_access("platform_support") else None,
         },
         "summary": {
             "orders_today": orders_today,
-            "collected_revenue_today": float(collected_today),
-            "pending_collection_today": float(pending_today),
             "open_sessions": open_sessions,
             "pending_payments": pending_payments,
             "active_staff": active_staff,
         },
-        "insights": insights,
     }
 
 
@@ -439,151 +418,6 @@ def platform_restaurant_tables(
     return {"tables": result}
 
 
-@router.get("/restaurants/{restaurant_id}/orders")
-def platform_restaurant_orders(
-    restaurant_id: int,
-    limit: int = Query(default=50, le=200),
-    ctx: PlatformContext = Depends(get_platform_context),
-    db: Session = Depends(get_db)
-):
-    orders = db.query(Order).options(joinedload(Order.table)).filter(Order.restaurant_id == restaurant_id).order_by(Order.created_at.desc()).limit(limit).all()
-    now = datetime.datetime.now(datetime.timezone.utc)
-
-    return {
-        "orders": [
-            {
-                "id": o.id,
-                "order_number": o.order_number,
-                "table_number": o.table.table_number if o.table else "Quick Sale / Counter",
-                "status": o.status,
-                "total_amount": float(o.subtotal),
-                "created_at": o.created_at.isoformat(),
-                "duration_minutes": int((now - o.created_at).total_seconds() / 60),
-                "order_source": o.source or "customer_qr",
-                "idempotency_key": getattr(o, "idempotency_key", "")[:8] + "..." if getattr(o, "idempotency_key", None) else None,
-            } for o in orders
-        ]
-    }
-
-
-@router.get("/restaurants/{restaurant_id}/bills")
-def platform_restaurant_bills(
-    restaurant_id: int,
-    limit: int = Query(default=50, le=200),
-    ctx: PlatformContext = Depends(get_platform_context),
-    db: Session = Depends(get_db)
-):
-    bills = db.query(Bill).filter(Bill.restaurant_id == restaurant_id).order_by(Bill.created_at.desc()).limit(limit).all()
-    return {
-        "bills": [
-            {
-                "id": b.id,
-                "bill_number": b.bill_number,
-                "total_amount": float(b.total_amount),
-                "bill_status": b.status,
-                "payment_status": b.status,
-                "payment_method": b.payment_method,
-                "created_at": b.created_at.isoformat(),
-                "paid_at": b.paid_at.isoformat() if b.paid_at else None,
-            } for b in bills
-        ]
-    }
-
-
-@router.get("/restaurants/{restaurant_id}/staff")
-def platform_restaurant_staff(
-    restaurant_id: int,
-    ctx: PlatformContext = Depends(get_platform_context),
-    db: Session = Depends(get_db)
-):
-    staff_list = db.query(StaffUser).filter(StaffUser.restaurant_id == restaurant_id).all()
-    return {
-        "staff": [
-            {
-                "id": s.id,
-                "name": s.name,
-                "username": s.username,
-                "email": s.email,
-                "role": s.role,
-                "status": s.status,
-                "is_active": s.is_active,
-                "operations_locked": s.operations_locked,
-                "security_version": s.security_version,
-                "last_login_at": s.last_login_at.isoformat() if s.last_login_at else None,
-            } for s in staff_list
-        ]
-    }
-
-
-@router.get("/restaurants/{restaurant_id}/config-readiness")
-def platform_restaurant_config(
-    restaurant_id: int,
-    ctx: PlatformContext = Depends(get_platform_context),
-    db: Session = Depends(get_db)
-):
-    restaurant = db.query(Restaurant).filter(Restaurant.id == restaurant_id).first()
-    if not restaurant:
-        raise HTTPException(status_code=404, detail="Restaurant not found")
-
-    tables_count = db.query(func.count(RestaurantTable.id)).filter(RestaurantTable.restaurant_id == restaurant_id, RestaurantTable.is_active == True).scalar() or 0
-    menu_items_count = db.query(func.count(MenuItem.id)).filter(MenuItem.restaurant_id == restaurant_id, MenuItem.is_available == True).scalar() or 0
-    staff_count = db.query(func.count(StaffUser.id)).filter(StaffUser.restaurant_id == restaurant_id, StaffUser.status == "active").scalar() or 0
-
-    readiness = {
-        "timezone_configured": bool(restaurant.timezone),
-        "tables_configured": tables_count > 0,
-        "tables_count": tables_count,
-        "menu_configured": menu_items_count > 0,
-        "active_menu_items": menu_items_count,
-        "staff_configured": staff_count > 0,
-        "active_staff_count": staff_count,
-        "gst_enabled": restaurant.gst_enabled,
-        "gstin_present": bool(restaurant.gstin) if restaurant.gst_enabled else True,
-        "is_ready_for_service": tables_count > 0 and menu_items_count > 0 and staff_count > 0,
-    }
-    return readiness
-
-
-# --- LIVE OPERATIONS ---
-
-@router.get("/live-operations")
-def platform_live_operations(
-    restaurant_id: Optional[int] = Query(default=None),
-    limit: int = Query(default=50, le=200),
-    ctx: PlatformContext = Depends(get_platform_context),
-    db: Session = Depends(get_db)
-):
-    now = datetime.datetime.now(datetime.timezone.utc)
-    recent_orders = db.query(Order).options(joinedload(Order.restaurant), joinedload(Order.table)).order_by(Order.created_at.desc())
-    if restaurant_id:
-        recent_orders = recent_orders.filter(Order.restaurant_id == restaurant_id)
-    orders = recent_orders.limit(limit).all()
-
-    events = []
-    for o in orders:
-        events.append({
-            "event_id": f"evt_order_{o.id}",
-            "timestamp": o.created_at.isoformat(),
-            "restaurant_id": o.restaurant_id,
-            "restaurant_name": o.restaurant.name if o.restaurant else f"Restaurant #{o.restaurant_id}",
-            "event_type": f"order.{o.status}",
-            "entity_id": str(o.id),
-            "reference": f"Order #{o.order_number} (Table {o.table.table_number if o.table else 'Counter'})",
-            "success": True,
-        })
-
-    realtime_snap = realtime_metrics_snapshot()
-    return {
-        "refreshed_at": now.isoformat(),
-        "events": events,
-        "realtime_status": {
-            "broker_healthy": realtime_snap.get("redis_available", True),
-            "active_connections": realtime_snap.get("active_websocket_connections", 0),
-            "mode": "live_websocket" if realtime_snap.get("redis_available", True) else "polling_fallback",
-        }
-    }
-
-
 # --- PENDING PAYMENTS QUEUE ---
 
 @router.get("/payments")
@@ -622,8 +456,6 @@ def platform_payments(
             "bill_number": b.bill_number,
             "restaurant_id": b.restaurant_id,
             "restaurant_name": b.restaurant.name if b.restaurant else "Unknown",
-            "total_amount": float(b.total_amount),
-            "payment_code": getattr(b, "payment_code_ciphertext", None),
             "waiting_minutes": waiting_mins,
             "duration_bucket": bucket,
             "created_at": b.created_at.isoformat(),
@@ -633,65 +465,64 @@ def platform_payments(
     return {"payments": queue, "total_pending": len(queue)}
 
 
-# --- REVENUE & RECONCILIATION ---
+# --- DIAGNOSTICS & RECOVERY WORKFLOWS ---
 
-@router.get("/revenue")
-def platform_revenue(
-    days: int = Query(default=30, ge=1, le=365),
-    restaurant_id: Optional[int] = Query(default=None),
+@router.get("/diagnostics/duplicate-active-sessions")
+def platform_duplicate_active_sessions_diagnostics(
     ctx: PlatformContext = Depends(get_platform_context),
     db: Session = Depends(get_db)
 ):
-    now = datetime.datetime.now(datetime.timezone.utc)
-    period_start = now - datetime.timedelta(days=days)
-
-    bill_q = db.query(Bill).filter(Bill.created_at >= period_start)
-    qs_q = db.query(QuickSale).filter(QuickSale.created_at >= period_start)
-
-    if restaurant_id:
-        bill_q = bill_q.filter(Bill.restaurant_id == restaurant_id)
-        qs_q = qs_q.filter(QuickSale.restaurant_id == restaurant_id)
-
-    bills = bill_q.all()
-    quick_sales = qs_q.all()
-
-    collected_dining = sum(b.total_amount for b in bills if b.status == "paid")
-    pending_dining = sum(b.total_amount for b in bills if b.status == "payment_pending")
-    completed_quick_sales = sum(qs.total_amount for qs in quick_sales if qs.status in ["completed", "paid", "served"])
-
-    cash_total = sum(b.total_amount for b in bills if b.status == "paid" and b.payment_method in ["cash", "counter_cash"])
-    upi_total = sum(b.total_amount for b in bills if b.status == "paid" and b.payment_method in ["upi", "counter_upi"])
-
-    cgst = sum(b.cgst_amount or Decimal("0.00") for b in bills if b.status == "paid")
-    sgst = sum(b.sgst_amount or Decimal("0.00") for b in bills if b.status == "paid")
-
-    return {
-        "period_days": days,
-        "collected_dining_revenue": float(collected_dining),
-        "completed_quick_sale_revenue": float(completed_quick_sales),
-        "pending_collection": float(pending_dining),
-        "payment_methods": {
-            "cash": float(cash_total),
-            "upi": float(upi_total),
-        },
-        "tax_breakdown": {
-            "cgst": float(cgst),
-            "sgst": float(sgst),
-            "total_gst": float(cgst + sgst),
-        },
-        "reconciliation_anomalies": [],
-    }
+    """
+    Diagnostic-only endpoint surfacing duplicate active table sessions with zero DB mutation.
+    """
+    violations = service_detect_duplicate_active_sessions(db)
+    return {"duplicate_active_sessions": violations, "total_violations": len(violations)}
 
 
-# --- INCIDENTS & ALERTS ---
-
-@router.get("/incidents")
-def platform_incidents(
-    ctx: PlatformContext = Depends(get_platform_context),
+@router.post("/recovery/finalize-paid-session")
+def platform_finalize_paid_session(
+    payload: dict,
+    request: Request,
+    ctx: PlatformContext = Depends(require_platform_role("platform_admin", "platform_owner")),
     db: Session = Depends(get_db)
 ):
-    alerts = generate_operational_alerts(db)
-    return {"incidents": alerts, "total_active": len(alerts)}
+    session_id = payload.get("session_id")
+    reason = payload.get("reason")
+    if not session_id or not isinstance(session_id, int):
+        raise HTTPException(status_code=400, detail="session_id integer is required.")
+
+    request_id = getattr(request.state, "request_id", None)
+    return service_finalize_paid_session(
+        db,
+        session_id=session_id,
+        operator_id=ctx.actor.id,
+        operator_role=ctx.role,
+        reason=reason or "",
+        request_id=request_id,
+    )
+
+
+@router.post("/recovery/stale-session-close")
+def platform_stale_session_close(
+    payload: dict,
+    request: Request,
+    ctx: PlatformContext = Depends(require_platform_role("platform_admin", "platform_owner")),
+    db: Session = Depends(get_db)
+):
+    session_id = payload.get("session_id")
+    reason = payload.get("reason")
+    if not session_id or not isinstance(session_id, int):
+        raise HTTPException(status_code=400, detail="session_id integer is required.")
+
+    request_id = getattr(request.state, "request_id", None)
+    return service_recover_abandoned_empty_session(
+        db,
+        session_id=session_id,
+        operator_id=ctx.actor.id,
+        operator_role=ctx.role,
+        reason=reason or "",
+        request_id=request_id,
+    )
 
 
 # --- SYSTEM TELEMETRY & HEALTH ---
@@ -720,11 +551,6 @@ def platform_system_health(
             "realtime_broker": "healthy" if realtime_snap.get("redis_available", True) else "degraded",
             "push_service": push_health().get("status", "unknown"),
         },
-        "metrics": {
-            "active_connections": realtime_snap.get("active_websocket_connections", 0),
-            "average_latency_ms": realtime_snap.get("average_delivery_latency_ms", 0.0),
-            "error_rate_5xx": 0.0,
-        },
         "version": {
             "app_version": "0.1.0",
             "migration_revision": "f5e6d7c8b9a0",
@@ -752,6 +578,9 @@ def platform_audit_log(
                 "target_id": log.target_id,
                 "restaurant_id": log.restaurant_id,
                 "ip_address": log.ip_address,
+                "previous_value": log.previous_value,
+                "new_value": log.new_value,
+                "request_id": log.request_id,
                 "timestamp": log.created_at.isoformat(),
             } for log in logs
         ]

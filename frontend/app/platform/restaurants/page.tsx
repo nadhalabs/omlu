@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { fetchFleetRestaurants, FleetRestaurant } from "@/lib/platformApi";
 
-export default function FleetPage() {
+export default function PlatformRestaurantsPage() {
   const [restaurants, setRestaurants] = useState<FleetRestaurant[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -14,10 +14,10 @@ export default function FleetPage() {
     let isMounted = true;
     const loadFleet = async () => {
       try {
-        const res = await fetchFleetRestaurants(search, statusFilter);
-        if (isMounted) setRestaurants(res.restaurants);
+        const data = await fetchFleetRestaurants(search, statusFilter);
+        if (isMounted) setRestaurants(data.restaurants);
       } catch {
-        // Ignore err
+        // Ignore error
       } finally {
         if (isMounted) setLoading(false);
       }
@@ -29,42 +29,45 @@ export default function FleetPage() {
     };
   }, [search, statusFilter]);
 
-  const getHealthBadge = (health: string) => {
-    switch (health) {
+  const getHealthBadge = (status: string) => {
+    switch (status) {
       case "Healthy":
-        return "bg-emerald-950/60 text-emerald-300 border-emerald-800";
-      case "Attention":
-        return "bg-amber-950/60 text-amber-300 border-amber-800";
-      case "Degraded":
-        return "bg-rose-950/60 text-rose-300 border-rose-800";
-      case "Offline":
-        return "bg-slate-800 text-slate-400 border-slate-700";
+        return "bg-emerald-950/60 border-emerald-800 text-emerald-300";
+      case "Attention Required":
+        return "bg-amber-950/60 border-amber-800 text-amber-300";
+      case "Critical Inconsistency":
+        return "bg-rose-950/60 border-rose-800 text-rose-300 font-bold animate-pulse";
+      case "No Recent Operational Activity":
+        return "bg-slate-900 border-slate-800 text-slate-400";
+      case "Suspended":
+        return "bg-rose-950 border-rose-900 text-rose-400";
+      case "Onboarding / Incomplete Setup":
+        return "bg-indigo-950 border-indigo-800 text-indigo-300";
       default:
-        return "bg-slate-800 text-slate-300 border-slate-700";
+        return "bg-slate-800 text-slate-300";
     }
   };
 
   return (
     <div className="space-y-6">
-      {/* Control header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-900 border border-slate-800 p-4 rounded-xl">
         <div>
-          <h1 className="text-lg font-bold text-slate-100">Restaurant Fleet Command</h1>
+          <h1 className="text-lg font-bold text-slate-100">Restaurants Fleet Command</h1>
           <p className="text-xs text-slate-400">
-            Monitoring all onboarded OMLU restaurant deployments ({restaurants.length})
+            Multi-tenant fleet management & operational monitoring across all onboarded restaurants
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
           <input
             type="text"
-            placeholder="Search restaurant, city, slug..."
+            placeholder="Search restaurant or city..."
             value={search}
             onChange={(e) => {
               setLoading(true);
               setSearch(e.target.value);
             }}
-            className="bg-slate-950 border border-slate-800 text-slate-200 text-xs rounded-lg px-3 py-1.5 focus:outline-none w-52"
+            className="bg-slate-950 border border-slate-800 text-slate-200 text-xs rounded-lg px-3 py-1.5 focus:outline-none w-48"
           />
 
           <select
@@ -75,17 +78,17 @@ export default function FleetPage() {
             }}
             className="bg-slate-950 border border-slate-800 text-slate-200 text-xs rounded-lg px-3 py-1.5 focus:outline-none"
           >
-            <option value="">All Health States</option>
-            <option value="Healthy">Healthy</option>
-            <option value="Attention">Attention</option>
-            <option value="Degraded">Degraded</option>
-            <option value="Offline">Offline</option>
-            <option value="Suspended">Suspended</option>
+            <option value="">All Health Statuses</option>
+            <option value="healthy">Healthy</option>
+            <option value="attention required">Attention Required</option>
+            <option value="critical inconsistency">Critical Inconsistency</option>
+            <option value="no recent operational activity">No Recent Operational Activity</option>
+            <option value="onboarding / incomplete setup">Onboarding / Incomplete Setup</option>
+            <option value="suspended">Suspended</option>
           </select>
         </div>
       </div>
 
-      {/* Fleet table */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg">
         {loading ? (
           <div className="p-8 text-center text-xs text-slate-400">Loading restaurant fleet...</div>
@@ -99,7 +102,6 @@ export default function FleetPage() {
                   <th className="p-4">Restaurant</th>
                   <th className="p-4">Health Status</th>
                   <th className="p-4">Orders (24h)</th>
-                  <th className="p-4">Revenue (24h)</th>
                   <th className="p-4">Open Tables</th>
                   <th className="p-4">Pending Payments</th>
                   <th className="p-4">Staff</th>
@@ -123,9 +125,6 @@ export default function FleetPage() {
                       </span>
                     </td>
                     <td className="p-4 font-mono text-slate-100">{r.orders_today}</td>
-                    <td className="p-4 font-mono text-emerald-400 font-bold">
-                      ₹{r.collected_revenue_today.toLocaleString()}
-                    </td>
                     <td className="p-4 font-mono">{r.open_tables}</td>
                     <td className="p-4 font-mono text-amber-400">{r.pending_payments}</td>
                     <td className="p-4 text-slate-400">{r.active_staff_count} active</td>

@@ -1,17 +1,15 @@
 export interface PlatformKPIs {
   total_restaurants: number;
+  total_restaurants_monitored: number;
   active_restaurants: number;
-  restaurants_online: number;
+  restaurants_healthy: number;
   restaurants_requiring_attention: number;
-  orders_today: number;
-  active_orders: number;
-  gross_order_value: number;
-  collected_revenue: number;
-  pending_collection: number;
-  completed_quick_sale_revenue: number;
-  open_table_sessions: number;
-  pending_payments: number;
-  realtime_connected_clients: number;
+  stuck_sessions_count: number;
+  duplicate_active_sessions_count: number;
+  billing_initiation_rate_pct: number | null;
+  billing_completion_rate_pct: number | null;
+  post_payment_closure_rate_pct: number | null;
+  workflow_inconsistencies_count: number;
 }
 
 export interface OperationalAlert {
@@ -35,6 +33,84 @@ export interface PlainLanguageInsight {
   drilldown_path: string;
 }
 
+export interface RealtimeSnapshot {
+  active_websocket_connections: number;
+  redis_available: boolean;
+  mode: "live_websocket" | "polling_fallback";
+}
+
+export interface FunnelStage {
+  stage: string;
+  count: number;
+  conversion_pct: number;
+}
+
+export interface IssuesByCategory {
+  category: string;
+  count: number;
+}
+
+export interface AgeBucket {
+  bucket: string;
+  count: number;
+}
+
+export interface ReliabilityPoint {
+  date: string;
+  initiation_rate_pct: number | null;
+  completion_rate_pct: number | null;
+  closure_rate_pct: number | null;
+  reliability_status: string;
+}
+
+export interface AttentionMatrixItem {
+  restaurant_id: number;
+  restaurant_name: string;
+  health_status: string;
+  reasons: string[];
+  stuck_sessions_count: number;
+  pending_payments_count: number;
+}
+
+export interface OperationalVisualizations {
+  session_lifecycle_funnel: FunnelStage[];
+  workflow_issues_by_category: IssuesByCategory[];
+  session_age_distribution: AgeBucket[];
+  pending_workflow_ageing: AgeBucket[];
+  billing_reliability_time_series: ReliabilityPoint[];
+  restaurant_operational_attention_matrix: AttentionMatrixItem[];
+}
+
+export interface MonitoringCoverage {
+  available_now: string[];
+  not_instrumented: string[];
+}
+
+export interface StuckSessionIssue {
+  session_id: number;
+  restaurant_id: number;
+  restaurant_name: string;
+  table_name: string;
+  primary_classification: string;
+  human_label: string;
+  confidence: string;
+  severity: "Critical" | "High" | "Medium" | "Low";
+  message: string;
+  opened_at: string;
+  diagnostic_flags: string[];
+}
+
+export interface DuplicateSessionViolation {
+  table_id: number;
+  table_number: string;
+  restaurant_id: number;
+  restaurant_name: string;
+  active_sessions_count: number;
+  session_ids: number[];
+  severity: string;
+  message: string;
+}
+
 export interface PlatformOverviewData {
   metadata: {
     refreshed_at: string;
@@ -42,10 +118,15 @@ export interface PlatformOverviewData {
     scope: string;
     timezone_normalized: string;
   };
+  platform_status: string;
   kpis: PlatformKPIs;
+  current_realtime_snapshot: RealtimeSnapshot;
   health_summary: Record<string, number>;
-  operational_attention_panel: OperationalAlert[];
-  plain_language_insights: PlainLanguageInsight[];
+  operational_attention_panel: StuckSessionIssue[];
+  duplicate_active_sessions_panel: DuplicateSessionViolation[];
+  visualizations: OperationalVisualizations;
+  monitoring_coverage: MonitoringCoverage;
+  plain_language_insights?: PlainLanguageInsight[];
 }
 
 export interface FleetRestaurant {
@@ -55,10 +136,10 @@ export interface FleetRestaurant {
   city: string;
   is_active: boolean;
   plan: string;
-  health_status: "Healthy" | "Attention" | "Degraded" | "Offline" | "Suspended" | "Onboarding";
+  health_status: "Healthy" | "Attention Required" | "Critical Inconsistency" | "No Recent Operational Activity" | "Suspended" | "Onboarding / Incomplete Setup";
   health_reasons: string[];
   orders_today: number;
-  collected_revenue_today: number;
+  collected_revenue_today?: number;
   open_tables: number;
   pending_payments: number;
   active_staff_count: number;
@@ -71,8 +152,7 @@ export interface PendingPaymentItem {
   bill_number: string;
   restaurant_id: number;
   restaurant_name: string;
-  total_amount: number;
-  payment_code?: string;
+  total_amount?: number;
   waiting_minutes: number;
   duration_bucket: string;
   created_at: string;
@@ -89,15 +169,17 @@ export interface SystemHealthData {
     realtime_broker: string;
     push_service: string;
   };
-  metrics: {
-    active_connections: number;
-    average_latency_ms: number;
-    error_rate_5xx: number;
-  };
   version: {
     app_version: string;
     migration_revision: string;
   };
+}
+
+export interface RecoveryActionResult {
+  status: string;
+  table_available: boolean;
+  participants_revoked?: number;
+  message?: string;
 }
 
 export async function fetchPlatformOverview(days: number = 1, restaurantId?: number): Promise<PlatformOverviewData> {
@@ -125,5 +207,31 @@ export async function fetchFleetRestaurants(search?: string, statusFilter?: stri
 export async function fetchSystemHealth(): Promise<SystemHealthData> {
   const res = await fetch("/api/platform/system-health", { cache: "no-store" });
   if (!res.ok) throw new Error("Failed to fetch system health");
+  return res.json();
+}
+
+export async function finalizePaidSession(sessionId: number, reason: string): Promise<RecoveryActionResult> {
+  const res = await fetch("/api/platform/recovery/finalize-paid-session", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ session_id: sessionId, reason }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Recovery action failed" }));
+    throw new Error(err.detail || "Recovery action failed");
+  }
+  return res.json();
+}
+
+export async function staleSessionClose(sessionId: number, reason: string): Promise<RecoveryActionResult> {
+  const res = await fetch("/api/platform/recovery/stale-session-close", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ session_id: sessionId, reason }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Recovery action failed" }));
+    throw new Error(err.detail || "Recovery action failed");
+  }
   return res.json();
 }
