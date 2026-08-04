@@ -1,8 +1,52 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omlu_operations/core/models/role_session.dart';
 import 'package:omlu_operations/core/storage/secure_token_storage.dart';
 import 'test_auth_fixtures.dart';
+
+class _BadDecryptStorage extends FlutterSecureStorage {
+  _BadDecryptStorage();
+
+  bool targetedDeleteCalled = false;
+  bool deleteAllCalled = false;
+
+  @override
+  Future<String?> read({
+    required String key,
+    IOSOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    MacOsOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) => throw PlatformException(code: 'BAD_DECRYPT');
+
+  @override
+  Future<void> delete({
+    required String key,
+    IOSOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    MacOsOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
+    targetedDeleteCalled = true;
+  }
+
+  @override
+  Future<void> deleteAll({
+    IOSOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    MacOsOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
+    deleteAllCalled = true;
+  }
+}
 
 class MockFlutterSecureStorage extends FlutterSecureStorage {
   final Map<String, String> _data = {};
@@ -158,5 +202,23 @@ void main() {
         expect(rawVal, isNull);
       },
     );
+
+    test('BAD_DECRYPT clears only auth state and never escapes raw', () async {
+      final badStorage = _BadDecryptStorage();
+      final recoveringStorage = SecureTokenStorage(secureStorage: badStorage);
+
+      await expectLater(
+        recoveringStorage.read(),
+        throwsA(
+          isA<StoredSessionRecoveryException>().having(
+            (error) => error.message,
+            'safe message',
+            isNot(contains('BAD_DECRYPT')),
+          ),
+        ),
+      );
+      expect(badStorage.targetedDeleteCalled, isTrue);
+      expect(badStorage.deleteAllCalled, isFalse);
+    });
   });
 }

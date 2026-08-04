@@ -2,6 +2,7 @@ import 'api_client.dart';
 import 'api_exceptions.dart';
 import '../models/operations_models.dart';
 import '../storage/operations_data_cache.dart';
+import '../printing/receipt_data.dart';
 
 class OperationsApi {
   OperationsApi(this._client, {OperationsDataCache? cache}) : _cache = cache;
@@ -141,6 +142,13 @@ class OperationsApi {
   Future<BillDetail> fetchBillDetail(String billNumber) async {
     final json = await fetchBill(billNumber);
     return BillDetail.fromJson(json);
+  }
+
+  Future<ReceiptData> fetchReceiptPayload(String billNumber) async {
+    final json = await _client.getJson(
+      '/staff/bills/$billNumber/receipt-payload',
+    );
+    return ReceiptData.fromJson(Map<String, dynamic>.from(json));
   }
 
   Future<PaymentCodeLookupResult> lookupPendingPaymentCode(String code) async {

@@ -34,7 +34,43 @@ class StaffAccessGate extends ConsumerWidget {
     if (access.loading && !access.locked) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    if (access.locked) return StaffLockScreen(access: access);
+    if (access.locked && !access.restaurantClosed) {
+      return Column(
+        children: [
+          Material(
+            color: OmluColors.accentSoft,
+            child: SafeArea(
+              bottom: false,
+              child: ListTile(
+                leading: const Icon(Icons.lock_rounded),
+                title: const Text('Read-only access'),
+                subtitle: Text(
+                  access.reason == null
+                      ? 'Operational actions are locked. Viewing remains available.'
+                      : 'Operational actions are locked: ${access.reason}',
+                ),
+                trailing: IconButton(
+                  tooltip: 'Refresh lock status',
+                  onPressed: access.loading
+                      ? null
+                      : () => ref
+                            .read(staffAccessProvider.notifier)
+                            .refreshAuthoritative(),
+                  icon: access.loading
+                      ? const SizedBox.square(
+                          dimension: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.refresh_rounded),
+                ),
+              ),
+            ),
+          ),
+          Expanded(child: child),
+        ],
+      );
+    }
+    if (access.restaurantClosed) return StaffLockScreen(access: access);
     return child;
   }
 }
@@ -68,9 +104,17 @@ class StaffLockScreen extends ConsumerWidget {
                   children: [
                     Text('OMLU Staff', style: OmluTypography.h2),
                     const SizedBox(height: OmluSpacing.xxl),
-                    const Icon(Icons.lock_rounded, size: 72, color: OmluColors.accent),
+                    const Icon(
+                      Icons.lock_rounded,
+                      size: 72,
+                      color: OmluColors.accent,
+                    ),
                     const SizedBox(height: OmluSpacing.lg),
-                    Text(_title, textAlign: TextAlign.center, style: OmluTypography.h1),
+                    Text(
+                      _title,
+                      textAlign: TextAlign.center,
+                      style: OmluTypography.h1,
+                    ),
                     const SizedBox(height: OmluSpacing.md),
                     Text(
                       'Operational actions are currently disabled.',
@@ -85,24 +129,34 @@ class StaffLockScreen extends ConsumerWidget {
                     if (lockedAt != null)
                       _DetailRow(
                         label: 'Locked at',
-                        value: TimeOfDay.fromDateTime(lockedAt.toLocal()).format(context),
+                        value: TimeOfDay.fromDateTime(
+                          lockedAt.toLocal(),
+                        ).format(context),
                       ),
                     const SizedBox(height: OmluSpacing.lg),
                     Text(
                       'Contact the restaurant owner or administrator.',
                       textAlign: TextAlign.center,
-                      style: OmluTypography.bodyMedium.copyWith(color: OmluColors.textSecondary),
+                      style: OmluTypography.bodyMedium.copyWith(
+                        color: OmluColors.textSecondary,
+                      ),
                     ),
                     const SizedBox(height: OmluSpacing.xl),
                     OmluButton(
                       text: access.loading ? 'Refreshing…' : 'Refresh status',
                       isLoading: access.loading,
-                      onPressed: () => ref.read(staffAccessProvider.notifier).refreshAuthoritative(),
+                      onPressed: () => ref
+                          .read(staffAccessProvider.notifier)
+                          .refreshAuthoritative(),
                     ),
                     const SizedBox(height: OmluSpacing.sm),
                     OutlinedButton(
-                      style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(52)),
-                      onPressed: access.loading ? null : () => ref.read(authProvider.notifier).logout(),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(52),
+                      ),
+                      onPressed: access.loading
+                          ? null
+                          : () => ref.read(authProvider.notifier).logout(),
                       child: const Text('Sign out'),
                     ),
                   ],
@@ -127,7 +181,10 @@ class _DetailRow extends StatelessWidget {
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox(width: 92, child: Text('$label:', style: OmluTypography.label)),
+        SizedBox(
+          width: 92,
+          child: Text('$label:', style: OmluTypography.label),
+        ),
         Expanded(child: Text(value, style: OmluTypography.bodyMedium)),
       ],
     ),

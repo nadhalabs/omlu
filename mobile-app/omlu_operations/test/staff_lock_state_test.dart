@@ -159,7 +159,7 @@ void main() {
   );
 
   testWidgets(
-    'individual and global lock replace the shell and hide navigation',
+    'individual and global lock keep the readable shell and show read-only state',
     (tester) async {
       final container = await pumpGate(tester);
       container
@@ -176,10 +176,10 @@ void main() {
             ),
           );
       await tester.pump();
-      expect(find.text('Staff operations are locked'), findsOneWidget);
-      expect(find.text('Reason:'), findsOneWidget);
-      expect(find.byType(NavigationBar), findsNothing);
-      expect(find.text('Tables screen'), findsNothing);
+      expect(find.text('Read-only access'), findsOneWidget);
+      expect(find.textContaining('Shift ended'), findsOneWidget);
+      expect(find.byType(NavigationBar), findsOneWidget);
+      expect(find.text('Tables screen'), findsOneWidget);
 
       container
           .read(staffAccessProvider.notifier)
@@ -187,10 +187,8 @@ void main() {
             event('staff.all_locked', state: {'locked_by': 'Owner'}),
           );
       await tester.pump();
-      expect(
-        find.text('Restaurant Staff operations are locked'),
-        findsOneWidget,
-      );
+      expect(find.text('Read-only access'), findsOneWidget);
+      expect(find.text('Tables screen'), findsOneWidget);
       container.dispose();
     },
   );
@@ -258,27 +256,29 @@ void main() {
     },
   );
 
-  testWidgets('resume and reconnect revalidate while keeping the lock screen', (
-    tester,
-  ) async {
-    final container = await pumpGate(tester);
-    final notifier = container.read(staffAccessProvider.notifier);
-    notifier.handleEvent(event('staff.all_locked'));
-    await tester.pump();
-    final before = profileFetches;
-    notifier.didChangeAppLifecycleState(AppLifecycleState.resumed);
-    await tester.pumpAndSettle();
-    expect(profileFetches, greaterThan(before));
-    expect(find.text('Restaurant Staff operations are locked'), findsOneWidget);
+  testWidgets(
+    'resume and reconnect revalidate while keeping read-only access',
+    (tester) async {
+      final container = await pumpGate(tester);
+      final notifier = container.read(staffAccessProvider.notifier);
+      notifier.handleEvent(event('staff.all_locked'));
+      await tester.pump();
+      final before = profileFetches;
+      notifier.didChangeAppLifecycleState(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(profileFetches, greaterThan(before));
+      expect(find.text('Read-only access'), findsOneWidget);
+      expect(find.text('Tables screen'), findsOneWidget);
 
-    final afterResume = profileFetches;
-    notifier.handleConnectionState(
-      RealtimeConnectionState.reconnecting,
-      RealtimeConnectionState.connected,
-    );
-    await tester.pumpAndSettle();
-    expect(profileFetches, greaterThan(afterResume));
-    expect(find.text('Restaurant Staff operations are locked'), findsOneWidget);
-    container.dispose();
-  });
+      final afterResume = profileFetches;
+      notifier.handleConnectionState(
+        RealtimeConnectionState.reconnecting,
+        RealtimeConnectionState.connected,
+      );
+      await tester.pumpAndSettle();
+      expect(profileFetches, greaterThan(afterResume));
+      expect(find.text('Read-only access'), findsOneWidget);
+      container.dispose();
+    },
+  );
 }

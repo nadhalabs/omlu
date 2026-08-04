@@ -181,6 +181,46 @@ export type BillStatus =
   | "paid"
   | "cancelled";
 
+export interface ReceiptItem {
+  name: string;
+  quantity: number;
+  unit_price: string;
+  line_total: string;
+  options: string[];
+}
+
+export interface ReceiptPayload {
+  bill_number: string;
+  invoice_number: string | null;
+  receipt_title: string;
+  status: "issued" | "payment_pending" | "paid";
+  restaurant_name: string;
+  legal_business_name: string;
+  address: string;
+  gstin: string | null;
+  state_name: string | null;
+  state_code: string | null;
+  table_number: string;
+  staff_name: string;
+  created_at: string;
+  paid_at: string | null;
+  items: ReceiptItem[];
+  subtotal: string;
+  discount_amount: string;
+  taxable_amount: string;
+  cgst_amount: string;
+  sgst_amount: string;
+  igst_amount: string;
+  tax_amount: string;
+  grand_total: string;
+  currency: string;
+  gst_enabled: boolean;
+  tax_mode: "inclusive" | "exclusive" | null;
+  payment_method: string | null;
+  payment_status: "PAID" | "UNPAID";
+  is_official_invoice: true;
+}
+
 export interface BillItem {
   item_name: string;
   quantity: number;

@@ -569,7 +569,7 @@ def create_staff_table_order(
         table,
         opened_by_staff_id=current_user.id,
     )
-    if session.status != "open":
+    if session.status not in {"open", "payment_requested"} or (session.bill and session.bill.status != "draft"):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ordering is locked for this table session.")
     order = create_order_in_session(
         db,
@@ -582,9 +582,25 @@ def create_staff_table_order(
         source=f"{current_user.role}_assisted",
     )
     _audit(db, current_user, "staff_manual_order_created", "order", str(order.id), {"table_id": table.id, "source": order.source})
+    if session.bill and session.bill.status == "draft":
+        from app.services.bills import apply_draft_totals
+        apply_draft_totals(db, session.bill)
     if not existing_session:
         _audit(db, current_user, "staff_session_opened", "dining_session", str(session.id), {"table_id": table.id, "opened_by": "staff_order"})
     db.commit()
+    if session.bill and session.bill.status == "draft":
+        publish_event(
+            EVENT_BILL_GENERATED,
+            restaurant_id=current_user.restaurant_id,
+            channels=[
+                restaurant_channel(current_user.restaurant_id, "operations"),
+                restaurant_channel(current_user.restaurant_id, "staff"),
+                session_channel(session.public_token),
+                table_channel(current_user.restaurant_id, table.id),
+            ],
+            resource_id=session.bill.id,
+            state={"bill_number": session.bill.bill_number, "session_token": session.public_token, "status": session.bill.status},
+        )
     if not existing_session:
         publish_event(
             EVENT_SESSION_OPENED,

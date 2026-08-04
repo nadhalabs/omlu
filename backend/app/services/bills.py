@@ -304,18 +304,24 @@ def apply_draft_totals(
     initialize_snapshot: bool = False,
     now: datetime.datetime | None = None,
 ) -> Bill:
-    # GST snapshots are immutable after the bill is first generated.
-    if bill.gst_enabled_snapshot and not initialize_snapshot:
+    # Issued, payment_pending, paid, and cancelled bills are immutable.
+    if bill.status in {"issued", "payment_pending", "paid", "cancelled"}:
         return bill
 
     subtotal = round_money(calculate_bill_subtotal(db, bill.dining_session_id))
     restaurant = bill.dining_session.restaurant
-    if initialize_snapshot and restaurant.gst_enabled:
+
+    if initialize_snapshot or bill.gst_enabled_snapshot is None:
+        bill.gst_enabled_snapshot = bool(restaurant.gst_enabled)
+
+    is_gst = bill.gst_enabled_snapshot
+
+    if is_gst:
         totals = calculate_gst_totals(
             subtotal=subtotal,
             discount_amount=bill.discount_amount or Decimal("0.00"),
-            gst_rate=restaurant.default_gst_rate,
-            tax_mode=restaurant.tax_mode,
+            gst_rate=bill.gst_rate or restaurant.default_gst_rate,
+            tax_mode=bill.tax_mode_snapshot or restaurant.tax_mode,
         )
         bill.gst_enabled_snapshot = True
         bill.subtotal = totals.subtotal
@@ -327,27 +333,26 @@ def apply_draft_totals(
         bill.igst_amount = totals.igst_amount
         bill.tax_amount = totals.tax_amount
         bill.total_amount = totals.total_amount
-        bill.tax_mode_snapshot = restaurant.tax_mode
-        bill.gstin_snapshot = restaurant.gstin
-        bill.legal_business_name_snapshot = restaurant.legal_business_name
-        bill.billing_address_snapshot = restaurant.registered_billing_address
-        bill.state_name_snapshot = restaurant.gst_state_name
-        bill.state_code_snapshot = restaurant.gst_state_code
-        bill.invoice_number, bill.invoice_date = generate_invoice_number(db, restaurant, now=now)
+        bill.tax_mode_snapshot = bill.tax_mode_snapshot or restaurant.tax_mode
+        bill.gstin_snapshot = bill.gstin_snapshot or restaurant.gstin
+        bill.legal_business_name_snapshot = bill.legal_business_name_snapshot or restaurant.legal_business_name
+        bill.billing_address_snapshot = bill.billing_address_snapshot or restaurant.registered_billing_address
+        bill.state_name_snapshot = bill.state_name_snapshot or restaurant.gst_state_name
+        bill.state_code_snapshot = bill.state_code_snapshot or restaurant.gst_state_code
+        if initialize_snapshot and not bill.invoice_number:
+            bill.invoice_number, bill.invoice_date = generate_invoice_number(db, restaurant, now=now)
         return bill
 
-    # This is the pre-GST calculation and remains unchanged for disabled restaurants.
     bill.subtotal = subtotal
     bill.tax_amount = Decimal("0.00")
     bill.discount_amount = Decimal("0.00")
     bill.total_amount = subtotal
-    if initialize_snapshot:
-        bill.gst_enabled_snapshot = False
-        bill.taxable_amount = subtotal
-        bill.gst_rate = Decimal("0.00")
-        bill.cgst_amount = Decimal("0.00")
-        bill.sgst_amount = Decimal("0.00")
-        bill.igst_amount = Decimal("0.00")
+    bill.gst_enabled_snapshot = False
+    bill.taxable_amount = subtotal
+    bill.gst_rate = Decimal("0.00")
+    bill.cgst_amount = Decimal("0.00")
+    bill.sgst_amount = Decimal("0.00")
+    bill.igst_amount = Decimal("0.00")
     return bill
 
 
@@ -403,7 +408,7 @@ def issue_bill(db: Session, bill: Bill) -> Bill:
     locked_session = _lock_session(db, bill.dining_session_id)
     locked_bill = _lock_bill_after_session(db, bill.id, locked_session.id)
 
-    if locked_bill.status == "paid":
+    if locked_bill.status in {"issued", "payment_pending", "paid"}:
         return locked_bill
 
     if locked_bill.status == "cancelled":
@@ -419,6 +424,10 @@ def issue_bill(db: Session, bill: Bill) -> Bill:
         )
 
     apply_draft_totals(db, locked_bill)
+    restaurant = locked_session.restaurant
+    if locked_bill.gst_enabled_snapshot and not locked_bill.invoice_number:
+        locked_bill.invoice_number, locked_bill.invoice_date = generate_invoice_number(db, restaurant)
+
     locked_bill.status = "issued"
     locked_session.status = "payment_requested"
     locked_session.payment_requested_at = datetime.datetime.now(datetime.timezone.utc)
@@ -859,4 +868,59 @@ def build_bill_response(db: Session, bill: Bill):
         "issued_at": bill.payment_code_created_at or bill.generated_at,
         "detached_session_status": bill.dining_session.status,
         "receipt_access": bill.receipt_token,
+    }
+
+
+def build_receipt_payload(db: Session, bill: Bill) -> dict:
+    bill = load_bill_for_response(db, bill.id)
+    orders = get_billable_orders(db, bill.dining_session_id)
+    items = []
+    for order in orders:
+        for item in order.items:
+            options = [
+                f"{option.group_name}: {option.option_name}"
+                for option in item.selected_options
+            ]
+            items.append({
+                "name": item.item_name,
+                "quantity": item.quantity,
+                "unit_price": item.unit_price,
+                "line_total": item.total_price,
+                "options": options,
+            })
+    receipt_title = (
+        "PROVISIONAL BILL PREVIEW" if bill.status == "draft"
+        else "TAX INVOICE" if bill.status in {"issued", "payment_pending"}
+        else "PAYMENT RECEIPT"
+    )
+    return {
+        "bill_number": bill.bill_number,
+        "invoice_number": bill.invoice_number,
+        "receipt_title": receipt_title,
+        "status": bill.status,
+        "restaurant_name": bill.restaurant.name,
+        "legal_business_name": bill.legal_business_name_snapshot or bill.restaurant.legal_business_name or bill.restaurant.name,
+        "address": bill.billing_address_snapshot or bill.restaurant.registered_billing_address or "",
+        "gstin": bill.gstin_snapshot or bill.restaurant.gstin or None,
+        "state_name": bill.state_name_snapshot or bill.restaurant.gst_state_name or None,
+        "state_code": bill.state_code_snapshot or bill.restaurant.gst_state_code or None,
+        "table_number": bill.dining_session.table.table_number,
+        "staff_name": bill.generated_by_staff.name if bill.generated_by_staff else "Staff",
+        "created_at": (bill.invoice_date or bill.generated_at).isoformat(),
+        "paid_at": bill.paid_at.isoformat() if bill.paid_at else None,
+        "items": items,
+        "subtotal": bill.subtotal,
+        "discount_amount": bill.discount_amount,
+        "taxable_amount": bill.taxable_amount,
+        "cgst_amount": bill.cgst_amount,
+        "sgst_amount": bill.sgst_amount,
+        "igst_amount": bill.igst_amount,
+        "tax_amount": bill.tax_amount,
+        "grand_total": bill.total_amount,
+        "currency": bill.currency,
+        "gst_enabled": bill.gst_enabled_snapshot,
+        "tax_mode": bill.tax_mode_snapshot,
+        "payment_method": bill.payment_method,
+        "payment_status": "PAID" if bill.status == "paid" else "UNPAID",
+        "is_official_invoice": bill.status in {"issued", "payment_pending", "paid"},
     }

@@ -570,7 +570,7 @@ def test_restaurant_reassignment_revalidation_ends_old_socket(realtime_context):
         assert_authority_close(ws)
 
 
-def test_operations_lock_revokes_live_socket(realtime_context):
+def test_operations_lock_keeps_live_socket_and_delivers_read_only_state(realtime_context):
     with client.websocket_connect(
         f"/ws/staff?channel=staff&token={realtime_context['staff_token']}"
     ) as ws:
@@ -581,7 +581,12 @@ def test_operations_lock_revokes_live_socket(realtime_context):
             json={"reason": "pause operations", "confirm_active_operations": True},
         )
         assert response.status_code == 200
-        assert_authority_close(ws)
+        event = receive_event(ws, realtime.EVENT_STAFF_LOCKED)
+        assert event["state"]["staff_id"] == realtime_context["staff_id"]
+        assert client.get(
+            f"/staff/tables/{realtime_context['table_id']}",
+            headers=auth(realtime_context, "staff_token"),
+        ).status_code == 200
 
 
 def test_production_broker_cannot_use_in_memory_fallback(monkeypatch):

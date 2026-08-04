@@ -712,7 +712,14 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
                 {billActionError}
               </p>
             )}
-            {!canOrderMore && (
+            {session.status === "payment_requested" && (
+              <p className="rounded-2xl border border-amber-200 bg-amber-50 p-3.5 text-sm font-bold text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300">
+                {language === "en"
+                  ? "Bill requested. Staff are reviewing your bill. You can view items while staff process your request."
+                  : "ബിൽ അഭ്യർത്ഥിച്ചു. ജീവനക്കാർ നിങ്ങളുടെ ബിൽ പരിശോധിക്കുകയാണ്. ജീവനക്കാർ പ്രോസസ്സ് ചെയ്യുമ്പോൾ നിങ്ങൾക്ക് വിഭവങ്ങൾ കാണാം."}
+              </p>
+            )}
+            {!canOrderMore && session.status !== "payment_requested" && (
               <p className="rounded-2xl border border-red-100 bg-red-50 p-3 text-sm font-semibold text-red-700 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-400">
                 {t.orderingLocked}
               </p>

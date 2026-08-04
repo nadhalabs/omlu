@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -10,7 +12,9 @@ import '../../design_system/widgets/omlu_skeleton_loader.dart';
 import '../../design_system/widgets/realtime_status_chip.dart';
 import '../auth_provider.dart';
 import '../realtime_connection_provider.dart';
+import 'cart_provider.dart';
 import 'menu_provider.dart';
+import 'staff_shell.dart';
 import 'tables_provider.dart';
 
 class StaffBillScreen extends ConsumerStatefulWidget {
@@ -27,6 +31,21 @@ class _StaffBillScreenState extends ConsumerState<StaffBillScreen> {
   Map<String, Object?>? _confirmedBill;
   bool _paymentCompleted = false;
   String? _currentBillNumber;
+  Timer? _refreshTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (mounted && !_submitting) unawaited(_refresh());
+    });
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
 
   Future<void> _refresh() async {
     ref.invalidate(tableDetailProvider(widget.tableId));
@@ -83,19 +102,16 @@ class _StaffBillScreenState extends ConsumerState<StaffBillScreen> {
     setState(() => _submitting = true);
     try {
       final api = ref.read(operationsApiProvider);
-      var latest = bill;
       final billNumber = _text(bill['bill_number']);
       if (_text(bill['status']) == 'draft') {
-        latest = await api.issueBill(
-          billNumber,
-          idempotencyKey: 'bill-issue-$billNumber-v1',
+        throw StateError(
+          'Draft bills must be issued before payment can be recorded.',
         );
       }
       final paid = await api.confirmCounterPayment(
-        billNumber: _text(latest['bill_number']),
+        billNumber: billNumber,
         method: method,
-        idempotencyKey:
-            'bill-payment-${_text(latest['bill_number'])}-$method-v1',
+        idempotencyKey: 'bill-payment-$billNumber-$method-v1',
       );
       if (!mounted) return;
       setState(() => _confirmedBill = paid);
@@ -115,6 +131,29 @@ class _StaffBillScreenState extends ConsumerState<StaffBillScreen> {
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
+  }
+
+  Future<void> _issueBill(Map<String, Object?> bill) async {
+    if (_submitting || _text(bill['status']) != 'draft') return;
+    setState(() => _submitting = true);
+    try {
+      final billNumber = _text(bill['bill_number']);
+      await ref
+          .read(operationsApiProvider)
+          .issueBill(billNumber, idempotencyKey: 'bill-issue-$billNumber-v1');
+      await _refresh();
+    } catch (error) {
+      await _handleFailure(error);
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  void _addItem() {
+    ref.read(selectedTableIdProvider.notifier).state = widget.tableId;
+    ref.read(cartProvider.notifier).setTable(widget.tableId);
+    ref.read(staffTabProvider.notifier).state = 1;
+    Navigator.of(context).pop();
   }
 
   Future<void> _sendToCounter(Map<String, Object?> bill) async {
@@ -178,6 +217,12 @@ class _StaffBillScreenState extends ConsumerState<StaffBillScreen> {
     final role = ref.watch(authProvider).valueOrNull?.role.name ?? 'staff';
     ref.listen(realtimeEventStreamProvider, (previous, next) {
       next.whenData((event) {
+        if ((event.type.startsWith('bill.') ||
+                event.type.startsWith('order.')) &&
+            mounted &&
+            !_submitting) {
+          unawaited(_refresh());
+        }
         if ((event.type == 'bill.payment_recorded' ||
                 event.type == 'bill.paid') &&
             event.state['bill_number'] == _currentBillNumber &&
@@ -291,6 +336,8 @@ class _StaffBillScreenState extends ConsumerState<StaffBillScreen> {
                   ref.read(authProvider).valueOrNull?.role.name == 'owner' ||
                   ref.read(authProvider).valueOrNull?.role.name == 'admin',
               isSubmitting: _submitting,
+              onAddItem: _addItem,
+              onIssueBill: () => _issueBill(bill),
               onSendToCounter: () => _sendToCounter(bill),
               onAcceptPayment: () => _acceptPayment(bill),
             ),
@@ -452,12 +499,16 @@ class _BillBreakdown extends StatelessWidget {
     required this.bill,
     required this.canRecordPayment,
     required this.isSubmitting,
+    required this.onAddItem,
+    required this.onIssueBill,
     required this.onSendToCounter,
     required this.onAcceptPayment,
   });
   final Map<String, Object?> bill;
   final bool canRecordPayment;
   final bool isSubmitting;
+  final VoidCallback onAddItem;
+  final VoidCallback onIssueBill;
   final VoidCallback onSendToCounter;
   final VoidCallback onAcceptPayment;
 
@@ -541,7 +592,29 @@ class _BillBreakdown extends StatelessWidget {
           _MoneyRow(label: 'Grand total', value: total, strong: true),
           _MoneyRow(label: 'Paid', value: paid),
           _MoneyRow(label: 'Balance', value: balance, strong: true),
-          if (status == 'paid') ...[
+          if (status == 'draft') ...[
+            const SizedBox(height: OmluSpacing.md),
+            const Text(
+              'Bill requested · Staff reviewing',
+              style: OmluTypography.bodyLarge,
+            ),
+            const SizedBox(height: OmluSpacing.xs),
+            const Text(
+              'This is a provisional total. Add missing items before issuing the bill.',
+              style: OmluTypography.bodySmall,
+            ),
+            const SizedBox(height: OmluSpacing.md),
+            OutlinedButton(
+              onPressed: isSubmitting ? null : onAddItem,
+              child: const Text('Add Item'),
+            ),
+            const SizedBox(height: OmluSpacing.sm),
+            OmluButton(
+              text: 'Issue Bill',
+              isLoading: isSubmitting,
+              onPressed: isSubmitting ? null : onIssueBill,
+            ),
+          ] else if (status == 'paid') ...[
             const SizedBox(height: OmluSpacing.md),
             if (canRecordPayment)
               _PaymentHistory(bill: bill)

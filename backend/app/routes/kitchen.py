@@ -232,6 +232,13 @@ def update_kitchen_order_status(
         )
         db.add(history_entry)
 
+        # A rejected order stops contributing to a provisional bill. Keep the
+        # draft authoritative before publishing the order event so every
+        # client refresh observes the same totals.
+        if order.dining_session and order.dining_session.bill and order.dining_session.bill.status == "draft":
+            from app.services.bills import apply_draft_totals
+            apply_draft_totals(db, order.dining_session.bill)
+
         db.commit()
 
         # Load committed order with relationships loaded separately

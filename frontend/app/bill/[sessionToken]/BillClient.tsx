@@ -86,6 +86,7 @@ function ActiveBillClient({ sessionToken, receiptToken = "" }: BillClientProps) 
   const [showPaymentSuccess, setShowPaymentSuccess] = useState<boolean>(false);
   const [doneFallback, setDoneFallback] = useState<boolean>(false);
   const [codeCopied, setCodeCopied] = useState(false);
+  const [printPaperWidth, setPrintPaperWidth] = useState<"58" | "80">("80");
   const [participantToken, setParticipantToken] = useState<string | null>(
     () => readSessionParticipantToken(sessionToken)
   );
@@ -463,7 +464,7 @@ function ActiveBillClient({ sessionToken, receiptToken = "" }: BillClientProps) 
   const waitingTotal = waitingSession?.combined_subtotal || bill?.total_amount;
   const waitingRequestedAt = waitingSession?.payment_requested_at || bill?.payment_requested_at || bill?.generated_at;
 
-  if ((waitingSession || draftWaiting) && !error) {
+  if (waitingSession && !bill && !error) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[var(--omlu-page-background)] p-5 text-[var(--omlu-text-primary)]">
         <section aria-labelledby="bill-requested-title" className="w-full max-w-lg rounded-3xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-6 text-center shadow-sm sm:p-8">
@@ -527,10 +528,17 @@ function ActiveBillClient({ sessionToken, receiptToken = "" }: BillClientProps) 
             : null;
 
   const isPaid = bill.status === "paid";
+  const canPrintOfficially = ["issued", "payment_pending", "paid"].includes(bill.status);
 
   return (
     <div className="min-h-screen bg-[var(--omlu-page-background)] px-4 py-4 text-[var(--omlu-text-primary)] sm:px-6 sm:py-6 print:bg-white print:px-0 print:py-0 print:text-black">
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 print:max-w-none print:gap-0">
+        {draftWaiting && (
+          <section className="print-hidden rounded-3xl border border-orange-200 bg-orange-50 p-5 text-orange-950 dark:border-orange-900/60 dark:bg-orange-950/30 dark:text-orange-50" aria-live="polite">
+            <h1 className="text-xl font-black">Bill requested · Staff reviewing</h1>
+            <p className="mt-2 text-sm font-medium">Final amount may change until the bill is issued.</p>
+          </section>
+        )}
         <div className="print-hidden flex flex-wrap items-center justify-end gap-3">
           <PublicThemeControl />
           {!isPaid && !isDetached && (
@@ -659,7 +667,7 @@ function ActiveBillClient({ sessionToken, receiptToken = "" }: BillClientProps) 
           </section>
         )}
 
-        <article className="print-bill-sheet rounded-3xl bg-[var(--omlu-primary-surface)] p-5 shadow-sm sm:p-7 print:rounded-none print:border-0 print:bg-white print:p-8 print:text-black print:shadow-none">
+        <article className={`print-bill-sheet print-thermal-${printPaperWidth} rounded-3xl bg-[var(--omlu-primary-surface)] p-5 shadow-sm sm:p-7 print:rounded-none print:border-0 print:bg-white print:text-black print:shadow-none`}>
           <header className="border-b border-[var(--omlu-border-strong)] pb-5 dark:border-[var(--omlu-border)] print:border-black">
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -824,12 +832,24 @@ function ActiveBillClient({ sessionToken, receiptToken = "" }: BillClientProps) 
         </div>
 
         <div className="print-hidden grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <button
-            onClick={() => window.print()}
-            className="min-h-12 rounded-xl bg-orange-600 px-5 py-3 text-sm font-black text-white shadow-sm hover:bg-orange-700"
-          >
-            {t.print}
-          </button>
+          {canPrintOfficially && <div className="flex flex-col gap-2">
+            <label htmlFor="receipt-paper-width" className="text-xs font-bold text-[var(--omlu-text-secondary)]">Paper width</label>
+            <select
+              id="receipt-paper-width"
+              value={printPaperWidth}
+              onChange={(event) => setPrintPaperWidth(event.target.value as "58" | "80")}
+              className="min-h-12 rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] px-4 font-bold"
+            >
+              <option value="58">58 mm</option>
+              <option value="80">80 mm</option>
+            </select>
+            <button
+              onClick={() => window.print()}
+              className="min-h-12 rounded-xl bg-orange-600 px-5 py-3 text-sm font-black text-white shadow-sm hover:bg-orange-700"
+            >
+              {isPaid ? "Print Receipt" : "Print Bill"}
+            </button>
+          </div>}
           <button
             onClick={() => window.open(shareUrl, "_blank", "noopener,noreferrer")}
             className="min-h-12 rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] px-5 py-3 text-sm font-black text-[var(--omlu-text-primary)]"

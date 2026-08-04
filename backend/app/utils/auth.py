@@ -21,6 +21,13 @@ ph = PasswordHasher()
 VALID_STAFF_ROLES = frozenset({"owner", "admin", "staff", "kitchen"})
 
 
+def as_utc(value: datetime.datetime) -> datetime.datetime:
+    """Normalize driver-returned timestamps before authoritative comparisons."""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=datetime.timezone.utc)
+    return value.astimezone(datetime.timezone.utc)
+
+
 @dataclass(frozen=True, slots=True)
 class TenantScope:
     """Immutable tenant and authority identity for an authenticated HTTP request.
@@ -212,7 +219,12 @@ def _resolve_authenticated_context(
         .first()
     )
     now = datetime.datetime.now(datetime.timezone.utc)
-    if not session or session.status != "active" or session.expires_at is None or session.expires_at <= now:
+    if (
+        not session
+        or session.status != "active"
+        or session.expires_at is None
+        or as_utc(session.expires_at) <= now
+    ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Staff session has expired or been revoked",

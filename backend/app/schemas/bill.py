@@ -98,6 +98,57 @@ class BillOrderResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ReceiptItemResponse(BaseModel):
+    name: str
+    quantity: int
+    unit_price: Decimal
+    line_total: Decimal
+    options: List[str] = Field(default_factory=list)
+
+    @field_serializer("unit_price", "line_total")
+    def serialize_money(self, value: Decimal) -> str:
+        return f"{value:.2f}"
+
+
+class ReceiptPayloadResponse(BaseModel):
+    bill_number: str
+    invoice_number: Optional[str] = None
+    receipt_title: str
+    status: Literal["issued", "payment_pending", "paid"]
+    restaurant_name: str
+    legal_business_name: str
+    address: str
+    gstin: Optional[str] = None
+    state_name: Optional[str] = None
+    state_code: Optional[str] = None
+    table_number: str
+    staff_name: str
+    created_at: datetime
+    paid_at: Optional[datetime] = None
+    items: List[ReceiptItemResponse]
+    subtotal: Decimal
+    discount_amount: Decimal
+    taxable_amount: Decimal
+    cgst_amount: Decimal
+    sgst_amount: Decimal
+    igst_amount: Decimal
+    tax_amount: Decimal
+    grand_total: Decimal
+    currency: str
+    gst_enabled: bool
+    tax_mode: Optional[str] = None
+    payment_method: Optional[str] = None
+    payment_status: Literal["PAID", "UNPAID"]
+    is_official_invoice: Literal[True]
+
+    @field_serializer(
+        "subtotal", "discount_amount", "taxable_amount", "cgst_amount",
+        "sgst_amount", "igst_amount", "tax_amount", "grand_total",
+    )
+    def serialize_receipt_money(self, value: Decimal) -> str:
+        return f"{value:.2f}"
+
+
 class BillResponse(BaseModel):
     bill_number: str
     receipt_token: str

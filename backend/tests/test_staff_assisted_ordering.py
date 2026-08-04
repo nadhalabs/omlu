@@ -15,7 +15,7 @@ from app.models.order import Order, OrderStatusHistory
 from app.models.restaurant import Restaurant
 from app.models.restaurant_table import RestaurantTable
 from app.models.service_request import ServiceRequest
-from app.models.staff_user import AuditLog, StaffUser
+from app.models.staff_user import AuditLog, StaffSession, StaffUser
 from app.models.table_session_participant import TableSessionParticipant
 from app.services.table_participants import create_participant, ensure_join_authority
 from app.utils.auth import hash_password
@@ -625,7 +625,7 @@ def test_staff_bill_request_reuses_customer_created_session(staff_order_context)
     db.close()
 
 
-def test_customer_bill_request_auto_detaches_into_pending_payments(staff_order_context):
+def test_customer_bill_request_creates_draft_and_leaves_session_attached(staff_order_context):
     order = client.post(
         f"/public/restaurants/{staff_order_context['restaurant_slug']}/tables/{staff_order_context['second_table_code']}/orders",
         headers={"Idempotency-Key": f"customer-bill-{uuid.uuid4().hex}"},
@@ -635,9 +635,8 @@ def test_customer_bill_request_auto_detaches_into_pending_payments(staff_order_c
         f"/public/sessions/{order['dining_session_token']}/bill-request"
     )
     assert requested.status_code == 201
-    assert requested.json()["status"] == "payment_pending"
-    assert requested.json()["session_status"] == "detached_awaiting_payment"
-    assert len(requested.json()["payment_code"]) == 6
+    assert requested.json()["status"] == "draft"
+    assert requested.json()["session_status"] == "payment_requested"
     assert requested.json()["receipt_token"]
 
     queue = client.get(
@@ -645,13 +644,7 @@ def test_customer_bill_request_auto_detaches_into_pending_payments(staff_order_c
         headers=auth(staff_order_context, "owner_token"),
     ).json()["items"]
     entry = next(item for item in queue if item["bill_number"] == requested.json()["bill_number"])
-    assert entry["stage"] == "detached_awaiting_payment"
-
-    services = client.get(
-        "/staff/service-requests",
-        headers=auth(staff_order_context, "owner_token"),
-    ).json()
-    assert all(item["request_type"] != "bill" for item in services)
+    assert entry["stage"] == "bill_requested"
 
 
 def test_staff_bill_request_hidden_after_payment_closes_session(staff_order_context):
@@ -856,3 +849,47 @@ def test_existing_qr_customer_ordering_remains_qr_sourced(staff_order_context):
     assert order.source == "customer_qr"
     assert order.created_by_staff_id is None
     db.close()
+
+
+def test_staff_lock_is_read_only_and_unlock_preserves_session(staff_order_context):
+    staff_headers = auth(staff_order_context, "staff_token")
+    owner_headers = auth(staff_order_context, "owner_token")
+
+    db = SessionLocal()
+    staff = db.query(StaffUser).filter(StaffUser.id == staff_order_context["staff_id"]).one()
+    security_version = staff.security_version
+    active_sessions_before = db.query(StaffSession).filter(
+        StaffSession.staff_user_id == staff.id,
+        StaffSession.status == "active",
+    ).count()
+    db.close()
+
+    locked = client.post(
+        f"/admin/staff/{staff_order_context['staff_id']}/lock",
+        headers=owner_headers,
+        json={"reason": "Shift review", "confirm_active_operations": True},
+    )
+    assert locked.status_code == 200
+
+    readable = client.get("/staff/tables", headers=staff_headers)
+    assert readable.status_code == 200
+    blocked = create_manual_order(staff_order_context)
+    assert blocked.status_code == 403
+    assert blocked.json()["detail"]["code"] == "STAFF_OPERATIONS_LOCKED"
+
+    db = SessionLocal()
+    staff = db.query(StaffUser).filter(StaffUser.id == staff_order_context["staff_id"]).one()
+    assert staff.security_version == security_version
+    assert db.query(StaffSession).filter(
+        StaffSession.staff_user_id == staff.id,
+        StaffSession.status == "active",
+    ).count() == active_sessions_before
+    db.close()
+
+    unlocked = client.post(
+        f"/admin/staff/{staff_order_context['staff_id']}/unlock",
+        headers=owner_headers,
+    )
+    assert unlocked.status_code == 200
+    allowed = create_manual_order(staff_order_context)
+    assert allowed.status_code == 201

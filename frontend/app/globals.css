@@ -276,9 +276,32 @@ a.text-white[aria-disabled="true"] {
   .print-bill-sheet * {
     color: #000 !important;
     border-color: #52525b !important;
+    overflow-wrap: anywhere;
   }
 
   .print-bill-sheet :is(section, article, header, footer, div, p) {
     background-color: transparent !important;
+  }
+
+  .print-thermal-58 {
+    width: 48mm !important;
+    max-width: 48mm !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    font-size: 11px !important;
+    line-height: 1.2 !important;
+    font-family: monospace !important;
+    min-height: auto !important;
+  }
+
+  .print-thermal-80 {
+    width: 72mm !important;
+    max-width: 72mm !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    font-size: 12px !important;
+    line-height: 1.3 !important;
+    font-family: monospace !important;
+    min-height: auto !important;
   }
 }

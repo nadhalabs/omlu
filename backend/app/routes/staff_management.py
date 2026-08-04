@@ -28,7 +28,7 @@ from app.services.realtime import (
     EVENT_STAFF_LOCKED, EVENT_STAFF_UNLOCKED, publish_authority_revocation,
     publish_event, restaurant_channel,
 )
-from app.utils.auth import RoleChecker, hash_password
+from app.utils.auth import RoleChecker, as_utc, hash_password
 from app.utils.validation import (
     field_error,
     validate_email,
@@ -92,7 +92,7 @@ def _serialize_staff(
     sessions = sessions or []
     active_sessions = [
         s for s in sessions
-        if s.status == "active" and s.expires_at is not None and s.expires_at > now
+        if s.status == "active" and s.expires_at is not None and as_utc(s.expires_at) > now
     ]
     last_active = staff.last_login_at
     if active_sessions:

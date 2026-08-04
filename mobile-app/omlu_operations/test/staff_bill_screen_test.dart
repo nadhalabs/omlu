@@ -201,6 +201,50 @@ void main() {
     expect(find.textContaining('UPI'), findsNothing);
   });
 
+  testWidgets('draft bill offers add item and issue but no payment action', (
+    tester,
+  ) async {
+    final api = OperationsApi(
+      ApiClient(
+        baseUrl: Uri.parse('https://api.example'),
+        transport: (_) async => const ApiResponse(
+          statusCode: 200,
+          body: {
+            'table': {'id': 12, 'table_number': '6', 'state': 'occupied'},
+            'session': {
+              'id': 100,
+              'session_token': 'session-100',
+              'status': 'payment_requested',
+              'orders': <Object?>[],
+              'bill': {
+                'bill_number': 'BILL-12',
+                'status': 'draft',
+                'subtotal': '100.00',
+                'tax_amount': '5.00',
+                'discount_amount': '0.00',
+                'total_amount': '105.00',
+              },
+            },
+            'activity': <Object?>[],
+          },
+        ),
+      ),
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [operationsApiProvider.overrideWithValue(api)],
+        child: const MaterialApp(home: StaffBillScreen(tableId: 12)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Bill requested · Staff reviewing'), findsOneWidget);
+    expect(find.text('Add Item'), findsOneWidget);
+    expect(find.text('Issue Bill'), findsOneWidget);
+    expect(find.textContaining('Record full payment'), findsNothing);
+    expect(find.text('Send bill to counter'), findsNothing);
+  });
+
   testWidgets('GST bill renders invoice identity and canonical tax split', (
     tester,
   ) async {

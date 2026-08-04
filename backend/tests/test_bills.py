@@ -7,6 +7,7 @@ from decimal import Decimal
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 
 from app.main import app
@@ -14,12 +15,13 @@ from app.database import SessionLocal
 from app.models.bill import Bill, PaymentCodeLookupAttempt
 from app.models.dining_session import DiningSession
 from app.models.menu import MenuCategory, MenuItem
-from app.models.order import Order, OrderItem, OrderStatusHistory
+from app.models.order import Order, OrderItem, OrderItemSelectedOption, OrderStatusHistory
 from app.models.payment import Payment, RevenueEntry
 from app.models.restaurant import Restaurant
 from app.models.restaurant_table import RestaurantTable
 from app.models.service_request import ServiceRequest
 from app.models.staff_user import AuditLog, StaffUser
+from app.schemas.bill import ReceiptPayloadResponse
 from app.services.bills import (
     calculate_gst_totals,
     decrypt_payment_code,
@@ -1134,7 +1136,7 @@ def test_detachment_releases_table_revokes_authority_and_stays_pending(bill_cont
     assert join.status_code == 404
 
 
-def test_customer_bill_request_automatically_issues_detaches_and_replays(bill_context):
+def test_customer_bill_request_creates_draft_and_locks_customer_ordering(bill_context):
     add_order(bill_context)
     url = f"/public/sessions/{bill_context['session_token']}/bill-request"
     headers = participant_headers(bill_context["participant_token"])
@@ -1145,64 +1147,38 @@ def test_customer_bill_request_automatically_issues_detaches_and_replays(bill_co
     assert first.status_code == replay.status_code == 201
     body = first.json()
     assert replay.json() == body
-    assert body["status"] == "payment_pending"
-    assert body["session_status"] == "detached_awaiting_payment"
-    assert body["payment_code"] and len(body["payment_code"]) == 6
+    assert body["status"] == "draft"
+    assert body["session_status"] == "payment_requested"
     assert body["bill_number"]
     assert body["total_amount"] == "100.00"
-    assert body["amount_due"] == body["total_amount"]
-    assert body["original_table"] == body["table_number"]
-    assert body["generated_at"]
-    assert body["issued_at"]
-    assert body["detached_session_status"] == "detached_awaiting_payment"
-    assert body["receipt_token"]
-    assert body["receipt_access"] == body["receipt_token"]
-    assert b"payment_code=" not in first.request.url.query
 
     status_response = client.get(
         f"/public/restaurants/{bill_context['restaurant_slug']}/tables/"
         f"{bill_context['table_code']}/session-status"
     )
-    assert status_response.json() == {"occupied": False}
+    assert status_response.json() == {"occupied": True}
 
     db = SessionLocal()
     session = db.query(DiningSession).filter(DiningSession.id == bill_context["session_id"]).one()
     bill = db.query(Bill).filter(Bill.dining_session_id == session.id).one()
-    assert session.detached_by_staff_id is None
-    assert bill.detachment_idempotency_key == f"customer-bill-request:{session.id}"
+    assert session.status == "payment_requested"
+    assert bill.status == "draft"
     assert db.query(Bill).filter(Bill.dining_session_id == session.id).count() == 1
     db.close()
 
-    assert client.get(f"/public/bills/{body['receipt_token']}").status_code == 200
-    assert client.get(
-        f"/public/sessions/{bill_context['session_token']}", headers=headers
-    ).status_code in {401, 409}
-
-    fallback = issue_and_release(
-        bill_context, body["bill_number"], key=f"admin-recovery-{uuid.uuid4().hex}"
+    # Staff/Admin issues and detaches the bill
+    issued = issue_and_release(
+        bill_context, body["bill_number"], key=f"admin-issue-{uuid.uuid4().hex}"
     )
-    assert fallback.status_code == 200
-    assert fallback.json()["payment_code"] == body["payment_code"]
-
-    created = client.post(
-        f"/public/restaurants/{bill_context['restaurant_slug']}/tables/"
-        f"{bill_context['table_code']}/sessions",
-        headers={"X-Device-ID": uuid.uuid4().hex},
-    )
-    assert created.status_code == 201
-    new_session_token = created.json()["session"]["public_id"]
+    assert issued.status_code == 200
+    assert issued.json()["bill_status"] == "payment_pending"
+    assert issued.json()["payment_code"] and len(issued.json()["payment_code"]) == 6
 
     paid = confirm_counter_payment(bill_context, body["bill_number"])
     assert paid.status_code == 200
-    db = SessionLocal()
-    assert db.query(DiningSession).filter(
-        DiningSession.public_token == new_session_token,
-        DiningSession.status == "open",
-    ).one()
-    db.close()
 
 
-def test_concurrent_customer_bill_requests_return_one_bill_and_code(bill_context):
+def test_concurrent_customer_bill_requests_return_one_bill(bill_context):
     add_order(bill_context)
     url = f"/public/sessions/{bill_context['session_token']}/bill-request"
     headers = participant_headers(bill_context["participant_token"])
@@ -1212,36 +1188,9 @@ def test_concurrent_customer_bill_requests_return_one_bill_and_code(bill_context
 
     assert [response.status_code for response in responses] == [201, 201]
     assert responses[0].json()["bill_number"] == responses[1].json()["bill_number"]
-    assert responses[0].json()["payment_code"] == responses[1].json()["payment_code"]
 
     db = SessionLocal()
     assert db.query(Bill).filter(Bill.dining_session_id == bill_context["session_id"]).count() == 1
-    db.close()
-
-
-def test_customer_auto_detachment_failure_rolls_back_full_request(monkeypatch, bill_context):
-    from app.services import bills as bill_service
-
-    add_order(bill_context)
-    monkeypatch.setattr(
-        bill_service,
-        "_assign_unique_payment_code",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("injected failure")),
-    )
-
-    with pytest.raises(RuntimeError, match="injected failure"):
-        client.post(
-            f"/public/sessions/{bill_context['session_token']}/bill-request",
-            headers=participant_headers(bill_context["participant_token"]),
-        )
-
-    db = SessionLocal()
-    session = db.query(DiningSession).filter(DiningSession.id == bill_context["session_id"]).one()
-    assert session.status == "open"
-    assert session.detached_at is None
-    assert db.query(Bill).filter(Bill.dining_session_id == session.id).count() == 0
-    assert any(participant.revoked_at is None for participant in session.participants)
-    assert find_current_open_session_for_table(db, bill_context["table_id"]).id == session.id
     db.close()
 
 
@@ -2280,3 +2229,220 @@ def test_new_session_after_full_payment_has_independent_join_code(bill_context):
     assert new_body["join_code"].isdigit()
     assert len(new_body["join_code"]) == 4
     assert new_body["session"]["public_id"] != bill_context["session_token"]
+
+
+def test_draft_bill_recalculates_on_late_staff_order_and_freezes_on_issue(bill_context):
+    add_order(bill_context)
+    url = f"/public/sessions/{bill_context['session_token']}/bill-request"
+    headers = participant_headers(bill_context["participant_token"])
+    staff_headers = {"Authorization": f"Bearer {bill_context['owner_token']}"}
+
+    req = client.post(url, headers=headers)
+    assert req.status_code == 201
+    draft = req.json()
+    assert draft["status"] == "draft"
+    assert draft["total_amount"] == "100.00"
+
+    # Customer ordering is blocked during bill review
+    customer_blocked = client.post(
+        f"/public/restaurants/{bill_context['restaurant_slug']}/tables/{bill_context['table_code']}/orders",
+        headers={**headers, "Idempotency-Key": f"cust-late-{uuid.uuid4().hex}"},
+        json={"items": [{"menu_item_id": bill_context["item_id"], "quantity": 1}], "customer_note": ""},
+    )
+    assert customer_blocked.status_code == 409
+
+    # Authorized staff adds a late item (Pepsi ₹100) before issuance
+    staff_order = client.post(
+        f"/staff/tables/{bill_context['table_id']}/orders",
+        headers={**staff_headers, "Idempotency-Key": f"staff-late-{uuid.uuid4().hex}"},
+        json={"items": [{"menu_item_id": bill_context["item_id"], "quantity": 1}]},
+    )
+    assert staff_order.status_code == 201
+
+    # Provisional bill recalculates subtotal and grand total
+    provisional = client.get(f"/staff/bills/{draft['bill_number']}", headers=staff_headers).json()
+    assert provisional["status"] == "draft"
+    assert provisional["total_amount"] == "200.00"
+    assert len(provisional["orders"]) == 2
+
+    # Issue Bill allocates invoice number and freezes official bill
+    issued = client.post(
+        f"/staff/bills/{draft['bill_number']}/issue",
+        headers={**staff_headers, "Idempotency-Key": f"issue-{draft['bill_number']}"},
+    )
+    assert issued.status_code == 200
+    issued_dict = issued.json()
+    assert issued_dict["status"] == "issued"
+    assert issued_dict["total_amount"] == "200.00"
+
+    # Post-issuance staff ordering is blocked
+    staff_blocked_post = client.post(
+        f"/staff/tables/{bill_context['table_id']}/orders",
+        headers={**staff_headers, "Idempotency-Key": f"staff-late-post-{uuid.uuid4().hex}"},
+        json={"items": [{"menu_item_id": bill_context["item_id"], "quantity": 1}]},
+    )
+    assert staff_blocked_post.status_code == 409
+
+
+def test_concurrent_issue_and_staff_order_are_serialized_safely(bill_context):
+    add_order(bill_context)
+    draft = client.post(
+        f"/public/sessions/{bill_context['session_token']}/bill-request",
+        headers=participant_headers(bill_context["participant_token"]),
+    ).json()
+    staff_headers = {"Authorization": f"Bearer {bill_context['owner_token']}"}
+
+    def issue():
+        return client.post(
+            f"/staff/bills/{draft['bill_number']}/issue",
+            headers={**staff_headers, "Idempotency-Key": f"race-issue-{uuid.uuid4().hex}"},
+        )
+
+    def order():
+        return client.post(
+            f"/staff/tables/{bill_context['table_id']}/orders",
+            headers={**staff_headers, "Idempotency-Key": f"race-order-{uuid.uuid4().hex}"},
+            json={"items": [{"menu_item_id": bill_context["item_id"], "quantity": 1}]},
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        issue_response, order_response = [future.result() for future in (
+            executor.submit(issue), executor.submit(order)
+        )]
+
+    assert issue_response.status_code == 200
+    assert order_response.status_code in {201, 409}
+    final_bill = client.get(
+        f"/staff/bills/{draft['bill_number']}", headers=staff_headers
+    ).json()
+    assert final_bill["status"] == "issued"
+    expected_total = "200.00" if order_response.status_code == 201 else "100.00"
+    assert final_bill["total_amount"] == expected_total
+    assert sum(Decimal(order["subtotal"]) for order in final_bill["orders"]) == Decimal(expected_total)
+
+    blocked = order()
+    assert blocked.status_code == 409
+
+
+def test_receipt_payload_endpoint_returns_authoritative_data(bill_context):
+    order_token = add_order(bill_context)
+    db = SessionLocal()
+    order = db.query(Order).filter(Order.public_token == order_token).one()
+    item = db.query(OrderItem).filter(OrderItem.order_id == order.id).one()
+    db.add(OrderItemSelectedOption(
+        order_item_id=item.id,
+        option_name="Large",
+        group_name="Size",
+        option_type="single",
+        price_delta=Decimal("0.00"),
+        quantity=1,
+    ))
+    db.commit()
+    db.close()
+    issued_dict = issue_bill_for(bill_context)
+    issued_number = issued_dict["bill_number"]
+    staff_headers = {"Authorization": f"Bearer {bill_context['owner_token']}"}
+    payload_resp = client.get(
+        f"/staff/bills/{issued_number}/receipt-payload",
+        headers=staff_headers,
+    )
+    assert payload_resp.status_code == 200
+    payload = payload_resp.json()
+    assert payload["bill_number"] == issued_number
+    assert payload["receipt_title"] == "TAX INVOICE"
+    assert payload["grand_total"] == "100.00"
+    assert len(payload["items"]) == 1
+    assert payload["items"][0] == {
+        "name": "Original Item",
+        "quantity": 1,
+        "unit_price": "100.00",
+        "line_total": "100.00",
+        "options": ["Size: Large"],
+    }
+
+    public_payload = client.get(
+        f"/public/bills/{issued_dict['receipt_token']}/receipt-payload"
+    )
+    assert public_payload.status_code == 200
+    assert client.get("/public/bills/invalid-token/receipt-payload").status_code == 404
+
+    cross_tenant = client.get(
+        f"/staff/bills/{issued_number}/receipt-payload",
+        headers={"Authorization": f"Bearer {bill_context['other_token']}"},
+    )
+    assert cross_tenant.status_code == 404
+    assert client.get(f"/staff/bills/{issued_number}/receipt-payload").status_code == 401
+
+    send_to_counter(bill_context, issued_number)
+    confirm_counter_payment(bill_context, issued_number)
+    db = SessionLocal()
+    bill = db.query(Bill).filter(Bill.bill_number == issued_number).one()
+    before = (bill.status, bill.total_amount, db.query(Payment).filter(Payment.bill_id == bill.id).count())
+    db.close()
+    paid_payload = client.get(
+        f"/public/bills/{issued_dict['receipt_token']}/receipt-payload"
+    )
+    assert paid_payload.status_code == 200
+    assert paid_payload.json()["status"] == "paid"
+    assert paid_payload.json()["receipt_title"] == "PAYMENT RECEIPT"
+    db = SessionLocal()
+    bill = db.query(Bill).filter(Bill.bill_number == issued_number).one()
+    after = (bill.status, bill.total_amount, db.query(Payment).filter(Payment.bill_id == bill.id).count())
+    db.close()
+    assert after == before
+
+
+def test_staff_receipt_payload_rejects_draft_bill(bill_context):
+    add_order(bill_context)
+    draft = create_bill(bill_context).json()
+    response = client.get(
+        f"/staff/bills/{draft['bill_number']}/receipt-payload",
+        headers={"Authorization": f"Bearer {bill_context['owner_token']}"},
+    )
+    assert response.status_code == 404
+    assert client.get(
+        f"/public/bills/{draft['receipt_token']}/receipt-payload"
+    ).status_code == 404
+
+
+def test_receipt_response_schema_enforces_canonical_item_contract():
+    payload = {
+        "bill_number": "BILL-1",
+        "invoice_number": None,
+        "receipt_title": "TAX INVOICE",
+        "status": "issued",
+        "restaurant_name": "OMLU Cafe",
+        "legal_business_name": "OMLU Cafe",
+        "address": "Kochi",
+        "table_number": "4",
+        "staff_name": "Staff",
+        "created_at": "2026-08-05T10:00:00Z",
+        "items": [{
+            "name": "A very long configured meal name",
+            "quantity": 2,
+            "unit_price": "75.00",
+            "line_total": "150.00",
+            "options": ["Size: Large", "Drink: Lime"],
+        }],
+        "subtotal": "150.00",
+        "discount_amount": "0.00",
+        "taxable_amount": "150.00",
+        "cgst_amount": "3.75",
+        "sgst_amount": "3.75",
+        "igst_amount": "0.00",
+        "tax_amount": "7.50",
+        "grand_total": "157.50",
+        "currency": "INR",
+        "gst_enabled": True,
+        "payment_status": "UNPAID",
+        "is_official_invoice": True,
+    }
+    validated = ReceiptPayloadResponse.model_validate(payload)
+    assert validated.items[0].line_total == Decimal("150.00")
+    assert validated.items[0].options == ["Size: Large", "Drink: Lime"]
+
+    invalid = {**payload, "items": [{**payload["items"][0], "options": "Size: Large"}]}
+    with pytest.raises(ValidationError):
+        ReceiptPayloadResponse.model_validate(invalid)
+    with pytest.raises(ValidationError):
+        ReceiptPayloadResponse.model_validate({**payload, "status": "draft"})

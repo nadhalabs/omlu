@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/operations_models.dart';
+import '../../core/printing/printer_adapter.dart';
 import '../../design_system/colors.dart';
 import '../../design_system/spacing.dart';
 import '../../design_system/typography.dart';
@@ -9,10 +10,13 @@ import '../../design_system/widgets/omlu_button.dart';
 import '../../design_system/widgets/omlu_card.dart';
 import '../../design_system/widgets/realtime_status_chip.dart';
 import '../auth_provider.dart';
+import '../printing/printer_settings_screen.dart';
 import 'pending_payments_tab.dart';
 
-final pendingBillDetailProvider =
-    FutureProvider.family<BillDetail, String>((ref, number) async {
+final pendingBillDetailProvider = FutureProvider.family<BillDetail, String>((
+  ref,
+  number,
+) async {
   ref.watch(authProvider).valueOrNull?.tenantScope;
   final api = ref.watch(operationsApiProvider);
   return api.fetchBillDetail(number);
@@ -31,6 +35,40 @@ class PendingBillReviewScreen extends ConsumerStatefulWidget {
 class _PendingBillReviewScreenState
     extends ConsumerState<PendingBillReviewScreen> {
   bool _submitting = false;
+
+  Future<void> _print(BillDetail bill) async {
+    if (_submitting) return;
+    setState(() => _submitting = true);
+    try {
+      final api = ref.read(operationsApiProvider);
+      final receipt = await api.fetchReceiptPayload(bill.billNumber);
+      final printer = ref.read(printerServiceProvider);
+      await printer.loadConfig();
+      await printer.printReceipt(receipt);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Receipt printed successfully.')),
+        );
+      }
+    } on PrinterException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.message), backgroundColor: Colors.red),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Printing failed. The bill remains safely issued.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
 
   Future<void> _confirmPayment(BillDetail bill, String method) async {
     if (_submitting) return;
@@ -60,8 +98,10 @@ class _PendingBillReviewScreenState
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Confirm $total received by $methodLabel for Table $table?',
-                style: OmluTypography.bodyLarge),
+            Text(
+              'Confirm $total received by $methodLabel for Table $table?',
+              style: OmluTypography.bodyLarge,
+            ),
             const SizedBox(height: OmluSpacing.xs),
             Text('Bill: ${bill.billNumber}', style: OmluTypography.bodyMedium),
             const SizedBox(height: OmluSpacing.md),
@@ -101,9 +141,7 @@ class _PendingBillReviewScreenState
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            'Payment recorded successfully for Table $table.',
-          ),
+          content: Text('Payment recorded successfully for Table $table.'),
           backgroundColor: OmluColors.statusAvailable,
         ),
       );
@@ -130,7 +168,18 @@ class _PendingBillReviewScreenState
     return Scaffold(
       appBar: AppBar(
         title: Text('Bill ${widget.billNumber}', style: OmluTypography.h2),
-        actions: const [RealtimeStatusChip()],
+        actions: [
+          IconButton(
+            tooltip: 'Printer settings',
+            icon: const Icon(Icons.print_rounded),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const PrinterSettingsScreen(),
+              ),
+            ),
+          ),
+          const RealtimeStatusChip(),
+        ],
       ),
       body: RefreshIndicator(
         onRefresh: () async {
@@ -186,7 +235,10 @@ class _PendingBillReviewScreenState
 
   Widget _buildBillContent(BillDetail bill, bool isAuthorized) {
     final isPaid = bill.isPaid;
-    final isPending = bill.isPaymentPending || bill.status == 'issued' || bill.status == 'draft';
+    final isPending =
+        bill.isPaymentPending ||
+        bill.status == 'issued' ||
+        bill.status == 'draft';
 
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
@@ -221,6 +273,17 @@ class _PendingBillReviewScreenState
 
         const SizedBox(height: OmluSpacing.md),
 
+        if (bill.status == 'issued' ||
+            bill.status == 'payment_pending' ||
+            bill.status == 'paid') ...[
+          OmluButton(
+            text: bill.status == 'paid' ? 'Print Receipt' : 'Print Bill',
+            isLoading: _submitting,
+            onPressed: _submitting ? null : () => _print(bill),
+          ),
+          const SizedBox(height: OmluSpacing.md),
+        ],
+
         // Payment Info & Actions Section
         if (isPaid) ...[
           OmluCard(
@@ -251,7 +314,10 @@ class _PendingBillReviewScreenState
               borderColor: Colors.amber.shade300,
               child: Row(
                 children: [
-                  Icon(Icons.info_outline_rounded, color: Colors.amber.shade900),
+                  Icon(
+                    Icons.info_outline_rounded,
+                    color: Colors.amber.shade900,
+                  ),
                   const SizedBox(width: OmluSpacing.sm),
                   Expanded(
                     child: Text(
@@ -330,13 +396,18 @@ class _BillHeaderCard extends StatelessWidget {
                 'Table ${bill.tableNumber.isEmpty ? '—' : bill.tableNumber}',
                 style: OmluTypography.h1,
               ),
-              _HumanStatusBadge(status: bill.status, sessionStatus: bill.sessionStatus),
+              _HumanStatusBadge(
+                status: bill.status,
+                sessionStatus: bill.sessionStatus,
+              ),
             ],
           ),
           const SizedBox(height: OmluSpacing.xs),
           Text(
             'Bill #${bill.billNumber}',
-            style: OmluTypography.bodyMedium.copyWith(color: OmluColors.textSecondary),
+            style: OmluTypography.bodyMedium.copyWith(
+              color: OmluColors.textSecondary,
+            ),
           ),
           if (bill.sentToCounterByRole != null) ...[
             const SizedBox(height: OmluSpacing.xxs),
@@ -360,20 +431,45 @@ class _HumanStatusBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     if (status == 'paid') {
       return const Chip(
-        avatar: Icon(Icons.check_circle_rounded, size: 16, color: OmluColors.statusAvailable),
-        label: Text('Paid', style: TextStyle(color: OmluColors.statusAvailable, fontWeight: FontWeight.bold)),
+        avatar: Icon(
+          Icons.check_circle_rounded,
+          size: 16,
+          color: OmluColors.statusAvailable,
+        ),
+        label: Text(
+          'Paid',
+          style: TextStyle(
+            color: OmluColors.statusAvailable,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         backgroundColor: Color(0xFFDCFCE7),
       );
     }
-    if (sessionStatus == 'detached_awaiting_payment' || status == 'payment_pending') {
+    if (sessionStatus == 'detached_awaiting_payment' ||
+        status == 'payment_pending') {
       return const Chip(
-        avatar: Icon(Icons.access_time_filled_rounded, size: 16, color: OmluColors.accentDark),
-        label: Text('Waiting for payment', style: TextStyle(color: OmluColors.accentDark, fontWeight: FontWeight.bold)),
+        avatar: Icon(
+          Icons.access_time_filled_rounded,
+          size: 16,
+          color: OmluColors.accentDark,
+        ),
+        label: Text(
+          'Waiting for payment',
+          style: TextStyle(
+            color: OmluColors.accentDark,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         backgroundColor: OmluColors.accentSoft,
       );
     }
     return Chip(
-      avatar: const Icon(Icons.receipt_rounded, size: 16, color: OmluColors.textPrimary),
+      avatar: const Icon(
+        Icons.receipt_rounded,
+        size: 16,
+        color: OmluColors.textPrimary,
+      ),
       label: Text(
         status == 'issued' ? 'Bill issued' : 'Bill draft',
         style: const TextStyle(fontWeight: FontWeight.bold),
@@ -397,58 +493,78 @@ class _BillOrderCard extends StatelessWidget {
             Row(
               children: [
                 Text(
-                  order.orderNumber.isEmpty ? 'Order' : 'Order #${order.orderNumber}',
+                  order.orderNumber.isEmpty
+                      ? 'Order'
+                      : 'Order #${order.orderNumber}',
                   style: OmluTypography.h3,
                 ),
                 const Spacer(),
-                Text(_money(order.subtotal), style: OmluTypography.bodyLarge.copyWith(fontWeight: FontWeight.bold)),
+                Text(
+                  _money(order.subtotal),
+                  style: OmluTypography.bodyLarge.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ],
             ),
             const Divider(height: OmluSpacing.md),
-            ...order.items.map((item) => Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '${item.quantity} × ',
-                            style: OmluTypography.bodyLarge.copyWith(fontWeight: FontWeight.bold),
+            ...order.items.map(
+              (item) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${item.quantity} × ',
+                          style: OmluTypography.bodyLarge.copyWith(
+                            fontWeight: FontWeight.bold,
                           ),
-                          Expanded(
-                            child: Text(item.itemName, style: OmluTypography.bodyLarge),
+                        ),
+                        Expanded(
+                          child: Text(
+                            item.itemName,
+                            style: OmluTypography.bodyLarge,
                           ),
-                          Text(_money(item.lineTotal), style: OmluTypography.bodyLarge.copyWith(fontWeight: FontWeight.w600)),
-                        ],
+                        ),
+                        Text(
+                          _money(item.lineTotal),
+                          style: OmluTypography.bodyLarge.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (item.selectedOptions.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 24, top: 2),
+                        child: Text(
+                          'Options: ${item.selectedOptions.map((o) => o.displayName).join(", ")}',
+                          style: OmluTypography.bodySmall.copyWith(
+                            color: OmluColors.accentDark,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
-                      if (item.selectedOptions.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 24, top: 2),
-                          child: Text(
-                            'Options: ${item.selectedOptions.map((o) => o.displayName).join(", ")}',
-                            style: OmluTypography.bodySmall.copyWith(
-                              color: OmluColors.accentDark,
-                              fontWeight: FontWeight.w600,
-                            ),
+                    if (item.itemNote != null && item.itemNote!.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 24, top: 2),
+                        child: Text(
+                          'Note: ${item.itemNote}',
+                          style: OmluTypography.bodySmall.copyWith(
+                            fontStyle: FontStyle.italic,
+                            color: OmluColors.textSecondary,
                           ),
                         ),
-                      if (item.itemNote != null && item.itemNote!.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 24, top: 2),
-                          child: Text(
-                            'Note: ${item.itemNote}',
-                            style: OmluTypography.bodySmall.copyWith(
-                              fontStyle: FontStyle.italic,
-                              color: OmluColors.textSecondary,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                )),
-            if (order.customerNote != null && order.customerNote!.isNotEmpty) ...[
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            if (order.customerNote != null &&
+                order.customerNote!.isNotEmpty) ...[
               const SizedBox(height: OmluSpacing.xs),
               Container(
                 width: double.infinity,
@@ -459,7 +575,9 @@ class _BillOrderCard extends StatelessWidget {
                 ),
                 child: Text(
                   'Order Note: ${order.customerNote}',
-                  style: OmluTypography.bodySmall.copyWith(fontStyle: FontStyle.italic),
+                  style: OmluTypography.bodySmall.copyWith(
+                    fontStyle: FontStyle.italic,
+                  ),
                 ),
               ),
             ],
@@ -484,13 +602,24 @@ class _BillSummarySection extends StatelessWidget {
           const SizedBox(height: OmluSpacing.md),
           if (bill.gstEnabled) ...[
             if (bill.legalBusinessName != null)
-              Text(bill.legalBusinessName!, style: OmluTypography.bodyLarge.copyWith(fontWeight: FontWeight.bold)),
+              Text(
+                bill.legalBusinessName!,
+                style: OmluTypography.bodyLarge.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             if (bill.registeredBillingAddress != null)
-              Text(bill.registeredBillingAddress!, style: OmluTypography.bodySmall),
+              Text(
+                bill.registeredBillingAddress!,
+                style: OmluTypography.bodySmall,
+              ),
             if (bill.gstin != null)
               Text('GSTIN: ${bill.gstin}', style: OmluTypography.bodySmall),
             if (bill.invoiceNumber != null)
-              Text('Invoice: ${bill.invoiceNumber}', style: OmluTypography.bodySmall),
+              Text(
+                'Invoice: ${bill.invoiceNumber}',
+                style: OmluTypography.bodySmall,
+              ),
             const SizedBox(height: OmluSpacing.sm),
           ],
           _SummaryRow(label: 'Menu subtotal', amount: bill.subtotal),
@@ -498,7 +627,10 @@ class _BillSummarySection extends StatelessWidget {
             _SummaryRow(label: 'Discount', amount: -bill.discountAmount),
           if (bill.gstEnabled) ...[
             if (bill.taxableAmount != null)
-              _SummaryRow(label: 'Taxable subtotal', amount: bill.taxableAmount!),
+              _SummaryRow(
+                label: 'Taxable subtotal',
+                amount: bill.taxableAmount!,
+              ),
             if (bill.cgstAmount != null)
               _SummaryRow(label: 'CGST', amount: bill.cgstAmount!),
             if (bill.sgstAmount != null)

@@ -21,6 +21,7 @@ from app.schemas.bill import (
     PaymentCodeLookupRequest,
     PaymentCodeLookupResponse,
     RateLimitErrorResponse,
+    ReceiptPayloadResponse,
     ShortOrderSummary,
 )
 from app.services.bills import (
@@ -150,19 +151,9 @@ def request_public_session_bill(
     if session.status == "open":
         session.status = "payment_requested"
         session.payment_requested_at = datetime.datetime.now(datetime.timezone.utc)
-    result = detach_issued_bill_and_release_table(
-        db,
-        restaurant_id=session.restaurant_id,
-        bill_id=bill.id,
-        actor=None,
-        idempotency_key=f"customer-bill-request:{session.id}",
-        payload_hash=request_hash({"session_id": session.id, "action": "bill_request"}),
-        request_id=getattr(request.state, "request_id", None),
-    )
     db.commit()
-    bill = result.bill
     publish_event(
-        EVENT_BILL_DETACHED_FOR_PAYMENT,
+        EVENT_BILL_GENERATED,
         restaurant_id=session.restaurant_id,
         channels=[
             restaurant_channel(session.restaurant_id, "operations"),
@@ -178,22 +169,7 @@ def request_public_session_bill(
             "bill_number": bill.bill_number,
             "bill_status": bill.status,
             "session_status": session.status,
-            "detached_at": session.detached_at.isoformat(),
-            "authority_epoch": session.join_code_version,
-        },
-    )
-    current_table_session = find_current_open_session_for_table(db, session.table_id)
-    publish_event(
-        EVENT_TABLE_STATUS_CHANGED,
-        restaurant_id=session.restaurant_id,
-        channels=[
-            restaurant_channel(session.restaurant_id, "operations"),
-            table_channel(session.restaurant_id, session.table_id),
-        ],
-        resource_id=session.table_id,
-        state={
-            "status": current_table_session.status if current_table_session else "free",
-            "session_token": current_table_session.public_token if current_table_session else None,
+            "payment_requested_at": session.payment_requested_at.isoformat() if session.payment_requested_at else None,
         },
     )
     return build_bill_response(db, bill)
@@ -337,6 +313,30 @@ def get_restaurant_public_bill_receipt(
 ):
     bill = _load_public_receipt(db, receipt_token, restaurant_slug)
     return build_bill_response(db, bill)
+
+
+@router.get("/public/bills/{receipt_token}/receipt-payload", response_model=ReceiptPayloadResponse)
+def get_public_bill_receipt_payload(receipt_token: str, db: Session = Depends(get_db)):
+    from app.services.bills import build_receipt_payload
+    bill = _load_public_receipt(db, receipt_token)
+    return build_receipt_payload(db, bill)
+
+
+@router.get("/staff/bills/{bill_number}/receipt-payload", response_model=ReceiptPayloadResponse)
+def get_staff_bill_receipt_payload(
+    bill_number: str,
+    current_user: StaffUser = Depends(_payment_lookup_roles),
+    db: Session = Depends(get_db),
+):
+    from app.services.bills import build_receipt_payload
+    bill = db.query(Bill).filter(
+        Bill.restaurant_id == current_user.restaurant_id,
+        Bill.bill_number == bill_number,
+        Bill.status.in_(["issued", "payment_pending", "paid"]),
+    ).first()
+    if not bill:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
+    return build_receipt_payload(db, bill)
 
 
 @router.post(

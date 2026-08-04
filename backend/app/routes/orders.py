@@ -199,17 +199,29 @@ def get_orderable_session_for_table(
     return dining_session
 
 
-def lock_open_session(db: Session, dining_session: DiningSession) -> DiningSession:
+def lock_open_session(
+    db: Session,
+    dining_session: DiningSession,
+    *,
+    allow_staff_assisted: bool = False,
+) -> DiningSession:
     locked_session = db.query(DiningSession).filter(
         DiningSession.id == dining_session.id
     ).with_for_update().first()
     if not locked_session:
         raise HTTPException(status_code=404, detail="Dining session not found")
-    if locked_session.status != "open":
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Ordering is locked for this table session."
-        )
+    if allow_staff_assisted:
+        if locked_session.status not in {"open", "payment_requested"} or (locked_session.bill and locked_session.bill.status != "draft"):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Ordering is locked for this table session."
+            )
+    else:
+        if locked_session.status != "open":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Ordering is locked for this table session."
+            )
     return locked_session
 
 
@@ -226,7 +238,7 @@ def create_order_in_session(
 ) -> Order:
     payload_hash = request_hash(order_req.model_dump(mode="json"))
     existing_order = db.query(Order).options(
-            selectinload(Order.items).selectinload(OrderItem.selected_options),
+        selectinload(Order.items).selectinload(OrderItem.selected_options),
         selectinload(Order.status_history),
         joinedload(Order.table),
         joinedload(Order.restaurant),
@@ -248,7 +260,9 @@ def create_order_in_session(
     subtotal, order_items_to_create = validate_public_order_items(db, restaurant, order_req)
 
     try:
-        locked_session = lock_open_session(db, dining_session)
+        locked_session = lock_open_session(
+            db, dining_session, allow_staff_assisted=created_by_staff_id is not None
+        )
 
         today = restaurant_business_date(restaurant)
         stmt = pg_insert(RestaurantDailySequence).values(

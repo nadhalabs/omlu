@@ -23,9 +23,11 @@ test("normal customer transition routes directly to the bill-ready receipt", () 
   assert.match(bill, /paymentStatus: "Payment status"/);
 });
 
-test("draft requested bills use waiting rather than the unavailable screen", () => {
+test("draft requested bills render the provisional bill rather than the recovery-only waiting screen", () => {
   assert.match(bill, /bill\?\.session_status === "payment_requested" && bill\.status === "draft"/);
-  assert.match(bill, /\(waitingSession \|\| draftWaiting\) && !error/);
+  assert.match(bill, /waitingSession && !bill && !error/);
+  assert.match(bill, /Bill requested · Staff reviewing/);
+  assert.match(bill, /Final amount may change until the bill is issued\./);
   assert.doesNotMatch(bill, /Bill not found|return to the table session to prepare/);
 });
 
@@ -33,7 +35,7 @@ test("waiting state shows safe session context and no ordering or menu action", 
   assert.match(bill, /waitingSession\?\.table_number/);
   assert.match(bill, /waitingSession\?\.combined_subtotal/);
   assert.match(bill, /waitingSession\?\.payment_requested_at/);
-  const waitingBlock = bill.slice(bill.indexOf("if ((waitingSession || draftWaiting)"), bill.indexOf("if (error && !bill)"));
+  const waitingBlock = bill.slice(bill.indexOf("if (waitingSession && !bill"), bill.indexOf("if (error && !bill)"));
   assert.doesNotMatch(waitingBlock, /\/menu\/|Start ordering|addOrderToDiningSession/);
 });
 

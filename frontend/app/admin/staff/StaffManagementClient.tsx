@@ -140,6 +140,7 @@ export default function StaffManagementClient() {
       const created = await createStaffAccount(validation.normalized);
       setStaff((prev) => [...prev, created]);
       setForm(EMPTY_FORM);
+      uiToast(`${created.name} was added successfully.`, "success");
     } catch (err) {
       if (err instanceof ApiError) {
         const field = backendFieldName(err.field) as keyof StaffAccountCreateRequest | undefined;
@@ -161,7 +162,8 @@ export default function StaffManagementClient() {
   const changeRole = async (member: StaffAccountResponse, role: string) => {
     if (!await confirmDialog({ title: `Change ${member.name}'s role?`, message: `Their role will change from ${member.role} to ${role}. Active permissions will refresh immediately.`, confirmLabel: "Change role" })) return;
     setBusyMemberId(member.id); setBusyAction("Updating role...");
-    try { replaceStaff(await updateStaffAccount(member.id, { role })); }
+    try { replaceStaff(await updateStaffAccount(member.id, { role })); uiToast(`${member.name}'s role was updated.`, "success"); }
+    catch { uiToast("Could not update this staff role.", "error"); }
     finally { setBusyMemberId(null); setBusyAction(null); }
   };
 
@@ -170,7 +172,8 @@ export default function StaffManagementClient() {
     if (status === "active") { if (!await confirmDialog({ title: `Reactivate ${member.name}?`, message: "Account access will be restored immediately.", confirmLabel: "Reactivate account" })) return; }
     else { const entered = await inputDialog({ title: `Suspend ${member.name}?`, message: "They will be signed out immediately and will not be able to log in until reactivated.", label: "Reason", placeholder: "Shift completed", required: false, confirmLabel: "Suspend account", tone: "destructive" }); if (entered === null) return; reason = entered || undefined; }
     setBusyMemberId(member.id); setBusyAction(status === "active" ? "Resuming..." : "Suspending...");
-    try { replaceStaff(await updateStaffAccount(member.id, { status, reason })); }
+    try { replaceStaff(await updateStaffAccount(member.id, { status, reason })); uiToast(`${member.name}'s account is now ${status}.`, "success"); }
+    catch { uiToast("Could not update this staff account.", "error"); }
     finally { setBusyMemberId(null); setBusyAction(null); }
   };
 
@@ -196,6 +199,7 @@ export default function StaffManagementClient() {
     setResetPasswordError(undefined);
     try {
       replaceStaff(await resetStaffPassword(resetTarget.id, resetPasswordValue));
+      uiToast(`${resetTarget.role === "staff" || resetTarget.role === "kitchen" ? "PIN" : "Password"} reset successfully.`, "success");
       setResetTarget(null);
       setResetPasswordValue("");
     } catch (err) {
@@ -229,6 +233,7 @@ export default function StaffManagementClient() {
       }
       replaceStaff(updated);
       setError(null);
+      uiToast(`${member.name} was signed out on all devices.`, "success");
     } catch (err) {
       const message = err instanceof ApiError ? err.message : "Could not sign out staff sessions.";
       setError(message);
@@ -248,6 +253,9 @@ export default function StaffManagementClient() {
     try {
       await removeStaffAccess(member.id);
       setStaff((prev) => prev.filter((item) => item.id !== member.id));
+      uiToast(`${member.name}'s access was removed.`, "success");
+    } catch {
+      uiToast("Could not remove this staff account.", "error");
     } finally { setBusyMemberId(null); setBusyAction(null); }
   };
 
@@ -258,7 +266,7 @@ export default function StaffManagementClient() {
     let reason: string | undefined;
     if (locking) { const entered = await inputDialog({ title: "Lock all Staff?", message: "Staff will immediately lose access to operational actions. Owner, Admin, and Kitchen access remain available.", details: [warnings], label: "Reason", placeholder: "Restaurant closed", confirmLabel: "Lock all Staff", tone: "destructive" }); if (entered === null) return; reason = entered || undefined; }
     else if (!await confirmDialog({ title: "Unlock all Staff?", message: "Operational access will be restored immediately for Staff accounts that are not individually locked.", confirmLabel: "Unlock Staff" })) return;
-    try { setOperations(await setAllStaffLocked(locking, reason, true)); }
+    try { setOperations(await setAllStaffLocked(locking, reason, true)); uiToast(locking ? "Staff operations are now read-only." : "Staff operations were restored.", "success"); }
     catch (err) { uiToast(err instanceof ApiError ? err.message : "Could not update Staff operations.", "error"); }
   };
 
@@ -268,7 +276,7 @@ export default function StaffManagementClient() {
     if (locking) { const entered = await inputDialog({ title: `Lock ${member.name}?`, message: `${member.name} will be blocked from creating orders, generating bills, sending bills to the counter, and changing restaurant operations.`, label: "Reason", placeholder: "Shift ended", confirmLabel: "Lock Staff", tone: "destructive" }); if (entered === null) return; reason = entered || undefined; }
     else if (!await confirmDialog({ title: `Unlock ${member.name}?`, message: "Operational access will be restored immediately.", confirmLabel: "Unlock Staff" })) return;
     setBusyMemberId(member.id); setBusyAction(locking ? "Locking..." : "Unlocking...");
-    try { replaceStaff(await setStaffLocked(member.id, locking, reason)); }
+    try { replaceStaff(await setStaffLocked(member.id, locking, reason)); uiToast(locking ? `${member.name} now has read-only access.` : `${member.name}'s operational access was restored.`, "success"); }
     catch (err) { uiToast(err instanceof ApiError ? err.message : "Could not update Staff lock.", "error"); }
     finally { setBusyMemberId(null); setBusyAction(null); }
   };
@@ -456,20 +464,13 @@ function RoleControl({ member, busy, changeRole }: Pick<StaffPresentationProps, 
 
 function ActionMenuPopover({
   triggerRect,
-  onClose,
   children,
 }: {
   triggerRect: DOMRect | null;
-  onClose: () => void;
   children: React.ReactNode;
 }) {
-  const [mounted, setMounted] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState<{ top?: number; bottom?: number; right: number }>({ right: 16 });
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   const updatePosition = useCallback(() => {
     if (!triggerRect) return;
@@ -492,13 +493,11 @@ function ActionMenuPopover({
   }, [triggerRect]);
 
   useLayoutEffect(() => {
-    if (mounted) {
-      updatePosition();
-    }
-  }, [mounted, updatePosition]);
+    updatePosition();
+  }, [updatePosition]);
 
   useEffect(() => {
-    if (!mounted) return;
+    if (!triggerRect) return;
     window.addEventListener("resize", updatePosition);
     window.addEventListener("scroll", updatePosition, true);
     let resizeObserver: ResizeObserver | null = null;
@@ -511,9 +510,9 @@ function ActionMenuPopover({
       window.removeEventListener("scroll", updatePosition, true);
       resizeObserver?.disconnect();
     };
-  }, [mounted, updatePosition]);
+  }, [triggerRect, updatePosition]);
 
-  if (!mounted || !triggerRect) return null;
+  if (typeof document === "undefined" || !triggerRect) return null;
 
   return createPortal(
     <div
@@ -626,7 +625,7 @@ function MemberActions(props: StaffPresentationProps) {
           ⋮
         </button>
         {openMenu && (
-          <ActionMenuPopover triggerRect={triggerRect} onClose={() => setOpenMenu(false)}>
+          <ActionMenuPopover triggerRect={triggerRect}>
             <MenuAction
               label={member.role === "staff" || member.role === "kitchen" ? "Reset PIN" : "Reset password"}
               onClick={() => run(() => openResetPassword(member))}
