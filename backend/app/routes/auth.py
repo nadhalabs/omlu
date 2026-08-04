@@ -85,6 +85,8 @@ def _staff_payload(staff: StaffUser, restaurant: Restaurant) -> dict:
 
 def _issue_session_token(staff: StaffUser, request: Request, db: Session) -> tuple[str, int]:
     now = datetime.datetime.now(datetime.timezone.utc)
+    expires_in_seconds = settings.jwt_access_token_minutes * 60
+    expires_at = now + datetime.timedelta(seconds=expires_in_seconds)
     staff.last_login_at = now
     token_jti = secrets.token_urlsafe(24)
     db.add(StaffSession(
@@ -96,6 +98,7 @@ def _issue_session_token(staff: StaffUser, request: Request, db: Session) -> tup
         status="active",
         login_at=now,
         last_active_at=now,
+        expires_at=expires_at,
     ))
     token_claims = {
         "sub": str(staff.id),

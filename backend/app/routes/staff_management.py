@@ -82,12 +82,22 @@ def _audit(
     )
 
 
-def _serialize_staff(staff: StaffUser, sessions: list[StaffSession] | None = None, locker_name: str | None = None) -> StaffAccountResponse:
+def _serialize_staff(
+    staff: StaffUser,
+    sessions: list[StaffSession] | None = None,
+    locker_name: str | None = None,
+    creator_name: str | None = None,
+) -> StaffAccountResponse:
+    now = datetime.datetime.now(datetime.timezone.utc)
     sessions = sessions or []
-    active_sessions = [s for s in sessions if s.status == "active"]
+    active_sessions = [
+        s for s in sessions
+        if s.status == "active" and s.expires_at is not None and s.expires_at > now
+    ]
     last_active = staff.last_login_at
     if active_sessions:
         last_active = max(s.last_active_at for s in active_sessions)
+    display_creator = creator_name or ("System" if not staff.added_by_staff_id else None)
     return StaffAccountResponse(
         id=staff.id,
         name=staff.name,
@@ -100,6 +110,7 @@ def _serialize_staff(staff: StaffUser, sessions: list[StaffSession] | None = Non
         last_active_at=last_active,
         created_at=staff.created_at,
         added_by_staff_id=staff.added_by_staff_id,
+        added_by_display_name=display_creator,
         active_session_count=len(active_sessions),
         sessions=[
             StaffSessionResponse(
@@ -176,7 +187,15 @@ def list_staff_accounts(
         ).order_by(StaffSession.last_active_at.desc()).all():
             sessions_by_user.setdefault(session.staff_user_id, []).append(session)
     names = {s.id: s.name for s in staff_members}
-    return [_serialize_staff(staff, sessions_by_user.get(staff.id, []), names.get(staff.operations_locked_by_id)) for staff in staff_members]
+    return [
+        _serialize_staff(
+            staff,
+            sessions_by_user.get(staff.id, []),
+            names.get(staff.operations_locked_by_id),
+            names.get(staff.added_by_staff_id),
+        )
+        for staff in staff_members
+    ]
 
 
 @router.get("/operations", response_model=StaffOperationsResponse)
@@ -227,16 +246,10 @@ def lock_staff(staff_id: int, body: StaffLockRequest, request: Request, current_
     target = db.query(StaffUser).filter(StaffUser.id == staff_id, StaffUser.restaurant_id == current_user.restaurant_id, StaffUser.role == "staff").first()
     if not target: raise HTTPException(status_code=404, detail="Staff account not found")
     now = datetime.datetime.now(datetime.timezone.utc); target.operations_locked = True; target.operations_locked_at = now; target.operations_locked_by_id = current_user.id; target.operations_lock_reason = body.reason
-    target.security_version = (target.security_version or 0) + 1
-    _revoke_sessions(db, target, current_user)
     _audit(db, current_user, request, "staff_account_locked", target, new_value={"reason": body.reason}); db.commit(); db.refresh(target)
     publish_event(EVENT_STAFF_LOCKED, restaurant_id=current_user.restaurant_id, channels=[restaurant_channel(current_user.restaurant_id, "staff")], resource_id=target.id, state={"staff_id": target.id, "locked_by": current_user.name, "locked_at": now.isoformat(), "reason": body.reason})
-    publish_authority_revocation(
-        actor_id=target.id,
-        restaurant_id=target.restaurant_id,
-        reason="staff_account_locked",
-    )
-    return _serialize_staff(target, locker_name=current_user.name)
+    creator_name = db.query(StaffUser.name).filter(StaffUser.id == target.added_by_staff_id).scalar() if target.added_by_staff_id else None
+    return _serialize_staff(target, locker_name=current_user.name, creator_name=creator_name)
 
 
 @router.post("/{staff_id}/unlock", response_model=StaffAccountResponse)

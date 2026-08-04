@@ -101,6 +101,7 @@ class StaffSession(Base):
     status: Mapped[str] = mapped_column(String(50), default="active", server_default="active", index=True)
     login_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     last_active_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     revoked_by_staff_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 

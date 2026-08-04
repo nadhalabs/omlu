@@ -576,6 +576,7 @@ export interface StaffAccountResponse {
   last_active_at: string | null;
   created_at: string;
   added_by_staff_id: number | null;
+  added_by_display_name?: string | null;
   active_session_count: number;
   sessions: StaffAccountSession[];
   operations_locked: boolean;

@@ -54,6 +54,7 @@ class StaffAccountResponse(BaseModel):
     last_active_at: Optional[datetime]
     created_at: datetime
     added_by_staff_id: Optional[int]
+    added_by_display_name: Optional[str] = None
     active_session_count: int
     sessions: List[StaffSessionResponse] = []
     operations_locked: bool = False

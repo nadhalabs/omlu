@@ -1,5 +1,7 @@
+import datetime
 import secrets
 
+from app.config import settings
 from app.database import SessionLocal
 from app.models.staff_user import StaffSession, StaffUser
 from app.utils.auth import create_access_token as _create_access_token
@@ -19,12 +21,15 @@ def create_session_access_token(data: dict, expires_delta=None, *, db=None) -> s
             claims["restaurant_id"] = staff.restaurant_id
             claims["security_version"] = staff.security_version or 0
             claims["session_required"] = True
+            now = datetime.datetime.now(datetime.timezone.utc)
+            delta = expires_delta or datetime.timedelta(minutes=settings.jwt_access_token_minutes)
             db.add(
                 StaffSession(
                     staff_user_id=staff.id,
                     restaurant_id=staff.restaurant_id,
                     token_jti=jti,
                     status="active",
+                    expires_at=now + delta,
                 )
             )
             db.commit()

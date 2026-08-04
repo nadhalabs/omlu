@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Exclude only secure storage SharedPreferences files to prevent invalid KeyStore key restoration -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="FlutterSecureStorage.xml" />
+        <exclude domain="sharedpref" path="encrypted_shared_preferences.xml" />
+        <exclude domain="sharedpref" path="secret_shared_prefs.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="FlutterSecureStorage.xml" />
+        <exclude domain="sharedpref" path="encrypted_shared_preferences.xml" />
+        <exclude domain="sharedpref" path="secret_shared_prefs.xml" />
+    </device-transfer>
+</data-extraction-rules>

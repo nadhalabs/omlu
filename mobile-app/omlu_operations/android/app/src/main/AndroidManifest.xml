@@ -9,7 +9,9 @@
         android:label="OMLU"
         android:name="${applicationName}"
         android:icon="@drawable/ic_launcher_omlu"
-        android:usesCleartextTraffic="false">
+        android:usesCleartextTraffic="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules">
         <activity
             android:name=".MainActivity"
             android:exported="true"

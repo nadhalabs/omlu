@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../core/storage/secure_token_storage.dart';
 import '../design_system/colors.dart';
 import '../design_system/typography.dart';
 import '../features/auth_provider.dart';
@@ -87,7 +88,14 @@ class OmluNativeApp extends ConsumerWidget {
           return RoleRouter(session: session);
         },
         loading: () => const SplashScreen(message: 'Restoring session...'),
-        error: (err, st) => LoginScreen(errorMessage: err.toString()),
+        error: (err, st) {
+          if (err is StoredSessionRecoveryException) {
+            return LoginScreen(errorMessage: err.message);
+          }
+          return const LoginScreen(
+            errorMessage: 'Session expired. Please sign in again.',
+          );
+        },
       ),
     );
   }

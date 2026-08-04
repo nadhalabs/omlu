@@ -743,3 +743,44 @@ def test_password_reset_revokes_existing_token(setup_auth_test_data):
     assert reset_response.json()["must_change_password"] is False
     me_response = client.get("/auth/staff/me", headers={"Authorization": f"Bearer {staff_token}"})
     assert me_response.status_code == 401
+
+
+def test_null_expires_at_session_rejected_and_not_counted(setup_auth_test_data):
+    from app.models.staff_user import StaffSession, StaffUser
+    from app.routes.staff_management import _serialize_staff
+    from app.utils.auth import _resolve_authenticated_context
+    db = SessionLocal()
+    staff = db.query(StaffUser).filter(StaffUser.email == "owner@test.local").first()
+    assert staff is not None
+    null_session = StaffSession(
+        staff_user_id=staff.id,
+        restaurant_id=staff.restaurant_id,
+        token_jti="test-null-expiry-jti",
+        device="Test Device",
+        ip_address="127.0.0.1",
+        status="active",
+        expires_at=None,
+    )
+    db.add(null_session)
+    db.commit()
+    db.refresh(null_session)
+
+    # Prove NULL session is NOT counted in active session count
+    serialized = _serialize_staff(staff, [null_session])
+    assert serialized.active_session_count == 0
+
+    # Prove NULL session is REJECTED during authenticated request resolution
+    from fastapi.security import HTTPAuthorizationCredentials
+    from jwt import encode
+    token = encode(
+        {"sub": str(staff.id), "jti": "test-null-expiry-jti", "exp": 9999999999},
+        settings.jwt_secret_key,
+        algorithm=settings.jwt_algorithm,
+    )
+    creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
+    with pytest.raises(Exception) as exc_info:
+        _resolve_authenticated_context(creds, db)
+    assert "401" in str(exc_info.value) or "Staff session has expired" in str(exc_info.value)
+
+    db.delete(null_session)
+    db.commit()

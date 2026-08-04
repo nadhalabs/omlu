@@ -1,7 +1,8 @@
 "use client";
 
 import type React from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { FormToast } from "@/components/FormToast";
 import { PasswordInput } from "@/components/PasswordInput";
 import {
@@ -167,7 +168,7 @@ export default function StaffManagementClient() {
   const changeStatus = async (member: StaffAccountResponse, status: string) => {
     let reason: string | undefined;
     if (status === "active") { if (!await confirmDialog({ title: `Reactivate ${member.name}?`, message: "Account access will be restored immediately.", confirmLabel: "Reactivate account" })) return; }
-    else { const entered = await inputDialog({ title: `Suspend ${member.name}?`, message: "This account will lose access immediately.", label: "Reason", placeholder: "Shift completed", required: false, confirmLabel: "Suspend account", tone: "destructive" }); if (entered === null) return; reason = entered || undefined; }
+    else { const entered = await inputDialog({ title: `Suspend ${member.name}?`, message: "They will be signed out immediately and will not be able to log in until reactivated.", label: "Reason", placeholder: "Shift completed", required: false, confirmLabel: "Suspend account", tone: "destructive" }); if (entered === null) return; reason = entered || undefined; }
     setBusyMemberId(member.id); setBusyAction(status === "active" ? "Resuming..." : "Suspending...");
     try { replaceStaff(await updateStaffAccount(member.id, { status, reason })); }
     finally { setBusyMemberId(null); setBusyAction(null); }
@@ -216,7 +217,7 @@ export default function StaffManagementClient() {
     pendingSessionRevocationsRef.current.add(member.id);
     let selfRevocationSucceeded = false;
     try {
-      if (!await confirmDialog({ title: `Sign out ${member.name}?`, message: "All active sessions for this account will be revoked immediately.", confirmLabel: "Sign out sessions", tone: "destructive" })) return;
+      if (!await confirmDialog({ title: `Sign out all active sessions for ${member.name}?`, message: "They will need to sign in again on every device.", confirmLabel: "Sign out sessions", tone: "destructive" })) return;
       setBusyMemberId(member.id); setBusyAction("Signing out...");
       const updated = await revokeStaffSessions(member.id);
       const isCurrentAccount = getActiveWebTenantScope()?.actor_id === member.id;
@@ -242,7 +243,7 @@ export default function StaffManagementClient() {
   };
 
   const removeAccess = async (member: StaffAccountResponse) => {
-    if (!await confirmDialog({ title: `Remove ${member.name}'s access?`, message: "This immediately signs them out and removes their restaurant access.", confirmLabel: "Remove access", cancelLabel: "Keep access", tone: "destructive" })) return;
+    if (!await confirmDialog({ title: `Remove ${member.name}?`, message: "Their restaurant access will be removed immediately. Historical activity will remain recorded.", confirmLabel: "Remove access", cancelLabel: "Keep access", tone: "destructive" })) return;
     setBusyMemberId(member.id); setBusyAction("Removing...");
     try {
       await removeStaffAccess(member.id);
@@ -426,40 +427,223 @@ function StatusBadge({ member }: { member: StaffAccountResponse }) {
 }
 
 function RoleControl({ member, busy, changeRole }: Pick<StaffPresentationProps, "member" | "busy" | "changeRole">) {
-  return <div><select aria-label={`Role for ${member.name}`} title={member.role === "owner" ? "The restaurant owner's role cannot be changed." : undefined} disabled={member.role === "owner" || busy} value={member.role} onChange={(event) => void changeRole(member, event.target.value)} className="min-h-10 w-full rounded-lg border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-2 text-sm font-semibold text-[var(--omlu-text-primary)] focus-visible:outline-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:border-[var(--omlu-border-strong)] disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)]"><option value="owner">Owner</option><option value="admin">Admin</option><option value="staff">Staff</option><option value="kitchen">Kitchen</option></select>{member.role === "owner" && <p className="mt-1 text-xs font-medium text-[var(--omlu-text-secondary)]">Owner role is protected.</p>}</div>;
+  if (member.role === "owner") {
+    return (
+      <div className="flex flex-col gap-0.5">
+        <span className="inline-flex w-fit items-center rounded-lg bg-violet-100 px-3 py-1.5 text-xs font-black text-violet-800">
+          Owner
+        </span>
+        <span className="text-[11px] font-medium text-[var(--omlu-text-secondary)]">Protected account</span>
+      </div>
+    );
+  }
+  return (
+    <div>
+      <select
+        aria-label={`Role for ${member.name}`}
+        disabled={busy}
+        value={member.role}
+        onChange={(event) => void changeRole(member, event.target.value)}
+        className="min-h-10 w-full rounded-lg border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-2 text-sm font-semibold text-[var(--omlu-text-primary)] focus-visible:outline-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:border-[var(--omlu-border-strong)] disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)]"
+      >
+        <option value="admin">Admin</option>
+        <option value="staff">Staff</option>
+        <option value="kitchen">Kitchen</option>
+      </select>
+    </div>
+  );
+}
+
+function ActionMenuPopover({
+  triggerRect,
+  onClose,
+  children,
+}: {
+  triggerRect: DOMRect | null;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  const [mounted, setMounted] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState<{ top?: number; bottom?: number; right: number }>({ right: 16 });
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const updatePosition = useCallback(() => {
+    if (!triggerRect) return;
+    const measuredHeight = menuRef.current?.getBoundingClientRect().height || 220;
+    const spaceBelow = window.innerHeight - triggerRect.bottom;
+    const spaceAbove = triggerRect.top;
+    const right = Math.max(16, window.innerWidth - triggerRect.right);
+
+    if (spaceBelow < measuredHeight && spaceAbove > spaceBelow) {
+      setPosition({
+        bottom: window.innerHeight - triggerRect.top + 8,
+        right,
+      });
+    } else {
+      setPosition({
+        top: triggerRect.bottom + 8,
+        right,
+      });
+    }
+  }, [triggerRect]);
+
+  useLayoutEffect(() => {
+    if (mounted) {
+      updatePosition();
+    }
+  }, [mounted, updatePosition]);
+
+  useEffect(() => {
+    if (!mounted) return;
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    let resizeObserver: ResizeObserver | null = null;
+    if (menuRef.current && typeof ResizeObserver !== "undefined") {
+      resizeObserver = new ResizeObserver(() => updatePosition());
+      resizeObserver.observe(menuRef.current);
+    }
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+      resizeObserver?.disconnect();
+    };
+  }, [mounted, updatePosition]);
+
+  if (!mounted || !triggerRect) return null;
+
+  return createPortal(
+    <div
+      ref={menuRef}
+      role="menu"
+      style={{
+        position: "fixed",
+        top: position.top !== undefined ? `${position.top}px` : undefined,
+        bottom: position.bottom !== undefined ? `${position.bottom}px` : undefined,
+        right: `${position.right}px`,
+      }}
+      className="z-50 w-56 rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-1.5 shadow-xl"
+    >
+      {children}
+    </div>,
+    document.body
+  );
 }
 
 function MemberActions(props: StaffPresentationProps) {
   const { member, busy, busyAction, openMenu, setOpenMenu, changeStatus, openResetPassword, signOutAll, toggleMemberLock, removeAccess } = props;
-  const menuRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [triggerRect, setTriggerRect] = useState<DOMRect | null>(null);
+
+  const toggleMenu = () => {
+    if (openMenu) {
+      setOpenMenu(false);
+    } else {
+      if (triggerRef.current) {
+        setTriggerRect(triggerRef.current.getBoundingClientRect());
+      }
+      setOpenMenu(true);
+    }
+  };
+
   useEffect(() => {
     if (!openMenu) return;
-    const close = (event: MouseEvent) => { if (!menuRef.current?.contains(event.target as Node)) setOpenMenu(false); };
-    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") setOpenMenu(false); };
-    document.addEventListener("mousedown", close); document.addEventListener("keydown", escape);
-    return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", escape); };
+    const handleScrollOrResize = () => setOpenMenu(false);
+    const close = (event: MouseEvent) => {
+      if (triggerRef.current && !triggerRef.current.contains(event.target as Node)) {
+        setOpenMenu(false);
+      }
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpenMenu(false);
+        triggerRef.current?.focus();
+      }
+    };
+    window.addEventListener("scroll", handleScrollOrResize, true);
+    window.addEventListener("resize", handleScrollOrResize);
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", escape);
+    return () => {
+      window.removeEventListener("scroll", handleScrollOrResize, true);
+      window.removeEventListener("resize", handleScrollOrResize);
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", escape);
+    };
   }, [openMenu, setOpenMenu]);
-  const run = (action: () => void | Promise<void>) => { setOpenMenu(false); void action(); };
+
+  const run = (action: () => void | Promise<void>) => {
+    setOpenMenu(false);
+    triggerRef.current?.focus();
+    void action();
+  };
+
   const owner = member.role === "owner";
   const primary = member.role === "staff"
     ? { label: member.operations_locked ? "Unlock account" : "Lock account", action: () => toggleMemberLock(member), positive: member.operations_locked }
     : member.status !== "active"
       ? { label: "Resume", action: () => changeStatus(member, "active"), positive: true }
       : { label: "Suspend", action: () => changeStatus(member, "suspended"), positive: false };
-  return <div className="flex min-w-0 flex-wrap items-center gap-2">
-    {!owner && <button type="button" disabled={busy} onClick={() => void primary.action()} className={`min-h-10 whitespace-nowrap rounded-lg px-3 py-2 text-xs font-black transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)] ${primary.positive ? "bg-emerald-700 text-[var(--omlu-strong-action-text)] hover:bg-emerald-800" : "border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-muted-surface)]"}`}>{busy ? busyAction : primary.label}</button>}
-    <button type="button" disabled={busy || member.active_session_count === 0} onClick={() => void signOutAll(member)} className="min-h-10 whitespace-nowrap rounded-lg border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-3 py-2 text-xs font-bold text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-muted-surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:border-[var(--omlu-border-strong)] disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)]">Sign out sessions</button>
-    <div className="relative" ref={menuRef}><button type="button" aria-label={`More actions for ${member.name}`} aria-haspopup="menu" aria-expanded={openMenu} disabled={busy} onClick={() => setOpenMenu(!openMenu)} className="min-h-10 min-w-10 rounded-lg border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-3 text-lg font-black text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-muted-surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)]">⋮</button>
-      {openMenu && <div role="menu" aria-label={`More actions for ${member.name}`} className="absolute right-0 z-20 mt-2 w-56 rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-1.5 shadow-xl">
-        <MenuAction label={member.role === "staff" || member.role === "kitchen" ? "Reset PIN" : "Reset password"} onClick={() => run(() => openResetPassword(member))} />
-        {member.active_session_count > 0 && <MenuAction label="Sign out active sessions" onClick={() => run(() => signOutAll(member))} />}
-        {!owner && member.role === "staff" && <MenuAction label={member.status === "active" ? "Suspend account" : "Resume account"} onClick={() => run(() => changeStatus(member, member.status === "active" ? "suspended" : "active"))} />}
-        {!owner && member.role === "staff" && <MenuAction label={member.operations_locked ? "Unlock account" : "Lock account"} onClick={() => run(() => toggleMemberLock(member))} />}
-        {!owner && <MenuAction label="Remove staff member" destructive onClick={() => run(() => removeAccess(member))} />}
-        {owner && <p className="px-3 py-2 text-xs font-medium text-[var(--omlu-text-secondary)]">The restaurant owner cannot be suspended or removed.</p>}
-      </div>}
+
+  return (
+    <div className="flex min-w-0 flex-wrap items-center gap-2">
+      {!owner && (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void primary.action()}
+          className={`min-h-10 whitespace-nowrap rounded-lg px-3 py-2 text-xs font-black transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)] ${
+            primary.positive
+              ? "bg-emerald-700 text-[var(--omlu-strong-action-text)] hover:bg-emerald-800"
+              : "border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-muted-surface)]"
+          }`}
+        >
+          {busy ? busyAction : primary.label}
+        </button>
+      )}
+      <button
+        type="button"
+        disabled={busy || member.active_session_count === 0}
+        onClick={() => void signOutAll(member)}
+        className="min-h-10 whitespace-nowrap rounded-lg border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-3 py-2 text-xs font-bold text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-muted-surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:border-[var(--omlu-border-strong)] disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)]"
+      >
+        Sign out sessions
+      </button>
+      <div>
+        <button
+          ref={triggerRef}
+          type="button"
+          aria-label={`More actions for ${member.name}`}
+          aria-haspopup="menu"
+          aria-expanded={openMenu}
+          disabled={busy}
+          onClick={toggleMenu}
+          className="min-h-10 min-w-10 rounded-lg border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-3 text-lg font-black text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-muted-surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)]"
+        >
+          ⋮
+        </button>
+        {openMenu && (
+          <ActionMenuPopover triggerRect={triggerRect} onClose={() => setOpenMenu(false)}>
+            <MenuAction
+              label={member.role === "staff" || member.role === "kitchen" ? "Reset PIN" : "Reset password"}
+              onClick={() => run(() => openResetPassword(member))}
+            />
+            {!owner && member.role !== "staff" && (
+              <MenuAction
+                label={member.status === "active" ? "Suspend account" : "Resume account"}
+                onClick={() => run(() => changeStatus(member, member.status === "active" ? "suspended" : "active"))}
+              />
+            )}
+            {!owner && <MenuAction label="Remove staff member" destructive onClick={() => run(() => removeAccess(member))} />}
+            {owner && <p className="px-3 py-2 text-xs font-medium text-[var(--omlu-text-secondary)]">The restaurant owner cannot be suspended or removed.</p>}
+          </ActionMenuPopover>
+        )}
+      </div>
     </div>
-  </div>;
+  );
 }
 
 function MenuAction({ label, onClick, destructive = false }: { label: string; onClick: () => void; destructive?: boolean }) {
@@ -468,7 +652,7 @@ function MenuAction({ label, onClick, destructive = false }: { label: string; on
 
 function StaffRow(props: StaffPresentationProps) {
   const { member, busy, changeRole } = props;
-  return <tr className="bg-[var(--omlu-primary-surface)] align-top text-[var(--omlu-text-primary)]"><td className="p-4"><div className="font-black text-[var(--omlu-text-primary)]">{member.name}</div><div className="mt-1 break-words text-xs font-semibold text-[var(--omlu-text-primary)]">@{member.username || "no-username"}</div>{member.email && <div className="mt-0.5 break-words text-xs text-[var(--omlu-text-secondary)]">{member.email}</div>}<div className="mt-2 text-xs text-[var(--omlu-text-secondary)]">Added by {member.added_by_staff_id || "System"} · {fmt(member.created_at)}</div></td><td className="p-4"><RoleControl member={member} busy={busy} changeRole={changeRole} /></td><td className="p-4"><StatusBadge member={member} />{member.operations_locked && member.operations_lock_reason && <p className="mt-2 text-xs text-[var(--omlu-text-secondary)]">{member.operations_lock_reason}</p>}</td><td className="p-4 font-medium text-[var(--omlu-text-primary)]" title={fmt(member.last_active_at)}>{relativeTime(member.last_active_at)}</td><td className="p-4 whitespace-nowrap font-medium text-[var(--omlu-text-primary)]">{member.active_session_count ? `${member.active_session_count} active` : "No active sessions"}</td><td className="overflow-visible p-4"><MemberActions {...props} /></td></tr>;
+  return <tr className="bg-[var(--omlu-primary-surface)] align-top text-[var(--omlu-text-primary)]"><td className="p-4"><div className="font-black text-[var(--omlu-text-primary)]">{member.name}</div><div className="mt-1 break-words text-xs font-semibold text-[var(--omlu-text-primary)]">@{member.username || "no-username"}</div>{member.email && <div className="mt-0.5 break-words text-xs text-[var(--omlu-text-secondary)]">{member.email}</div>}<div className="mt-2 text-xs text-[var(--omlu-text-secondary)]">Added by {member.added_by_display_name || "System"} · {fmt(member.created_at)}</div></td><td className="p-4"><RoleControl member={member} busy={busy} changeRole={changeRole} /></td><td className="p-4"><StatusBadge member={member} />{member.operations_locked && member.operations_lock_reason && <p className="mt-2 text-xs text-[var(--omlu-text-secondary)]">{member.operations_lock_reason}</p>}</td><td className="p-4 font-medium text-[var(--omlu-text-primary)]" title={fmt(member.last_active_at)}>{relativeTime(member.last_active_at)}</td><td className="p-4 whitespace-nowrap font-medium text-[var(--omlu-text-primary)]">{member.active_session_count ? `${member.active_session_count} active` : "No active sessions"}</td><td className="overflow-visible p-4"><MemberActions {...props} /></td></tr>;
 }
 
 function StaffCard(props: StaffPresentationProps) {

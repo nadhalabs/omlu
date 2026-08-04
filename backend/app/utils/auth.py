@@ -211,10 +211,11 @@ def _resolve_authenticated_context(
         )
         .first()
     )
-    if not session or session.status != "active":
+    now = datetime.datetime.now(datetime.timezone.utc)
+    if not session or session.status != "active" or session.expires_at is None or session.expires_at <= now:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Staff session has been revoked",
+            detail="Staff session has expired or been revoked",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
@@ -224,7 +225,7 @@ def _resolve_authenticated_context(
             detail="Password change required before accessing this resource",
         )
 
-    session.last_active_at = datetime.datetime.now(datetime.timezone.utc)
+    session.last_active_at = now
     db.commit()
     scope = TenantScope(
         restaurant_id=staff.restaurant_id,
@@ -333,5 +334,8 @@ class OperationalWriteChecker(RoleChecker):
         db.commit()
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Staff operations are currently locked. Contact the restaurant owner or administrator.",
+            detail={
+                "code": "STAFF_OPERATIONS_LOCKED",
+                "message": "Your operational access has been locked by the restaurant owner. You can still view restaurant activity.",
+            },
         )

@@ -6,6 +6,8 @@ import '../storage/token_storage.dart';
 import 'flutter_tenant_scope.dart';
 import 'native_auth_runtime.dart';
 
+import '../storage/secure_token_storage.dart';
+
 class AuthenticatedProfile {
   const AuthenticatedProfile(this.profile, this.scope);
   final StaffProfile profile;
@@ -75,7 +77,13 @@ class AuthRepository {
   }
 
   Future<RoleSession?> restore() async {
-    final stored = await _tokenStorage.read();
+    RoleSession? stored;
+    try {
+      stored = await _tokenStorage.read();
+    } on StoredSessionRecoveryException {
+      await terminate(reason: 'storage_recovery', revokeServer: false);
+      return null;
+    }
     if (stored == null || stored.isExpired) {
       await terminate(reason: 'invalid_session_restore', revokeServer: false);
       return null;

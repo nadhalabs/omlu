@@ -140,7 +140,7 @@ void main() {
     });
 
     test(
-      'handles corrupted JSON by clearing storage and returning null',
+      'handles corrupted JSON by clearing storage and throwing StoredSessionRecoveryException',
       () async {
         // Write invalid JSON format directly to secure storage
         await mockSecureStorage.write(
@@ -148,8 +148,10 @@ void main() {
           value: 'invalid-json-content',
         );
 
-        final readSession = await tokenStorage.read();
-        expect(readSession, isNull);
+        await expectLater(
+          tokenStorage.read(),
+          throwsA(isA<StoredSessionRecoveryException>()),
+        );
 
         // Verify that storage has been cleared
         final rawVal = await mockSecureStorage.read(key: 'omlu_role_session');
