@@ -152,6 +152,49 @@ class _StaffBillScreenState extends ConsumerState<StaffBillScreen> {
   void _addItem() {
     ref.read(selectedTableIdProvider.notifier).state = widget.tableId;
     ref.read(cartProvider.notifier).setTable(widget.tableId);
+    ref.read(cartProvider.notifier).setNormalEntry();
+    ref.read(staffTabProvider.notifier).state = 1;
+    Navigator.of(context).pop();
+  }
+
+  Future<void> _addServedItem() async {
+    final controller = TextEditingController();
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Add Served Item'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Use only for an item already delivered. No kitchen ticket will be created.',
+            ),
+            TextField(
+              controller: controller,
+              decoration: const InputDecoration(labelText: 'Reason (required)'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final value = controller.text.trim();
+              if (value.isNotEmpty) Navigator.pop(dialogContext, value);
+            },
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (!mounted || reason == null) return;
+    ref.read(selectedTableIdProvider.notifier).state = widget.tableId;
+    ref.read(cartProvider.notifier).setTable(widget.tableId);
+    ref.read(cartProvider.notifier).setServedEntry(reason);
     ref.read(staffTabProvider.notifier).state = 1;
     Navigator.of(context).pop();
   }
@@ -337,6 +380,7 @@ class _StaffBillScreenState extends ConsumerState<StaffBillScreen> {
                   ref.read(authProvider).valueOrNull?.role.name == 'admin',
               isSubmitting: _submitting,
               onAddItem: _addItem,
+              onAddServedItem: _addServedItem,
               onIssueBill: () => _issueBill(bill),
               onSendToCounter: () => _sendToCounter(bill),
               onAcceptPayment: () => _acceptPayment(bill),
@@ -500,6 +544,7 @@ class _BillBreakdown extends StatelessWidget {
     required this.canRecordPayment,
     required this.isSubmitting,
     required this.onAddItem,
+    required this.onAddServedItem,
     required this.onIssueBill,
     required this.onSendToCounter,
     required this.onAcceptPayment,
@@ -508,6 +553,7 @@ class _BillBreakdown extends StatelessWidget {
   final bool canRecordPayment;
   final bool isSubmitting;
   final VoidCallback onAddItem;
+  final VoidCallback onAddServedItem;
   final VoidCallback onIssueBill;
   final VoidCallback onSendToCounter;
   final VoidCallback onAcceptPayment;
@@ -606,7 +652,22 @@ class _BillBreakdown extends StatelessWidget {
             const SizedBox(height: OmluSpacing.md),
             OutlinedButton(
               onPressed: isSubmitting ? null : onAddItem,
-              child: const Text('Add Item'),
+              child: const Column(
+                children: [
+                  Text('Add Item'),
+                  Text('Sends to kitchen', style: OmluTypography.bodySmall),
+                ],
+              ),
+            ),
+            const SizedBox(height: OmluSpacing.sm),
+            OutlinedButton(
+              onPressed: isSubmitting ? null : onAddServedItem,
+              child: const Column(
+                children: [
+                  Text('Add Served Item'),
+                  Text('No kitchen ticket', style: OmluTypography.bodySmall),
+                ],
+              ),
             ),
             const SizedBox(height: OmluSpacing.sm),
             OmluButton(

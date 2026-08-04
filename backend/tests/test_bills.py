@@ -1901,7 +1901,12 @@ def test_five_percent_exclusive_gst_and_cgst_sgst_split(bill_context):
     assert bill["igst_amount"] == "0.00"
     assert bill["tax_amount"] == "5.00"
     assert bill["total_amount"] == "105.00"
-    assert bill["invoice_number"].endswith("/000001")
+    assert bill["invoice_number"] is None
+    issued = client.post(
+        f"/staff/bills/{bill['bill_number']}/issue",
+        headers={"Authorization": f"Bearer {bill_context['owner_token']}", "Idempotency-Key": "issue-exclusive-gst"},
+    ).json()
+    assert issued["invoice_number"].endswith("/000001")
 
 
 def test_five_percent_inclusive_gst(bill_context):
@@ -1939,6 +1944,25 @@ def test_discount_is_applied_before_gst_and_decimal_rounding():
     assert rounded.total_amount == Decimal("104.99")
 
 
+def test_gst_rate_is_applied_before_split_for_exact_360_regression():
+    totals = calculate_gst_totals(
+        subtotal=Decimal("360.00"), discount_amount=Decimal("0.00"),
+        gst_rate=Decimal("5.00"), tax_mode="exclusive",
+    )
+    assert totals.tax_amount == Decimal("18.00")
+    assert totals.cgst_amount == Decimal("9.00")
+    assert totals.sgst_amount == Decimal("9.00")
+    assert totals.total_amount == Decimal("378.00")
+
+    interstate = calculate_gst_totals(
+        subtotal=Decimal("360.00"), discount_amount=Decimal("0.00"),
+        gst_rate=Decimal("5.00"), tax_mode="exclusive", interstate=True,
+    )
+    assert interstate.cgst_amount == interstate.sgst_amount == Decimal("0.00")
+    assert interstate.igst_amount == Decimal("18.00")
+    assert interstate.total_amount == Decimal("378.00")
+
+
 def test_gst_bill_snapshots_are_immutable_after_settings_change(bill_context):
     _enable_gst(bill_context, rate="5.00", prefix="MM")
     add_order(bill_context)
@@ -1960,7 +1984,9 @@ def test_gst_bill_snapshots_are_immutable_after_settings_change(bill_context):
     assert issued["gst_rate"] == "5.00"
     assert issued["gstin"] == "32ABCDE1234F1Z5"
     assert issued["legal_business_name"] == "Malabar Meals Private Limited"
-    assert issued["invoice_number"] == generated["invoice_number"]
+    assert generated["invoice_number"] is None
+    # The number and its then-current prefix are allocated only at issuance.
+    assert issued["invoice_number"].startswith("NEW/")
     assert issued["total_amount"] == generated["total_amount"]
 
 
@@ -2005,7 +2031,7 @@ def test_invoice_sequence_resets_by_financial_year_and_is_restaurant_scoped(bill
     assert other_first == "OT/2026-27/000001"
 
 
-def test_cancelled_invoice_number_is_never_reused(bill_context):
+def test_cancelled_draft_does_not_consume_invoice_number(bill_context):
     _enable_gst(bill_context, prefix="MM")
     add_order(bill_context)
     generated = create_bill(bill_context).json()
@@ -2016,8 +2042,8 @@ def test_cancelled_invoice_number_is_never_reused(bill_context):
     next_number, _ = generate_invoice_number(db, restaurant)
     db.commit()
     db.close()
-    assert generated["invoice_number"].endswith("/000001")
-    assert next_number.endswith("/000002")
+    assert generated["invoice_number"] is None
+    assert next_number.endswith("/000001")
 
 
 def test_concurrent_invoice_generation_is_unique(bill_context):
@@ -2321,6 +2347,51 @@ def test_concurrent_issue_and_staff_order_are_serialized_safely(bill_context):
     assert sum(Decimal(order["subtotal"]) for order in final_bill["orders"]) == Decimal(expected_total)
 
     blocked = order()
+    assert blocked.status_code == 409
+
+
+def test_post_request_normal_and_served_entry_paths_are_distinct(bill_context):
+    add_order(bill_context)
+    draft = client.post(
+        f"/public/sessions/{bill_context['session_token']}/bill-request",
+        headers=participant_headers(bill_context["participant_token"]),
+    ).json()
+    headers = {"Authorization": f"Bearer {bill_context['owner_token']}"}
+
+    normal = client.post(
+        f"/staff/tables/{bill_context['table_id']}/orders",
+        headers={**headers, "Idempotency-Key": f"normal-{uuid.uuid4().hex}"},
+        json={"items": [{"menu_item_id": bill_context["item_id"], "quantity": 1}]},
+    )
+    assert normal.status_code == 201
+    assert normal.json()["status"] == "pending"
+
+    served = client.post(
+        f"/staff/tables/{bill_context['table_id']}/served-items",
+        headers={**headers, "Idempotency-Key": f"served-{uuid.uuid4().hex}"},
+        json={
+            "items": [{"menu_item_id": bill_context["item_id"], "quantity": 1}],
+            "late_entry_reason": "Delivered before the missing ticket was noticed",
+        },
+    )
+    assert served.status_code == 201
+    assert served.json()["status"] == "served"
+
+    refreshed = client.get(f"/staff/bills/{draft['bill_number']}", headers=headers).json()
+    assert refreshed["total_amount"] == "300.00"
+    issued = client.post(
+        f"/staff/bills/{draft['bill_number']}/issue",
+        headers={**headers, "Idempotency-Key": f"issue-{uuid.uuid4().hex}"},
+    )
+    assert issued.status_code == 200
+    blocked = client.post(
+        f"/staff/tables/{bill_context['table_id']}/served-items",
+        headers={**headers, "Idempotency-Key": f"served-blocked-{uuid.uuid4().hex}"},
+        json={
+            "items": [{"menu_item_id": bill_context["item_id"], "quantity": 1}],
+            "late_entry_reason": "Should be blocked",
+        },
+    )
     assert blocked.status_code == 409
 
 

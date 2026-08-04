@@ -58,6 +58,10 @@ class EmptyTableReportCreateRequest(BaseModel):
     session_token: str
 
 
+class ServedItemCreateRequest(PublicOrderCreateRequest):
+    late_entry_reason: str
+
+
 def _audit(db: Session, actor: StaffUser, action: str, target_type: str, target_id: str, new_value: dict | None = None) -> None:
     db.add(
         AuditLog(
@@ -630,6 +634,77 @@ def create_staff_table_order(
         resource_id=table.id,
         state={"table_id": table.id},
     )
+    return build_order_response(db, load_order_for_response(db, order.id))
+
+
+@router.post("/{table_id}/served-items", status_code=status.HTTP_201_CREATED)
+def create_staff_served_item(
+    table_id: int,
+    order_req: ServedItemCreateRequest,
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
+    current_user: StaffUser = Depends(_staff_write_roles),
+    db: Session = Depends(get_db),
+):
+    """Record food already served without sending a new ticket to the kitchen."""
+    key_clean = validate_idempotency_key(idempotency_key)
+    reason = order_req.late_entry_reason.strip()
+    if not reason:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Late-entry reason is required.")
+    table = db.query(RestaurantTable).filter(
+        RestaurantTable.id == table_id,
+        RestaurantTable.restaurant_id == current_user.restaurant_id,
+        RestaurantTable.is_active == True,
+    ).first()
+    if not table:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Table not found")
+    session = find_current_open_session_for_table(db, table.id)
+    if not session:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Active session not found")
+    if session.status not in {"open", "payment_requested"} or (session.bill and session.bill.status != "draft"):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ordering is locked for this table session.")
+
+    order = create_order_in_session(
+        db,
+        current_user.restaurant,
+        table,
+        session,
+        order_req,
+        key_clean,
+        created_by_staff_id=current_user.id,
+        source="staff_late_entry",
+        initial_status="served",
+    )
+    _audit(db, current_user, "staff_served_item_created", "order", str(order.id), {
+        "table_id": table.id,
+        "source": order.source,
+        "reason": reason,
+    })
+    if session.bill and session.bill.status == "draft":
+        from app.services.bills import apply_draft_totals
+        apply_draft_totals(db, session.bill)
+    db.commit()
+    channels = [
+        restaurant_channel(current_user.restaurant_id, "operations"),
+        restaurant_channel(current_user.restaurant_id, "staff"),
+        session_channel(session.public_token),
+        table_channel(current_user.restaurant_id, table.id),
+        order_channel(order.public_token),
+    ]
+    publish_event(
+        EVENT_ORDER_CREATED,
+        restaurant_id=current_user.restaurant_id,
+        channels=channels,
+        resource_id=order.id,
+        state={"order_number": order.order_number, "status": "served", "table_id": table.id, "source": order.source},
+    )
+    if session.bill and session.bill.status == "draft":
+        publish_event(
+            EVENT_BILL_GENERATED,
+            restaurant_id=current_user.restaurant_id,
+            channels=channels,
+            resource_id=session.bill.id,
+            state={"bill_number": session.bill.bill_number, "session_token": session.public_token, "status": "draft"},
+        )
     return build_order_response(db, load_order_for_response(db, order.id))
 
 

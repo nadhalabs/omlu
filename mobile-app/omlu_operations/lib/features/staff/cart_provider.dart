@@ -43,6 +43,7 @@ class CartState {
     required this.idempotencyKey,
     this.submissionState = SubmissionState.idle,
     this.errorMessage,
+    this.servedEntryReason,
   });
 
   final int? tableId;
@@ -53,6 +54,8 @@ class CartState {
   final String idempotencyKey;
   final SubmissionState submissionState;
   final String? errorMessage;
+  final String? servedEntryReason;
+  bool get isServedEntry => servedEntryReason != null;
 
   bool get isEmpty => items.isEmpty;
 
@@ -66,6 +69,8 @@ class CartState {
     SubmissionState? submissionState,
     String? errorMessage,
     bool clearTable = false,
+    String? servedEntryReason,
+    bool clearServedEntry = false,
   }) {
     return CartState(
       tableId: clearTable ? null : (tableId ?? this.tableId),
@@ -78,6 +83,9 @@ class CartState {
       idempotencyKey: idempotencyKey ?? this.idempotencyKey,
       submissionState: submissionState ?? this.submissionState,
       errorMessage: errorMessage,
+      servedEntryReason: clearServedEntry
+          ? null
+          : (servedEntryReason ?? this.servedEntryReason),
     );
   }
 }
@@ -135,6 +143,16 @@ class CartNotifier extends StateNotifier<CartState> {
       scope: scope,
       idempotencyKey: _generateIdempotencyKey(),
     );
+    _persist();
+  }
+
+  void setNormalEntry() {
+    state = state.copyWith(clearServedEntry: true);
+    _persist();
+  }
+
+  void setServedEntry(String reason) {
+    state = state.copyWith(servedEntryReason: reason.trim());
     _persist();
   }
 
@@ -268,11 +286,20 @@ class CartNotifier extends StateNotifier<CartState> {
         customerNote: 'Staff assisted order',
       );
 
-      await api.createStaffOrder(
-        tableId: state.tableId!,
-        draft: draft,
-        idempotencyKey: state.idempotencyKey,
-      );
+      if (state.isServedEntry) {
+        await api.createStaffServedItem(
+          tableId: state.tableId!,
+          draft: draft,
+          reason: state.servedEntryReason!,
+          idempotencyKey: state.idempotencyKey,
+        );
+      } else {
+        await api.createStaffOrder(
+          tableId: state.tableId!,
+          draft: draft,
+          idempotencyKey: state.idempotencyKey,
+        );
+      }
 
       state = state.copyWith(submissionState: SubmissionState.success);
       _persist();
@@ -329,6 +356,7 @@ class CartNotifier extends StateNotifier<CartState> {
         items: items,
         idempotencyKey:
             json['idempotency_key'] as String? ?? _generateIdempotencyKey(),
+        servedEntryReason: json['served_entry_reason'] as String?,
       );
     } catch (_) {
       // A corrupt or old-authority draft is never allowed to repopulate state.
@@ -344,6 +372,7 @@ class CartNotifier extends StateNotifier<CartState> {
             'restaurant_slug': state.restaurantSlug,
             'table_id': state.tableId,
             'idempotency_key': state.idempotencyKey,
+            'served_entry_reason': state.servedEntryReason,
             'items': [
               for (final item in state.items.values)
                 {

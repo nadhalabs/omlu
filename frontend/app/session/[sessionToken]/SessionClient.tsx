@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { PublicThemeControl } from "@/components/PublicThemeControl";
 import {
   ApiError,
-  createOrRefreshPublicBill,
   createPublicServiceRequest,
   requestPublicSessionBill,
   getPublicDiningSession,
@@ -428,20 +427,8 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
     );
   };
 
-  const handleViewBill = async () => {
-    if (!session || billActionLoading) return;
-    setBillActionLoading("view");
-    setBillActionError(null);
-    try {
-      if (!participantToken) throw new Error("Your access to this table has ended.");
-      const prepared = await createOrRefreshPublicBill(session.public_token, participantToken);
-      markDetachedSession({ sessionToken: session.public_token, restaurantSlug: session.restaurant_slug, restaurantName: session.restaurant_name, tableCode: session.table_code, receiptToken: prepared.receipt_token });
-      router.replace(detachedBillPath({ sessionToken: session.public_token, receiptToken: prepared.receipt_token }));
-    } catch (err) {
-      setBillActionError(err instanceof Error ? err.message : "Failed to prepare bill.");
-    } finally {
-      setBillActionLoading(null);
-    }
+  const handleViewBill = () => {
+    document.getElementById("provisional-bill")?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   const handleRequestBill = async () => {
@@ -450,17 +437,22 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
     setBillActionError(null);
     try {
       if (!participantToken) throw new Error("Your access to this table has ended.");
-      const prepared = await requestPublicSessionBill(session.public_token, participantToken);
-      markDetachedSession({ sessionToken: session.public_token, restaurantSlug: session.restaurant_slug, restaurantName: session.restaurant_name, tableCode: session.table_code, receiptToken: prepared.receipt_token });
+      await requestPublicSessionBill(session.public_token, participantToken);
       setBillActionError(null);
       setServiceMessage((prev) => ({ ...prev, bill: t.billRequestSent }));
-      router.replace(detachedBillPath({ sessionToken: session.public_token, receiptToken: prepared.receipt_token }));
+      await fetchSession(false);
     } catch (err) {
       setBillActionError(err instanceof Error ? err.message : "Failed to request bill.");
     } finally {
       setBillActionLoading(null);
     }
   };
+
+  useEffect(() => {
+    if (!session?.bill?.receipt_token || !["issued", "payment_pending", "paid"].includes(session.bill.status)) return;
+    markDetachedSession({ sessionToken: session.public_token, restaurantSlug: session.restaurant_slug, restaurantName: session.restaurant_name, tableCode: session.table_code, receiptToken: session.bill.receipt_token });
+    router.replace(detachedBillPath({ sessionToken: session.public_token, receiptToken: session.bill.receipt_token }));
+  }, [router, session]);
 
   const handleServiceRequest = async (type: "waiter" | "water") => {
     if (!session) return;
@@ -690,13 +682,13 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
               </button>
             )}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <button
+              {session.bill?.status === "draft" && <button
                 onClick={handleViewBill}
                 disabled={billActionLoading !== null}
                 className="min-h-14 rounded-2xl bg-[var(--omlu-primary-surface)] px-5 py-4 text-base font-black text-[var(--omlu-primary-action-text)] shadow-md transition hover:bg-[var(--omlu-muted-surface)] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[var(--omlu-muted-surface)] dark:text-[var(--omlu-text-primary)] dark:hover:bg-[var(--omlu-primary-surface)]"
               >
-                {billActionLoading === "view" ? t.preparingBill : t.viewBill}
-              </button>
+                {session.bill?.status === "draft" ? "Review current bill" : t.viewBill}
+              </button>}
               {session.status === "open" && (
                 <button
                   onClick={handleRequestBill}
@@ -715,7 +707,7 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
             {session.status === "payment_requested" && (
               <p className="rounded-2xl border border-amber-200 bg-amber-50 p-3.5 text-sm font-bold text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300">
                 {language === "en"
-                  ? "Bill requested. Staff are reviewing your bill. You can view items while staff process your request."
+                  ? "Bill requested · Staff reviewing. Final amount may change until the bill is issued."
                   : "ബിൽ അഭ്യർത്ഥിച്ചു. ജീവനക്കാർ നിങ്ങളുടെ ബിൽ പരിശോധിക്കുകയാണ്. ജീവനക്കാർ പ്രോസസ്സ് ചെയ്യുമ്പോൾ നിങ്ങൾക്ക് വിഭവങ്ങൾ കാണാം."}
               </p>
             )}
@@ -817,6 +809,23 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
               </div>
           </div>}
         </section>
+
+        {session.bill?.status === "draft" && (
+          <section id="provisional-bill" className="scroll-mt-4 rounded-3xl border border-amber-200 bg-[var(--omlu-primary-surface)] p-5" aria-label="Provisional bill">
+            <div className="flex items-start justify-between gap-4">
+              <div><p className="text-xs font-black uppercase tracking-wide text-amber-700">Status: Draft</p><p className="mt-1 text-sm font-bold">Invoice number: Not issued</p><p className="text-sm font-bold">Invoice date: —</p></div>
+              <p className="text-xl font-black">₹{Number(session.bill.total_amount).toFixed(2)}</p>
+            </div>
+            <div className="mt-4 grid gap-2 border-t border-[var(--omlu-border)] pt-4 text-sm font-semibold">
+              <div className="flex justify-between"><span>Subtotal</span><span>₹{Number(session.bill.subtotal).toFixed(2)}</span></div>
+              <div className="flex justify-between"><span>Discount</span><span>− ₹{Number(session.bill.discount_amount).toFixed(2)}</span></div>
+              {Number(session.bill.cgst_amount) > 0 && <div className="flex justify-between"><span>CGST</span><span>₹{Number(session.bill.cgst_amount).toFixed(2)}</span></div>}
+              {Number(session.bill.sgst_amount) > 0 && <div className="flex justify-between"><span>SGST</span><span>₹{Number(session.bill.sgst_amount).toFixed(2)}</span></div>}
+              {Number(session.bill.igst_amount) > 0 && <div className="flex justify-between"><span>IGST</span><span>₹{Number(session.bill.igst_amount).toFixed(2)}</span></div>}
+              <div className="flex justify-between border-t border-[var(--omlu-border)] pt-2 text-base font-black"><span>Provisional total</span><span>₹{Number(session.bill.total_amount).toFixed(2)}</span></div>
+            </div>
+          </section>
+        )}
 
         <main className="flex flex-col gap-4">
           {session.orders.length === 0 ? (

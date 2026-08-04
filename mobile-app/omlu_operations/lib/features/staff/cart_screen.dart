@@ -33,7 +33,12 @@ class CartScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Cart - $tableNumber', style: OmluTypography.h2),
+        title: Text(
+          cartState.isServedEntry
+              ? 'Served item - $tableNumber'
+              : 'Cart - $tableNumber',
+          style: OmluTypography.h2,
+        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
       ),
@@ -133,7 +138,9 @@ class CartScreen extends ConsumerWidget {
                 ),
                 child: SafeArea(
                   child: OmluButton(
-                    text: 'Send to Kitchen',
+                    text: cartState.isServedEntry
+                        ? 'Add Served Item · No kitchen ticket'
+                        : 'Send to Kitchen',
                     isLoading:
                         cartState.submissionState == SubmissionState.submitting,
                     onPressed:
@@ -147,8 +154,12 @@ class CartScreen extends ConsumerWidget {
                               if (context.mounted) {
                                 // Show success dialog/snack and return to table view
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Order sent successfully!'),
+                                  SnackBar(
+                                    content: Text(
+                                      cartState.isServedEntry
+                                          ? 'Served item added without a kitchen ticket.'
+                                          : 'Order sent to kitchen.',
+                                    ),
                                     backgroundColor: OmluColors.statusAvailable,
                                   ),
                                 );
@@ -169,7 +180,9 @@ class CartScreen extends ConsumerWidget {
         },
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (err, st) => const Center(
-          child: Text('Could not load the menu. Check the connection and try again.'),
+          child: Text(
+            'Could not load the menu. Check the connection and try again.',
+          ),
         ),
       ),
     );

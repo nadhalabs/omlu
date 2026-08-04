@@ -10,13 +10,13 @@ export const metadata = {
 export default async function NewStaffOrderPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tableId?: string }>;
+  searchParams: Promise<{ tableId?: string; mode?: string }>;
 }) {
   const staff = await requireStaffRole(["owner", "admin", "staff"]);
-  const { tableId } = await searchParams;
+  const { tableId, mode } = await searchParams;
   const parsedTableId = tableId ? Number(tableId) : null;
   const initialTableId = parsedTableId !== null && Number.isFinite(parsedTableId) ? parsedTableId : null;
   if (!initialTableId) redirect("/staff/tables");
 
-  return <WebAuthScope scope={staff.scope}><NewStaffOrderClient initialTableId={initialTableId} /></WebAuthScope>;
+  return <WebAuthScope scope={staff.scope}><NewStaffOrderClient initialTableId={initialTableId} servedEntry={mode === "served"} /></WebAuthScope>;
 }

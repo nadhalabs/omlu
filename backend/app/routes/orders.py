@@ -159,6 +159,29 @@ def build_session_response(db: Session, dining_session: DiningSession):
         ServiceRequest.dining_session_id == dining_session.id,
         ServiceRequest.request_type != "bill",
     ).order_by(ServiceRequest.created_at.asc(), ServiceRequest.id.asc()).all()
+    bill = dining_session.bill
+    bill_payload = None
+    if bill:
+        bill_payload = {
+            "bill_number": bill.bill_number,
+            "status": bill.status,
+            "total_amount": bill.total_amount,
+            "currency": bill.currency,
+            "generated_at": bill.generated_at,
+            "paid_at": bill.paid_at,
+            "payment_method": bill.payment_method,
+            "receipt_token": bill.receipt_token if bill.status in {"issued", "payment_pending", "paid"} else None,
+            "invoice_number": bill.invoice_number if bill.status in {"issued", "payment_pending", "paid"} else None,
+            "invoice_date": bill.invoice_date if bill.status in {"issued", "payment_pending", "paid"} else None,
+            "subtotal": bill.subtotal,
+            "discount_amount": bill.discount_amount,
+            "taxable_amount": bill.taxable_amount,
+            "gst_rate": bill.gst_rate,
+            "cgst_amount": bill.cgst_amount,
+            "sgst_amount": bill.sgst_amount,
+            "igst_amount": bill.igst_amount,
+            "tax_amount": bill.tax_amount,
+        }
     return {
         "public_token": dining_session.public_token,
         "status": dining_session.status,
@@ -169,11 +192,11 @@ def build_session_response(db: Session, dining_session: DiningSession):
         "opened_at": dining_session.opened_at,
         "payment_requested_at": dining_session.payment_requested_at,
         "orders": orders,
-        "combined_subtotal": sum((order.subtotal for order in orders), Decimal("0.00")),
+        "combined_subtotal": sum((order.subtotal for order in orders if order.status not in {"rejected", "cancelled", "voided"}), Decimal("0.00")),
         "order_count": len(orders),
         "service_requests_enabled": getattr(dining_session.restaurant, "service_requests_enabled", True),
         "can_order_more": dining_session.status == "open",
-        "bill": dining_session.bill,
+        "bill": bill_payload,
         "service_requests": service_requests,
     }
 
@@ -235,8 +258,13 @@ def create_order_in_session(
     created_by_staff_id: int | None = None,
     source: str = "customer_qr",
     created_by_participant_id: int | None = None,
+    initial_status: str = "pending",
 ) -> Order:
-    payload_hash = request_hash(order_req.model_dump(mode="json"))
+    payload_hash = request_hash({
+        "order": order_req.model_dump(mode="json"),
+        "initial_status": initial_status,
+        "source": source,
+    })
     existing_order = db.query(Order).options(
         selectinload(Order.items).selectinload(OrderItem.selected_options),
         selectinload(Order.status_history),
@@ -284,7 +312,7 @@ def create_order_in_session(
             dining_session_id=locked_session.id,
             order_number=order_number,
             public_token=uuid.uuid4().hex,
-            status="pending",
+            status=initial_status,
             subtotal=subtotal,
             customer_note=order_req.customer_note,
             source=source,
@@ -327,7 +355,7 @@ def create_order_in_session(
         db.add(OrderStatusHistory(
             order_id=new_order.id,
             old_status=None,
-            new_status="pending",
+            new_status=initial_status,
             changed_by_staff_id=created_by_staff_id
         ))
         db.flush()

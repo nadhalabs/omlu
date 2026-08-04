@@ -167,6 +167,7 @@ def calculate_gst_totals(
     discount_amount: Decimal,
     gst_rate: Decimal,
     tax_mode: str,
+    interstate: bool = False,
 ) -> BillTaxTotals:
     subtotal = round_money(subtotal)
     discount = round_money(max(Decimal("0.00"), min(discount_amount, subtotal)))
@@ -177,18 +178,23 @@ def calculate_gst_totals(
             discounted if rate == 0 else discounted * Decimal("100") / (Decimal("100") + rate)
         )
         tax_total = round_money(discounted - taxable)
-        cgst = round_money(tax_total / Decimal("2"))
-        sgst = round_money(tax_total - cgst)
         total = discounted
     elif tax_mode == "exclusive":
         taxable = discounted
-        half_rate = rate / Decimal("2")
-        cgst = round_money(taxable * half_rate / Decimal("100"))
-        sgst = round_money(taxable * half_rate / Decimal("100"))
-        tax_total = round_money(cgst + sgst)
+        tax_total = round_money(taxable * rate / Decimal("100"))
         total = round_money(taxable + tax_total)
     else:
         raise ValueError("tax_mode must be inclusive or exclusive")
+    if interstate:
+        cgst = Decimal("0.00")
+        sgst = Decimal("0.00")
+        igst = tax_total
+    else:
+        # Apply the configured GST rate once, then split that resulting tax.
+        # Deriving the second component as the remainder preserves paise exactly.
+        cgst = round_money(tax_total * Decimal("50") / Decimal("100"))
+        sgst = round_money(tax_total - cgst)
+        igst = Decimal("0.00")
     return BillTaxTotals(
         subtotal=subtotal,
         discount_amount=discount,
@@ -196,7 +202,7 @@ def calculate_gst_totals(
         gst_rate=rate.quantize(MONEY_QUANTUM),
         cgst_amount=cgst,
         sgst_amount=sgst,
-        igst_amount=Decimal("0.00"),
+        igst_amount=igst,
         tax_amount=tax_total,
         total_amount=total,
     )
@@ -339,8 +345,6 @@ def apply_draft_totals(
         bill.billing_address_snapshot = bill.billing_address_snapshot or restaurant.registered_billing_address
         bill.state_name_snapshot = bill.state_name_snapshot or restaurant.gst_state_name
         bill.state_code_snapshot = bill.state_code_snapshot or restaurant.gst_state_code
-        if initialize_snapshot and not bill.invoice_number:
-            bill.invoice_number, bill.invoice_date = generate_invoice_number(db, restaurant, now=now)
         return bill
 
     bill.subtotal = subtotal

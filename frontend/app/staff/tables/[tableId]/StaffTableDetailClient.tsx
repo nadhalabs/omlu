@@ -102,7 +102,8 @@ export default function StaffTableDetailClient({ tableId }: { tableId: number })
             </div>
             <div className="flex flex-wrap gap-2">
               <button disabled={Boolean(busy)} onClick={() => void load()} className="rounded-lg border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] px-4 py-3 text-sm font-black text-[var(--omlu-text-secondary)] disabled:opacity-50">Refresh</button>
-              <Link href={`/staff/orders/new?tableId=${tableId}`} className="rounded-lg bg-orange-600 px-4 py-3 text-sm font-black text-[var(--omlu-primary-action-text)]">Add Order</Link>
+              <Link href={`/staff/orders/new?tableId=${tableId}`} className="rounded-lg bg-orange-600 px-4 py-3 text-sm font-black text-[var(--omlu-primary-action-text)]">Add Item · Kitchen</Link>
+              {bill?.status === "draft" && <Link href={`/staff/orders/new?tableId=${tableId}&mode=served`} className="rounded-lg border border-amber-500 px-4 py-3 text-sm font-black text-amber-500">Add Served Item · No kitchen</Link>}
             </div>
           </div>
         </div>

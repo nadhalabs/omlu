@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { StaffBottomNav } from "@/components/staff/StaffBottomNav";
 import {
   createStaffTableOrder,
+  createStaffServedItem,
   getStaffTableDetail,
   getStaffTables,
   StaffTableDetail,
@@ -45,13 +46,14 @@ function fallbackImageLabel(name: string) {
   return name.trim().slice(0, 2).toUpperCase() || "OM";
 }
 
-export default function NewStaffOrderClient({ initialTableId }: { initialTableId: number | null }) {
+export default function NewStaffOrderClient({ initialTableId, servedEntry = false }: { initialTableId: number | null; servedEntry?: boolean }) {
   const router = useRouter();
   const [tables, setTables] = useState<StaffTableSummary[]>([]);
   const [tableId, setTableId] = useState<number | null>(initialTableId);
   const [detail, setDetail] = useState<StaffTableDetail | null>(null);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [orderNote, setOrderNote] = useState("");
+  const [lateEntryReason, setLateEntryReason] = useState("");
   const [search, setSearch] = useState("");
   const [categoryId, setCategoryId] = useState<number | "all">("all");
   const [loading, setLoading] = useState(true);
@@ -193,7 +195,7 @@ export default function NewStaffOrderClient({ initialTableId }: { initialTableId
   const subtotal = cart.reduce((sum, line) => sum + Number(line.price) * line.quantity, 0);
   const itemCount = cart.reduce((sum, line) => sum + line.quantity, 0);
   const activeTable = detail?.table ?? tables.find((table) => table.id === tableId);
-  const canOrder = Boolean(tableId && (!detail?.session || detail.session.status === "open"));
+  const canOrder = Boolean(tableId && (!detail?.session || detail.session.status === "open" || (detail.session.status === "payment_requested" && detail.session.bill?.status === "draft")));
 
   const optionSignature = (options: SelectedOptionRequest[]) =>
     JSON.stringify(options.slice().sort((a, b) => a.group_id - b.group_id || a.option_id - b.option_id));
@@ -257,7 +259,8 @@ export default function NewStaffOrderClient({ initialTableId }: { initialTableId
     setError(null);
     setSuccess(null);
     try {
-      const order = await createStaffTableOrder(tableId, {
+      if (servedEntry && !lateEntryReason.trim()) throw new Error("Explain why this served item was missing.");
+      const payload = {
         items: cart.map((line) => ({
           menu_item_id: line.menu_item_id,
           quantity: line.quantity,
@@ -265,11 +268,14 @@ export default function NewStaffOrderClient({ initialTableId }: { initialTableId
           selected_options: line.selected_options,
         })),
         customer_note: orderNote.trim() || null,
-      });
+      };
+      const order = servedEntry
+        ? await createStaffServedItem(tableId, { ...payload, late_entry_reason: lateEntryReason.trim() })
+        : await createStaffTableOrder(tableId, payload);
       setCart([]);
       setOrderNote("");
       window.localStorage.removeItem(cartKey(tableId));
-      setSuccess(`Order ${order.order_number} sent.`);
+      setSuccess(servedEntry ? `Served item ${order.order_number} added without a kitchen ticket.` : `Order ${order.order_number} sent to kitchen.`);
       await loadDetail();
       window.setTimeout(() => router.replace(`/staff/tables/${tableId}`), 900);
     } catch (err) {
@@ -287,7 +293,7 @@ export default function NewStaffOrderClient({ initialTableId }: { initialTableId
             ‹
           </Link>
           <div className="text-center">
-            <p className="text-xs font-bold text-[var(--omlu-text-secondary)]">New Order</p>
+            <p className="text-xs font-bold text-[var(--omlu-text-secondary)]">{servedEntry ? "Add Served Item · No kitchen ticket" : "Add Item · Sends to kitchen"}</p>
             <h1 className="text-2xl font-black text-orange-600">Table {activeTable?.table_number || tableId}</h1>
           </div>
           <Link href="/staff/requests" className="flex h-12 w-12 items-center justify-center rounded-full text-2xl text-[var(--omlu-text-primary)]" aria-label="Requests">
@@ -404,8 +410,9 @@ export default function NewStaffOrderClient({ initialTableId }: { initialTableId
                 </div>
               ))}
               <textarea value={orderNote} onChange={(event) => setOrderNote(event.target.value)} placeholder="Order note" className="min-h-20 rounded-2xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-4 py-3 text-sm font-semibold outline-none" />
+              {servedEntry && <textarea required value={lateEntryReason} onChange={(event) => setLateEntryReason(event.target.value)} placeholder="Required: why was this served item missing?" className="min-h-20 rounded-2xl border border-amber-300 bg-[var(--omlu-primary-surface)] px-4 py-3 text-sm font-semibold outline-none" />}
               <button type="button" disabled={!canOrder || cart.length === 0 || submitting} onClick={handleSubmit} className="h-14 rounded-2xl bg-orange-600 text-base font-black text-[var(--omlu-primary-action-text)] disabled:bg-[var(--omlu-muted-surface)]">
-                {submitting ? "Sending..." : "Send Order"}
+                {submitting ? "Saving..." : servedEntry ? "Add Served Item · Do not send to kitchen" : "Add Item · Send to kitchen"}
               </button>
             </div>
           )}

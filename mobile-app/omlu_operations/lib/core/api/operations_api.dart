@@ -71,6 +71,22 @@ class OperationsApi {
     return OrderSummary.fromJson(json);
   }
 
+  Future<OrderSummary> createStaffServedItem({
+    required int tableId,
+    required StaffOrderDraft draft,
+    required String reason,
+    required String idempotencyKey,
+  }) async {
+    final body = draft.toJson()..['late_entry_reason'] = reason;
+    final json = await _client.postJson(
+      '/staff/tables/$tableId/served-items',
+      body: body,
+      idempotencyKey: idempotencyKey,
+    );
+    await _cache?.invalidate('tables', identifier: 'all');
+    return OrderSummary.fromJson(json);
+  }
+
   Future<List<KitchenOrder>> fetchKitchenOrders({
     required String restaurantSlug,
     String? status,
@@ -159,8 +175,9 @@ class OperationsApi {
         )
         .toUpperCase();
 
-    if (!RegExp(r'^[2346789ABCDEFGHJKLMNPQRTUVWXYZ]{6}$')
-        .hasMatch(normalized)) {
+    if (!RegExp(
+      r'^[2346789ABCDEFGHJKLMNPQRTUVWXYZ]{6}$',
+    ).hasMatch(normalized)) {
       throw const ValidationException(
         'Enter a valid 6-character payment code.',
       );
@@ -217,8 +234,7 @@ class OperationsApi {
     return _client.postJson(
       '/staff/bills/$billNumber/confirm-counter-payment',
       body: {'method': method},
-      idempotencyKey:
-          idempotencyKey ?? 'bill-payment-$billNumber-$method-v1',
+      idempotencyKey: idempotencyKey ?? 'bill-payment-$billNumber-$method-v1',
     );
   }
 

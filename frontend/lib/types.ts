@@ -323,6 +323,17 @@ export interface PublicDiningSessionBillSummary {
   generated_at: string;
   paid_at: string | null;
   payment_method: "counter_cash" | "counter_upi" | "counter_card" | "online" | null;
+  receipt_token: string | null;
+  invoice_number: string | null;
+  invoice_date: string | null;
+  subtotal: string;
+  discount_amount: string;
+  taxable_amount: string;
+  gst_rate: string;
+  cgst_amount: string;
+  sgst_amount: string;
+  igst_amount: string;
+  tax_amount: string;
 }
 
 export interface PublicDiningSessionServiceRequest {

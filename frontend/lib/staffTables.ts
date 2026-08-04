@@ -92,6 +92,20 @@ export async function createStaffTableOrder(tableId: number, payload: ManualOrde
   return res.json();
 }
 
+export async function createStaffServedItem(tableId: number, payload: ManualOrderPayload & { late_entry_reason: string }): Promise<PublicOrderResponse> {
+  const storageKey = `omlu:staff-served-item-key:${tableId}`;
+  const idempotencyKey = localStorage.getItem(storageKey) || crypto.randomUUID();
+  localStorage.setItem(storageKey, idempotencyKey);
+  const res = await fetch(`/api/staff/tables/${tableId}/served-items`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(await parseError(res, "Could not add served item."));
+  localStorage.removeItem(storageKey);
+  return res.json();
+}
+
 export async function generateStaffTableBill(tableId: number): Promise<BillResponse> {
   const res = await fetch(`/api/staff/tables/${tableId}/bill`, { method: "POST", body: "{}" });
   if (!res.ok) throw new Error(await parseError(res, "Could not generate bill."));

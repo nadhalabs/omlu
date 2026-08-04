@@ -54,7 +54,7 @@ test("staff assisted ordering requires a selected table and replaces after succe
 });
 
 test("staff order UI allows first order to create the table state and blocks duplicate sends", () => {
-  assert.match(staffOrderClient, /const canOrder = Boolean\(tableId && \(!detail\?\.session \|\| detail\.session\.status === "open"\)\)/);
+  assert.match(staffOrderClient, /detail\.session\.status === "payment_requested" && detail\.session\.bill\?\.status === "draft"/);
   assert.match(staffOrderClient, /if \(!tableId \|\| cart\.length === 0 \|\| submitting \|\| !canOrder\) return/);
   assert.match(staffOrderClient, /disabled=\{!canOrder \|\| cart\.length === 0 \|\| submitting\}/);
   assert.doesNotMatch(staffOrderClient, /Start Session/);

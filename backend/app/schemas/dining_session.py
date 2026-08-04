@@ -50,10 +50,24 @@ class PublicDiningSessionBillSummary(BaseModel):
     generated_at: datetime
     paid_at: Optional[datetime] = None
     payment_method: Optional[str] = None
+    receipt_token: Optional[str] = None
+    invoice_number: Optional[str] = None
+    invoice_date: Optional[datetime] = None
+    subtotal: Decimal
+    discount_amount: Decimal
+    taxable_amount: Decimal
+    gst_rate: Decimal
+    cgst_amount: Decimal
+    sgst_amount: Decimal
+    igst_amount: Decimal
+    tax_amount: Decimal
 
-    @field_serializer("total_amount")
-    def serialize_total_amount(self, total_amount: Decimal) -> str:
-        return f"{total_amount:.2f}"
+    @field_serializer(
+        "subtotal", "discount_amount", "taxable_amount", "gst_rate",
+        "cgst_amount", "sgst_amount", "igst_amount", "tax_amount", "total_amount"
+    )
+    def serialize_money(self, value: Decimal) -> str:
+        return f"{value:.2f}"
 
     model_config = ConfigDict(from_attributes=True)
 
