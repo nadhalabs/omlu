@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/printing/printer_adapter.dart';
 import '../../design_system/colors.dart';
 import '../../design_system/spacing.dart';
 import '../../design_system/typography.dart';
@@ -11,6 +12,7 @@ import '../../design_system/widgets/omlu_card.dart';
 import '../../design_system/widgets/omlu_skeleton_loader.dart';
 import '../../design_system/widgets/realtime_status_chip.dart';
 import '../auth_provider.dart';
+import '../printing/printer_settings_screen.dart';
 import '../realtime_connection_provider.dart';
 import 'cart_provider.dart';
 import 'menu_provider.dart';
@@ -28,6 +30,7 @@ class StaffBillScreen extends ConsumerStatefulWidget {
 
 class _StaffBillScreenState extends ConsumerState<StaffBillScreen> {
   bool _submitting = false;
+  String? _operationLabel;
   Map<String, Object?>? _confirmedBill;
   bool _paymentCompleted = false;
   String? _currentBillNumber;
@@ -133,20 +136,141 @@ class _StaffBillScreenState extends ConsumerState<StaffBillScreen> {
     }
   }
 
-  Future<void> _issueBill(Map<String, Object?> bill) async {
+  Future<void> _issueBill(
+    Map<String, Object?> bill, {
+    required bool printAfterIssue,
+  }) async {
     if (_submitting || _text(bill['status']) != 'draft') return;
-    setState(() => _submitting = true);
+    setState(() {
+      _submitting = true;
+      _operationLabel = 'Issuing bill…';
+    });
+    Map<String, Object?>? issued;
     try {
       final billNumber = _text(bill['bill_number']);
-      await ref
+      issued = await ref
           .read(operationsApiProvider)
           .issueBill(billNumber, idempotencyKey: 'bill-issue-$billNumber-v1');
-      await _refresh();
+      final status = _text(issued['status']);
+      if (!{'issued', 'payment_pending'}.contains(status)) {
+        throw StateError('The bill was not ready to print.');
+      }
+      if (printAfterIssue) {
+        if (mounted) setState(() => _operationLabel = 'Printing bill…');
+        await _printIssuedBill(issued, showFailureDialog: true);
+      }
     } catch (error) {
-      await _handleFailure(error);
+      if (issued == null) {
+        await _handleFailure(error);
+      }
     } finally {
-      if (mounted) setState(() => _submitting = false);
+      try {
+        await _refresh();
+      } catch (_) {
+        // The issued response remains authoritative when refresh is offline.
+      }
+      if (mounted) {
+        setState(() {
+          _submitting = false;
+          _operationLabel = null;
+        });
+      }
     }
+  }
+
+  Future<void> _printIssuedBill(
+    Map<String, Object?> bill, {
+    required bool showFailureDialog,
+  }) async {
+    final billNumber = _text(bill['bill_number']);
+    try {
+      final api = ref.read(operationsApiProvider);
+      final receipt = await api.fetchReceiptPayload(billNumber);
+      final printer = ref.read(printerServiceProvider);
+      await printer.loadConfig();
+      await printer.printReceipt(receipt);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Bill issued and printed.'),
+          backgroundColor: OmluColors.statusAvailable,
+        ),
+      );
+    } on PrinterException catch (error) {
+      if (showFailureDialog) {
+        await _showPrintFailure(
+          bill,
+          'Bill issued, but printing failed.',
+          error.message,
+        );
+      } else {
+        rethrow;
+      }
+    } catch (_) {
+      if (showFailureDialog) {
+        await _showPrintFailure(
+          bill,
+          'Bill issued, but the printable bill could not be loaded.',
+          'Printing failed. The bill remains safely issued.',
+        );
+      } else {
+        rethrow;
+      }
+    }
+  }
+
+  Future<void> _showPrintFailure(
+    Map<String, Object?> issuedBill,
+    String title,
+    String detail,
+  ) async {
+    if (!mounted) return;
+    final retry = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(title),
+        content: Text(detail),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Continue Without Printing'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Retry Print'),
+          ),
+        ],
+      ),
+    );
+    if (retry == true && mounted) {
+      setState(() => _operationLabel = 'Printing bill…');
+      await _printIssuedBill(issuedBill, showFailureDialog: true);
+    }
+  }
+
+  Future<void> _reprintBill(Map<String, Object?> bill) async {
+    if (_submitting) return;
+    setState(() {
+      _submitting = true;
+      _operationLabel = 'Printing bill…';
+    });
+    try {
+      await _printIssuedBill(bill, showFailureDialog: true);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _submitting = false;
+          _operationLabel = null;
+        });
+      }
+    }
+  }
+
+  void _openPrinterSettings() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const PrinterSettingsScreen()),
+    );
   }
 
   void _addItem() {
@@ -305,6 +429,8 @@ class _StaffBillScreenState extends ConsumerState<StaffBillScreen> {
   }
 
   Widget _buildDetail(Map<String, Object?> detail) {
+    final printerConfig = ref.watch(printerConfigProvider).valueOrNull;
+    final hasConfiguredPrinter = printerConfig?.isConfigured == true;
     final table = _map(detail['table']);
     final session = detail['session'] is Map ? _map(detail['session']) : null;
     if (session == null) {
@@ -379,9 +505,15 @@ class _StaffBillScreenState extends ConsumerState<StaffBillScreen> {
                   ref.read(authProvider).valueOrNull?.role.name == 'owner' ||
                   ref.read(authProvider).valueOrNull?.role.name == 'admin',
               isSubmitting: _submitting,
+              operationLabel: _operationLabel,
+              hasConfiguredPrinter: hasConfiguredPrinter,
               onAddItem: _addItem,
               onAddServedItem: _addServedItem,
-              onIssueBill: () => _issueBill(bill),
+              onIssueAndPrint: () => _issueBill(bill, printAfterIssue: true),
+              onIssueWithoutPrinting: () =>
+                  _issueBill(bill, printAfterIssue: false),
+              onReprintBill: () => _reprintBill(bill),
+              onPrinterSettings: _openPrinterSettings,
               onSendToCounter: () => _sendToCounter(bill),
               onAcceptPayment: () => _acceptPayment(bill),
             ),
@@ -543,18 +675,28 @@ class _BillBreakdown extends StatelessWidget {
     required this.bill,
     required this.canRecordPayment,
     required this.isSubmitting,
+    required this.operationLabel,
+    required this.hasConfiguredPrinter,
     required this.onAddItem,
     required this.onAddServedItem,
-    required this.onIssueBill,
+    required this.onIssueAndPrint,
+    required this.onIssueWithoutPrinting,
+    required this.onReprintBill,
+    required this.onPrinterSettings,
     required this.onSendToCounter,
     required this.onAcceptPayment,
   });
   final Map<String, Object?> bill;
   final bool canRecordPayment;
   final bool isSubmitting;
+  final String? operationLabel;
+  final bool hasConfiguredPrinter;
   final VoidCallback onAddItem;
   final VoidCallback onAddServedItem;
-  final VoidCallback onIssueBill;
+  final VoidCallback onIssueAndPrint;
+  final VoidCallback onIssueWithoutPrinting;
+  final VoidCallback onReprintBill;
+  final VoidCallback onPrinterSettings;
   final VoidCallback onSendToCounter;
   final VoidCallback onAcceptPayment;
 
@@ -671,10 +813,35 @@ class _BillBreakdown extends StatelessWidget {
             ),
             const SizedBox(height: OmluSpacing.sm),
             OmluButton(
-              text: 'Issue Bill',
+              text: isSubmitting
+                  ? (operationLabel ?? 'Issuing bill…')
+                  : hasConfiguredPrinter
+                  ? 'Issue & Print Bill'
+                  : 'Issue Bill',
               isLoading: isSubmitting,
-              onPressed: isSubmitting ? null : onIssueBill,
+              onPressed: isSubmitting
+                  ? null
+                  : hasConfiguredPrinter
+                  ? onIssueAndPrint
+                  : onIssueWithoutPrinting,
             ),
+            const SizedBox(height: OmluSpacing.sm),
+            if (hasConfiguredPrinter)
+              TextButton(
+                onPressed: isSubmitting ? null : onIssueWithoutPrinting,
+                child: const Text('Issue Without Printing'),
+              )
+            else ...[
+              const Text(
+                'Configure a printer to issue and print in one step.',
+                textAlign: TextAlign.center,
+                style: OmluTypography.bodySmall,
+              ),
+              TextButton(
+                onPressed: isSubmitting ? null : onPrinterSettings,
+                child: const Text('Printer Settings'),
+              ),
+            ],
           ] else if (status == 'paid') ...[
             const SizedBox(height: OmluSpacing.md),
             if (canRecordPayment)
@@ -708,6 +875,15 @@ class _BillBreakdown extends StatelessWidget {
             ),
           ] else ...[
             const SizedBox(height: OmluSpacing.md),
+            OutlinedButton(
+              onPressed: isSubmitting ? null : onReprintBill,
+              child: Text(
+                isSubmitting && operationLabel == 'Printing bill…'
+                    ? 'Printing bill…'
+                    : 'Reprint Bill',
+              ),
+            ),
+            const SizedBox(height: OmluSpacing.sm),
             OmluButton(
               text: 'Send bill to counter',
               isLoading: isSubmitting,

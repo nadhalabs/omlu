@@ -152,12 +152,12 @@ export default function StaffSessionsClient() {
     }
   };
 
-  const handleIssueBill = async (session: StaffSessionListItem) => {
+  const handleIssueBill = async (session: StaffSessionListItem, openPrint: boolean) => {
     if (pendingIssueTokens.current.has(session.session_token) || session.bill_number) return;
     await confirmDialog({
       title: `Issue bill for Table ${session.table_number}?`,
       message: "This will generate the bill for all currently billable orders in this table session.",
-      confirmLabel: "Issue Bill",
+      confirmLabel: openPrint ? "Issue & Open Print" : "Issue Without Printing",
       onConfirm: async () => {
         if (pendingIssueTokens.current.has(session.session_token)) return;
         pendingIssueTokens.current.add(session.session_token);
@@ -167,6 +167,10 @@ export default function StaffSessionsClient() {
           delete next[session.session_token];
           return next;
         });
+        let printWindow: Window | null = null;
+        if (openPrint) {
+          printWindow = window.open("", "_blank");
+        }
         try {
           const prepared = await createOrRefreshStaffSessionBill(session.session_token);
           const issued = await issueStaffBill(prepared.bill_number);
@@ -178,8 +182,19 @@ export default function StaffSessionsClient() {
             bill_total: issued.total_amount,
           } : item));
           window.dispatchEvent(new Event("admin-operational-counts-changed"));
-          toast("Bill issued.", "success");
+          if (openPrint && printWindow && issued.receipt_token) {
+            const printUrl = `/bill/${encodeURIComponent(session.session_token)}?receipt=${encodeURIComponent(issued.receipt_token)}`;
+            printWindow.location.replace(printUrl);
+            printWindow.addEventListener("load", () => printWindow?.print(), { once: true });
+            toast("Bill issued. Print view opened.", "success");
+          } else if (openPrint) {
+            printWindow?.close();
+            toast("Bill issued. Open Print Bill to print.", "information");
+          } else {
+            toast("Bill issued.", "success");
+          }
         } catch (err) {
+          printWindow?.close();
           const message = err instanceof ApiError ? err.message : "Failed to issue bill.";
           setCloseError((previous) => ({ ...previous, [session.session_token]: message }));
         } finally {
@@ -455,14 +470,19 @@ export default function StaffSessionsClient() {
                     </div>
                   )}
                   {canCloseSession && s.billable_order_count > 0 && !s.bill_number && (
-                    <button
-                      type="button"
-                      disabled={isIssuing}
-                      onClick={() => void handleIssueBill(s)}
-                      className="mt-auto rounded-xl bg-orange-600 px-4 py-3 text-sm font-black text-[var(--omlu-primary-action-text)] hover:bg-orange-500 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {isIssuing ? "Issuing bill…" : "Issue Bill"}
-                    </button>
+                    <div className="mt-auto flex flex-col gap-2">
+                      <button
+                        type="button"
+                        disabled={isIssuing}
+                        onClick={() => void handleIssueBill(s, true)}
+                        className="rounded-xl bg-orange-600 px-4 py-3 text-sm font-black text-[var(--omlu-primary-action-text)] hover:bg-orange-500 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {isIssuing ? "Issuing bill…" : "Issue & Open Print"}
+                      </button>
+                      <button type="button" disabled={isIssuing} onClick={() => void handleIssueBill(s, false)} className="rounded-xl border border-[var(--omlu-border)] px-4 py-2 text-xs font-black disabled:opacity-50">
+                        Issue Without Printing
+                      </button>
+                    </div>
                   )}
                   {/* Close action */}
                   {canCloseSession && s.order_count === 0 && !s.bill_number && s.status !== "payment_pending" && (!isConfirming ? (

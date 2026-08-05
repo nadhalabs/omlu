@@ -6,11 +6,151 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omlu_operations/core/api/api_client.dart';
 import 'package:omlu_operations/core/api/operations_api.dart';
 import 'package:omlu_operations/core/realtime/realtime_client.dart';
+import 'package:omlu_operations/core/printing/printer_adapter.dart';
+import 'package:omlu_operations/core/printing/printer_service.dart';
+import 'package:omlu_operations/core/storage/key_value_storage.dart';
 import 'package:omlu_operations/features/auth_provider.dart';
 import 'package:omlu_operations/features/realtime_connection_provider.dart';
+import 'package:omlu_operations/features/printing/printer_settings_screen.dart';
 import 'package:omlu_operations/features/staff/staff_bill_screen.dart';
 
+class _IssuePrintAdapter implements PrinterAdapter {
+  _IssuePrintAdapter({required this.failFirst});
+  final bool failFirst;
+  int calls = 0;
+  @override
+  String get name => 'test tcp';
+  @override
+  Future<void> printBytes(List<int> bytes) async {
+    calls++;
+    if (failFirst && calls == 1) {
+      throw const PrinterException('Printer is not connected.');
+    }
+  }
+}
+
 void main() {
+  testWidgets('print failure keeps issued bill and retry never reissues', (
+    tester,
+  ) async {
+    var issued = false;
+    var issueCalls = 0;
+    var receiptCalls = 0;
+    final adapter = _IssuePrintAdapter(failFirst: true);
+    final printer = PrinterService(
+      storage: MemoryKeyValueStorage(),
+      adapterFactory: (_) => adapter,
+    );
+    await printer.saveConfig(
+      const PrinterConfig(enabled: true, tcpIpAddress: 'printer.local'),
+    );
+    final api = OperationsApi(
+      ApiClient(
+        baseUrl: Uri.parse('https://api.example'),
+        transport: (request) async {
+          if (request.uri.path == '/staff/bills/BILL-12/issue') {
+            issueCalls++;
+            issued = true;
+            return const ApiResponse(
+              statusCode: 200,
+              body: {
+                'bill_number': 'BILL-12',
+                'status': 'issued',
+                'total_amount': '105.00',
+              },
+            );
+          }
+          if (request.uri.path.endsWith('/receipt-payload')) {
+            receiptCalls++;
+            return const ApiResponse(
+              statusCode: 200,
+              body: {
+                'bill_number': 'BILL-12',
+                'receipt_title': 'TAX INVOICE',
+                'restaurant_name': 'OMLU',
+                'created_at': '2026-08-05T10:00:00Z',
+                'items': <Object?>[],
+                'subtotal': '100.00',
+                'discount_amount': '0.00',
+                'taxable_amount': '100.00',
+                'cgst_amount': '2.50',
+                'sgst_amount': '2.50',
+                'igst_amount': '0.00',
+                'tax_amount': '5.00',
+                'grand_total': '105.00',
+                'currency': 'INR',
+                'payment_status': 'UNPAID',
+                'is_official_invoice': true,
+              },
+            );
+          }
+          if (request.uri.path == '/staff/tables/12') {
+            return ApiResponse(
+              statusCode: 200,
+              body: {
+                'table': {'id': 12, 'table_number': '6', 'state': 'occupied'},
+                'session': {
+                  'id': 100,
+                  'session_token': 'session-100',
+                  'status': 'payment_requested',
+                  'orders': <Object?>[],
+                  'bill': {
+                    'bill_number': 'BILL-12',
+                    'status': issued ? 'issued' : 'draft',
+                    'subtotal': '100.00',
+                    'tax_amount': '5.00',
+                    'discount_amount': '0.00',
+                    'total_amount': '105.00',
+                  },
+                },
+                'activity': <Object?>[],
+              },
+            );
+          }
+          return const ApiResponse(
+            statusCode: 200,
+            body: {'items': <Object?>[]},
+          );
+        },
+      ),
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          operationsApiProvider.overrideWithValue(api),
+          printerServiceProvider.overrideWithValue(printer),
+        ],
+        child: const MaterialApp(home: StaffBillScreen(tableId: 12)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Issue & Print Bill'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.ensureVisible(find.text('Issue & Print Bill'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Issue & Print Bill'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(issueCalls, 1);
+    expect(receiptCalls, 1);
+    expect(adapter.calls, 1);
+    expect(find.text('Bill issued, but printing failed.'), findsOneWidget);
+    expect(find.text('Retry Print'), findsOneWidget);
+    expect(find.text('Continue Without Printing'), findsOneWidget);
+    await tester.tap(find.text('Retry Print'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(issueCalls, 1);
+    expect(receiptCalls, 2);
+    expect(adapter.calls, 2);
+    expect(find.text('Reprint Bill'), findsOneWidget);
+    expect(find.text('Add Item'), findsNothing);
+    expect(find.text('Add Served Item'), findsNothing);
+  });
+
   testWidgets(
     'staff renders complete bill and sends it to counter without payment controls',
     (tester) async {

@@ -44,9 +44,11 @@ test("owner and admin can issue a bill from an eligible Active Tables card", () 
   assert.match(activeSessions, /issueStaffBill\(prepared\.bill_number\)/);
   assert.match(activeSessions, /Issue bill for Table \$\{session\.table_number\}\?/);
   assert.match(activeSessions, /This will generate the bill for all currently billable orders in this table session\./);
-  assert.match(activeSessions, /confirmLabel: "Issue Bill"/);
+  assert.match(activeSessions, /confirmLabel: openPrint \? "Issue & Open Print" : "Issue Without Printing"/);
   assert.match(activeSessions, /s\.billable_order_count > 0 && !s\.bill_number/);
-  assert.match(activeSessions, /isIssuing \? "Issuing bill…" : "Issue Bill"/);
+  assert.match(activeSessions, /isIssuing \? "Issuing bill…" : "Issue & Open Print"/);
+  assert.match(activeSessions, /Issue Without Printing/);
+  assert.match(activeSessions, /printWindow\.addEventListener\("load", \(\) => printWindow\?\.print\(\)/);
   assert.match(activeSessions, /pendingIssueTokens\.current\.has\(session\.session_token\)/);
   assert.match(activeSessions, /previous\.map\(\(item\) => item\.session_token === session\.session_token/);
   assert.match(activeSessions, /bill_total: issued\.total_amount/);
