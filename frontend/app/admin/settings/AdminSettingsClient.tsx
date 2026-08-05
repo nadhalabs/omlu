@@ -279,6 +279,29 @@ export default function AdminSettingsClient() {
             <p className="mt-0.5 text-xs font-semibold text-[var(--omlu-text-secondary)]">
               Direct LAN thermal printing is configured locally in the OMLU Operations Android app.
             </p>
+            <p className="mt-0.5 text-xs font-semibold text-orange-500">
+              🖥️ Windows PCs use the local OMLU Print Bridge for direct USB, TCP/LAN, and Bluetooth COM printing.
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] p-5 flex flex-col gap-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h3 className="text-sm font-black text-[var(--omlu-text-primary)]">🖥️ OMLU Desktop Print Bridge (Windows)</h3>
+                <p className="text-xs text-[var(--omlu-text-secondary)] mt-0.5">
+                  Direct thermal-printer bridge running on <code className="font-mono text-orange-500">127.0.0.1:24242</code>.
+                </p>
+              </div>
+              <span className="shrink-0 rounded-full bg-amber-950/40 border border-amber-700/60 px-3 py-1 text-xs font-bold text-amber-400">
+                ● Not detected
+              </span>
+            </div>
+
+            <div className="text-xs text-[var(--omlu-text-secondary)] flex flex-col gap-1.5 border-t border-[var(--omlu-border)] pt-3">
+              <p>• Supported Transports: Windows RAW Spooler, Windows Driver Spooler, TCP/LAN Network Printers, Bluetooth Serial COM Ports.</p>
+              <p>• Emergency Fallback: Standard browser print dialog remains available if the bridge is offline or uninstalled.</p>
+              <p>• Developer / Hardware Test Package: Requires Node.js v18+ on target PC. Run <code className="font-mono text-orange-400">npm install --omit=dev && npm start</code> inside extracted archive.</p>
+            </div>
           </div>
 
           <div className="rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] p-4 text-xs text-[var(--omlu-text-secondary)] flex flex-col gap-2">
@@ -289,19 +312,18 @@ export default function AdminSettingsClient() {
 
           <div className="flex flex-wrap items-center gap-3 pt-1">
             <a
-              href="/downloads/omlu.apk"
+              href="/downloads/omlu-print-bridge-developer-package.zip"
               download
               className="px-4 py-2.5 bg-orange-600 hover:bg-orange-700 text-white text-xs font-black rounded-xl transition inline-flex items-center gap-2"
             >
-              📱 Download Operations App
+              🖥️ Download Windows Bridge (Developer / Hardware Test Package)
             </a>
             <a
               href="/downloads/omlu.apk"
-              target="_blank"
-              rel="noopener noreferrer"
+              download
               className="px-4 py-2.5 border border-[var(--omlu-border)] hover:bg-[var(--omlu-muted-surface)] text-[var(--omlu-text-primary)] text-xs font-bold rounded-xl transition inline-flex items-center gap-2"
             >
-              📖 Open Printing Setup Guide
+              📱 Download Operations App
             </a>
           </div>
         </section>

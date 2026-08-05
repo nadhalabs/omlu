@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { confirmPendingPayment, getBillingCounter, issueStaffBill, reopenBillOrdering } from "@/lib/api";
+import { confirmPendingPayment, getBillingCounter, getStaffBillReceiptPayload, issueStaffBill, reopenBillOrdering, requestPrintBridgeToken } from "@/lib/api";
 import { BillingCounterItem, BillingCounterQueues } from "@/lib/types";
 import { useOmluUi } from "@/components/OmluUiProvider";
 import { useRealtime } from "@/lib/realtime";
+import { checkBridgeHealth, sendPrintJobToBridge } from "@/lib/print_bridge";
 
 type Tab = "requested" | "awaiting_payment" | "paid_recently";
 type Method = "counter_cash" | "counter_upi";
@@ -49,22 +50,64 @@ export default function BillingCounterClient() {
     if (item.status !== "draft" || issuing.current.has(item.bill_number)) return;
     issuing.current.add(item.bill_number);
     setBusy(item.bill_number);
-    const printWindow = openPrint ? window.open("", "_blank") : null;
     try {
       const issued = await issueStaffBill(item.bill_number);
-      if (openPrint && printWindow && issued.receipt_token) {
-        printWindow.location.replace(`/bill/${encodeURIComponent(item.session_token)}?receipt=${encodeURIComponent(issued.receipt_token)}`);
-        printWindow.addEventListener("load", () => printWindow.print(), { once: true });
-      } else if (openPrint) {
-        printWindow?.close();
-        toast("Bill issued. Open Print Bill to print.", "information");
+
+      if (openPrint) {
+        // Attempt local OMLU Print Bridge direct print first
+        const bridge = await checkBridgeHealth();
+        if (bridge && bridge.printer_online && bridge.installation_id) {
+          try {
+            toast("Fetching receipt payload…", "information");
+            const payload = await getStaffBillReceiptPayload(item.bill_number);
+
+            toast("Authorizing print job…", "information");
+            const authRes = await requestPrintBridgeToken("bill:print", bridge.installation_id, item.bill_number);
+
+            const jobId = `job_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+            const jobPayload = {
+              schema_version: "1.0" as const,
+              job_id: jobId,
+              idempotency_key: `idemp_${item.bill_number}_${Date.now()}`,
+              installation_id: bridge.installation_id,
+              tenant_id: bridge.tenant_id || "default",
+              bill_id: item.bill_number,
+              bill_number: item.bill_number,
+              receipt_type: "bill" as const,
+              receipt_data: payload,
+              copy_count: 1,
+              created_at: new Date().toISOString(),
+              expires_at: new Date(Date.now() + 300000).toISOString(),
+              retry_count: 0,
+              signed_token: authRes.token,
+            };
+
+            toast("Printing bill via OMLU Print Bridge…", "information");
+            const printRes = await sendPrintJobToBridge(jobPayload);
+            if (printRes.success) {
+              toast("Print complete", "success");
+            } else {
+              toast(printRes.error || "Bill issued, but printing failed.", "error");
+            }
+          } catch {
+            toast("Bill issued, but printing failed.", "error");
+          }
+        } else {
+          // Fall back to system browser print dialog
+          const activeWin = window.open("", "_blank");
+          if (activeWin && issued.receipt_token) {
+            activeWin.location.replace(`/bill/${encodeURIComponent(item.session_token)}?receipt=${encodeURIComponent(issued.receipt_token)}`);
+            activeWin.addEventListener("load", () => activeWin.print(), { once: true });
+          } else {
+            toast("Bill issued. Open Print Bill to print.", "information");
+          }
+        }
       } else {
         toast("Bill issued.", "success");
       }
       await refresh();
       setTab("awaiting_payment");
     } catch (err) {
-      printWindow?.close();
       toast(err instanceof Error ? err.message : "Bill could not be issued.", "error");
     } finally {
       issuing.current.delete(item.bill_number);

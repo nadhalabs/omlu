@@ -1688,3 +1688,55 @@ export async function confirmPendingPayment(
   }
   return res.json();
 }
+
+export async function getStaffBillReceiptPayload(billNumber: string): Promise<Record<string, unknown>> {
+  const res = await fetch(`/api/staff/bills/${encodeURIComponent(billNumber)}/receipt-payload`);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, body.detail || "Could not fetch receipt payload.");
+  }
+  return res.json();
+}
+
+export async function requestPrintBridgeToken(
+  action: "bridge:pair" | "printer:configure" | "printer:test" | "bill:print" | "receipt:reprint",
+  installationId: string,
+  billId?: string,
+): Promise<{ status: string; token: string; expires_in_seconds: number }> {
+  const res = await fetch("/api/admin/print-bridge/authorize-action", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action, installation_id: installationId, bill_id: billId }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, body.detail || "Could not authorize print bridge action.");
+  }
+  return res.json();
+}
+
+export async function createPairingChallenge(installationId: string): Promise<{ pairing_code: string }> {
+  const res = await fetch("/api/admin/print-bridge/pairing-challenge", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ installation_id: installationId }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, body.detail || "Could not create pairing challenge.");
+  }
+  return res.json();
+}
+
+export async function confirmBridgePairing(installationId: string, pairingCode: string): Promise<{ bridge_token: string }> {
+  const res = await fetch("/api/admin/print-bridge/confirm-pairing", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ installation_id: installationId, pairing_code: pairingCode }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, body.detail || "Pairing confirmation failed.");
+  }
+  return res.json();
+}

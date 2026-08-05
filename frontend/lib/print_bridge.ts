@@ -1,0 +1,150 @@
+const BRIDGE_BASE = "http://127.0.0.1:24242/v1";
+
+export interface BridgeHealth {
+  bridge_version: string;
+  operating_system: string;
+  readiness: string;
+  configured_printer: string;
+  active_transport: string;
+  supported_transports: string[];
+  active_job_id: string | null;
+  printer_online: boolean;
+  installation_id: string | null;
+  tenant_id: string | null;
+}
+
+export interface BridgeSettings {
+  enabled: boolean;
+  transport: "windows_raw_spooler" | "windows_driver_spooler" | "tcp_lan" | "bluetooth_com";
+  printerName: string;
+  queueName: string;
+  paperWidth: "58" | "80";
+  copies: number;
+  autoCut: boolean;
+  codePage: string;
+  charsPerLine: number;
+  connectTimeoutMs: number;
+  writeTimeoutMs: number;
+  chunkSize: number;
+  interChunkDelayMs: number;
+  feedLines: number;
+  tcpHost: string;
+  tcpPort: number;
+  comPort: string;
+  baudRate: number;
+  dataBits: number;
+  stopBits: number;
+  parity: "none" | "even" | "odd";
+  installationId: string;
+  tenantId: string;
+}
+
+export async function checkBridgeHealth(): Promise<BridgeHealth | null> {
+  try {
+    const res = await fetch(`${BRIDGE_BASE}/health`, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(2000),
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch {
+    // Bridge offline or uninstalled
+  }
+  return null;
+}
+
+export async function fetchBridgePrinters(): Promise<Array<{ id: string; name: string; transport: string; description?: string }>> {
+  try {
+    const res = await fetch(`${BRIDGE_BASE}/printers`, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(3000),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return data.printers || [];
+    }
+  } catch {
+    // Fall through
+  }
+  return [];
+}
+
+export async function sendPrintJobToBridge(job: {
+  schema_version: "1.0";
+  job_id: string;
+  idempotency_key: string;
+  installation_id: string;
+  tenant_id: string;
+  bill_id?: string;
+  bill_number?: string;
+  receipt_type: "bill" | "receipt" | "test";
+  receipt_data?: Record<string, unknown>;
+  copy_count: number;
+  created_at: string;
+  expires_at: string;
+  retry_count: number;
+  signed_token: string;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const res = await fetch(`${BRIDGE_BASE}/print-jobs`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(job),
+      signal: AbortSignal.timeout(10000),
+    });
+    const data = await res.json();
+    if (res.ok && data.result?.state === "completed") {
+      return { success: true };
+    }
+    return { success: false, error: data.result?.error || data.message || "Print job failed on bridge." };
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : "Could not reach local OMLU Print Bridge.";
+    return { success: false, error: errorMsg };
+  }
+}
+
+export async function testBridgePrinter(token: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const res = await fetch(`${BRIDGE_BASE}/printers/test`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      signal: AbortSignal.timeout(10000),
+    });
+    const data = await res.json();
+    if (res.ok && data.result?.state === "completed") {
+      return { success: true };
+    }
+    return { success: false, error: data.result?.error || data.message || "Test print failed on bridge." };
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : "Could not communicate with local OMLU Print Bridge.";
+    return { success: false, error: errorMsg };
+  }
+}
+
+export async function saveBridgeSettings(token: string, settings: Partial<BridgeSettings>): Promise<{ success: boolean; error?: string }> {
+  try {
+    const res = await fetch(`${BRIDGE_BASE}/settings`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(settings),
+      signal: AbortSignal.timeout(5000),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      return { success: true };
+    }
+    return { success: false, error: data.message || "Could not save bridge settings." };
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : "Could not save settings on local OMLU Print Bridge.";
+    return { success: false, error: errorMsg };
+  }
+}

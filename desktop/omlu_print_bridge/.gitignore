@@ -1,0 +1,6 @@
+node_modules/
+dist/*
+!dist/hardware-test/
+dist/hardware-test/*
+!dist/hardware-test/omlu-print-bridge-developer-package.zip
+!dist/hardware-test/omlu-print-bridge-developer-package.zip.sha256
