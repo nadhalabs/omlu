@@ -102,8 +102,12 @@ export default function StaffTableDetailClient({ tableId }: { tableId: number })
             </div>
             <div className="flex flex-wrap gap-2">
               <button disabled={Boolean(busy)} onClick={() => void load()} className="rounded-lg border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] px-4 py-3 text-sm font-black text-[var(--omlu-text-secondary)] disabled:opacity-50">Refresh</button>
-              <Link href={`/staff/orders/new?tableId=${tableId}`} className="rounded-lg bg-orange-600 px-4 py-3 text-sm font-black text-[var(--omlu-primary-action-text)]">Add Item · Kitchen</Link>
-              {bill?.status === "draft" && <Link href={`/staff/orders/new?tableId=${tableId}&mode=served`} className="rounded-lg border border-amber-500 px-4 py-3 text-sm font-black text-amber-500">Add Served Item · No kitchen</Link>}
+              {(!bill || bill.status === "draft") && detail?.session?.status !== "closed" && detail?.session?.status !== "paid" && (
+                <>
+                  <Link href={`/staff/orders/new?tableId=${tableId}`} title="Sends a new order to the kitchen." className="rounded-lg bg-orange-600 px-4 py-3 text-sm font-black text-[var(--omlu-primary-action-text)]">Add Item</Link>
+                  <Link href={`/staff/orders/new?tableId=${tableId}&mode=served`} title="Records an item already delivered. The kitchen will not be notified." className="rounded-lg border border-amber-500 px-4 py-3 text-sm font-black text-amber-500">Add Served Item</Link>
+                </>
+              )}
             </div>
           </div>
         </div>

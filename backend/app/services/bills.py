@@ -428,6 +428,20 @@ def issue_bill(db: Session, bill: Bill) -> Bill:
         )
 
     apply_draft_totals(db, locked_bill)
+    billable_orders = get_billable_orders(db, locked_session.id)
+    displayed_line_total = round_money(sum(
+        (item.total_price for order in billable_orders for item in order.items),
+        Decimal("0.00"),
+    ))
+    authoritative_subtotal = round_money(sum(
+        (order.subtotal for order in billable_orders),
+        Decimal("0.00"),
+    ))
+    if displayed_line_total != authoritative_subtotal or locked_bill.subtotal != authoritative_subtotal:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Bill lines do not match the authoritative subtotal. Correct the order before issuing.",
+        )
     restaurant = locked_session.restaurant
     if locked_bill.gst_enabled_snapshot and not locked_bill.invoice_number:
         locked_bill.invoice_number, locked_bill.invoice_date = generate_invoice_number(db, restaurant)
@@ -803,7 +817,8 @@ def build_bill_response(db: Session, bill: Bill):
     )
     return {
         "bill_number": bill.bill_number,
-        "receipt_token": bill.receipt_token,
+        # Drafts are provisional and must not grant durable receipt access.
+        "receipt_token": bill.receipt_token if bill.status != "draft" else None,
         "restaurant_name": bill.restaurant.name,
         "restaurant_slug": bill.restaurant.slug,
         "table_number": bill.dining_session.table.table_number,
@@ -871,7 +886,7 @@ def build_bill_response(db: Session, bill: Bill):
         "original_table": bill.dining_session.table.table_number,
         "issued_at": bill.payment_code_created_at or bill.generated_at,
         "detached_session_status": bill.dining_session.status,
-        "receipt_access": bill.receipt_token,
+        "receipt_access": bill.receipt_token if bill.status != "draft" else None,
     }
 
 

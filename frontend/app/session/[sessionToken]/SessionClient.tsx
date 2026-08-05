@@ -93,11 +93,14 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
   const [billActionError, setBillActionError] = useState<string | null>(null);
   const [pushStatus, setPushStatus] = useState<"idle" | "loading" | "enabled" | "unsupported" | "error">("idle");
   const [pushMessage, setPushMessage] = useState<string | null>(null);
+  const [reopenNotice, setReopenNotice] = useState<string | null>(null);
   const [participantToken, setParticipantToken] = useState<string | null>(() => readSessionParticipantToken(sessionToken));
   const [visibleJoinCode, setVisibleJoinCode] = useState<string | null>(null);
   const [joinCodeCopied, setJoinCodeCopied] = useState(false);
   const fetchInFlightRef = useRef(false);
   const pendingFetchRef = useRef(false);
+  const previousStatusRef = useRef<string | null>(null);
+
 
   useEffect(() => {
     if (typeof window === "undefined" || !sessionToken) return;
@@ -320,6 +323,10 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
             const authority = readSessionParticipantToken(sessionToken);
             if (!authority) throw new ApiError(401, "Your access to this table has ended.");
             const data = await getPublicDiningSession(sessionToken, authority);
+            if (previousStatusRef.current === "payment_requested" && data.status === "open") {
+              setReopenNotice("Ordering has been reopened.");
+            }
+            previousStatusRef.current = data.status;
             setSession(data);
             setError(null);
             setLastUpdated(new Date());
@@ -397,6 +404,9 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
         const detached = readDetachedSession(sessionToken);
         if (detached) router.replace(detachedBillPath(detached));
         return;
+      }
+      if (event.type === "session.ordering_reopened") {
+        setReopenNotice("Ordering has been reopened.");
       }
       void fetchSession(false);
     },
@@ -606,6 +616,13 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
             {pushMessage}
           </p>
         )}
+
+        {reopenNotice && (
+          <p className="rounded-2xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300">
+            {reopenNotice}
+          </p>
+        )}
+
 
         <header className="rounded-3xl bg-[var(--omlu-primary-surface)] p-5 shadow-xs">
           <div className="flex items-start justify-between gap-4">

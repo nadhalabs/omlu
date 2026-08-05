@@ -13,6 +13,7 @@ from app.models.empty_table_report import EmptyTableReport
 from app.models.staff_user import AuditLog, StaffUser
 from app.services.idempotency import ensure_same_request, request_hash, require_key
 from app.schemas.bill import (
+    BillingReasonRequest,
     BillResponse,
     CounterPaymentRequest,
     DetachedPendingBillResponse,
@@ -50,6 +51,7 @@ from app.services.realtime import (
     EVENT_BILL_SENT_TO_COUNTER,
     EVENT_BILL_UPDATED,
     EVENT_SESSION_CLOSED,
+    EVENT_ORDERING_REOPENED,
     EVENT_TABLE_STATUS_CHANGED,
     publish_event,
     restaurant_channel,
@@ -65,6 +67,64 @@ _staff_bill_write_roles = OperationalWriteChecker(["owner", "admin", "staff"])
 _official_billing_roles = BillingRoleChecker(["owner", "admin"])
 _payment_record_roles = _official_billing_roles
 _payment_lookup_roles = RoleChecker(["owner", "admin", "staff"])
+
+
+@router.post("/staff/bills/{bill_number}/reopen-ordering", response_model=BillResponse)
+def reopen_bill_ordering(
+    bill_number: str,
+    payload: BillingReasonRequest,
+    current_user: StaffUser = Depends(_official_billing_roles),
+    db: Session = Depends(get_db),
+):
+    bill_identity = db.query(Bill.id, Bill.dining_session_id).filter(
+        Bill.restaurant_id == current_user.restaurant_id,
+        Bill.bill_number == bill_number,
+    ).first()
+    if not bill_identity:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
+
+    session = db.query(DiningSession).filter(
+        DiningSession.id == bill_identity.dining_session_id,
+        DiningSession.restaurant_id == current_user.restaurant_id,
+    ).with_for_update().first()
+    bill = db.query(Bill).filter(
+        Bill.id == bill_identity.id,
+        Bill.restaurant_id == current_user.restaurant_id,
+        Bill.dining_session_id == session.id,
+    ).with_for_update().first()
+    if session.status != "payment_requested" or bill.status != "draft":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Ordering can only be reopened before the bill is issued.",
+        )
+
+    previous = {"session_status": session.status, "bill_status": bill.status}
+    session.status = "open"
+    session.payment_requested_at = None
+    db.add(AuditLog(
+        restaurant_id=current_user.restaurant_id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role,
+        target_type="dining_session",
+        target_id=str(session.id),
+        action="ordering.reopened",
+        previous_value=json.dumps(previous, sort_keys=True),
+        new_value=json.dumps({"session_status": "open", "reason": payload.reason}, sort_keys=True),
+    ))
+    db.commit()
+    publish_event(
+        EVENT_ORDERING_REOPENED,
+        restaurant_id=current_user.restaurant_id,
+        channels=[
+            restaurant_channel(current_user.restaurant_id, "operations"),
+            restaurant_channel(current_user.restaurant_id, "staff"),
+            session_channel(session.public_token),
+            table_channel(current_user.restaurant_id, session.table_id),
+        ],
+        resource_id=session.id,
+        state={"session_token": session.public_token, "status": "open"},
+    )
+    return build_bill_response(db, bill)
 
 
 def _short_order_summary(db: Session, bill: Bill) -> ShortOrderSummary:
@@ -187,10 +247,12 @@ def create_public_session_bill(
     participant_token: str = Depends(participant_token_header),
     db: Session = Depends(get_db),
 ):
-    dining_session = db.query(DiningSession).options(
-        joinedload(DiningSession.restaurant),
-        joinedload(DiningSession.table),
-    ).filter(DiningSession.public_token == session_token).first()
+    dining_session = (
+        db.query(DiningSession)
+        .filter(DiningSession.public_token == session_token)
+        .with_for_update()
+        .first()
+    )
 
     if not dining_session:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dining session not found")
@@ -431,6 +493,67 @@ def list_pending_counter_payments(
             ),
         })
     return {"items": items}
+
+
+def _billing_counter_item(db: Session, bill: Bill) -> dict:
+    session = bill.dining_session
+    summary = _short_order_summary(db, bill)
+    return {
+        "bill_id": bill.id,
+        "bill_number": bill.bill_number,
+        "session_token": session.public_token,
+        "table_id": session.table_id,
+        "table_number": session.table.table_number,
+        "requested_at": (session.payment_requested_at or bill.generated_at).isoformat(),
+        "item_count": summary.item_count,
+        "subtotal": f"{bill.subtotal:.2f}",
+        "tax_amount": f"{bill.tax_amount:.2f}",
+        "total_amount": f"{bill.total_amount:.2f}",
+        "currency": bill.currency,
+        "status": bill.status,
+        "invoice_number": bill.invoice_number,
+        "payment_method": bill.payment_method,
+        "paid_at": bill.paid_at.isoformat() if bill.paid_at else None,
+        "receipt_token": bill.receipt_token if bill.status in {"issued", "payment_pending", "paid"} else None,
+    }
+
+
+@router.get("/staff/bills/billing-counter")
+def get_billing_counter(
+    current_user: StaffUser = Depends(_official_billing_roles),
+    db: Session = Depends(get_db),
+):
+    """Authoritative owner/admin queues for counter operations."""
+    active = (
+        db.query(Bill)
+        .options(joinedload(Bill.dining_session).joinedload(DiningSession.table))
+        .filter(
+            Bill.restaurant_id == current_user.restaurant_id,
+            Bill.status.in_(["draft", "issued", "payment_pending"]),
+        )
+        .order_by(Bill.updated_at.desc(), Bill.id.desc())
+        .all()
+    )
+    paid = (
+        db.query(Bill)
+        .options(joinedload(Bill.dining_session).joinedload(DiningSession.table))
+        .filter(
+            Bill.restaurant_id == current_user.restaurant_id,
+            Bill.status == "paid",
+        )
+        .order_by(Bill.paid_at.desc(), Bill.id.desc())
+        .limit(20)
+        .all()
+    )
+    return {
+        "requested": [_billing_counter_item(db, bill) for bill in active if bill.status == "draft"],
+        "awaiting_payment": [
+            _billing_counter_item(db, bill)
+            for bill in active
+            if bill.status in {"issued", "payment_pending"}
+        ],
+        "paid_recently": [_billing_counter_item(db, bill) for bill in paid],
+    }
 
 
 @router.post(

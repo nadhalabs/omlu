@@ -36,7 +36,7 @@ test("each queue has distinct high-contrast semantic styling", () => {
 
 test("only operational queues receive sidebar badges", () => {
   assert.match(layout, /AdminOperationalSidebarLink[^>]*Quick Sale[^>]*queue="activeTakeaways"/);
-  assert.match(layout, /AdminOperationalSidebarLink[^>]*Pending Payments[^>]*queue="pendingPayments"/);
+  assert.match(layout, /AdminOperationalSidebarLink[^>]*Billing Counter[^>]*queue="pendingPayments"/);
   assert.match(layout, /AdminOperationalSidebarLink[^>]*Service Requests[^>]*queue="unresolvedRequests"/);
   assert.doesNotMatch(layout, /AdminOperationalSidebarLink[^>]*(?:Kitchen Dashboard|Tables Map)/);
 });

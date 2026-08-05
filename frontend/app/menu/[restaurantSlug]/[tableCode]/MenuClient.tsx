@@ -7,6 +7,7 @@ import Image from "next/image";
 import {
   getPublicMenu,
   getPublicDiningSession,
+  getActivePublicDiningSession,
   addOrderToDiningSession,
   createFirstTableOrder,
   getTableSessionStatus,
@@ -491,7 +492,17 @@ function ActiveMenuClient({
       setSessionNotice(null);
     }
 
-    const tokenToValidate = queryToken || savedToken;
+    let tokenToValidate = queryToken || savedToken;
+    if (!tokenToValidate && savedParticipantToken) {
+      try {
+        const active = await getActivePublicDiningSession(restaurantSlug, tableCode);
+        if (active?.public_token) {
+          tokenToValidate = active.public_token;
+          savePublicSessionToken(restaurantSlug, tableCode, tokenToValidate);
+        }
+      } catch {}
+    }
+
     if (!tokenToValidate || !savedParticipantToken) {
       clearOrderingState();
       setSessionCompleteNotice(null);

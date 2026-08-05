@@ -26,6 +26,7 @@ import {
   StaffAccountCreateRequest,
   StaffAccountResponse,
   PendingPaymentItem,
+  BillingCounterQueues,
   MenuImportResponse,
   MenuImportDraftItem,
   IssueAndReleaseResponse,
@@ -464,6 +465,41 @@ export async function issueStaffBill(
 
     if (!response.ok) {
       let message = "Failed to issue bill.";
+      try {
+        const errorData = await response.json();
+        if (errorData && typeof errorData.detail === "string") {
+          message = errorData.detail;
+        }
+      } catch {}
+      throw new ApiError(response.status, message);
+    }
+
+    return await response.json();
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError(500, "Could not connect to proxy server.");
+  }
+}
+
+export async function reopenBillOrdering(
+  billNumber: string,
+  reason: string
+): Promise<IssueBillResponse> {
+  try {
+    const response = await fetch(
+      `/api/staff/bills/${encodeURIComponent(billNumber)}/reopen-ordering`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": `reopen-${billNumber}-${Date.now()}`,
+        },
+        body: JSON.stringify({ reason }),
+      }
+    );
+
+    if (!response.ok) {
+      let message = "Failed to reopen ordering.";
       try {
         const errorData = await response.json();
         if (errorData && typeof errorData.detail === "string") {
@@ -1576,6 +1612,16 @@ export async function getPendingPayments(): Promise<PendingPaymentItem[]> {
   }
   const body = await res.json();
   return body.items || [];
+}
+
+export async function getBillingCounter(): Promise<BillingCounterQueues> {
+  const res = await fetch("/api/staff/bills/billing-counter", { cache: "no-store" });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const detail = typeof body.detail === "string" ? body.detail : body.detail?.message;
+    throw new ApiError(res.status, detail || "Failed to load the billing counter.");
+  }
+  return body;
 }
 
 export async function issueAndReleaseBill(

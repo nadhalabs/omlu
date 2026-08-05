@@ -109,7 +109,7 @@ export default async function AdminLayout({
             <AdminOperationalCountsProvider initialCounts={operationalCounts}>
             <AdminSidebarLink href="/admin/dashboard" label="📊 Dashboard" />
             <AdminOperationalSidebarLink href="/admin/quick-sale" label="🧾 Quick Sale" queue="activeTakeaways" />
-            <AdminOperationalSidebarLink href="/admin/payments/pending" label="💳 Pending Payments" queue="pendingPayments" />
+            <AdminOperationalSidebarLink href="/admin/billing" label="🧾 Billing Counter" queue="pendingPayments" />
             <AdminSidebarLink href={`/kitchen/${staffInfo.restaurant_slug}`} label="🧑‍🍳 Kitchen Dashboard" />
             <AdminOperationalSidebarLink href="/admin/requests" label="🔔 Service Requests" queue="unresolvedRequests" />
             <AdminSidebarLink href="/admin/history?view=orders" label="History" />

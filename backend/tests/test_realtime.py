@@ -673,7 +673,7 @@ def test_public_session_websocket_receives_bill_payment_and_close_events(realtim
 
         issue_response = client.post(
             f"/staff/bills/{bill_number}/issue",
-            headers={**auth(realtime_context), "Idempotency-Key": f"issue-{uuid.uuid4().hex}"},
+            headers={**auth(realtime_context, "owner_token"), "Idempotency-Key": f"issue-{uuid.uuid4().hex}"},
         )
         assert issue_response.status_code == 200
         issue_event = receive_event(ws, realtime.EVENT_BILL_UPDATED)
@@ -803,7 +803,7 @@ def test_staff_websocket_receives_session_bill_and_payment_events(realtime_conte
 
         issue_response = client.post(
             f"/staff/bills/{bill_number}/issue",
-            headers={**auth(realtime_context), "Idempotency-Key": f"issue-{uuid.uuid4().hex}"},
+            headers={**auth(realtime_context, "owner_token"), "Idempotency-Key": f"issue-{uuid.uuid4().hex}"},
         )
         assert issue_response.status_code == 200
         receive_event(ws, realtime.EVENT_BILL_UPDATED)

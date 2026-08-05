@@ -4,19 +4,19 @@ import test from "node:test";
 
 const read = (path) => fs.readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("active tables exposes an owner/admin-only release action with confirmation", () => {
+test("active tables routes owner/admin billing work to the Billing Counter", () => {
   const source = read("app/staff/sessions/StaffSessionsClient.tsx");
   assert.match(source, /canCloseSession && s\.bill_number/);
-  assert.match(source, /s\.status === "payment_requested"/);
-  assert.match(source, /Issue bill and release table/);
+  assert.match(source, /href="\/admin\/billing"/);
+  assert.match(source, /Open Billing Counter/);
   assert.match(read("lib/api.ts"), /confirm_table_is_free/);
 });
 
 test("release action prevents duplicate clicks and reuses its idempotency key", () => {
-  const source = read("app/staff/sessions/StaffSessionsClient.tsx");
-  assert.match(source, /pendingIssueTokens\.current\.has/);
-  assert.match(source, /releaseKeys\.current\.get/);
-  assert.match(source, /setSessions\(\(previous\) => previous\.filter/);
+  const api = read("lib/api.ts");
+  assert.match(api, /issueAndReleaseBill/);
+  assert.match(api, /Idempotency-Key/);
+  assert.match(api, /confirm_table_is_free/);
 });
 
 test("customer bill screen shows detached bill essentials without exposing code in URLs", () => {

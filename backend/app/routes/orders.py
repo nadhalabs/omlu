@@ -516,7 +516,11 @@ def create_first_public_order(
             Order.idempotency_key == key_clean,
         ).first()
         if existing_order:
-            ensure_same_request(existing_order.idempotency_request_hash, request_hash(order_req.model_dump(mode="json")))
+            ensure_same_request(existing_order.idempotency_request_hash, request_hash({
+                "order": order_req.model_dump(mode="json"),
+                "initial_status": "pending",
+                "source": "customer_qr",
+            }))
             if existing_order.table_id != locked_table.id or not existing_order.dining_session_id:
                 raise HTTPException(status_code=409, detail="Idempotency-Key was already used for another table.")
             dining_session = db.query(DiningSession).filter(DiningSession.id == existing_order.dining_session_id).one()

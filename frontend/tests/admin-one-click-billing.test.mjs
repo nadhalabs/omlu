@@ -5,35 +5,25 @@ import test from "node:test";
 const read = (path) => fs.readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
 test("web admin cashier path exposes one-click Issue & Open Print and Issue Without Printing", () => {
-  const pending = read("app/admin/payments/pending/PendingPaymentsClient.tsx");
-  const requests = read("app/admin/requests/AdminRequestsClient.tsx");
+  const counter = read("app/admin/billing/BillingCounterClient.tsx");
   const activeSessions = read("app/staff/sessions/StaffSessionsClient.tsx");
 
-  assert.match(pending, /Issue & Open Print/);
-  assert.match(pending, /Issue Without Printing/);
-  assert.match(requests, /Issue & Open Print/);
-  assert.match(requests, /Issue Without Printing/);
-  assert.match(activeSessions, /Issue & Open Print/);
-  assert.match(activeSessions, /Issue Without Printing/);
+  assert.match(counter, /Issue & Open Print/);
+  assert.match(counter, /Issue Without Printing/);
+  assert.doesNotMatch(activeSessions, /Issue & Open Print/);
+  assert.doesNotMatch(activeSessions, /Issue Without Printing/);
 });
 
 test("web admin popup blocking displays fallback notification", () => {
-  const pending = read("app/admin/payments/pending/PendingPaymentsClient.tsx");
-  const requests = read("app/admin/requests/AdminRequestsClient.tsx");
-  const activeSessions = read("app/staff/sessions/StaffSessionsClient.tsx");
-
-  for (const source of [pending, requests, activeSessions]) {
-    assert.match(source, /Bill issued\. Open Print Bill to print\./);
-  }
+  const counter = read("app/admin/billing/BillingCounterClient.tsx");
+  assert.match(counter, /Bill issued\. Open Print Bill to print\./);
 });
 
 test("double-click on web admin issue action is ignored while pending", () => {
-  const pending = read("app/admin/payments/pending/PendingPaymentsClient.tsx");
-  const activeSessions = read("app/staff/sessions/StaffSessionsClient.tsx");
+  const counter = read("app/admin/billing/BillingCounterClient.tsx");
 
-  assert.match(pending, /pendingIssueTokens\.has\(payment\.bill_number\)/);
-  assert.match(pending, /issuingBills\[payment\.bill_number\]/);
-  assert.match(activeSessions, /pendingIssueTokens\.current\.has\(session\.session_token\)/);
+  assert.match(counter, /issuing\.current\.has\(item\.bill_number\)/);
+  assert.match(counter, /issuing\.current\.add\(item\.bill_number\)/);
 });
 
 test("draft bills cannot print official receipt and issuance does not mutate payment state", () => {

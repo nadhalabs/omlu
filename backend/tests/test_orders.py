@@ -390,6 +390,11 @@ def test_public_session_includes_public_bill_and_request_state(setup_test_data):
         tax_amount=0.00,
         discount_amount=0.00,
         total_amount=200.00,
+        taxable_amount=200.00,
+        gst_rate=0.00,
+        cgst_amount=0.00,
+        sgst_amount=0.00,
+        igst_amount=0.00,
         currency="INR",
     )
     request = ServiceRequest(

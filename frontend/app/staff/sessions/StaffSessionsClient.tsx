@@ -2,11 +2,10 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
-import { getStaffMe, getStaffSessions, closeEmptySession, createOrRefreshStaffSessionBill, issueStaffBill, issueAndReleaseBill, ApiError } from "@/lib/api";
+import { getStaffMe, getStaffSessions, closeEmptySession, ApiError } from "@/lib/api";
 import { CurrentStaffResponse, StaffSessionListItem } from "@/lib/types";
 import { useRealtime } from "@/lib/realtime";
 import { registerAuthenticatedCleanup } from "@/lib/authRuntime.mjs";
-import { useOmluUi } from "@/components/OmluUiProvider";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -63,7 +62,6 @@ const ORDER_STATUS_LABEL: Record<string, string> = {
 // ── component ─────────────────────────────────────────────────────────────────
 
 export default function StaffSessionsClient() {
-  const { confirm: confirmDialog, toast } = useOmluUi();
   const [sessions, setSessions] = useState<StaffSessionListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -73,12 +71,9 @@ export default function StaffSessionsClient() {
   // Close state
   const [confirmToken, setConfirmToken] = useState<string | null>(null);
   const [closingToken, setClosingToken] = useState<string | null>(null);
-  const [issuingTokens, setIssuingTokens] = useState<Set<string>>(() => new Set());
   const [closeError, setCloseError] = useState<Record<string, string>>({});
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingIssueTokens = useRef(new Set<string>());
-  const releaseKeys = useRef(new Map<string, string>());
 
   const fetchSessions = useCallback(async (showLoading = true) => {
     if (showLoading) setLoading(true);
@@ -150,97 +145,6 @@ export default function StaffSessionsClient() {
     } finally {
       setClosingToken(null);
     }
-  };
-
-  const handleIssueBill = async (session: StaffSessionListItem, openPrint: boolean) => {
-    if (pendingIssueTokens.current.has(session.session_token) || session.bill_number) return;
-    await confirmDialog({
-      title: `Issue bill for Table ${session.table_number}?`,
-      message: "This will generate the bill for all currently billable orders in this table session.",
-      confirmLabel: openPrint ? "Issue & Open Print" : "Issue Without Printing",
-      onConfirm: async () => {
-        if (pendingIssueTokens.current.has(session.session_token)) return;
-        pendingIssueTokens.current.add(session.session_token);
-        setIssuingTokens((previous) => new Set(previous).add(session.session_token));
-        setCloseError((previous) => {
-          const next = { ...previous };
-          delete next[session.session_token];
-          return next;
-        });
-        let printWindow: Window | null = null;
-        if (openPrint) {
-          printWindow = window.open("", "_blank");
-        }
-        try {
-          const prepared = await createOrRefreshStaffSessionBill(session.session_token);
-          const issued = await issueStaffBill(prepared.bill_number);
-          setSessions((previous) => previous.map((item) => item.session_token === session.session_token ? {
-            ...item,
-            status: "payment_requested",
-            bill_number: issued.bill_number,
-            bill_status: issued.status,
-            bill_total: issued.total_amount,
-          } : item));
-          window.dispatchEvent(new Event("admin-operational-counts-changed"));
-          if (openPrint && printWindow && issued.receipt_token) {
-            const printUrl = `/bill/${encodeURIComponent(session.session_token)}?receipt=${encodeURIComponent(issued.receipt_token)}`;
-            printWindow.location.replace(printUrl);
-            printWindow.addEventListener("load", () => printWindow?.print(), { once: true });
-            toast("Bill issued. Print view opened.", "success");
-          } else if (openPrint) {
-            printWindow?.close();
-            toast("Bill issued. Open Print Bill to print.", "information");
-          } else {
-            toast("Bill issued.", "success");
-          }
-        } catch (err) {
-          printWindow?.close();
-          const message = err instanceof ApiError ? err.message : "Failed to issue bill.";
-          setCloseError((previous) => ({ ...previous, [session.session_token]: message }));
-        } finally {
-          pendingIssueTokens.current.delete(session.session_token);
-          setIssuingTokens((previous) => {
-            const next = new Set(previous);
-            next.delete(session.session_token);
-            return next;
-          });
-        }
-      },
-    });
-  };
-
-  const handleIssueAndRelease = async (session: StaffSessionListItem) => {
-    if (!session.bill_number || pendingIssueTokens.current.has(session.session_token)) return;
-    await confirmDialog({
-      title: "Release this table?",
-      message: "The current bill will move to Pending Payments, and new customers will be able to start a separate session at this table.",
-      details: [`Table ${session.table_number}`, `Bill ${session.bill_number}`, session.bill_total ? `Amount ₹${session.bill_total}` : ""].filter(Boolean),
-      cancelLabel: "Cancel",
-      confirmLabel: "Issue bill and release table",
-      onConfirm: async () => {
-        if (pendingIssueTokens.current.has(session.session_token)) return;
-        pendingIssueTokens.current.add(session.session_token);
-        setIssuingTokens((previous) => new Set(previous).add(session.session_token));
-        const key = releaseKeys.current.get(session.bill_number!) || `bill-release-${session.bill_number}-${crypto.randomUUID()}`;
-        releaseKeys.current.set(session.bill_number!, key);
-        try {
-          const result = await issueAndReleaseBill(session.bill_number!, key);
-          setSessions((previous) => previous.filter((item) => item.session_token !== session.session_token));
-          window.dispatchEvent(new Event("admin-operational-counts-changed"));
-          window.dispatchEvent(new Event("pending-payments-changed"));
-          toast(`Table released · Payment code ${result.payment_code} · ₹${Number(result.amount_due).toFixed(2)}`, "success");
-        } catch (err) {
-          throw new Error(err instanceof ApiError ? err.message : "Could not issue the bill and release this table.");
-        } finally {
-          pendingIssueTokens.current.delete(session.session_token);
-          setIssuingTokens((previous) => {
-            const next = new Set(previous);
-            next.delete(session.session_token);
-            return next;
-          });
-        }
-      },
-    });
   };
 
   // ── render ─────────────────────────────────────────────────────────────────
@@ -346,7 +250,6 @@ export default function StaffSessionsClient() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {sessions.map((s) => {
               const isClosing = closingToken === s.session_token;
-              const isIssuing = issuingTokens.has(s.session_token);
               const isConfirming = confirmToken === s.session_token;
               const cardError = closeError[s.session_token];
               const orderDot =
@@ -445,10 +348,10 @@ export default function StaffSessionsClient() {
                   {canCloseSession && s.status === "payment_pending" && s.bill_number && (
                     <div className="mt-auto flex flex-col gap-2">
                       <Link
-                        href={`/admin/payments/pending?bill=${encodeURIComponent(s.bill_number)}`}
+                        href="/admin/billing"
                         className="rounded-xl bg-orange-600 px-4 py-2 text-center text-xs font-black text-[var(--omlu-primary-action-text)] hover:bg-orange-500"
                       >
-                        Review Pending Payment
+                        Open Billing Counter
                       </Link>
                       <p className="text-center text-[10px] text-[var(--omlu-text-secondary)]">
                         Cannot close a session with a payment_pending bill.
@@ -462,26 +365,13 @@ export default function StaffSessionsClient() {
                         {s.bill_total && <span className="font-black text-orange-400">₹{s.bill_total}</span>}
                       </div>
                       <Link href={`/bill/${encodeURIComponent(s.session_token)}`} className="rounded-xl bg-[var(--omlu-muted-surface)] px-4 py-2 text-center text-xs font-black text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-muted-surface)]">View Bill</Link>
-                      {s.status === "payment_requested" && ["draft", "issued"].includes(s.bill_status || "") && (
-                        <button type="button" disabled={isIssuing} onClick={() => void handleIssueAndRelease(s)} className="min-h-11 rounded-xl bg-orange-600 px-4 py-2 text-xs font-black text-white disabled:opacity-50">
-                          {isIssuing ? "Releasing table…" : "Issue bill and release table"}
-                        </button>
-                      )}
+                      <Link href="/admin/billing" className="min-h-11 rounded-xl bg-orange-600 px-4 py-3 text-center text-xs font-black text-white">Open Billing Counter</Link>
                     </div>
                   )}
                   {canCloseSession && s.billable_order_count > 0 && !s.bill_number && (
                     <div className="mt-auto flex flex-col gap-2">
-                      <button
-                        type="button"
-                        disabled={isIssuing}
-                        onClick={() => void handleIssueBill(s, true)}
-                        className="rounded-xl bg-orange-600 px-4 py-3 text-sm font-black text-[var(--omlu-primary-action-text)] hover:bg-orange-500 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {isIssuing ? "Issuing bill…" : "Issue & Open Print"}
-                      </button>
-                      <button type="button" disabled={isIssuing} onClick={() => void handleIssueBill(s, false)} className="rounded-xl border border-[var(--omlu-border)] px-4 py-2 text-xs font-black disabled:opacity-50">
-                        Issue Without Printing
-                      </button>
+                      <Link href="/staff/tables" className="rounded-xl border border-[var(--omlu-border)] px-4 py-2 text-center text-xs font-black">Review Table</Link>
+                      <Link href="/admin/billing" className="rounded-xl bg-orange-600 px-4 py-3 text-center text-sm font-black text-white">Open Billing Counter</Link>
                     </div>
                   )}
                   {/* Close action */}

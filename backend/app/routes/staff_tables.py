@@ -62,6 +62,10 @@ class ServedItemCreateRequest(PublicOrderCreateRequest):
     late_entry_reason: str
 
 
+class ResolutionReasonRequest(BaseModel):
+    reason: str
+
+
 def _audit(db: Session, actor: StaffUser, action: str, target_type: str, target_id: str, new_value: dict | None = None) -> None:
     db.add(
         AuditLog(
@@ -461,9 +465,13 @@ def dismiss_empty_table_report(
 @router.post("/{table_id}/empty-table-report/close-session")
 def close_reported_empty_table_session(
     table_id: int,
+    payload: ResolutionReasonRequest,
     current_user: StaffUser = Depends(_report_resolution_roles),
     db: Session = Depends(get_db),
 ):
+    reason = payload.reason.strip()
+    if not reason:
+        raise HTTPException(status_code=422, detail="Resolution reason is required")
     report, session = _lock_open_report(db, current_user, table_id)
     if session.status not in ACTIVE_DINING_SESSION_STATUSES:
         raise HTTPException(status_code=409, detail="Reported session is no longer active")
@@ -497,8 +505,8 @@ def close_reported_empty_table_session(
     report.status = "resolved_by_session_close"
     report.resolved_at = now
     report.resolved_by_user_id = current_user.id
-    report.resolution_reason = "session_closed_empty_table"
-    _audit(db, current_user, "empty_table_session_closed", "dining_session", str(session.id), {"table_id": table_id, "cancelled_order_ids": [order.id for order in cancelled]})
+    report.resolution_reason = reason
+    _audit(db, current_user, "empty_table_session_closed", "dining_session", str(session.id), {"table_id": table_id, "cancelled_order_ids": [order.id for order in cancelled], "reason": reason})
     _audit(db, current_user, "table_participants_invalidated", "dining_session", str(session.id), {"table_id": table_id, "count": invalidated, "reason": "session_closed_empty_table"})
     db.commit()
     channels = _report_channels(current_user.restaurant_id, table_id, session.public_token)

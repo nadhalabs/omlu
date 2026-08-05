@@ -87,6 +87,20 @@ class OperationsApi {
     return OrderSummary.fromJson(json);
   }
 
+  Future<Map<String, Object?>> reopenBillOrdering({
+    required String billNumber,
+    required String reason,
+    required String idempotencyKey,
+  }) async {
+    final json = await _client.postJson(
+      '/staff/bills/$billNumber/reopen-ordering',
+      body: <String, Object?>{'reason': reason},
+      idempotencyKey: idempotencyKey,
+    );
+    await _cache?.invalidate('tables', identifier: 'all');
+    return json;
+  }
+
   Future<List<KitchenOrder>> fetchKitchenOrders({
     required String restaurantSlug,
     String? status,
@@ -149,6 +163,10 @@ class OperationsApi {
   Future<List<Object?>> fetchPendingPayments() async {
     final response = await _client.getJson('/staff/bills/pending-payments');
     return (response['items'] as List<Object?>?) ?? const [];
+  }
+
+  Future<Map<String, Object?>> fetchBillingCounter() {
+    return _client.getJson('/staff/bills/billing-counter');
   }
 
   Future<Map<String, Object?>> fetchBill(String billNumber) {

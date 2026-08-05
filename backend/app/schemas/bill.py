@@ -13,6 +13,18 @@ class CounterPaymentRequest(BaseModel):
     method: CounterPaymentMethod
 
 
+class BillingReasonRequest(BaseModel):
+    reason: str = Field(min_length=1, max_length=500)
+
+    @field_validator("reason")
+    @classmethod
+    def normalize_reason(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Reason is required.")
+        return normalized
+
+
 class IssueAndReleaseRequest(BaseModel):
     confirm_table_is_free: bool
 
@@ -151,7 +163,7 @@ class ReceiptPayloadResponse(BaseModel):
 
 class BillResponse(BaseModel):
     bill_number: str
-    receipt_token: str
+    receipt_token: Optional[str] = None
     restaurant_name: str
     restaurant_slug: str
     table_number: str

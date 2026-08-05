@@ -39,19 +39,11 @@ test("close and dismiss confirmations preserve the required safety wording", () 
   assert.match(tables, /onEvent: \(\) => void load\(\)/);
 });
 
-test("owner and admin can issue a bill from an eligible Active Tables card", () => {
-  assert.match(activeSessions, /createOrRefreshStaffSessionBill\(session\.session_token\)/);
-  assert.match(activeSessions, /issueStaffBill\(prepared\.bill_number\)/);
-  assert.match(activeSessions, /Issue bill for Table \$\{session\.table_number\}\?/);
-  assert.match(activeSessions, /This will generate the bill for all currently billable orders in this table session\./);
-  assert.match(activeSessions, /confirmLabel: openPrint \? "Issue & Open Print" : "Issue Without Printing"/);
+test("Active Tables links owner and admin to the canonical Billing Counter", () => {
   assert.match(activeSessions, /s\.billable_order_count > 0 && !s\.bill_number/);
-  assert.match(activeSessions, /isIssuing \? "Issuing bill…" : "Issue & Open Print"/);
-  assert.match(activeSessions, /Issue Without Printing/);
-  assert.match(activeSessions, /printWindow\.addEventListener\("load", \(\) => printWindow\?\.print\(\)/);
-  assert.match(activeSessions, /pendingIssueTokens\.current\.has\(session\.session_token\)/);
-  assert.match(activeSessions, /previous\.map\(\(item\) => item\.session_token === session\.session_token/);
-  assert.match(activeSessions, /bill_total: issued\.total_amount/);
+  assert.match(activeSessions, /href="\/admin\/billing"/);
+  assert.match(activeSessions, /Open Billing Counter/);
+  assert.match(activeSessions, /Review Table/);
   assert.match(activeSessions, /View Bill/);
 });
 
@@ -59,5 +51,5 @@ test("Active Tables closes only genuinely empty sessions and preserves staff per
   assert.match(activeSessions, /s\.order_count === 0 && !s\.bill_number/);
   assert.match(activeSessions, /Close Empty Session/);
   assert.match(activeSessions, /staffInfo\?\.role === "owner" \|\| staffInfo\?\.role === "admin"/);
-  assert.match(activeSessions, /issuingTokens\.has\(s\.session_token\)/);
+  assert.match(activeSessions, /closingToken === s\.session_token/);
 });

@@ -742,6 +742,31 @@ export interface PendingPaymentItem {
   stage: "bill_requested" | "bill_issued" | "detached_awaiting_payment" | "ready_for_payment" | "payment_pending";
 }
 
+export interface BillingCounterItem {
+  bill_id: number;
+  bill_number: string;
+  session_token: string;
+  table_id: number;
+  table_number: string;
+  requested_at: string;
+  item_count: number;
+  subtotal: string;
+  tax_amount: string;
+  total_amount: string;
+  currency: string;
+  status: "draft" | "issued" | "payment_pending" | "paid";
+  invoice_number: string | null;
+  payment_method: string | null;
+  paid_at: string | null;
+  receipt_token: string | null;
+}
+
+export interface BillingCounterQueues {
+  requested: BillingCounterItem[];
+  awaiting_payment: BillingCounterItem[];
+  paid_recently: BillingCounterItem[];
+}
+
 export interface StaffSessionDetail extends StaffSessionListItem {
   closed_at: string | null;
 }

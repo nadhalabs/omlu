@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omlu_operations/core/api/api_client.dart';
 import 'package:omlu_operations/core/api/operations_api.dart';
 import 'package:omlu_operations/core/printing/printer_adapter.dart';
+import 'package:omlu_operations/core/models/role_session.dart';
 import 'package:omlu_operations/core/printing/printer_service.dart';
 import 'package:omlu_operations/core/storage/key_value_storage.dart';
 import 'package:omlu_operations/features/auth_provider.dart';
@@ -85,7 +86,7 @@ Future<void> pumpBill(
         if (printer != null) printerServiceProvider.overrideWithValue(printer),
       ],
       child: const MaterialApp(
-        home: PendingBillReviewScreen(billNumber: 'BILL-PRINT'),
+        home: PendingBillReviewScreen(billNumber: 'BILL-PRINT', actorRole: StaffRole.owner),
       ),
     ),
   );

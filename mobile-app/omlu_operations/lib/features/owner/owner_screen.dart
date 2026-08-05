@@ -9,6 +9,7 @@ import '../../design_system/widgets/omlu_skeleton_loader.dart';
 import '../../design_system/widgets/realtime_status_chip.dart';
 import '../auth_provider.dart';
 import '../payments/pending_payments_tab.dart';
+import '../payments/billing_counter_screen.dart';
 import '../payments/pending_bill_review_screen.dart';
 import '../realtime_connection_provider.dart';
 import '../staff/tables_provider.dart';
@@ -70,7 +71,7 @@ class OwnerScreen extends ConsumerWidget {
     final List<Widget> screens = const [
       _OwnerDashboardTab(),
       _OwnerTablesTab(),
-      PendingPaymentsTab(),
+      BillingCounterScreen(actorRole: StaffRole.owner),
       _OwnerRequestsTab(),
     ];
 
@@ -99,8 +100,7 @@ class OwnerScreen extends ConsumerWidget {
                   ),
                   BottomNavigationBarItem(
                     icon: _PaymentBadge(count: pendingCount),
-                    label:
-                        'Pending payments${pendingCount > 0 ? '  $pendingCount' : ''}',
+                    label: 'Billing${pendingCount > 0 ? '  $pendingCount' : ''}',
                   ),
                   const BottomNavigationBarItem(
                     icon: Icon(Icons.notifications_rounded),
@@ -132,7 +132,7 @@ class OwnerScreen extends ConsumerWidget {
                     NavigationRailDestination(
                       icon: _PaymentBadge(count: pendingCount),
                       label: Text(
-                        'Pending payments${pendingCount > 0 ? '  $pendingCount' : ''}',
+                        'Billing Counter${pendingCount > 0 ? '  $pendingCount' : ''}',
                       ),
                     ),
                     NavigationRailDestination(

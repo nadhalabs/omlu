@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omlu_operations/core/api/api_client.dart';
 import 'package:omlu_operations/core/api/operations_api.dart';
 import 'package:omlu_operations/core/models/operations_models.dart';
+import 'package:omlu_operations/core/models/role_session.dart';
 import 'package:omlu_operations/features/auth_provider.dart';
 import 'package:omlu_operations/features/payments/pending_bill_review_screen.dart';
 
@@ -95,6 +96,36 @@ void main() {
   });
 
   group('PendingBillReviewScreen UI', () {
+    testWidgets('direct staff review hides official billing and printer actions', (tester) async {
+      final api = OperationsApi(ApiClient(
+        baseUrl: Uri.parse('https://api.example'),
+        transport: (_) async => const ApiResponse(statusCode: 200, body: {
+          'bill_number': 'BILL-STAFF',
+          'restaurant_name': 'Cafe',
+          'table_number': '4',
+          'status': 'draft',
+          'subtotal': '100.00',
+          'tax_amount': '5.00',
+          'discount_amount': '0.00',
+          'total_amount': '105.00',
+          'currency': 'INR',
+          'orders': <Object?>[],
+        }),
+      ));
+      await tester.pumpWidget(ProviderScope(
+        overrides: [operationsApiProvider.overrideWithValue(api)],
+        child: const MaterialApp(
+          home: PendingBillReviewScreen(billNumber: 'BILL-STAFF', actorRole: StaffRole.staff),
+        ),
+      ));
+      await tester.pumpAndSettle();
+      expect(find.text('Issue Bill'), findsNothing);
+      expect(find.text('Issue & Print Bill'), findsNothing);
+      expect(find.text('Printer Settings'), findsNothing);
+      expect(find.byTooltip('Printer settings'), findsNothing);
+      expect(find.text('Bill requested. Waiting for an admin or owner to issue it.'), findsOneWidget);
+    });
+
     testWidgets('renders header, item lines, GST split, and confirm payment buttons for owner/admin', (
       tester,
     ) async {
@@ -150,7 +181,7 @@ void main() {
         ProviderScope(
           overrides: [operationsApiProvider.overrideWithValue(api)],
           child: const MaterialApp(
-            home: PendingBillReviewScreen(billNumber: 'BILL-777'),
+            home: PendingBillReviewScreen(billNumber: 'BILL-777', actorRole: StaffRole.owner),
           ),
         ),
       );
@@ -204,7 +235,7 @@ void main() {
         ProviderScope(
           overrides: [operationsApiProvider.overrideWithValue(api)],
           child: const MaterialApp(
-            home: PendingBillReviewScreen(billNumber: 'BILL-320'),
+            home: PendingBillReviewScreen(billNumber: 'BILL-320', actorRole: StaffRole.admin),
           ),
         ),
       );

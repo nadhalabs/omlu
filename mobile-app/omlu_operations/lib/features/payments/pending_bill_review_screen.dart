@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_exceptions.dart';
 import '../../core/models/operations_models.dart';
+import '../../core/models/role_session.dart';
 import '../../core/printing/printer_adapter.dart';
 import '../../design_system/colors.dart';
 import '../../design_system/spacing.dart';
@@ -24,9 +25,10 @@ final pendingBillDetailProvider = FutureProvider.family<BillDetail, String>((
 });
 
 class PendingBillReviewScreen extends ConsumerStatefulWidget {
-  const PendingBillReviewScreen({required this.billNumber, super.key});
+  const PendingBillReviewScreen({required this.billNumber, this.actorRole, super.key});
 
   final String billNumber;
+  final StaffRole? actorRole;
 
   @override
   ConsumerState<PendingBillReviewScreen> createState() =>
@@ -83,6 +85,87 @@ class _PendingBillReviewScreenState
             ),
           );
         }
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _submitting = false;
+          _operationLabel = null;
+        });
+      }
+    }
+  }
+
+  Future<void> _reopenOrdering(BillDetail bill) async {
+    if (_submitting || bill.status != 'draft') return;
+    final controller = TextEditingController(text: 'Customer requested more items');
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Reopen Ordering'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Enter the reason for reopening ordering on this table:',
+              style: OmluTypography.bodyMedium,
+            ),
+            const SizedBox(height: OmluSpacing.sm),
+            TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                labelText: 'Reason',
+                border: OutlineInputBorder(),
+              ),
+              autofocus: true,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, null),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, controller.text.trim()),
+            child: const Text('Reopen Ordering'),
+          ),
+        ],
+      ),
+    );
+
+    if (reason == null || reason.isEmpty || _submitting) return;
+    setState(() {
+      _submitting = true;
+      _operationLabel = 'Reopening ordering…';
+    });
+
+    try {
+      final billNumber = bill.billNumber;
+      await ref.read(operationsApiProvider).reopenBillOrdering(
+        billNumber: billNumber,
+        reason: reason,
+        idempotencyKey: 'reopen-$billNumber-v1',
+      );
+      ref.invalidate(pendingBillDetailProvider(widget.billNumber));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Ordering has been reopened.'),
+            backgroundColor: OmluColors.statusAvailable,
+          ),
+        );
+        Navigator.pop(context);
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error is ApiException ? error.message : '$error'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     } finally {
       if (mounted) {
@@ -290,23 +373,24 @@ class _PendingBillReviewScreenState
 
   @override
   Widget build(BuildContext context) {
-    final role = ref.watch(authProvider).valueOrNull?.role.name;
-    final isAuthorized = role == null || role == 'owner' || role == 'admin';
+    final role = widget.actorRole ?? ref.watch(authProvider).valueOrNull?.role;
+    final isAuthorized = role == StaffRole.owner || role == StaffRole.admin;
     final asyncValue = ref.watch(pendingBillDetailProvider(widget.billNumber));
 
     return Scaffold(
       appBar: AppBar(
         title: Text('Bill ${widget.billNumber}', style: OmluTypography.h2),
         actions: [
-          IconButton(
-            tooltip: 'Printer settings',
-            icon: const Icon(Icons.print_rounded),
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => const PrinterSettingsScreen(),
+          if (isAuthorized)
+            IconButton(
+              tooltip: 'Printer settings',
+              icon: const Icon(Icons.print_rounded),
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const PrinterSettingsScreen(),
+                ),
               ),
             ),
-          ),
           const RealtimeStatusChip(),
         ],
       ),
@@ -412,54 +496,68 @@ class _PendingBillReviewScreenState
             style: OmluTypography.bodySmall,
           ),
           const SizedBox(height: OmluSpacing.md),
-          OmluButton(
-            text: _submitting
-                ? (_operationLabel ?? 'Issuing bill…')
-                : hasConfiguredPrinter
-                ? 'Issue & Print Bill'
-                : 'Issue Bill',
-            isLoading: _submitting,
-            onPressed: _submitting
-                ? null
-                : hasConfiguredPrinter
-                ? () => _issueBill(bill, printAfterIssue: true)
-                : () => _issueBill(bill, printAfterIssue: false),
-          ),
-          const SizedBox(height: OmluSpacing.sm),
-          if (hasConfiguredPrinter)
-            TextButton(
+          if (isAuthorized) ...[
+            OmluButton(
+              text: _submitting
+                  ? (_operationLabel ?? 'Issuing bill…')
+                  : hasConfiguredPrinter
+                  ? 'Issue & Print Bill'
+                  : 'Issue Bill',
+              isLoading: _submitting,
               onPressed: _submitting
                   ? null
+                  : hasConfiguredPrinter
+                  ? () => _issueBill(bill, printAfterIssue: true)
                   : () => _issueBill(bill, printAfterIssue: false),
-              child: const Text('Issue Without Printing'),
-            )
-          else ...[
-            const Text(
-              'Configure a printer to issue and print in one step.',
-              textAlign: TextAlign.center,
-              style: OmluTypography.bodySmall,
             ),
-            TextButton(
-              onPressed: _submitting
-                  ? null
-                  : () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => const PrinterSettingsScreen(),
+            const SizedBox(height: OmluSpacing.sm),
+            if (hasConfiguredPrinter)
+              TextButton(
+                onPressed: _submitting
+                    ? null
+                    : () => _issueBill(bill, printAfterIssue: false),
+                child: const Text('Issue Without Printing'),
+              )
+            else ...[
+              const Text(
+                'Configure a printer to issue and print in one step.',
+                textAlign: TextAlign.center,
+                style: OmluTypography.bodySmall,
+              ),
+              TextButton(
+                onPressed: _submitting
+                    ? null
+                    : () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const PrinterSettingsScreen(),
+                          ),
                         ),
-                      ),
-              child: const Text('Printer Settings'),
+                child: const Text('Printer Settings'),
+              ),
+            ],
+            const SizedBox(height: OmluSpacing.xs),
+            TextButton(
+              onPressed: _submitting ? null : () => _reopenOrdering(bill),
+              child: const Text('Reopen Ordering'),
             ),
-          ],
+          ] else
+            const Text(
+              'Bill requested. Waiting for an admin or owner to issue it.',
+              textAlign: TextAlign.center,
+              style: OmluTypography.bodyMedium,
+            ),
           const SizedBox(height: OmluSpacing.md),
         ] else if (bill.status == 'issued' ||
             bill.status == 'payment_pending' ||
             bill.status == 'paid') ...[
-          OmluButton(
-            text: bill.status == 'paid' ? 'Print Receipt' : 'Reprint Bill',
-            isLoading: _submitting,
-            onPressed: _submitting ? null : () => _print(bill),
-          ),
-          const SizedBox(height: OmluSpacing.md),
+          if (isAuthorized) ...[
+            OmluButton(
+              text: bill.status == 'paid' ? 'Print Receipt' : 'Reprint Bill',
+              isLoading: _submitting,
+              onPressed: _submitting ? null : () => _print(bill),
+            ),
+            const SizedBox(height: OmluSpacing.md),
+          ],
         ],
 
         // Payment Info & Actions Section

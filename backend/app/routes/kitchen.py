@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, selectinload, joinedload
 from app.database import get_db
 from app.models.restaurant import Restaurant
 from app.models.order import Order, OrderItem, OrderStatusHistory
+from app.models.bill import Bill
 from app.models.staff_user import StaffUser
 from app.models.quick_sale import QuickSale, QuickSaleItem
 from app.schemas.kitchen import KitchenOrderResponse, KitchenStatusUpdateRequest
@@ -212,6 +213,17 @@ def update_kitchen_order_status(
 
         old_status = order.status
         new_status = update_req.status
+
+        if new_status == "rejected" and order.dining_session_id is not None:
+            bill = db.query(Bill).filter(
+                Bill.restaurant_id == restaurant.id,
+                Bill.dining_session_id == order.dining_session_id,
+            ).with_for_update().first()
+            if bill and bill.status != "draft":
+                raise HTTPException(
+                    status_code=fastapi_status.HTTP_409_CONFLICT,
+                    detail="An issued bill is immutable; this order can no longer be rejected.",
+                )
 
         # Transition validation
         if old_status not in ALLOWED_TRANSITIONS or new_status not in ALLOWED_TRANSITIONS[old_status]:

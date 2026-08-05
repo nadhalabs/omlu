@@ -8,6 +8,7 @@ import uuid
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from fastapi import Header, HTTPException, status
 from sqlalchemy import func
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session, joinedload
 
 from app.config import settings
@@ -204,19 +205,20 @@ def enforce_session_action_rate(
         TableSessionJoinAttempt.window_started_at < now - datetime.timedelta(hours=24),
     ).delete(synchronize_session=False)
     key = authority_hash(f"{action}:{ip_value}:{token_hash(participant_token)}")
-    record = db.query(TableSessionJoinAttempt).filter(
-        TableSessionJoinAttempt.session_id == session.id,
-        TableSessionJoinAttempt.authority_hash == key,
-    ).with_for_update().first()
-    if not record:
-        record = TableSessionJoinAttempt(
+    db.execute(
+        pg_insert(TableSessionJoinAttempt)
+        .values(
             session_id=session.id,
             authority_hash=key,
             window_started_at=now,
             failed_count=0,
         )
-        db.add(record)
-        db.flush()
+        .on_conflict_do_nothing(constraint="uq_join_attempt_session_authority")
+    )
+    record = db.query(TableSessionJoinAttempt).filter(
+        TableSessionJoinAttempt.session_id == session.id,
+        TableSessionJoinAttempt.authority_hash == key,
+    ).with_for_update().one()
     if now - _utc(record.window_started_at) >= datetime.timedelta(seconds=window_seconds):
         record.window_started_at = now
         record.failed_count = 0

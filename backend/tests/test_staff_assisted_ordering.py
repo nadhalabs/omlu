@@ -314,7 +314,7 @@ def test_close_reported_session_cancels_orders_bill_participants_and_report(staf
     closed = client.post(
         f"/staff/tables/{staff_order_context['table_id']}/empty-table-report/close-session",
         headers=auth(staff_order_context, "owner_token"),
-        json={},
+        json={"reason": "Table confirmed abandoned"},
     )
     assert closed.status_code == 200
     assert closed.json()["cancelled_orders"] == 4
@@ -343,14 +343,31 @@ def test_reported_session_close_is_controlled_when_repeated(staff_order_context)
     report_empty(staff_order_context)
     first = client.post(
         f"/staff/tables/{staff_order_context['table_id']}/empty-table-report/close-session",
-        headers=auth(staff_order_context, "admin_token"), json={},
+        headers=auth(staff_order_context, "admin_token"), json={"reason": "Table confirmed abandoned"},
     )
     second = client.post(
         f"/staff/tables/{staff_order_context['table_id']}/empty-table-report/close-session",
-        headers=auth(staff_order_context, "admin_token"), json={},
+        headers=auth(staff_order_context, "admin_token"), json={"reason": "Table confirmed abandoned"},
     )
     assert first.status_code == 200
     assert second.status_code == 409
+
+
+def test_reported_session_close_requires_reason(staff_order_context):
+    start_session(staff_order_context)
+    report_empty(staff_order_context)
+    missing = client.post(
+        f"/staff/tables/{staff_order_context['table_id']}/empty-table-report/close-session",
+        headers=auth(staff_order_context, "owner_token"),
+        json={},
+    )
+    assert missing.status_code == 422
+    blank = client.post(
+        f"/staff/tables/{staff_order_context['table_id']}/empty-table-report/close-session",
+        headers=auth(staff_order_context, "owner_token"),
+        json={"reason": "   "},
+    )
+    assert blank.status_code == 422
 
 
 def test_concurrent_empty_table_report_creation_keeps_one_open(staff_order_context):
@@ -375,7 +392,7 @@ def test_concurrent_close_and_dismiss_has_one_resolution(staff_order_context):
     ]
     with ThreadPoolExecutor(max_workers=2) as executor:
         responses = list(executor.map(
-            lambda path: client.post(path, headers=auth(staff_order_context, "owner_token"), json={}),
+            lambda path: client.post(path, headers=auth(staff_order_context, "owner_token"), json={"reason": "Table confirmed abandoned"}),
             paths,
         ))
     assert sorted(response.status_code for response in responses) == [200, 409]
@@ -405,7 +422,7 @@ def test_empty_table_close_rolls_back_on_partial_failure(staff_order_context, mo
         client.post(
             f"/staff/tables/{staff_order_context['table_id']}/empty-table-report/close-session",
             headers=auth(staff_order_context, "owner_token"),
-            json={},
+            json={"reason": "Table confirmed abandoned"},
         )
     db = SessionLocal()
     session = db.query(DiningSession).filter(DiningSession.id == session_id).one()
@@ -637,7 +654,7 @@ def test_customer_bill_request_creates_draft_and_leaves_session_attached(staff_o
     assert requested.status_code == 201
     assert requested.json()["status"] == "draft"
     assert requested.json()["session_status"] == "payment_requested"
-    assert requested.json()["receipt_token"]
+    assert requested.json()["receipt_token"] is None
 
     queue = client.get(
         "/staff/bills/pending-payments",
@@ -780,7 +797,7 @@ def test_staff_bill_generation_and_counter_handoff(staff_order_context):
 
     issued = client.post(
         f"/staff/bills/{bill['bill_number']}/issue",
-        headers=auth(staff_order_context),
+        headers=auth(staff_order_context, "owner_token"),
     )
     assert issued.status_code == 200
 

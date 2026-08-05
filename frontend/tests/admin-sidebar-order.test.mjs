@@ -13,7 +13,7 @@ test("admin sidebar uses the required navigation order without duplicate entries
   assert.deepEqual(labels, [
     "Dashboard",
     "Quick Sale",
-    "Pending Payments",
+    "Billing Counter",
     "Kitchen Dashboard",
     "Service Requests",
     "History",
