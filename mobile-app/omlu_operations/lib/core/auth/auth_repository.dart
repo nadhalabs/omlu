@@ -86,6 +86,12 @@ class AuthRepository {
         throw AuthenticationException(message);
       }
 
+      if (authenticated.profile.mustChangePassword) {
+        throw const AuthenticationException(
+          'This account requires a password reset by the restaurant owner.',
+        );
+      }
+
       final session = RoleSession(
         accessToken: token,
         expiresAt: _now().toUtc().add(Duration(seconds: expiresIn)),

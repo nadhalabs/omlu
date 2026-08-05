@@ -115,7 +115,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       if (mounted) {
         final errStr = e.toString();
         String displayMsg;
-        if (e is AuthenticationException) {
+        if (errStr.toLowerCase().contains('password change required') ||
+            errStr.contains('PASSWORD_CHANGE_REQUIRED') ||
+            errStr.contains('requires a password reset')) {
+          displayMsg =
+              'This account requires a password reset by the restaurant owner.';
+        } else if (e is AuthenticationException) {
           displayMsg = e.message;
         } else if (errStr.contains('Invalid restaurant credentials') ||
             errStr.contains('401') ||

@@ -489,5 +489,57 @@ void main() {
         findsOneWidget,
       );
     });
+
+    test('Account with must_change_password=true throws clear reset-required exception', () async {
+      final storage = MemoryTokenStorage();
+      final client = ApiClient(
+        baseUrl: Uri.parse('https://api.example'),
+        transport: (request) async {
+          if (request.uri.path == '/auth/staff/login') {
+            return const ApiResponse(
+              statusCode: 200,
+              body: {'access_token': 'flagged_jwt', 'expires_in': 3600, 'staff': {'role': 'admin'}},
+            );
+          }
+          if (request.uri.path == '/auth/staff/me') {
+            return const ApiResponse(
+              statusCode: 200,
+              body: {
+                'name': 'Flagged Admin',
+                'email': 'flagged@example.com',
+                'role': 'admin',
+                'status': 'active',
+                'must_change_password': true,
+                'restaurant_name': 'My Restaurant',
+                'restaurant_slug': 'my-restaurant',
+                'scope': {'restaurant_id': 1, 'actor_id': 200, 'role': 'admin', 'authority_epoch': 'v1.epoch'},
+              },
+            );
+          }
+          if (request.uri.path == '/auth/staff/logout') {
+            return const ApiResponse(statusCode: 200, body: {'success': true});
+          }
+          throw UnimplementedError(request.uri.path);
+        },
+      );
+
+      final repository = testAuthRepository(client, storage);
+
+      expect(
+        repository.login(
+          restaurantSlug: 'my-restaurant',
+          login: 'flagged_admin',
+          password: 'password123',
+          entryMode: EntryMode.ownerAdmin,
+        ),
+        throwsA(
+          isA<AuthenticationException>().having(
+            (e) => e.message,
+            'message',
+            'This account requires a password reset by the restaurant owner.',
+          ),
+        ),
+      );
+    });
   });
 }

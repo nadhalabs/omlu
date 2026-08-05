@@ -1,4 +1,5 @@
 import datetime
+import secrets
 import pytest
 import jwt
 from fastapi.testclient import TestClient
@@ -784,3 +785,290 @@ def test_null_expires_at_session_rejected_and_not_counted(setup_auth_test_data):
 
     db.delete(null_session)
     db.commit()
+
+
+def test_newly_created_admin_has_no_forced_password_change(setup_auth_test_data):
+    data = setup_auth_test_data
+    owner_token = create_access_token(
+        data={"sub": str(data["owner_id"]), "restaurant_id": data["restaurant_id"], "role": "owner"}
+    )
+    create_res = client.post(
+        "/admin/staff",
+        headers={"Authorization": f"Bearer {owner_token}"},
+        json={
+            "name": "New Unflagged Admin",
+            "username": "unflagged_admin",
+            "email": "unflagged_admin@test.local",
+            "role": "admin",
+            "temporary_password": "PilotSecure984!Z",
+        },
+    )
+    assert create_res.status_code == 201
+    assert create_res.json()["must_change_password"] is False
+
+    # Admin signs in and accesses protected admin APIs immediately
+    login_res = client.post(
+        "/auth/staff/login",
+        json={
+            "login": "unflagged_admin",
+            "password": "PilotSecure984!Z",
+            "restaurant_slug": data["restaurant_slug"],
+        },
+    )
+    assert login_res.status_code == 200
+    token = login_res.json()["access_token"]
+    assert login_res.json()["staff"]["must_change_password"] is False
+
+    me_res = client.get("/auth/staff/me", headers={"Authorization": f"Bearer {token}"})
+    assert me_res.status_code == 200
+    assert me_res.json()["must_change_password"] is False
+
+    # Billing counter & operational APIs work immediately
+    billing_res = client.get("/staff/bills/billing-counter", headers={"Authorization": f"Bearer {token}"})
+    assert billing_res.status_code == 200
+
+
+def test_admin_password_reset_clears_must_change_password_and_revokes_old_sessions(setup_auth_test_data):
+    data = setup_auth_test_data
+    owner_token = create_access_token(
+        data={"sub": str(data["owner_id"]), "restaurant_id": data["restaurant_id"], "role": "owner"}
+    )
+    create_res = client.post(
+        "/admin/staff",
+        headers={"Authorization": f"Bearer {owner_token}"},
+        json={
+            "name": "Reset Admin Test",
+            "username": "reset_admin_test",
+            "email": "reset_admin_test@test.local",
+            "role": "admin",
+            "temporary_password": "InitialPass123!",
+        },
+    )
+    admin_id = create_res.json()["id"]
+
+    login_old = client.post(
+        "/auth/staff/login",
+        json={"login": "reset_admin_test", "password": "InitialPass123!", "restaurant_slug": data["restaurant_slug"]},
+    )
+    old_token = login_old.json()["access_token"]
+
+    reset_res = client.post(
+        f"/admin/staff/{admin_id}/reset-password",
+        headers={"Authorization": f"Bearer {owner_token}"},
+        json={"temporary_password": "NewStrongPass999!"},
+    )
+    assert reset_res.status_code == 200
+    assert reset_res.json()["must_change_password"] is False
+
+    # Old token revoked
+    assert client.get("/auth/staff/me", headers={"Authorization": f"Bearer {old_token}"}).status_code == 401
+
+    # Login with new password works directly
+    login_new = client.post(
+        "/auth/staff/login",
+        json={"login": "reset_admin_test", "password": "NewStrongPass999!", "restaurant_slug": data["restaurant_slug"]},
+    )
+    assert login_new.status_code == 200
+    assert login_new.json()["staff"]["must_change_password"] is False
+
+
+def test_admin_cannot_access_owner_only_endpoints(setup_auth_test_data):
+    data = setup_auth_test_data
+    admin_login = client.post(
+        "/auth/staff/login",
+        json={"login": data["admin_email"], "password": "admin123", "restaurant_slug": data["restaurant_slug"]},
+    )
+    admin_token = admin_login.json()["access_token"]
+
+    # Admin cannot update owner-only settings (PATCH /admin/settings requires owner)
+    assert client.patch(
+        "/admin/settings",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={"service_requests_enabled": True},
+    ).status_code == 403
+
+    # Admin cannot reset owner password
+    reset_res = client.post(
+        f"/admin/staff/{data['owner_id']}/reset-password",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={"temporary_password": "NewOwnerPass123!"},
+    )
+    assert reset_res.status_code == 403
+
+
+
+@pytest.mark.parametrize("role", ["owner", "admin", "staff", "kitchen"])
+def test_all_roles_creation_and_reset_have_no_forced_credential_change(setup_auth_test_data, role):
+    data = setup_auth_test_data
+    owner_token = create_access_token(
+        data={"sub": str(data["owner_id"]), "restaurant_id": data["restaurant_id"], "role": "owner"}
+    )
+    is_pin = role in {"staff", "kitchen"}
+    username = f"unflagged_{role}_{secrets.token_hex(4)}"
+    credential = "654321" if is_pin else "PilotSecure984!Z"
+    reset_credential = "123456" if is_pin else "NewStrongPass999!"
+
+    if role == "owner":
+        # Owner self-registration creates a new restaurant and owner
+        reg_slug = f"unflagged-owner-{secrets.token_hex(4)}"
+        reg_res = client.post(
+            "/public/restaurants/register",
+            json={
+                "restaurant_name": "Unflagged Owner Resto",
+                "restaurant_slug": reg_slug,
+                "contact_email": f"{username}@test.local",
+                "phone_number": "+91 99999 99999",
+                "city": "Kochi",
+                "owner_full_name": "Unflagged Owner",
+                "owner_username": username,
+                "owner_email": f"{username}@test.local",
+                "password": credential,
+                "confirm_password": credential,
+                "accept_terms": True,
+            },
+        )
+        assert reg_res.status_code == 201
+        target_slug = reg_slug
+
+        # Login with initial owner password
+        login_res = client.post(
+            "/auth/staff/login",
+            json={"login": username, "password": credential, "restaurant_slug": target_slug},
+        )
+        assert login_res.status_code == 200
+        assert login_res.json()["staff"]["must_change_password"] is False
+        token = login_res.json()["access_token"]
+
+        # Owner change password
+        change_res = client.post(
+            "/auth/staff/change-password",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"current_password": credential, "new_password": reset_credential},
+        )
+        assert change_res.status_code == 200
+        assert change_res.json()["staff"]["must_change_password"] is False
+
+        # Login with new password works directly without forced change
+        login_reset = client.post(
+            "/auth/staff/login",
+            json={"login": username, "password": reset_credential, "restaurant_slug": target_slug},
+        )
+        assert login_reset.status_code == 200
+        assert login_reset.json()["staff"]["must_change_password"] is False
+
+    else:
+        # Admin / Staff / Kitchen creation by owner
+        payload = {
+            "name": f"Unflagged {role.title()}",
+            "username": username,
+            "role": role,
+        }
+        if role == "admin":
+            payload["email"] = f"{username}@test.local"
+            payload["temporary_password"] = credential
+        else:
+            payload["pin"] = credential
+            payload["confirm_pin"] = credential
+
+        create_res = client.post(
+            "/admin/staff",
+            headers={"Authorization": f"Bearer {owner_token}"},
+            json=payload,
+        )
+        assert create_res.status_code == 201
+        assert create_res.json()["must_change_password"] is False
+        staff_id = create_res.json()["id"]
+
+        # Sign in with initial credential
+        login_res = client.post(
+            "/auth/staff/login",
+            json={"login": username, "password": credential, "restaurant_slug": data["restaurant_slug"]},
+        )
+        assert login_res.status_code == 200
+        assert login_res.json()["staff"]["must_change_password"] is False
+        token = login_res.json()["access_token"]
+
+        # Workspace API is immediately accessible
+        me_res = client.get("/auth/staff/me", headers={"Authorization": f"Bearer {token}"})
+        assert me_res.status_code == 200
+        assert me_res.json()["must_change_password"] is False
+
+        # Reset credential by owner
+        reset_res = client.post(
+            f"/admin/staff/{staff_id}/reset-password",
+            headers={"Authorization": f"Bearer {owner_token}"},
+            json={"temporary_password": reset_credential},
+        )
+        assert reset_res.status_code == 200
+        assert reset_res.json()["must_change_password"] is False
+
+        # Old token is revoked
+        assert client.get("/auth/staff/me", headers={"Authorization": f"Bearer {token}"}).status_code == 401
+
+        # Login with reset credential works directly without forced change
+        login_reset = client.post(
+            "/auth/staff/login",
+            json={"login": username, "password": reset_credential, "restaurant_slug": data["restaurant_slug"]},
+        )
+        assert login_reset.status_code == 200
+        assert login_reset.json()["staff"]["must_change_password"] is False
+
+
+@pytest.mark.parametrize("role", ["owner", "admin", "staff", "kitchen"])
+def test_repair_account_cli_clears_flag_for_all_roles(setup_auth_test_data, role):
+    from app.models.staff_user import StaffUser
+    from app.repair_account import main as repair_main
+    from unittest.mock import patch
+
+    data = setup_auth_test_data
+    db = SessionLocal()
+    is_pin = role in {"staff", "kitchen"}
+    old_cred = "111111" if is_pin else "OldPassword123!"
+    repaired_cred = "999999" if is_pin else "RepairedPassword123!"
+
+    if role == "owner":
+        # Flag the existing owner for repair
+        owner_user = db.query(StaffUser).filter(StaffUser.id == data["owner_id"]).first()
+        owner_user.must_change_password = True
+        owner_user.password_hash = hash_password(old_cred)
+        db.commit()
+        username = owner_user.username or owner_user.email
+    else:
+        username = f"flagged_cli_{role}_{secrets.token_hex(4)}"
+        flagged_user = StaffUser(
+            restaurant_id=data["restaurant_id"],
+            name=f"Flagged CLI {role.title()}",
+            username=username,
+            email=f"{username}@test.local" if role == "admin" else None,
+            password_hash=hash_password(old_cred),
+            role=role,
+            status="active",
+            is_active=True,
+            must_change_password=True,
+        )
+        db.add(flagged_user)
+        db.commit()
+    db.close()
+
+    # Run repair CLI command for this role
+    with patch("sys.argv", [
+        "repair_account",
+        "--slug", data["restaurant_slug"],
+        "--username", username,
+        "--credential", repaired_cred,
+    ]):
+        repair_main()
+
+    # Verify flag cleared and password/pin updated
+    db = SessionLocal()
+    repaired = db.query(StaffUser).filter(StaffUser.restaurant_id == data["restaurant_id"], (StaffUser.username == username) | (StaffUser.email == username)).first()
+    assert repaired.must_change_password is False
+    db.close()
+
+    # Verify login with repaired credential succeeds immediately without must_change_password
+    login_res = client.post(
+        "/auth/staff/login",
+        json={"login": username, "password": repaired_cred, "restaurant_slug": data["restaurant_slug"]},
+    )
+    assert login_res.status_code == 200
+    assert login_res.json()["staff"]["must_change_password"] is False

@@ -360,7 +360,8 @@ export default function StaffManagementClient() {
           <FieldInput name="pin" label="6-digit PIN" hint="Enter exactly 6 digits." placeholder="6-digit PIN" type="password" autoComplete="new-password" value={form.pin || ""} error={fieldErrors.pin} disabled={saving} inputMode="numeric" maxLength={6} onChange={(value) => setForm({ ...form, pin: value.replace(/\D/g, "").slice(0, 6) })} />
           <FieldInput name="confirm_pin" label="Confirm PIN" hint="Re-enter the same 6 digits." placeholder="Confirm PIN" type="password" autoComplete="new-password" value={form.confirm_pin || ""} error={fieldErrors.confirm_pin} disabled={saving} inputMode="numeric" maxLength={6} onChange={(value) => setForm({ ...form, confirm_pin: value.replace(/\D/g, "").slice(0, 6) })} />
         </> : <>
-          <PasswordInput name="temporary_password" label="Temporary password" value={form.temporary_password || ""} error={fieldErrors.temporary_password} disabled={saving} autoComplete="new-password" showChecklist onChange={(value) => setForm({ ...form, temporary_password: value })} />
+          <PasswordInput name="temporary_password" label="Password" placeholder="Password" value={form.temporary_password || ""} error={fieldErrors.temporary_password} disabled={saving} autoComplete="new-password" showChecklist onChange={(value) => setForm({ ...form, temporary_password: value })} />
+          <p className="text-xs font-medium text-[var(--omlu-text-secondary)] md:col-span-2 xl:col-span-3">The admin can sign in immediately with this password.</p>
         </>}
         <button disabled={saving} className="min-h-11 self-end rounded-lg bg-orange-600 px-5 py-2 text-sm font-black text-[var(--omlu-primary-action-text)] transition hover:bg-orange-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)]">
           {saving ? "Adding staff..." : "Add Staff"}
@@ -386,7 +387,7 @@ export default function StaffManagementClient() {
             <div className="mt-4">
               <PasswordInput
                 name="temporary_password"
-                label={resetTarget.role === "staff" || resetTarget.role === "kitchen" ? "New 6-digit PIN" : "Temporary password"}
+                label={resetTarget.role === "staff" || resetTarget.role === "kitchen" ? "New 6-digit PIN" : "New password"}
                 value={resetPasswordValue}
                 error={resetPasswordError}
                 disabled={resetSaving}
@@ -398,6 +399,9 @@ export default function StaffManagementClient() {
                   setResetPasswordError(undefined);
                 }}
               />
+              {(resetTarget.role === "owner" || resetTarget.role === "admin") && (
+                <p className="mt-2 text-xs font-medium text-[var(--omlu-text-secondary)]">The admin can sign in immediately with this password.</p>
+              )}
             </div>
             <div className="mt-5 flex justify-end gap-2">
               <button type="button" disabled={resetSaving} onClick={() => setResetTarget(null)} className="rounded-lg bg-[var(--omlu-muted-surface)] px-4 py-2 text-sm font-bold text-[var(--omlu-text-secondary)]">

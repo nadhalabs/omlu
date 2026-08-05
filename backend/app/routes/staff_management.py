@@ -313,7 +313,7 @@ def create_staff_account(
         role=role,
         status="active",
         is_active=True,
-        must_change_password=role == "admin",
+        must_change_password=False,
         added_by_staff_id=current_user.id,
     )
     db.add(staff)
@@ -425,7 +425,7 @@ def reset_staff_password(
         personal_username=target.username,
     )
     target.password_hash = hash_password(body.temporary_password)
-    target.must_change_password = target.role == "admin"
+    target.must_change_password = False
     target.security_version = (target.security_version or 0) + 1
     _revoke_sessions(db, target, current_user)
     _audit(db, current_user, request, "pin_reset" if target.role in {"staff", "kitchen"} else "password_reset_initiated", target)

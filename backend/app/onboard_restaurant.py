@@ -180,7 +180,7 @@ def main():
                 role="owner",
                 status="active",
                 is_active=True,
-                must_change_password=True,
+                must_change_password=False,
             )
             db.add(owner)
             db.flush()
