@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/api/api_exceptions.dart';
 import '../../core/models/operations_models.dart';
 import '../../core/printing/printer_adapter.dart';
 import '../../design_system/colors.dart';
@@ -35,39 +36,167 @@ class PendingBillReviewScreen extends ConsumerStatefulWidget {
 class _PendingBillReviewScreenState
     extends ConsumerState<PendingBillReviewScreen> {
   bool _submitting = false;
+  String? _operationLabel;
 
-  Future<void> _print(BillDetail bill) async {
-    if (_submitting) return;
-    setState(() => _submitting = true);
+  Future<void> _issueBill(
+    BillDetail bill, {
+    required bool printAfterIssue,
+  }) async {
+    if (_submitting || bill.status != 'draft') return;
+    setState(() {
+      _submitting = true;
+      _operationLabel = 'Issuing bill…';
+    });
+    Map<String, Object?>? issued;
+    try {
+      final billNumber = bill.billNumber;
+      issued = await ref
+          .read(operationsApiProvider)
+          .issueBill(billNumber, idempotencyKey: 'bill-issue-$billNumber-v1');
+      final status = issued['status']?.toString();
+      if (!{'issued', 'payment_pending'}.contains(status)) {
+        throw StateError('The bill was not ready to print.');
+      }
+      ref.invalidate(pendingBillDetailProvider(widget.billNumber));
+      await ref.read(pendingPaymentsProvider.notifier).fetch(silent: true);
+
+      if (printAfterIssue) {
+        if (mounted) setState(() => _operationLabel = 'Printing bill…');
+        await _printIssuedBill(issued, showFailureDialog: true);
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Bill issued.'),
+              backgroundColor: OmluColors.statusAvailable,
+            ),
+          );
+        }
+      }
+    } catch (error) {
+      if (issued == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(error is ApiException ? error.message : '$error'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _submitting = false;
+          _operationLabel = null;
+        });
+      }
+    }
+  }
+
+  Future<void> _printIssuedBill(
+    Map<String, Object?> bill, {
+    required bool showFailureDialog,
+  }) async {
+    final billNumber = bill['bill_number']?.toString() ?? widget.billNumber;
     try {
       final api = ref.read(operationsApiProvider);
-      final receipt = await api.fetchReceiptPayload(bill.billNumber);
+      final receipt = await api.fetchReceiptPayload(billNumber);
       final printer = ref.read(printerServiceProvider);
       await printer.loadConfig();
       await printer.printReceipt(receipt);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Receipt printed successfully.')),
-        );
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Bill issued and printed.'),
+          backgroundColor: OmluColors.statusAvailable,
+        ),
+      );
     } on PrinterException catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(error.message), backgroundColor: Colors.red),
+      if (showFailureDialog) {
+        await _showPrintFailure(
+          bill,
+          'Bill issued, but printing failed.',
+          error.message,
         );
+      } else {
+        rethrow;
       }
     } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Printing failed. The bill remains safely issued.'),
-            backgroundColor: Colors.red,
-          ),
+      if (showFailureDialog) {
+        await _showPrintFailure(
+          bill,
+          'Bill issued, but the printable bill could not be loaded.',
+          'Printing failed. The bill remains safely issued.',
         );
+      } else {
+        rethrow;
       }
-    } finally {
-      if (mounted) setState(() => _submitting = false);
     }
+  }
+
+  Future<void> _showPrintFailure(
+    Map<String, Object?> issuedBill,
+    String title,
+    String detail,
+  ) async {
+    if (!mounted) return;
+    final retry = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(title),
+        content: Text(detail),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Continue Without Printing'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Retry Print'),
+          ),
+        ],
+      ),
+    );
+    if (retry == true && mounted) {
+      setState(() => _operationLabel = 'Printing bill…');
+      await _printIssuedBill(issuedBill, showFailureDialog: true);
+    }
+  }
+
+  Future<void> _reprintBill(BillDetail bill) async {
+    if (_submitting) return;
+    if (bill.status == 'draft') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Draft bills cannot be printed directly.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    setState(() {
+      _submitting = true;
+      _operationLabel = 'Printing bill…';
+    });
+    try {
+      await _printIssuedBill({
+        'bill_number': bill.billNumber,
+        'status': bill.status,
+      }, showFailureDialog: true);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _submitting = false;
+          _operationLabel = null;
+        });
+      }
+    }
+  }
+
+  Future<void> _print(BillDetail bill) async {
+    await _reprintBill(bill);
   }
 
   Future<void> _confirmPayment(BillDetail bill, String method) async {
@@ -234,11 +363,10 @@ class _PendingBillReviewScreenState
   }
 
   Widget _buildBillContent(BillDetail bill, bool isAuthorized) {
+    final printerConfig = ref.watch(printerConfigProvider).valueOrNull;
+    final hasConfiguredPrinter = printerConfig?.isConfigured == true;
     final isPaid = bill.isPaid;
-    final isPending =
-        bill.isPaymentPending ||
-        bill.status == 'issued' ||
-        bill.status == 'draft';
+    final isPending = bill.isPaymentPending || bill.status == 'issued';
 
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
@@ -273,11 +401,61 @@ class _PendingBillReviewScreenState
 
         const SizedBox(height: OmluSpacing.md),
 
-        if (bill.status == 'issued' ||
+        if (bill.status == 'draft') ...[
+          const Text(
+            'Bill requested · Under review',
+            style: OmluTypography.bodyLarge,
+          ),
+          const SizedBox(height: OmluSpacing.xs),
+          const Text(
+            'This is a provisional total. Issue the bill to freeze totals and print.',
+            style: OmluTypography.bodySmall,
+          ),
+          const SizedBox(height: OmluSpacing.md),
+          OmluButton(
+            text: _submitting
+                ? (_operationLabel ?? 'Issuing bill…')
+                : hasConfiguredPrinter
+                ? 'Issue & Print Bill'
+                : 'Issue Bill',
+            isLoading: _submitting,
+            onPressed: _submitting
+                ? null
+                : hasConfiguredPrinter
+                ? () => _issueBill(bill, printAfterIssue: true)
+                : () => _issueBill(bill, printAfterIssue: false),
+          ),
+          const SizedBox(height: OmluSpacing.sm),
+          if (hasConfiguredPrinter)
+            TextButton(
+              onPressed: _submitting
+                  ? null
+                  : () => _issueBill(bill, printAfterIssue: false),
+              child: const Text('Issue Without Printing'),
+            )
+          else ...[
+            const Text(
+              'Configure a printer to issue and print in one step.',
+              textAlign: TextAlign.center,
+              style: OmluTypography.bodySmall,
+            ),
+            TextButton(
+              onPressed: _submitting
+                  ? null
+                  : () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const PrinterSettingsScreen(),
+                        ),
+                      ),
+              child: const Text('Printer Settings'),
+            ),
+          ],
+          const SizedBox(height: OmluSpacing.md),
+        ] else if (bill.status == 'issued' ||
             bill.status == 'payment_pending' ||
             bill.status == 'paid') ...[
           OmluButton(
-            text: bill.status == 'paid' ? 'Print Receipt' : 'Print Bill',
+            text: bill.status == 'paid' ? 'Print Receipt' : 'Reprint Bill',
             isLoading: _submitting,
             onPressed: _submitting ? null : () => _print(bill),
           ),

@@ -97,16 +97,16 @@ void main() {
     tester,
   ) async {
     await pumpBill(tester, 'draft');
-    expect(find.text('Print Bill'), findsNothing);
+    expect(find.text('Reprint Bill'), findsNothing);
     expect(find.text('Print Receipt'), findsNothing);
 
     await pumpBill(tester, 'issued');
     await tester.scrollUntilVisible(
-      find.text('Print Bill'),
+      find.text('Reprint Bill'),
       200,
       scrollable: find.byType(Scrollable).first,
     );
-    expect(find.text('Print Bill'), findsOneWidget);
+    expect(find.text('Reprint Bill'), findsOneWidget);
 
     await pumpBill(tester, 'paid');
     await tester.drag(find.byType(ListView), const Offset(0, -500));
@@ -127,11 +127,11 @@ void main() {
       );
       await pumpBill(tester, 'issued', printer: printer);
       await tester.scrollUntilVisible(
-        find.text('Print Bill'),
+        find.text('Reprint Bill'),
         200,
         scrollable: find.byType(Scrollable).first,
       );
-      final printButtonCenter = tester.getCenter(find.text('Print Bill'));
+      final printButtonCenter = tester.getCenter(find.text('Reprint Bill'));
       await tester.tapAt(printButtonCenter);
       await tester.pump();
       await tester.tapAt(printButtonCenter);

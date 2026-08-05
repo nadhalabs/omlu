@@ -139,10 +139,42 @@ export default function PendingPaymentsClient({ actorRole, showQueue = true }: P
     finally { setLookingUp(false); }
   }
 
-  async function issue(payment: PendingPaymentItem) {
-    await issueStaffBill(payment.bill_number);
-    await refresh();
-    toast("Bill issued.", "success");
+  const pendingIssueTokens = useState<Set<string>>(() => new Set())[0];
+  const [issuingBills, setIssuingBills] = useState<Record<string, boolean>>({});
+
+  async function issue(payment: PendingPaymentItem, openPrint: boolean) {
+    if (pendingIssueTokens.has(payment.bill_number) || issuingBills[payment.bill_number]) return;
+    pendingIssueTokens.add(payment.bill_number);
+    setIssuingBills((prev) => ({ ...prev, [payment.bill_number]: true }));
+
+    let printWindow: Window | null = null;
+    if (openPrint) {
+      printWindow = window.open("", "_blank");
+    }
+
+    try {
+      const issued = await issueStaffBill(payment.bill_number);
+      await refresh();
+      window.dispatchEvent(new Event("admin-operational-counts-changed"));
+
+      if (openPrint && printWindow && issued.receipt_token) {
+        const printUrl = `/bill/${encodeURIComponent(payment.session_token)}?receipt=${encodeURIComponent(issued.receipt_token)}`;
+        printWindow.location.replace(printUrl);
+        printWindow.addEventListener("load", () => printWindow?.print(), { once: true });
+        toast("Bill issued. Print view opened.", "success");
+      } else if (openPrint) {
+        printWindow?.close();
+        toast("Bill issued. Open Print Bill to print.", "information");
+      } else {
+        toast("Bill issued.", "success");
+      }
+    } catch (err) {
+      printWindow?.close();
+      toast(err instanceof ApiError ? err.message : "Failed to issue bill.", "error");
+    } finally {
+      pendingIssueTokens.delete(payment.bill_number);
+      setIssuingBills((prev) => ({ ...prev, [payment.bill_number]: false }));
+    }
   }
 
   const visibleItems = tab === "all" ? items : items.filter((item) => item.stage === tab);
@@ -271,7 +303,22 @@ export default function PendingPaymentsClient({ actorRole, showQueue = true }: P
               {item.stage === "bill_requested" ? (
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <Link href={`/bill/${encodeURIComponent(item.session_token)}`} className="min-h-11 w-full sm:w-auto rounded-xl border border-[var(--omlu-border)] px-4 py-2.5 text-center text-sm font-bold">View bill</Link>
-                  <button type="button" onClick={() => void issue(item)} className="min-h-11 w-full sm:flex-1 rounded-xl bg-orange-600 px-4 font-black text-white">Issue bill</button>
+                  <button
+                    type="button"
+                    disabled={issuingBills[item.bill_number]}
+                    onClick={() => void issue(item, true)}
+                    className="min-h-11 w-full sm:flex-1 rounded-xl bg-orange-600 px-4 font-black text-white disabled:opacity-50"
+                  >
+                    {issuingBills[item.bill_number] ? "Issuing…" : "Issue & Open Print"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={issuingBills[item.bill_number]}
+                    onClick={() => void issue(item, false)}
+                    className="min-h-11 w-full sm:w-auto rounded-xl border border-[var(--omlu-border)] px-4 py-2.5 text-center text-sm font-bold disabled:opacity-50"
+                  >
+                    Issue Without Printing
+                  </button>
                 </div>
               ) : canConfirm ? (
                 <div className="flex flex-col gap-3">

@@ -12,6 +12,7 @@ import {
   requestStaffPaymentAssistance,
   ApiError,
 } from "@/lib/api";
+import { useOmluUi } from "@/components/OmluUiProvider";
 import { CounterPaymentMethod, CurrentStaffResponse, StaffServiceRequestResponse } from "@/lib/types";
 import { useRealtime } from "@/lib/realtime";
 import { registerAuthenticatedCleanup } from "@/lib/authRuntime.mjs";
@@ -34,6 +35,7 @@ function timeAgo(dateStr: string): string {
 }
 
 export default function AdminRequestsClient() {
+  const { toast } = useOmluUi();
   const [requests, setRequests] = useState<StaffServiceRequestResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -137,10 +139,14 @@ export default function AdminRequestsClient() {
     }
   };
 
-  const handleIssueBill = async (req: StaffServiceRequestResponse) => {
+  const handleIssueBill = async (req: StaffServiceRequestResponse, openPrint: boolean = true) => {
     if (!req.dining_session_token || issuingId === req.id) return;
     setIssuingId(req.id);
     setError(null);
+    let printWindow: Window | null = null;
+    if (openPrint) {
+      printWindow = window.open("", "_blank");
+    }
     try {
       const bill = req.bill_number
         ? null
@@ -157,7 +163,19 @@ export default function AdminRequestsClient() {
             : item
         )
       );
+      if (openPrint && printWindow && issued.receipt_token) {
+        const printUrl = `/bill/${encodeURIComponent(req.dining_session_token)}?receipt=${encodeURIComponent(issued.receipt_token)}`;
+        printWindow.location.replace(printUrl);
+        printWindow.addEventListener("load", () => printWindow?.print(), { once: true });
+        toast("Bill issued. Print view opened.", "success");
+      } else if (openPrint) {
+        printWindow?.close();
+        toast("Bill issued. Open Print Bill to print.", "information");
+      } else {
+        toast("Bill issued.", "success");
+      }
     } catch (err) {
+      printWindow?.close();
       if (err instanceof ApiError) setError(err.message);
       else if (err instanceof Error) setError(err.message);
       else setError("Failed to issue bill.");
@@ -397,11 +415,18 @@ export default function AdminRequestsClient() {
                                 Open Bill
                               </a>
                               <button
-                                onClick={() => handleIssueBill(req)}
+                                onClick={() => handleIssueBill(req, true)}
                                 disabled={issuingId === req.id}
                                 className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-[var(--omlu-strong-action-text)] font-bold text-xs rounded-xl transition cursor-pointer"
                               >
-                                {issuingId === req.id ? "Issuing…" : "Issue Bill"}
+                                {issuingId === req.id ? "Issuing…" : "Issue & Open Print"}
+                              </button>
+                              <button
+                                onClick={() => handleIssueBill(req, false)}
+                                disabled={issuingId === req.id}
+                                className="px-4 py-2 bg-[var(--omlu-muted-surface)] hover:bg-[var(--omlu-primary-surface)] disabled:opacity-50 text-[var(--omlu-text-primary)] font-bold text-xs rounded-xl transition cursor-pointer"
+                              >
+                                Issue Without Printing
                               </button>
                               {canRecordPayments ? (
                                 <>
