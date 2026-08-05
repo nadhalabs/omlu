@@ -310,6 +310,21 @@ class RoleChecker:
         return current_user
 
 
+class BillingRoleChecker(RoleChecker):
+    """Owner/admin gate for actions that create or expose official bills."""
+
+    def __call__(self, current_user: StaffUser = Depends(get_current_staff_user)):
+        if current_user.role not in self.allowed_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "code": "BILLING_PERMISSION_REQUIRED",
+                    "message": "Official billing actions require an owner or admin.",
+                },
+            )
+        return current_user
+
+
 class OperationalWriteChecker(RoleChecker):
     """Role check plus authoritative restaurant/staff write-lock enforcement."""
 

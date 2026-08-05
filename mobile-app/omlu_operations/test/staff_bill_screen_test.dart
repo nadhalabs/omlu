@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omlu_operations/core/api/api_client.dart';
 import 'package:omlu_operations/core/api/operations_api.dart';
+import 'package:omlu_operations/core/models/role_session.dart';
 import 'package:omlu_operations/core/realtime/realtime_client.dart';
 import 'package:omlu_operations/core/printing/printer_adapter.dart';
 import 'package:omlu_operations/core/printing/printer_service.dart';
@@ -120,7 +121,9 @@ void main() {
           operationsApiProvider.overrideWithValue(api),
           printerServiceProvider.overrideWithValue(printer),
         ],
-        child: const MaterialApp(home: StaffBillScreen(tableId: 12)),
+        child: const MaterialApp(
+          home: StaffBillScreen(tableId: 12, actorRole: StaffRole.owner),
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -341,7 +344,7 @@ void main() {
     expect(find.textContaining('UPI'), findsNothing);
   });
 
-  testWidgets('draft bill offers add item and issue but no payment action', (
+  testWidgets('staff draft bill offers item entry but no official actions', (
     tester,
   ) async {
     final api = OperationsApi(
@@ -380,7 +383,13 @@ void main() {
 
     expect(find.text('Bill requested · Staff reviewing'), findsOneWidget);
     expect(find.text('Add Item'), findsOneWidget);
-    expect(find.text('Issue Bill'), findsOneWidget);
+    expect(find.text('Issue Bill'), findsNothing);
+    expect(find.text('Issue & Print Bill'), findsNothing);
+    expect(find.text('Printer Settings'), findsNothing);
+    expect(
+      find.text('Bill requested. Waiting for an admin or owner to issue it.'),
+      findsOneWidget,
+    );
     expect(find.textContaining('Record full payment'), findsNothing);
     expect(find.text('Send bill to counter'), findsNothing);
   });

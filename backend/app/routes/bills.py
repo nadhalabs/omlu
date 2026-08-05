@@ -40,7 +40,7 @@ from app.services.bills import (
 from app.services.dining_sessions import find_current_open_session_for_table
 from app.services.table_participants import authority_hash, enforce_session_action_rate, load_participant, participant_token_header
 from app.services.table_participants import invalidate_session_participants
-from app.utils.auth import OperationalWriteChecker, RoleChecker
+from app.utils.auth import BillingRoleChecker, OperationalWriteChecker, RoleChecker
 from app.services.realtime import (
     EVENT_BILL_GENERATED,
     EVENT_BILL_DETACHED_FOR_PAYMENT,
@@ -61,8 +61,9 @@ from app.services.realtime import (
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-_bill_issue_roles = OperationalWriteChecker(["owner", "admin", "staff"])
-_payment_record_roles = RoleChecker(["owner", "admin"])
+_staff_bill_write_roles = OperationalWriteChecker(["owner", "admin", "staff"])
+_official_billing_roles = BillingRoleChecker(["owner", "admin"])
+_payment_record_roles = _official_billing_roles
 _payment_lookup_roles = RoleChecker(["owner", "admin", "staff"])
 
 
@@ -224,7 +225,7 @@ def create_public_session_bill(
 )
 def create_staff_session_bill(
     session_token: str,
-    current_user: StaffUser = Depends(_bill_issue_roles),
+    current_user: StaffUser = Depends(_staff_bill_write_roles),
     db: Session = Depends(get_db),
 ):
     dining_session = db.query(DiningSession).filter(
@@ -325,7 +326,7 @@ def get_public_bill_receipt_payload(receipt_token: str, db: Session = Depends(ge
 @router.get("/staff/bills/{bill_number}/receipt-payload", response_model=ReceiptPayloadResponse)
 def get_staff_bill_receipt_payload(
     bill_number: str,
-    current_user: StaffUser = Depends(_payment_lookup_roles),
+    current_user: StaffUser = Depends(_official_billing_roles),
     db: Session = Depends(get_db),
 ):
     from app.services.bills import build_receipt_payload
@@ -662,7 +663,7 @@ def get_staff_bill(
 def issue_staff_bill(
     bill_number: str,
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
-    current_user: StaffUser = Depends(_bill_issue_roles),
+    current_user: StaffUser = Depends(_official_billing_roles),
     db: Session = Depends(get_db),
 ):
     key = require_key(idempotency_key)
@@ -921,7 +922,7 @@ def _send_counter_handoff(db: Session, bill: Bill, current_user: StaffUser) -> B
 )
 def send_staff_bill_to_counter(
     bill_number: str,
-    current_user: StaffUser = Depends(_bill_issue_roles),
+    current_user: StaffUser = Depends(_staff_bill_write_roles),
     db: Session = Depends(get_db),
 ):
     bill = db.query(Bill).filter(
@@ -939,7 +940,7 @@ def send_staff_bill_to_counter(
 )
 def request_staff_payment_assistance(
     bill_number: str,
-    current_user: StaffUser = Depends(_bill_issue_roles),
+    current_user: StaffUser = Depends(_staff_bill_write_roles),
     db: Session = Depends(get_db),
 ):
     bill = (

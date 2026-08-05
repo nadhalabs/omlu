@@ -184,6 +184,11 @@ export default function StaffTableDetailClient({ tableId }: { tableId: number })
                         <span className="block text-xs font-medium text-orange-200/80">Waiting for owner/admin review</span>
                       </div>
                     )}
+                    {staffInfo?.role === "staff" && (pendingBillRequest || bill?.status === "draft") && (
+                      <p className="w-full text-sm font-semibold text-orange-300">
+                        Bill requested. Waiting for an admin or owner to issue it.
+                      </p>
+                    )}
                     {bill && bill.status !== "paid" && billUrl && (
                       <Link href={billUrl} className="rounded-lg bg-[var(--omlu-muted-surface)] px-4 py-3 text-sm font-black text-[var(--omlu-text-primary)]">
                         {bill.status === "issued" || bill.status === "payment_pending" ? "Bill Issued" : "View Bill"}
@@ -192,7 +197,7 @@ export default function StaffTableDetailClient({ tableId }: { tableId: number })
                   </div>
                   {!hasValidOrder && !bill && <div className="mt-4 text-sm text-[var(--omlu-text-secondary)]">Add at least one order before requesting a bill.</div>}
                   {bill && <div className="mt-4 text-sm text-[var(--omlu-text-secondary)]">Bill {bill.bill_number} · ₹{bill.total_amount} · {bill.status}</div>}
-                  {staffInfo?.role === "staff" && <div className="mt-3 text-xs text-[var(--omlu-text-secondary)]">Staff can generate and send the bill. Only Owner/Admin can record payment.</div>}
+                  {staffInfo?.role === "staff" && <div className="mt-3 text-xs text-[var(--omlu-text-secondary)]">You can review provisional totals and notify the counter. Only an owner or admin can issue, print, or collect payment.</div>}
                 </div>
               </div>
             </section>

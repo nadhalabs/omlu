@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/printing/printer_adapter.dart';
+import '../../core/models/role_session.dart';
 import '../../design_system/colors.dart';
 import '../../design_system/spacing.dart';
 import '../../design_system/typography.dart';
@@ -20,9 +21,10 @@ import 'staff_shell.dart';
 import 'tables_provider.dart';
 
 class StaffBillScreen extends ConsumerStatefulWidget {
-  const StaffBillScreen({required this.tableId, super.key});
+  const StaffBillScreen({required this.tableId, this.actorRole, super.key});
 
   final int tableId;
+  final StaffRole? actorRole;
 
   @override
   ConsumerState<StaffBillScreen> createState() => _StaffBillScreenState();
@@ -429,6 +431,8 @@ class _StaffBillScreenState extends ConsumerState<StaffBillScreen> {
   }
 
   Widget _buildDetail(Map<String, Object?> detail) {
+    final role = widget.actorRole ?? ref.watch(authProvider).valueOrNull?.role;
+    final canOfficiallyBill = role == StaffRole.owner || role == StaffRole.admin;
     final printerConfig = ref.watch(printerConfigProvider).valueOrNull;
     final hasConfiguredPrinter = printerConfig?.isConfigured == true;
     final table = _map(detail['table']);
@@ -502,8 +506,8 @@ class _StaffBillScreenState extends ConsumerState<StaffBillScreen> {
             _BillBreakdown(
               bill: bill,
               canRecordPayment:
-                  ref.read(authProvider).valueOrNull?.role.name == 'owner' ||
-                  ref.read(authProvider).valueOrNull?.role.name == 'admin',
+                  canOfficiallyBill,
+              canOfficiallyBill: canOfficiallyBill,
               isSubmitting: _submitting,
               operationLabel: _operationLabel,
               hasConfiguredPrinter: hasConfiguredPrinter,
@@ -674,6 +678,7 @@ class _BillBreakdown extends StatelessWidget {
   const _BillBreakdown({
     required this.bill,
     required this.canRecordPayment,
+    required this.canOfficiallyBill,
     required this.isSubmitting,
     required this.operationLabel,
     required this.hasConfiguredPrinter,
@@ -688,6 +693,7 @@ class _BillBreakdown extends StatelessWidget {
   });
   final Map<String, Object?> bill;
   final bool canRecordPayment;
+  final bool canOfficiallyBill;
   final bool isSubmitting;
   final String? operationLabel;
   final bool hasConfiguredPrinter;
@@ -812,26 +818,33 @@ class _BillBreakdown extends StatelessWidget {
               ),
             ),
             const SizedBox(height: OmluSpacing.sm),
-            OmluButton(
-              text: isSubmitting
-                  ? (operationLabel ?? 'Issuing bill…')
-                  : hasConfiguredPrinter
-                  ? 'Issue & Print Bill'
-                  : 'Issue Bill',
-              isLoading: isSubmitting,
-              onPressed: isSubmitting
-                  ? null
-                  : hasConfiguredPrinter
-                  ? onIssueAndPrint
-                  : onIssueWithoutPrinting,
-            ),
-            const SizedBox(height: OmluSpacing.sm),
-            if (hasConfiguredPrinter)
+            if (canOfficiallyBill)
+              OmluButton(
+                text: isSubmitting
+                    ? (operationLabel ?? 'Issuing bill…')
+                    : hasConfiguredPrinter
+                    ? 'Issue & Print Bill'
+                    : 'Issue Bill',
+                isLoading: isSubmitting,
+                onPressed: isSubmitting
+                    ? null
+                    : hasConfiguredPrinter
+                    ? onIssueAndPrint
+                    : onIssueWithoutPrinting,
+              )
+            else
+              const Text(
+                'Bill requested. Waiting for an admin or owner to issue it.',
+                textAlign: TextAlign.center,
+                style: OmluTypography.bodyMedium,
+              ),
+            if (canOfficiallyBill) const SizedBox(height: OmluSpacing.sm),
+            if (canOfficiallyBill && hasConfiguredPrinter)
               TextButton(
                 onPressed: isSubmitting ? null : onIssueWithoutPrinting,
                 child: const Text('Issue Without Printing'),
               )
-            else ...[
+            else if (canOfficiallyBill) ...[
               const Text(
                 'Configure a printer to issue and print in one step.',
                 textAlign: TextAlign.center,
@@ -875,15 +888,17 @@ class _BillBreakdown extends StatelessWidget {
             ),
           ] else ...[
             const SizedBox(height: OmluSpacing.md),
-            OutlinedButton(
-              onPressed: isSubmitting ? null : onReprintBill,
-              child: Text(
-                isSubmitting && operationLabel == 'Printing bill…'
-                    ? 'Printing bill…'
-                    : 'Reprint Bill',
+            if (canOfficiallyBill) ...[
+              OutlinedButton(
+                onPressed: isSubmitting ? null : onReprintBill,
+                child: Text(
+                  isSubmitting && operationLabel == 'Printing bill…'
+                      ? 'Printing bill…'
+                      : 'Reprint Bill',
+                ),
               ),
-            ),
-            const SizedBox(height: OmluSpacing.sm),
+              const SizedBox(height: OmluSpacing.sm),
+            ],
             OmluButton(
               text: 'Send bill to counter',
               isLoading: isSubmitting,

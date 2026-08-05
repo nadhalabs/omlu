@@ -399,7 +399,7 @@ def test_issue_bill(bill_context):
 
     response = client.post(
         f"/staff/bills/{bill['bill_number']}/issue",
-        headers={"Authorization": f"Bearer {bill_context['staff_token']}"},
+        headers={"Authorization": f"Bearer {bill_context['owner_token']}"},
     )
 
     assert response.status_code == 200
@@ -413,8 +413,8 @@ def test_issue_bill(bill_context):
     db.close()
 
 
-@pytest.mark.parametrize("token_key", ["owner_token", "admin_token", "staff_token"])
-def test_owner_admin_staff_allowed_to_issue_bill(bill_context, token_key):
+@pytest.mark.parametrize("token_key", ["owner_token", "admin_token"])
+def test_owner_admin_allowed_to_issue_bill(bill_context, token_key):
     add_order(bill_context)
     bill = create_bill(bill_context).json()
 
@@ -425,6 +425,35 @@ def test_owner_admin_staff_allowed_to_issue_bill(bill_context, token_key):
 
     assert response.status_code == 200
     assert response.json()["status"] == "issued"
+
+
+def test_staff_official_billing_actions_are_rejected(bill_context):
+    add_order(bill_context)
+    bill = create_bill(bill_context).json()
+    staff_headers = {"Authorization": f"Bearer {bill_context['staff_token']}"}
+
+    issue = client.post(
+        f"/staff/bills/{bill['bill_number']}/issue",
+        headers=staff_headers,
+    )
+    assert issue.status_code == 403
+    assert issue.json()["detail"]["code"] == "BILLING_PERMISSION_REQUIRED"
+
+    issued = issue_bill_for(bill_context, token_key="owner_token")
+    receipt = client.get(
+        f"/staff/bills/{issued['bill_number']}/receipt-payload",
+        headers=staff_headers,
+    )
+    assert receipt.status_code == 403
+    assert receipt.json()["detail"]["code"] == "BILLING_PERMISSION_REQUIRED"
+
+    payment = client.post(
+        f"/staff/bills/{issued['bill_number']}/confirm-counter-payment",
+        json={"method": "counter_cash"},
+        headers=staff_headers,
+    )
+    assert payment.status_code == 403
+    assert payment.json()["detail"]["code"] == "BILLING_PERMISSION_REQUIRED"
 
 
 def test_issuing_locks_ordering(bill_context):

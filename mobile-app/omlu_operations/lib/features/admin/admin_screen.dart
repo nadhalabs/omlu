@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/models/role_session.dart';
 import '../../design_system/colors.dart';
 import '../../design_system/spacing.dart';
 import '../../design_system/typography.dart';
@@ -259,7 +260,10 @@ class _AdminTablesTab extends ConsumerWidget {
                 onTap: hasSession
                     ? () => Navigator.of(context).push(
                         MaterialPageRoute<void>(
-                          builder: (_) => StaffBillScreen(tableId: t.id),
+                          builder: (_) => StaffBillScreen(
+                            tableId: t.id,
+                            actorRole: StaffRole.admin,
+                          ),
                         ),
                       )
                     : null,
