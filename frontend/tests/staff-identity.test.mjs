@@ -24,9 +24,8 @@ test("Staff and Kitchen creation hides email and uses role-aware PIN validation"
   assert.match(validation, /errors\.pin = "PIN must be exactly 6 digits\."/);
 });
 
-test("Flutter operational login asks for Personal username rather than email", () => {
+test("Flutter operational login supports mode-specific login fields", () => {
   const login = read("../mobile-app/omlu_operations/lib/features/login/login_screen.dart");
-  assert.ok(login.includes("label: 'Personal username'"));
-  assert.ok(login.includes('Use the username and 6-digit PIN given by your restaurant manager.'));
-  assert.ok(!login.includes("label: 'Personal username or email'"));
+  assert.ok(login.includes("Staff username"));
+  assert.ok(login.includes("Kitchen username"));
 });

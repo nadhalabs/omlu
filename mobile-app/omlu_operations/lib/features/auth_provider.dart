@@ -73,11 +73,13 @@ class AuthStateNotifier extends StateNotifier<AsyncValue<RoleSession?>> {
     required String restaurantSlug,
     required String login,
     required String password,
+    EntryMode entryMode = EntryMode.ownerAdmin,
   }) async {
     final loginFuture = _repository.login(
       restaurantSlug: restaurantSlug,
       login: login,
       password: password,
+      entryMode: entryMode,
     );
     state = const AsyncValue.loading();
     try {

@@ -11,6 +11,7 @@ import '../auth_provider.dart';
 import '../payments/pending_payments_tab.dart';
 import '../payments/billing_counter_screen.dart';
 import '../payments/pending_bill_review_screen.dart';
+import '../printing/printer_settings_screen.dart';
 import '../realtime_connection_provider.dart';
 import '../staff/tables_provider.dart';
 import '../staff/staff_bill_screen.dart';
@@ -196,7 +197,21 @@ class _AdminOverviewTab extends ConsumerWidget {
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: false,
-        actions: const [RealtimeStatusChip()],
+        actions: [
+          const RealtimeStatusChip(),
+          IconButton(
+            tooltip: 'Printer setup',
+            icon: const Icon(
+              Icons.print_rounded,
+              color: OmluColors.textPrimary,
+            ),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const PrinterSettingsScreen(),
+              ),
+            ),
+          ),
+        ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(OmluSpacing.md),

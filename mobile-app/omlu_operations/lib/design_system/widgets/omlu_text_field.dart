@@ -13,6 +13,7 @@ class OmluTextField extends StatelessWidget {
     this.keyboardType = TextInputType.text,
     this.textInputAction = TextInputAction.next,
     this.prefixIcon,
+    this.suffixIcon,
     this.validator,
   });
 
@@ -23,6 +24,7 @@ class OmluTextField extends StatelessWidget {
   final TextInputType keyboardType;
   final TextInputAction textInputAction;
   final Widget? prefixIcon;
+  final Widget? suffixIcon;
   final String? Function(String?)? validator;
 
   @override
@@ -45,6 +47,7 @@ class OmluTextField extends StatelessWidget {
               color: OmluColors.textSecondary.withValues(alpha: 0.6),
             ),
             prefixIcon: prefixIcon,
+            suffixIcon: suffixIcon,
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 16,
               vertical: 14,

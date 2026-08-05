@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/models/role_session.dart';
 import '../../core/printing/esc_pos_encoder.dart';
 import '../../core/printing/printer_adapter.dart';
 import '../../core/printing/printer_service.dart';
 import '../../core/storage/key_value_storage.dart';
 import '../../design_system/spacing.dart';
+import '../auth_provider.dart';
 
 final printerServiceProvider = Provider<PrinterService>((ref) {
   return PrinterService(storage: SecureKeyValueStorage());
@@ -29,6 +31,7 @@ class _PrinterSettingsScreenState extends ConsumerState<PrinterSettingsScreen> {
   PaperWidth _paperWidth = PaperWidth.mm58;
   bool _enabled = false;
   int _copies = 1;
+  bool _autoCut = true;
   bool _initialized = false;
   bool _busy = false;
 
@@ -42,9 +45,10 @@ class _PrinterSettingsScreenState extends ConsumerState<PrinterSettingsScreen> {
   PrinterConfig _currentConfig() => PrinterConfig(
     enabled: _enabled,
     tcpIpAddress: _ipController.text.trim(),
-    tcpPort: int.tryParse(_portController.text) ?? 0,
+    tcpPort: int.tryParse(_portController.text) ?? 9100,
     paperWidth: _paperWidth,
     copies: _copies,
+    autoCut: _autoCut,
   );
 
   Future<void> _save({bool test = false}) async {
@@ -78,6 +82,18 @@ class _PrinterSettingsScreenState extends ConsumerState<PrinterSettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final sessionRole = ref.watch(authProvider).valueOrNull?.role;
+    if (sessionRole == StaffRole.staff || sessionRole == StaffRole.kitchen) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Access Denied')),
+        body: const Center(
+          child: Text(
+            'Printer setup is reserved for owners and administrators.',
+          ),
+        ),
+      );
+    }
+
     final config = ref.watch(printerConfigProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('TCP/LAN printer')),
@@ -92,6 +108,7 @@ class _PrinterSettingsScreenState extends ConsumerState<PrinterSettingsScreen> {
             _paperWidth = value.paperWidth;
             _enabled = value.enabled;
             _copies = value.copies;
+            _autoCut = value.autoCut;
           }
           return ListView(
             padding: const EdgeInsets.all(OmluSpacing.md),
@@ -115,7 +132,7 @@ class _PrinterSettingsScreenState extends ConsumerState<PrinterSettingsScreen> {
               TextField(
                 controller: _ipController,
                 decoration: const InputDecoration(
-                  labelText: 'Printer IP address',
+                  labelText: 'Printer IP address / Hostname',
                   hintText: '192.168.1.100',
                   border: OutlineInputBorder(),
                 ),
@@ -125,7 +142,7 @@ class _PrinterSettingsScreenState extends ConsumerState<PrinterSettingsScreen> {
               TextField(
                 controller: _portController,
                 decoration: const InputDecoration(
-                  labelText: 'Port',
+                  labelText: 'Port (default 9100)',
                   border: OutlineInputBorder(),
                 ),
                 keyboardType: TextInputType.number,
@@ -167,6 +184,18 @@ class _PrinterSettingsScreenState extends ConsumerState<PrinterSettingsScreen> {
                 onChanged: (value) => setState(() {
                   if (value != null) _paperWidth = value;
                 }),
+              ),
+              const SizedBox(height: OmluSpacing.md),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Auto-cut paper'),
+                subtitle: const Text(
+                  'Send cut command after printing receipt.',
+                ),
+                value: _autoCut,
+                onChanged: _busy
+                    ? null
+                    : (value) => setState(() => _autoCut = value),
               ),
               const SizedBox(height: OmluSpacing.lg),
               FilledButton(

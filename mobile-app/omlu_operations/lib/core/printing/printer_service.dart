@@ -12,6 +12,7 @@ class PrinterConfig {
     this.tcpPort = 9100,
     this.paperWidth = PaperWidth.mm58,
     this.copies = 1,
+    this.autoCut = true,
   });
 
   final bool enabled;
@@ -19,6 +20,7 @@ class PrinterConfig {
   final int tcpPort;
   final PaperWidth paperWidth;
   final int copies;
+  final bool autoCut;
 
   bool get isConfigured =>
       enabled && tcpIpAddress.trim().isNotEmpty && tcpPort > 0;
@@ -29,6 +31,7 @@ class PrinterConfig {
     'tcp_port': tcpPort,
     'paper_width': paperWidth.name,
     'copies': copies,
+    'auto_cut': autoCut,
   };
 
   factory PrinterConfig.fromJson(Map<String, Object?> json) => PrinterConfig(
@@ -39,6 +42,7 @@ class PrinterConfig {
         ? PaperWidth.mm80
         : PaperWidth.mm58,
     copies: int.tryParse(json['copies']?.toString() ?? '') ?? 1,
+    autoCut: json['auto_cut'] == null || json['auto_cut'] == true,
   );
 }
 

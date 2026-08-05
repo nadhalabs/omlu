@@ -65,6 +65,7 @@ void main() {
           restaurantSlug: 'demo',
           login: 'kai',
           password: 'secret',
+          entryMode: EntryMode.kitchenDevice,
         );
         final restored = await auth.restore();
 

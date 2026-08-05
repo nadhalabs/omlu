@@ -7,7 +7,7 @@ import { BillingCounterItem, BillingCounterQueues } from "@/lib/types";
 import { useOmluUi } from "@/components/OmluUiProvider";
 import { useRealtime } from "@/lib/realtime";
 
-type Tab = "requested" | "awaiting_payment" | "paid_recently" | "printer_setup";
+type Tab = "requested" | "awaiting_payment" | "paid_recently";
 type Method = "counter_cash" | "counter_upi";
 const emptyQueues: BillingCounterQueues = { requested: [], awaiting_payment: [], paid_recently: [] };
 const money = (value: string) => `₹${Number(value).toFixed(2)}`;
@@ -117,21 +117,51 @@ export default function BillingCounterClient() {
     } finally { setBusy(null); }
   }
 
-  const tabs: Array<[Tab, string, number?]> = [
+  const tabs: Array<[Tab, string, number]> = [
     ["requested", "Requested Bills", queues.requested.length],
     ["awaiting_payment", "Issued / Awaiting Payment", queues.awaiting_payment.length],
     ["paid_recently", "Paid Recently", queues.paid_recently.length],
-    ["printer_setup", "Printer Setup"],
   ];
-  const items = tab === "requested" ? queues.requested : tab === "awaiting_payment" ? queues.awaiting_payment : tab === "paid_recently" ? queues.paid_recently : [];
+  const items = queues[tab];
 
   return <div className="mx-auto flex w-full max-w-6xl flex-col gap-5">
-    <header><h1 className="text-3xl font-black">🧾 Billing Counter</h1><p className="mt-1 text-sm text-[var(--omlu-text-secondary)]">Issue official bills, collect payment, and retrieve receipts from one place.</p></header>
+    <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <h1 className="text-3xl font-black">🧾 Billing Counter</h1>
+        <p className="mt-1 text-sm text-[var(--omlu-text-secondary)]">Issue official bills, collect payment, and retrieve receipts from one place.</p>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Link href="/admin/settings#printing" className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] px-3.5 py-2 text-xs font-bold text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-muted-surface)] transition">
+          🖨️ Printer Setup
+        </Link>
+        <a href="/downloads/omlu.apk" download className="inline-flex items-center gap-1.5 rounded-xl bg-orange-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-orange-700 transition">
+          📱 Download App
+        </a>
+      </div>
+    </header>
+
+    <section className="rounded-2xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div>
+        <h2 className="text-sm font-black text-[var(--omlu-text-primary)]">Configure Thermal Printing</h2>
+        <p className="mt-0.5 text-xs text-[var(--omlu-text-secondary)]">
+          Configure direct LAN thermal printing in the OMLU Operations Android app.
+        </p>
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        <Link href="/admin/settings#printing" className="rounded-xl bg-orange-600 px-3.5 py-2 text-xs font-black text-white hover:bg-orange-700 transition inline-flex items-center gap-1.5">
+          Printer Setup
+        </Link>
+        <a href="/downloads/omlu.apk" download className="rounded-xl border border-[var(--omlu-border)] px-3.5 py-2 text-xs font-bold text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-muted-surface)] transition inline-flex items-center gap-1.5">
+          Download App
+        </a>
+      </div>
+    </section>
+
     <nav className="flex flex-wrap gap-2" aria-label="Billing Counter sections">
-      {tabs.map(([value, label, count]) => <button key={value} onClick={() => setTab(value)} aria-current={tab === value ? "page" : undefined} className={`min-h-11 rounded-xl px-4 text-sm font-black ${tab === value ? "bg-orange-600 text-white" : "bg-[var(--omlu-muted-surface)]"}`}>{label}{count !== undefined ? ` (${count})` : ""}</button>)}
+      {tabs.map(([value, label, count]) => <button key={value} onClick={() => setTab(value)} aria-current={tab === value ? "page" : undefined} className={`min-h-11 rounded-xl px-4 text-sm font-black ${tab === value ? "bg-orange-600 text-white" : "bg-[var(--omlu-muted-surface)]"}`}>{label} ({count})</button>)}
     </nav>
     {error && <div role="alert" className="rounded-xl border border-red-700 p-4 text-red-400">{error}</div>}
-    {tab === "printer_setup" ? <section className="rounded-2xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-6"><h2 className="text-xl font-black">Printer Setup</h2><p className="mt-2 text-sm text-[var(--omlu-text-secondary)]">Browser printing uses the system print dialog. Direct LAN printer configuration remains available in the OMLU Operations app.</p><Link href="/admin/settings" className="mt-4 inline-flex rounded-xl bg-orange-600 px-4 py-3 font-black text-white">Open Settings</Link></section> : loading ? <div className="h-40 animate-pulse rounded-2xl bg-[var(--omlu-muted-surface)]" /> : items.length === 0 ? <div className="rounded-2xl border border-[var(--omlu-border)] p-10 text-center font-bold">No bills in this queue.</div> : <div className="grid gap-4 xl:grid-cols-2">
+    {loading ? <div className="h-40 animate-pulse rounded-2xl bg-[var(--omlu-muted-surface)]" /> : items.length === 0 ? <div className="rounded-2xl border border-[var(--omlu-border)] p-10 text-center font-bold">No bills in this queue.</div> : <div className="grid gap-4 xl:grid-cols-2">
       {items.map((item) => <article key={item.bill_id} className="rounded-2xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-5">
         <div className="flex justify-between gap-4"><div><p className="text-xs font-black uppercase text-orange-500">{item.status === "draft" ? "Bill requested" : item.status === "paid" ? "Paid" : "Awaiting payment"}</p><h2 className="text-xl font-black">Table {item.table_number}</h2><p className="text-xs">{item.invoice_number || item.bill_number}</p></div><p className="text-2xl font-black">{money(item.total_amount)}</p></div>
         <dl className="mt-4 grid grid-cols-2 gap-3 text-sm"><div><dt className="text-[var(--omlu-text-secondary)]">Items</dt><dd>{item.item_count}</dd></div><div><dt className="text-[var(--omlu-text-secondary)]">Requested</dt><dd>{new Date(item.requested_at).toLocaleString()}</dd></div><div><dt className="text-[var(--omlu-text-secondary)]">Subtotal</dt><dd>{money(item.subtotal)}</dd></div><div><dt className="text-[var(--omlu-text-secondary)]">GST / Tax</dt><dd>{money(item.tax_amount)}</dd></div></dl>

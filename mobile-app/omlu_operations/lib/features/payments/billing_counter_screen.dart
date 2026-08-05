@@ -7,6 +7,7 @@ import '../../design_system/spacing.dart';
 import '../../design_system/typography.dart';
 import '../../design_system/widgets/omlu_card.dart';
 import '../auth_provider.dart';
+import '../printing/printer_settings_screen.dart';
 import 'pending_bill_review_screen.dart';
 
 final billingCounterProvider = FutureProvider<Map<String, Object?>>((ref) async {
@@ -40,6 +41,17 @@ class _BillingCounterScreenState extends ConsumerState<BillingCounterScreen> {
       appBar: AppBar(
         title: const Text('Billing Counter', style: OmluTypography.h2),
         actions: [
+          if (widget.actorRole == StaffRole.owner ||
+              widget.actorRole == StaffRole.admin)
+            IconButton(
+              tooltip: 'Printer setup',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const PrinterSettingsScreen(),
+                ),
+              ),
+              icon: const Icon(Icons.print_rounded),
+            ),
           IconButton(
             tooltip: 'Refresh billing counter',
             onPressed: () => ref.invalidate(billingCounterProvider),

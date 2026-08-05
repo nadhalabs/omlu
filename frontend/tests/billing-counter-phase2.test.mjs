@@ -20,7 +20,7 @@ test("owner/admin Billing Counter route is prominent and directly protected", ()
 });
 
 test("Billing Counter exposes the required server-classified queues", () => {
-  for (const label of ["Requested Bills", "Issued / Awaiting Payment", "Paid Recently", "Printer Setup"]) assert.ok(counter.includes(label), label);
+  for (const label of ["Requested Bills", "Issued / Awaiting Payment", "Paid Recently"]) assert.ok(counter.includes(label), label);
   assert.match(counter, /queues\.requested/);
   assert.match(counter, /queues\.awaiting_payment/);
   assert.match(counter, /queues\.paid_recently/);

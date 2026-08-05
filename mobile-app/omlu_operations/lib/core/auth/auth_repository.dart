@@ -42,6 +42,7 @@ class AuthRepository {
     required String restaurantSlug,
     required String login,
     required String password,
+    EntryMode entryMode = EntryMode.ownerAdmin,
   }) async {
     await terminate(reason: 'account_switch', revokeServer: true);
     final json = await _apiClient.postJson(
@@ -60,11 +61,37 @@ class AuthRepository {
     _apiClient.accessToken = token;
     try {
       final authenticated = await currentUser();
+      final role = authenticated.profile.role;
+
+      final isAllowed = switch (entryMode) {
+        EntryMode.ownerAdmin =>
+          role == StaffRole.owner || role == StaffRole.admin,
+        EntryMode.staffPin => role == StaffRole.staff,
+        EntryMode.kitchenDevice => role == StaffRole.kitchen,
+      };
+
+      if (!isAllowed) {
+        await terminate(reason: 'role_mismatch_login', revokeServer: true);
+        final message = switch (entryMode) {
+          EntryMode.ownerAdmin => role == StaffRole.kitchen
+              ? 'Use Kitchen Device to sign in with this account.'
+              : 'This account cannot use the owner/admin workspace.',
+          EntryMode.staffPin => role == StaffRole.owner || role == StaffRole.admin
+              ? 'This account belongs to an owner or admin. Use Owner / Admin Sign In.'
+              : 'Use Kitchen Device to sign in with this account.',
+          EntryMode.kitchenDevice => role == StaffRole.owner || role == StaffRole.admin
+              ? 'This account belongs to an owner or admin. Use Owner / Admin Sign In.'
+              : 'This account cannot use the owner/admin workspace.',
+        };
+        throw AuthenticationException(message);
+      }
+
       final session = RoleSession(
         accessToken: token,
         expiresAt: _now().toUtc().add(Duration(seconds: expiresIn)),
         profile: authenticated.profile,
         tenantScope: authenticated.scope,
+        entryMode: entryMode,
       );
       _authRuntime.activate(authenticated.scope);
       await _operationsCache.initializeScope();
@@ -96,7 +123,14 @@ class AuthRepository {
         expiresAt: stored.expiresAt,
         profile: authenticated.profile,
         tenantScope: authenticated.scope,
+        entryMode: stored.entryMode,
       );
+
+      if (!refreshed.isEntryModeValid) {
+        await terminate(reason: 'restore_role_mismatch', revokeServer: false);
+        return null;
+      }
+
       _authRuntime.activate(authenticated.scope);
       await _operationsCache.initializeScope();
       await _tokenStorage.save(refreshed);

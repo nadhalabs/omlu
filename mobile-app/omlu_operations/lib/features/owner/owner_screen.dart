@@ -11,6 +11,7 @@ import '../auth_provider.dart';
 import '../payments/pending_payments_tab.dart';
 import '../payments/billing_counter_screen.dart';
 import '../payments/pending_bill_review_screen.dart';
+import '../printing/printer_settings_screen.dart';
 import '../realtime_connection_provider.dart';
 import '../staff/tables_provider.dart';
 import '../staff/service_requests_provider.dart';
@@ -200,6 +201,18 @@ class _OwnerDashboardTab extends ConsumerWidget {
         centerTitle: false,
         actions: [
           const RealtimeStatusChip(),
+          IconButton(
+            tooltip: 'Printer setup',
+            icon: const Icon(
+              Icons.print_rounded,
+              color: OmluColors.textPrimary,
+            ),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const PrinterSettingsScreen(),
+              ),
+            ),
+          ),
           IconButton(
             icon: const Icon(
               Icons.refresh_rounded,

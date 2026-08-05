@@ -4,6 +4,20 @@ export '../auth/flutter_tenant_scope.dart' show StaffRole;
 
 enum OperationsHome { staff, kitchen, owner, admin }
 
+enum EntryMode {
+  ownerAdmin,
+  staffPin,
+  kitchenDevice;
+
+  static EntryMode defaultForRole(StaffRole role) {
+    return switch (role) {
+      StaffRole.owner || StaffRole.admin => EntryMode.ownerAdmin,
+      StaffRole.staff => EntryMode.staffPin,
+      StaffRole.kitchen => EntryMode.kitchenDevice,
+    };
+  }
+}
+
 class StaffProfile {
   const StaffProfile({
     required this.name,
@@ -51,22 +65,32 @@ class StaffProfile {
 }
 
 class RoleSession {
-  const RoleSession({
+  RoleSession({
     required this.accessToken,
     required this.expiresAt,
     required this.profile,
     required this.tenantScope,
-  });
+    EntryMode? entryMode,
+  }) : entryMode = entryMode ?? EntryMode.defaultForRole(profile.role);
 
   final String accessToken;
   final DateTime expiresAt;
   final StaffProfile profile;
   final FlutterTenantScope tenantScope;
+  final EntryMode entryMode;
 
   String get restaurantSlug => profile.restaurantSlug;
   StaffRole get role => profile.role;
 
   bool get isExpired => !DateTime.now().toUtc().isBefore(expiresAt.toUtc());
+
+  bool get isEntryModeValid {
+    return switch (entryMode) {
+      EntryMode.ownerAdmin => role == StaffRole.owner || role == StaffRole.admin,
+      EntryMode.staffPin => role == StaffRole.staff,
+      EntryMode.kitchenDevice => role == StaffRole.kitchen,
+    };
+  }
 
   OperationsHome get home {
     return switch (role) {
@@ -82,18 +106,29 @@ class RoleSession {
     'expires_at': expiresAt.toUtc().toIso8601String(),
     'profile': profile.toJson(),
     'tenant_scope': tenantScope.toJson(),
+    'entry_mode': entryMode.name,
   };
 
   factory RoleSession.fromJson(Map<String, Object?> json) {
+    final profile = StaffProfile.fromJson(
+      Map<String, Object?>.from(json['profile'] as Map? ?? {}),
+    );
+    final rawMode = json['entry_mode'] as String?;
+    final entryMode = rawMode != null
+        ? EntryMode.values.firstWhere(
+            (m) => m.name == rawMode,
+            orElse: () => EntryMode.defaultForRole(profile.role),
+          )
+        : EntryMode.defaultForRole(profile.role);
+
     return RoleSession(
       accessToken: json['access_token'] as String? ?? '',
       expiresAt: DateTime.parse(json['expires_at'] as String),
-      profile: StaffProfile.fromJson(
-        Map<String, Object?>.from(json['profile'] as Map? ?? {}),
-      ),
+      profile: profile,
       tenantScope: FlutterTenantScope.fromJson(
         Map<String, Object?>.from(json['tenant_scope'] as Map? ?? {}),
       ),
+      entryMode: entryMode,
     );
   }
 }
