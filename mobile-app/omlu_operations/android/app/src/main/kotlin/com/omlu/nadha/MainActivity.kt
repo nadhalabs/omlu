@@ -9,13 +9,34 @@ import android.webkit.CookieManager
 import android.webkit.URLUtil
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
+import com.omlu.nadha.printing.BlePrinterManager
+import com.omlu.nadha.printing.BluetoothEventChannel
+import com.omlu.nadha.printing.BluetoothMethodChannel
+import com.omlu.nadha.printing.BluetoothPermissionManager
+import com.omlu.nadha.printing.ClassicPrinterManager
 
 class MainActivity : FlutterActivity() {
     private val downloadChannel = "app.omlu.operations/downloads"
+    private val btCommandChannel = "app.omlu.operations/bluetooth/commands"
+    private val btEventChannel = "app.omlu.operations/bluetooth/events"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        val permissionManager = BluetoothPermissionManager(context)
+        val classicManager = ClassicPrinterManager(context)
+        val bleManager = BlePrinterManager(context)
+
+        val btMethodHandler = BluetoothMethodChannel(context, classicManager, bleManager, permissionManager)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, btCommandChannel)
+            .setMethodCallHandler(btMethodHandler)
+
+        val btStreamHandler = BluetoothEventChannel(context)
+        EventChannel(flutterEngine.dartExecutor.binaryMessenger, btEventChannel)
+            .setStreamHandler(btStreamHandler)
+
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, downloadChannel).setMethodCallHandler { call, result ->
             when (call.method) {
                 "download" -> {

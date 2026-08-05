@@ -26,6 +26,14 @@ class ReceiptItemData {
           const [],
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    'name': name,
+    'quantity': quantity,
+    'unit_price': unitPrice,
+    'line_total': lineTotal,
+    'options': options,
+  };
 }
 
 class ReceiptData {
@@ -119,4 +127,33 @@ class ReceiptData {
       isOfficialInvoice: json['is_official_invoice'] as bool? ?? false,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    'bill_number': billNumber,
+    'invoice_number': invoiceNumber,
+    'receipt_title': receiptTitle,
+    'restaurant_name': restaurantName,
+    'legal_business_name': legalBusinessName,
+    'address': address,
+    'gstin': gstin,
+    'state_name': stateName,
+    'state_code': stateCode,
+    'table_number': tableNumber,
+    'staff_name': staffName,
+    'created_at': createdAt,
+    'paid_at': paidAt,
+    'items': items.map((i) => i.toJson()).toList(),
+    'subtotal': subtotal,
+    'discount_amount': discountAmount,
+    'taxable_amount': taxableAmount,
+    'cgst_amount': cgstAmount,
+    'sgst_amount': sgstAmount,
+    'igst_amount': igstAmount,
+    'tax_amount': taxAmount,
+    'grand_total': grandTotal,
+    'currency': currency,
+    'payment_method': paymentMethod,
+    'payment_status': paymentStatus,
+    'is_official_invoice': isOfficialInvoice,
+  };
 }

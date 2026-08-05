@@ -181,13 +181,29 @@ class _PendingBillReviewScreenState
     Map<String, Object?> bill, {
     required bool showFailureDialog,
   }) async {
+    final role = ref.read(authProvider).valueOrNull?.role;
+    if (role == StaffRole.staff || role == StaffRole.kitchen) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Printer access is reserved for owners and administrators.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     final billNumber = bill['bill_number']?.toString() ?? widget.billNumber;
     try {
+      if (mounted) setState(() => _operationLabel = 'Connecting to printer…');
       final api = ref.read(operationsApiProvider);
       final receipt = await api.fetchReceiptPayload(billNumber);
       final printer = ref.read(printerServiceProvider);
       await printer.loadConfig();
+
+      if (mounted) setState(() => _operationLabel = 'Printing bill…');
       await printer.printReceipt(receipt);
+
+      if (mounted) setState(() => _operationLabel = 'Print complete');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -224,7 +240,7 @@ class _PendingBillReviewScreenState
     String detail,
   ) async {
     if (!mounted) return;
-    final retry = await showDialog<bool>(
+    final action = await showDialog<String>(
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) => AlertDialog(
@@ -232,19 +248,30 @@ class _PendingBillReviewScreenState
         content: Text(detail),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
+            onPressed: () => Navigator.pop(dialogContext, 'setup'),
+            child: const Text('Printer Setup'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, 'continue'),
             child: const Text('Continue Without Printing'),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
+            onPressed: () => Navigator.pop(dialogContext, 'retry'),
             child: const Text('Retry Print'),
           ),
         ],
       ),
     );
-    if (retry == true && mounted) {
+
+    if (action == 'retry' && mounted) {
       setState(() => _operationLabel = 'Printing bill…');
       await _printIssuedBill(issuedBill, showFailureDialog: true);
+    } else if (action == 'setup' && mounted) {
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => const PrinterSettingsScreen(),
+        ),
+      );
     }
   }
 
