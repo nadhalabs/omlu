@@ -1,3 +1,4 @@
+from typing import Literal
 from pydantic import BaseModel, Field, model_validator
 
 from app.utils.validation import (
@@ -25,7 +26,7 @@ class RestaurantRegistrationRequest(BaseModel):
     owner_email: str = Field(..., min_length=1, max_length=255)
     password: str = Field(..., min_length=1, max_length=256)
     confirm_password: str = Field(..., min_length=1, max_length=256)
-    accept_terms: bool
+    accept_terms: Literal[True]
 
     @model_validator(mode="after")
     def validate_registration(self):

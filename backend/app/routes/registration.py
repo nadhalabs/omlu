@@ -9,6 +9,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.constants import PRIVACY_VERSION, TERMS_VERSION
 from app.database import get_db
 from app.models.restaurant import Restaurant
 from app.models.staff_user import AuditLog, StaffUser
@@ -123,6 +124,7 @@ def register_restaurant(
         db.add(owner)
         db.flush()
 
+        user_agent = request.headers.get("user-agent", "")
         db.add(AuditLog(
             restaurant_id=restaurant.id,
             actor_user_id=owner.id,
@@ -137,6 +139,13 @@ def register_restaurant(
                 "city": body.city,
                 "contact_email": contact_email,
                 "owner_username": owner.username,
+                "terms_version": TERMS_VERSION,
+                "privacy_version": PRIVACY_VERSION,
+                "accepted_at": now.isoformat(),
+                "restaurant_id": restaurant.id,
+                "owner_user_id": owner.id,
+                "request_ip": client_ip,
+                "user_agent": user_agent,
             }),
             ip_address=client_ip,
         ))

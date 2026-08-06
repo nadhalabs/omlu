@@ -1,0 +1,7 @@
+"""Legal and policy version constants for OMLU backend services."""
+
+TERMS_VERSION = "2026-08-07"
+PRIVACY_VERSION = "2026-08-07"
+REFUND_VERSION = "2026-08-07"
+ACCEPTABLE_USE_VERSION = "2026-08-07"
+SERVICE_POLICY_VERSION = "2026-08-07"

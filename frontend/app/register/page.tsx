@@ -172,7 +172,14 @@ export default function RegisterPage() {
               className={`mt-1 h-4 w-4 accent-zinc-950 ${fieldErrors.accept_terms ? "outline outline-2 outline-red-500" : ""}`}
             />
             <span>
-              I accept the terms and confirm I am creating an owner account for this restaurant.
+              I confirm that I am authorized to create this restaurant account and agree to the OMLU{" "}
+              <Link href="/terms" target="_blank" className="text-orange-600 underline hover:text-orange-700 font-bold">
+                Terms of Service
+              </Link>{" "}
+              and{" "}
+              <Link href="/privacy" target="_blank" className="text-orange-600 underline hover:text-orange-700 font-bold">
+                Privacy Policy
+              </Link>.
               {fieldErrors.accept_terms && <span className="mt-1 block text-xs font-semibold text-red-600">{fieldErrors.accept_terms}</span>}
             </span>
           </label>

@@ -76,9 +76,37 @@ def test_restaurant_registration_creates_active_owner_and_defaults():
         assert owner.email == "owner@registration.test"
         assert verify_password("StrongPass1!", owner.password_hash)
         assert audit_log.actor_user_id == owner.id
+
+        import json
+        metadata = json.loads(audit_log.new_value)
+        assert metadata["terms_version"] == "2026-08-07"
+        assert metadata["privacy_version"] == "2026-08-07"
+        assert "accepted_at" in metadata
+        assert metadata["restaurant_id"] == restaurant.id
+        assert metadata["owner_user_id"] == owner.id
+        assert "request_ip" in metadata
+        assert "user_agent" in metadata
     finally:
         db.close()
         _delete_restaurant(slug)
+
+
+def test_registration_requires_literal_true_accept_terms():
+    slug = "registration-accept-terms-cafe"
+    _delete_restaurant(slug)
+
+    # False accept_terms rejected by Pydantic Literal[True] schema validation
+    payload = _payload(slug=slug)
+    payload["accept_terms"] = False
+    response = client.post("/public/restaurants/register", json=payload)
+    assert response.status_code == 422
+
+    # Missing accept_terms rejected by Pydantic schema validation
+    payload_missing = _payload(slug=slug)
+    del payload_missing["accept_terms"]
+    response_missing = client.post("/public/restaurants/register", json=payload_missing)
+    assert response_missing.status_code == 422
+
 
 
 def test_duplicate_restaurant_username_is_rejected_case_insensitively():

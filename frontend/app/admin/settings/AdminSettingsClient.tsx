@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState, useCallback } from "react";
 import { getRestaurantSettings, updateRestaurantSettings, ApiError } from "@/lib/api";
 import { RestaurantSettingsResponse, RestaurantSettingsUpdate } from "@/lib/types";
@@ -325,6 +326,31 @@ export default function AdminSettingsClient() {
             >
               📱 Download Operations App
             </a>
+          </div>
+        </section>
+
+        {/* Legal & Compliance References */}
+        <section className="space-y-4 rounded-2xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-6 shadow-sm">
+          <div>
+            <h2 className="text-base font-bold text-[var(--omlu-text-primary)]">Legal & Policy Terms</h2>
+            <p className="text-xs text-[var(--omlu-text-secondary)]">Review the governing terms, privacy rules, tax compliance disclosures, and support guidelines for your restaurant account.</p>
+          </div>
+          <div className="flex flex-wrap gap-2 pt-1">
+            <Link href="/terms" target="_blank" className="px-3.5 py-2 border border-[var(--omlu-border)] hover:bg-[var(--omlu-muted-surface)] text-[var(--omlu-text-primary)] text-xs font-bold rounded-xl transition inline-flex items-center gap-1.5">
+              📜 Terms of Service
+            </Link>
+            <Link href="/privacy" target="_blank" className="px-3.5 py-2 border border-[var(--omlu-border)] hover:bg-[var(--omlu-muted-surface)] text-[var(--omlu-text-primary)] text-xs font-bold rounded-xl transition inline-flex items-center gap-1.5">
+              🛡️ Privacy Policy
+            </Link>
+            <Link href="/refunds" target="_blank" className="px-3.5 py-2 border border-[var(--omlu-border)] hover:bg-[var(--omlu-muted-surface)] text-[var(--omlu-text-primary)] text-xs font-bold rounded-xl transition inline-flex items-center gap-1.5">
+              💳 Refund & Cancellation
+            </Link>
+            <Link href="/acceptable-use" target="_blank" className="px-3.5 py-2 border border-[var(--omlu-border)] hover:bg-[var(--omlu-muted-surface)] text-[var(--omlu-text-primary)] text-xs font-bold rounded-xl transition inline-flex items-center gap-1.5">
+              ⚖️ Acceptable Use Policy
+            </Link>
+            <Link href="/service-policy" target="_blank" className="px-3.5 py-2 border border-[var(--omlu-border)] hover:bg-[var(--omlu-muted-surface)] text-[var(--omlu-text-primary)] text-xs font-bold rounded-xl transition inline-flex items-center gap-1.5">
+              🛠️ Service & Support Policy
+            </Link>
           </div>
         </section>
 

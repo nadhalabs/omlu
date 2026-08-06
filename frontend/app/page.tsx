@@ -55,7 +55,18 @@ export default function Home() {
           <div className="mt-5 flex flex-col justify-center gap-3 sm:flex-row"><Link href="/login" className="inline-flex min-h-12 items-center justify-center rounded-lg bg-[var(--omlu-primary-action)] px-6 text-sm font-bold text-[var(--omlu-primary-action-text)] hover:brightness-95">Restaurant Login</Link><Link href="/register" className="inline-flex min-h-12 items-center justify-center rounded-lg border border-[var(--omlu-border-strong)] px-6 text-sm font-bold hover:bg-[var(--omlu-hover-background)]">Create Restaurant</Link></div>
         </section>
       </main>
-      <footer className="border-t border-[var(--omlu-border)] px-6 py-7 text-center text-xs font-semibold text-[var(--omlu-text-secondary)]">OMLU · Restaurant ordering and operations</footer>
+      <footer className="border-t border-[var(--omlu-border)] px-6 py-7 text-center text-xs font-semibold text-[var(--omlu-text-secondary)]">
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 sm:flex-row">
+          <span>OMLU · Restaurant ordering and operations</span>
+          <div className="flex flex-wrap items-center justify-center gap-4">
+            <Link href="/terms" className="hover:text-orange-600 underline">Terms of Service</Link>
+            <Link href="/privacy" className="hover:text-orange-600 underline">Privacy Policy</Link>
+            <Link href="/refunds" className="hover:text-orange-600 underline">Refund Policy</Link>
+            <Link href="/acceptable-use" className="hover:text-orange-600 underline">Acceptable Use</Link>
+            <Link href="/service-policy" className="hover:text-orange-600 underline">Service Policy</Link>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
