@@ -4,8 +4,9 @@ import test from "node:test";
 
 const read = (path) => fs.readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("shared print_service implements Print Bridge direct print and hidden iframe fallback", () => {
+test("shared print_service implements Print Bridge direct print and OMLU_PRINT_READY iframe fallback", () => {
   const printService = read("lib/print_service.ts");
+  const billClient = read("app/bill/[sessionToken]/BillClient.tsx");
 
   assert.match(printService, /export async function printIssuedBill/);
   assert.match(printService, /checkBridgeHealth/);
@@ -13,11 +14,21 @@ test("shared print_service implements Print Bridge direct print and hidden ifram
   assert.match(printService, /requestPrintBridgeToken/);
   assert.match(printService, /sendPrintJobToBridge/);
   assert.match(printService, /document\.createElement\("iframe"\)/);
+  assert.match(printService, /OMLU_PRINT_READY/);
+  assert.match(printService, /event\.origin !== window\.location\.origin/);
+  assert.match(printService, /event\.source !== iframe\.contentWindow/);
+  assert.match(printService, /event\.data\?\.sessionToken !== sessionToken/);
+  assert.match(printService, /event\.data\?\.receiptToken !== receiptToken/);
+  assert.match(printService, /doc\.querySelector\("\.print-bill-sheet"\)/);
+  assert.match(printService, /win === window/);
   assert.match(printService, /afterprint/);
   assert.match(printService, /win\.print\(\)/);
-  assert.match(printService, /method:\s*"bridge"/);
-  assert.match(printService, /method:\s*"iframe"/);
-  assert.match(printService, /confirmed:\s*false/);
+  assert.match(printService, /Printable bill did not become ready\./);
+
+  // BillClient emits readiness postMessage only when official printable receipt is mounted
+  assert.match(billClient, /OMLU_PRINT_READY/);
+  assert.match(billClient, /document\.querySelector\("\.print-bill-sheet"\)/);
+  assert.match(billClient, /window\.parent\.postMessage/);
 });
 
 test("admin billing views use print_service and contain zero window.open or target=_blank print calls", () => {

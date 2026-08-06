@@ -116,6 +116,29 @@ function ActiveBillClient({ sessionToken, receiptToken = "" }: BillClientProps) 
     window.addEventListener("focus", enforce);
     return () => { window.removeEventListener("pageshow", enforce); window.removeEventListener("popstate", enforce); window.removeEventListener("focus", enforce); };
   }, [receiptToken, router, sessionToken]);
+
+  useEffect(() => {
+    if (!bill || !["issued", "payment_pending", "paid"].includes(bill.status)) return;
+    if (typeof window === "undefined" || !window.parent) return;
+
+    const notifyReady = () => {
+      const receiptSheet = document.querySelector(".print-bill-sheet");
+      if (receiptSheet) {
+        window.parent.postMessage(
+          {
+            type: "OMLU_PRINT_READY",
+            sessionToken,
+            receiptToken: receiptAccessToken || receiptToken || bill.receipt_token || "",
+          },
+          window.location.origin
+        );
+      }
+    };
+
+    notifyReady();
+    const frameId = requestAnimationFrame(notifyReady);
+    return () => cancelAnimationFrame(frameId);
+  }, [bill, receiptAccessToken, receiptToken, sessionToken]);
   const labels = {
     en: {
       title: "Table Bill",

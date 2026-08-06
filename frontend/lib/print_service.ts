@@ -59,7 +59,7 @@ export async function printIssuedBill(
     // Print bridge failed or unavailable, fallback to hidden iframe
   }
 
-  // 2. Browser print fallback using hidden same-origin iframe
+  // 2. Browser print fallback using hidden same-origin iframe with OMLU_PRINT_READY signal
   return new Promise<PrintResult>((resolve) => {
     try {
       const printUrl = `/bill/${encodeURIComponent(sessionToken)}?receipt=${encodeURIComponent(receiptToken)}`;
@@ -76,9 +76,12 @@ export async function printIssuedBill(
       iframe.setAttribute("aria-hidden", "true");
 
       let cleanedUp = false;
+      let hasTriggeredPrint = false;
+
       const cleanup = () => {
         if (cleanedUp) return;
         cleanedUp = true;
+        window.removeEventListener("message", messageListener);
         try {
           if (iframe.parentNode) {
             iframe.parentNode.removeChild(iframe);
@@ -86,23 +89,54 @@ export async function printIssuedBill(
         } catch {}
       };
 
-      // Safe fallback cleanup timeout (2 minutes) to ensure elements do not linger
-      const cleanupTimeout = setTimeout(cleanup, 120000);
+      // 10-second timeout if print-ready message is never received
+      const timeoutId = setTimeout(() => {
+        if (!hasTriggeredPrint) {
+          cleanup();
+          resolve({
+            success: false,
+            method: "none",
+            error: "Printable bill did not become ready.",
+          });
+        }
+      }, 10000);
 
-      const handleLoad = () => {
+      const messageListener = (event: MessageEvent) => {
         try {
+          if (event.origin !== window.location.origin) return;
+          if (event.source !== iframe.contentWindow) return;
+          if (event.data?.type !== "OMLU_PRINT_READY") return;
+          if (event.data?.sessionToken !== sessionToken) return;
+          if (event.data?.receiptToken !== receiptToken) return;
+
+          if (hasTriggeredPrint) return;
+          hasTriggeredPrint = true;
+
           const win = iframe.contentWindow;
-          if (!win) {
-            clearTimeout(cleanupTimeout);
+          const doc = iframe.contentDocument;
+
+          if (!win || win === window) {
+            clearTimeout(timeoutId);
             cleanup();
-            resolve({ success: false, method: "none", error: "Could not access printable receipt frame." });
+            resolve({ success: false, method: "none", error: "Invalid print target window." });
             return;
           }
+
+          if (!doc || !doc.querySelector(".print-bill-sheet")) {
+            clearTimeout(timeoutId);
+            cleanup();
+            resolve({ success: false, method: "none", error: "Printable receipt sheet not found in document." });
+            return;
+          }
+
+          // Extended cleanup timeout (2 minutes) for afterprint completion
+          const afterprintCleanupTimeout = setTimeout(cleanup, 120000);
 
           win.addEventListener(
             "afterprint",
             () => {
-              clearTimeout(cleanupTimeout);
+              clearTimeout(afterprintCleanupTimeout);
+              clearTimeout(timeoutId);
               cleanup();
             },
             { once: true }
@@ -112,7 +146,7 @@ export async function printIssuedBill(
           win.print();
           resolve({ success: true, method: "iframe", confirmed: false });
         } catch (err) {
-          clearTimeout(cleanupTimeout);
+          clearTimeout(timeoutId);
           cleanup();
           resolve({
             success: false,
@@ -122,13 +156,14 @@ export async function printIssuedBill(
         }
       };
 
+      window.addEventListener("message", messageListener);
+
       iframe.onerror = () => {
-        clearTimeout(cleanupTimeout);
+        clearTimeout(timeoutId);
         cleanup();
         resolve({ success: false, method: "none", error: "Failed to load printable receipt frame." });
       };
 
-      iframe.onload = handleLoad;
       iframe.src = printUrl;
       document.body.appendChild(iframe);
     } catch (err) {
