@@ -1,9 +1,11 @@
 import logging
-import uuid
+import re
 import time
+import uuid
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 import app.models  # Ensures all models are registered on Base
 
 from app.config import settings
@@ -31,6 +33,29 @@ app.add_middleware(
 )
 
 
+SENSITIVE_PATH_PATTERNS = [
+    (re.compile(r'(/public/sessions/)[^/]+(/.*)?'), r'\1[REDACTED]\2'),
+    (re.compile(r'(/public/bills/)[^/]+(/.*)?'), r'\1[REDACTED]\2'),
+    (re.compile(r'(/public/orders/)[^/]+(/.*)?'), r'\1[REDACTED]\2'),
+    (re.compile(r'(/public/restaurants/[^/]+/bills/)[^/]+(/.*)?'), r'\1[REDACTED]\2'),
+    (re.compile(r'(/staff/sessions/)[^/]+(/.*)?'), r'\1[REDACTED]\2'),
+    (re.compile(r'(/session/)[^/]+(/.*)?'), r'\1[REDACTED]\2'),
+    (re.compile(r'(/bill/)[^/]+(/.*)?'), r'\1[REDACTED]\2'),
+    (re.compile(r'(/order/)[^/]+(/.*)?'), r'\1[REDACTED]\2'),
+    (re.compile(r'(/complete/)[^/]+(/.*)?'), r'\1[REDACTED]\2'),
+    (re.compile(r'(/quick-sales/)[^/]+(/.*)?'), r'\1[REDACTED]\2'),
+    (re.compile(r'(/receipts?/)[^/]+(/.*)?'), r'\1[REDACTED]\2'),
+    (re.compile(r'(/reset-password/)[^/]+(/.*)?'), r'\1[REDACTED]\2'),
+    (re.compile(r'(/verify-token/)[^/]+(/.*)?'), r'\1[REDACTED]\2'),
+]
+
+def sanitize_path_for_logging(path: str) -> str:
+    for pattern, replacement in SENSITIVE_PATH_PATTERNS:
+        if pattern.search(path):
+            path = pattern.sub(replacement, path)
+    return path
+
+
 @app.middleware("http")
 async def request_logging_middleware(request: Request, call_next):
     """Log every request with method, path, status, and timing. Never log secrets or bodies."""
@@ -41,44 +66,76 @@ async def request_logging_middleware(request: Request, call_next):
     response = await call_next(request)
 
     duration_ms = int((time.time() - start_time) * 1000)
+    sanitized_path = sanitize_path_for_logging(request.url.path)
     logger.info(
         "request method=%s path=%s status=%d duration_ms=%d request_id=%s",
         request.method,
-        request.url.path,
+        sanitized_path,
         response.status_code,
         duration_ms,
         request_id
     )
-    path = request.url.path
     if response.status_code >= 400:
         event = None
-        if request.method == "POST" and "/orders" in path:
+        if request.method == "POST" and "/orders" in sanitized_path:
             event = "order_creation_failure"
-        elif "confirm-counter-payment" in path or "/payment" in path:
+        elif "confirm-counter-payment" in sanitized_path or "/payment" in sanitized_path:
             event = "unauthorized_payment_attempt" if response.status_code in {401, 403} else "payment_failure"
-        elif request.method == "POST" and ("close-empty" in path or path.endswith("/close")):
+        elif request.method == "POST" and ("close-empty" in sanitized_path or sanitized_path.endswith("/close")):
             event = "session_closure_failure"
         if response.status_code == 409 and request.headers.get("Idempotency-Key"):
             logger.warning(
                 "event=duplicate_idempotency_conflict method=%s path=%s status=%d request_id=%s",
-                request.method, path, response.status_code, request_id,
+                request.method, sanitized_path, response.status_code, request_id,
             )
         if event:
             logger.warning(
                 "event=%s method=%s path=%s status=%d request_id=%s",
-                event, request.method, path, response.status_code, request_id,
+                event, request.method, sanitized_path, response.status_code, request_id,
             )
     response.headers["X-Request-ID"] = request_id
     return response
 
 
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    request_id = getattr(request.state, "request_id", "unknown")
+    sanitized_path = sanitize_path_for_logging(request.url.path)
+    if exc.status_code == 405:
+        logger.warning(
+            "event=method_not_allowed method=%s path=%s request_id=%s",
+            request.method,
+            sanitized_path,
+            request_id,
+        )
+        headers = dict(exc.headers) if exc.headers else {}
+        return JSONResponse(
+            status_code=405,
+            content={
+                "code": "METHOD_NOT_ALLOWED",
+                "message": "Method not allowed for this endpoint.",
+                "request_id": request_id,
+            },
+            headers=headers,
+        )
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "detail": exc.detail,
+            "request_id": request_id,
+        },
+        headers=exc.headers,
+    )
+
+
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
     request_id = getattr(request.state, "request_id", "unknown")
+    sanitized_path = sanitize_path_for_logging(request.url.path)
     logger.exception(
         "event=unhandled_api_failure method=%s path=%s request_id=%s error_type=%s",
         request.method,
-        request.url.path,
+        sanitized_path,
         request_id,
         exc.__class__.__name__,
     )

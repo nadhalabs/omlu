@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getStaffMe, resolveStaffServiceRequest } from "@/lib/api";
 import {
   getStaffTableDetail,
@@ -25,7 +25,10 @@ export default function StaffTableDetailClient({ tableId }: { tableId: number })
   const [error, setError] = useState<string | null>(null);
   const [staffInfo, setStaffInfo] = useState<CurrentStaffResponse | null>(null);
   const [participants, setParticipants] = useState<StaffTableParticipants | null>(null);
+  const inFlightRef = useRef(false);
   const load = useCallback(async () => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     setLoading(true);
     try {
       const nextDetail = await getStaffTableDetail(tableId);
@@ -39,17 +42,29 @@ export default function StaffTableDetailClient({ tableId }: { tableId: number })
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load table.");
     } finally {
+      inFlightRef.current = false;
       setLoading(false);
     }
   }, [tableId]);
+
+  const realtimeStatus = useRealtime({
+    target: { kind: "staff", channel: "staff" },
+    onEvent: () => void load(),
+    onReconnect: () => void load(),
+  });
+
   useEffect(() => {
     const timeout = window.setTimeout(() => void load(), 0);
-    return () => window.clearTimeout(timeout);
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") void load();
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      window.clearTimeout(timeout);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
   }, [load]);
-  useEffect(() => {
-    const interval = window.setInterval(() => void load(), 15_000);
-    return () => window.clearInterval(interval);
-  }, [load]);
+
   useEffect(() => {
     let cancelled = false;
     getStaffMe()
@@ -64,11 +79,14 @@ export default function StaffTableDetailClient({ tableId }: { tableId: number })
     };
   }, []);
 
-  const realtimeStatus = useRealtime({
-    target: { kind: "staff", channel: "staff" },
-    onEvent: () => void load(),
-    onReconnect: () => void load(),
-  });
+  useEffect(() => {
+    const intervalMs = realtimeStatus === "live" ? 90_000 : 15_000;
+    const interval = window.setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      void load();
+    }, intervalMs);
+    return () => window.clearInterval(interval);
+  }, [load, realtimeStatus]);
 
   const run = async (name: string, fn: () => Promise<unknown>) => {
     setBusy(name);

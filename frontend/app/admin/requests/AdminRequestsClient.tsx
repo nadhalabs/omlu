@@ -53,50 +53,82 @@ export default function AdminRequestsClient() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   // Track IDs we've already alerted for so we don't replay
   const alertedIdsRef = useRef<Set<number>>(new Set());
+  const inFlightRef = useRef(false);
+  const pendingFetchRef = useRef(false);
 
   const fetchRequests = useCallback(
     async (showLoading = true) => {
-      if (showLoading) setLoading(true);
+      if (inFlightRef.current) {
+        pendingFetchRef.current = true;
+        return;
+      }
+      inFlightRef.current = true;
+      let shouldShowLoading = showLoading;
       try {
-        const data = await getStaffServiceRequests(showResolved ? "all" : "pending");
-        setRequests(data);
-        setError(null);
-        setLastUpdated(new Date());
+        do {
+          pendingFetchRef.current = false;
+          if (shouldShowLoading) setLoading(true);
+          try {
+            const data = await getStaffServiceRequests(showResolved ? "all" : "pending");
+            setRequests(data);
+            setError(null);
+            setLastUpdated(new Date());
 
-        // Sound alert: only for NEW pending requests not previously alerted
-        const pendingIds = data
-          .filter((r) => r.status === "pending")
-          .map((r) => r.id);
-        const newIds = pendingIds.filter((id) => !alertedIdsRef.current.has(id));
-        if (newIds.length > 0) {
-          // Play alert sound
-          if (audioRef.current) {
-            audioRef.current.currentTime = 0;
-            audioRef.current.play().catch(() => {}); // Suppress autoplay block errors
+            // Sound alert: only for NEW pending requests not previously alerted
+            const pendingIds = data
+              .filter((r) => r.status === "pending")
+              .map((r) => r.id);
+            const newIds = pendingIds.filter((id) => !alertedIdsRef.current.has(id));
+            if (newIds.length > 0) {
+              // Mark these as alerted immediately
+              newIds.forEach((id) => alertedIdsRef.current.add(id));
+              // Attempt to play sound if audio element is ready
+              if (audioRef.current) {
+                audioRef.current.currentTime = 0;
+                audioRef.current.play().catch(() => {
+                  // Audio playback blocked by browser policy (user hasn't interacted yet)
+                });
+              }
+            }
+          } catch (err) {
+            if (err instanceof ApiError) setError(err.message);
+            else setError("Failed to fetch service requests.");
+          } finally {
+            if (shouldShowLoading) setLoading(false);
+            shouldShowLoading = false;
           }
-          newIds.forEach((id) => alertedIdsRef.current.add(id));
-        }
-      } catch (err) {
-        if (err instanceof ApiError) setError(err.message);
-        else setError("Failed to fetch service requests.");
+        } while (pendingFetchRef.current);
       } finally {
-        if (showLoading) setLoading(false);
+        inFlightRef.current = false;
       }
     },
     [showResolved]
   );
 
+  const realtimeStatus = useRealtime({
+    target: { kind: "staff", channel: "staff" },
+    onEvent: (event) => {
+      if (event.type.startsWith("service_request.")) {
+        void fetchRequests(false);
+      }
+    },
+    onReconnect: () => void fetchRequests(false),
+  });
+
   useEffect(() => {
     const timeout = window.setTimeout(() => fetchRequests(true), 0);
-    const interval = setInterval(() => fetchRequests(false), 5_000);
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") void fetchRequests(false);
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
     const unregister = registerAuthenticatedCleanup(() => {
       window.clearTimeout(timeout);
-      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibility);
     });
     return () => {
       unregister();
       window.clearTimeout(timeout);
-      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, [fetchRequests]);
 
@@ -114,11 +146,14 @@ export default function AdminRequestsClient() {
     };
   }, []);
 
-  const realtimeStatus = useRealtime({
-    target: { kind: "staff", channel: "staff" },
-    onEvent: () => void fetchRequests(false),
-    onReconnect: () => void fetchRequests(false),
-  });
+  useEffect(() => {
+    const intervalMs = realtimeStatus === "live" ? 90_000 : 15_000;
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      fetchRequests(false);
+    }, intervalMs);
+    return () => clearInterval(interval);
+  }, [fetchRequests, realtimeStatus]);
 
   const handleResolve = async (requestId: number) => {
     setResolvingId(requestId);

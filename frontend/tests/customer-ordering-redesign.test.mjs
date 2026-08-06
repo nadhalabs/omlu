@@ -123,7 +123,7 @@ test("customer flows retain realtime, polling fallback, and submission guards", 
   assert.match(menu, /useRealtime/);
   assert.match(menu, /if \(isPlacingOrder\) return/);
   assert.match(session, /useRealtime/);
-  assert.match(session, /setInterval\(\(\) => fetchSession\(false\), 6_000\)/);
+  assert.match(session, /document\.visibilityState !== "visible"/);
   assert.match(session, /status === "loading" \|\| status === "success"/);
   assert.match(session, /billActionLoading !== null/);
 });

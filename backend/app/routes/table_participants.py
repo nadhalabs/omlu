@@ -111,6 +111,7 @@ def _response(participant: TableSessionParticipant, token: str, session: DiningS
         },
         "session": {
             "public_id": session.public_token,
+            "public_token": session.public_token,
             "table_number": session.table.table_number,
             "status": session.status,
         },
@@ -244,7 +245,7 @@ def participant_me(session_token: str, token: str = Depends(participant_token_he
         "participant": {"public_id": participant.public_id, "label": f"Device {participant.label_number}", "joined_at": participant.joined_at},
         "join_code": code,
         "participant_count": active_count,
-        "session": {"public_id": session.public_token, "status": session.status, "table_number": session.table.table_number},
+        "session": {"public_id": session.public_token, "public_token": session.public_token, "status": session.status, "table_number": session.table.table_number},
     }
 
 

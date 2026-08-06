@@ -77,15 +77,19 @@ export default function StaffTablesClient() {
     ? tablesError.message || "Could not load tables."
     : null;
 
-  useRealtime({
+  const realtimeStatus = useRealtime({
     target: { kind: "staff", channel: "staff" },
     onEvent: () => void load().catch(() => undefined),
     onReconnect: () => void load().catch(() => undefined),
   });
   useEffect(() => {
-    const interval = window.setInterval(() => void load().catch(() => undefined), 15_000);
+    const intervalMs = realtimeStatus === "live" ? 90_000 : 15_000;
+    const interval = window.setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      void load().catch(() => undefined);
+    }, intervalMs);
     return () => window.clearInterval(interval);
-  }, [load]);
+  }, [load, realtimeStatus]);
 
   const visibleTables = useMemo(() => {
     const query = search.trim().toLowerCase();

@@ -9,6 +9,7 @@ import {
   requestPublicSessionBill,
   getPublicDiningSession,
   getTableParticipantAuthority,
+  isDefiniteAuthFailure,
 } from "@/lib/api";
 import { PublicDiningSessionResponse } from "@/lib/types";
 import {
@@ -16,7 +17,10 @@ import {
   clearParticipantToken,
   clearPublicSessionToken,
   savePublicSessionToken,
+  readParticipantToken,
   readSessionParticipantToken,
+  saveParticipantToken,
+  saveSessionParticipantToken,
   clearSessionParticipantToken,
 } from "@/lib/publicSessionStorage";
 import { clearCustomerCartState, completionPath, markCompletedSession, readCompletedSession } from "@/lib/customerCompletion";
@@ -320,7 +324,13 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
           pendingFetchRef.current = false;
           if (shouldShowLoading) setLoading(true);
           try {
-            const authority = readSessionParticipantToken(sessionToken);
+            let authority = readSessionParticipantToken(sessionToken) || participantToken;
+            if (!authority && session?.restaurant_slug && session?.table_code) {
+              authority = readParticipantToken(session.restaurant_slug, session.table_code);
+              if (authority) {
+                saveSessionParticipantToken(sessionToken, authority);
+              }
+            }
             if (!authority) throw new ApiError(401, "Your access to this table has ended.");
             const data = await getPublicDiningSession(sessionToken, authority);
             if (previousStatusRef.current === "payment_requested" && data.status === "open") {
@@ -343,6 +353,9 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
               router.replace(completionPath(sessionToken));
               return;
             } else {
+              saveParticipantToken(data.restaurant_slug, data.table_code, authority);
+              saveSessionParticipantToken(sessionToken, authority);
+              setParticipantToken(authority);
               const participantAuthority = await getTableParticipantAuthority(sessionToken, authority);
               setVisibleJoinCode(participantAuthority.join_code);
               setJoinCodeCopied(false);
@@ -350,13 +363,11 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
               clearLegacyPublicReceiptToken(data.restaurant_slug, data.table_code);
             }
           } catch (err) {
-            if (err instanceof ApiError) {
-              if (err.status === 401 || err.status === 403) {
-                setVisibleJoinCode(null);
-                setParticipantToken(null);
-              }
-              setError(err.status === 404 ? t.notFound : err.message);
-            } else {
+            if (isDefiniteAuthFailure(err)) {
+              setVisibleJoinCode(null);
+              setParticipantToken(null);
+              setError(err instanceof ApiError ? err.message : t.notFound);
+            } else if (!session) {
               setError(t.connectionError);
             }
           } finally {
@@ -368,7 +379,7 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
         fetchInFlightRef.current = false;
       }
     },
-    [router, sessionToken, t.connectionError, t.notFound]
+    [participantToken, router, session, sessionToken, t.connectionError, t.notFound]
   );
 
   const copyJoinCode = useCallback(async () => {
@@ -414,9 +425,13 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
   });
 
   useEffect(() => {
-    const interval = window.setInterval(() => fetchSession(false), 6_000);
+    const intervalMs = realtimeStatus === "live" ? 90_000 : 15_000;
+    const interval = window.setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      fetchSession(false);
+    }, intervalMs);
     return () => window.clearInterval(interval);
-  }, [fetchSession]);
+  }, [fetchSession, realtimeStatus]);
 
   const serviceTypes = [
     { type: "waiter", label: t.callWaiter },
@@ -430,6 +445,15 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
       session.table_code,
       session.public_token
     );
+    const activeParticipantToken = participantToken || readSessionParticipantToken(session.public_token);
+    if (activeParticipantToken) {
+      saveParticipantToken(
+        session.restaurant_slug,
+        session.table_code,
+        activeParticipantToken
+      );
+      saveSessionParticipantToken(session.public_token, activeParticipantToken);
+    }
     router.push(
       `/menu/${encodeURIComponent(session.restaurant_slug)}/${encodeURIComponent(
         session.table_code

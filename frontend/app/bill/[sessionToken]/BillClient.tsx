@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PublicThemeControl } from "@/components/PublicThemeControl";
-import { ApiError, getPublicBill, getPublicDiningSession } from "@/lib/api";
+import { ApiError, getPublicBill, getPublicDiningSession, isDefiniteAuthFailure } from "@/lib/api";
 import { BillResponse, PublicDiningSessionResponse } from "@/lib/types";
 import { buildWhatsAppBillShareUrl } from "@/lib/billShare";
 import { clearCustomerCartState, completionPath, markCompletedSession, readCompletedSession } from "@/lib/customerCompletion";
@@ -15,7 +15,9 @@ import {
   clearSessionParticipantToken,
   hasSeenPaymentSuccess,
   markPaymentSuccessSeen,
+  readParticipantToken,
   readSessionParticipantToken,
+  saveSessionParticipantToken,
 } from "@/lib/publicSessionStorage";
 import { clearDetachedSession, markDetachedSession } from "@/lib/customerDetachment";
 
@@ -372,41 +374,75 @@ function ActiveBillClient({ sessionToken, receiptToken = "" }: BillClientProps) 
     [celebratePayment, receiptAccessToken, receiptToken, router, sessionToken]
   );
 
+  const fetchInFlightRef = useRef(false);
+  const pendingFetchRef = useRef(false);
+
   const fetchBill = useCallback(
     async (
       showLoading = true,
       source: "initial" | "event" | "poll" | "action" = "poll"
     ) => {
-      if (showLoading) setLoading(true);
+      if (fetchInFlightRef.current) {
+        pendingFetchRef.current = true;
+        return;
+      }
+      fetchInFlightRef.current = true;
+      let shouldShowLoading = showLoading;
       try {
-        const authority = readSessionParticipantToken(sessionToken) || "";
-        if (!authority && !receiptAccessToken) {
-          throw new ApiError(401, "Your access to this table has ended.");
-        }
-        const data = await getPublicBill(sessionToken, authority, receiptAccessToken);
-        applyFetchedBill(data, source);
-      } catch (err) {
-        const authority = readSessionParticipantToken(sessionToken) || "";
-        if (err instanceof ApiError && err.status === 404 && authority && !receiptAccessToken) {
+        do {
+          pendingFetchRef.current = false;
+          if (shouldShowLoading) setLoading(true);
           try {
-            const session = await getPublicDiningSession(sessionToken, authority);
-            if (session.status === "payment_requested" && (!session.bill || session.bill.status === "draft")) {
-              setBill(null);
-              setWaitingSession(session);
-              setError(null);
-              return;
+            let authority = readSessionParticipantToken(sessionToken) || participantToken || "";
+            if (!authority && bill?.restaurant_slug && bill?.table_code) {
+              const recovered = readParticipantToken(bill.restaurant_slug, bill.table_code);
+              if (recovered) {
+                authority = recovered;
+                saveSessionParticipantToken(sessionToken, authority);
+              }
             }
-          } catch {
-            // The customer-friendly unavailable state below covers invalid or revoked authority.
+            if (!authority && !receiptAccessToken) {
+              throw new ApiError(401, "Your access to this table has ended.");
+            }
+            const data = await getPublicBill(sessionToken, authority, receiptAccessToken);
+            applyFetchedBill(data, source);
+          } catch (err) {
+            let authority = readSessionParticipantToken(sessionToken) || participantToken || "";
+            if (!authority && bill?.restaurant_slug && bill?.table_code) {
+              authority = readParticipantToken(bill.restaurant_slug, bill.table_code) || "";
+            }
+            if (err instanceof ApiError && err.status === 404 && authority && !receiptAccessToken) {
+              try {
+                const session = await getPublicDiningSession(sessionToken, authority);
+                if (session.status === "payment_requested" && (!session.bill || session.bill.status === "draft")) {
+                  setBill(null);
+                  setWaitingSession(session);
+                  setError(null);
+                  return;
+                }
+              } catch {
+                // The customer-friendly unavailable state below covers invalid or revoked authority.
+              }
+            }
+
+            if (isDefiniteAuthFailure(err)) {
+              setWaitingSession(null);
+              setBill(null);
+              setError(t.unavailable);
+            } else if (!bill && !waitingSession) {
+              setWaitingSession(null);
+              setError(t.unavailable);
+            }
+          } finally {
+            if (shouldShowLoading) setLoading(false);
+            shouldShowLoading = false;
           }
-        }
-        setWaitingSession(null);
-        setError(t.unavailable);
+        } while (pendingFetchRef.current);
       } finally {
-        if (showLoading) setLoading(false);
+        fetchInFlightRef.current = false;
       }
     },
-    [applyFetchedBill, receiptAccessToken, sessionToken, t.unavailable]
+    [applyFetchedBill, bill, participantToken, receiptAccessToken, sessionToken, waitingSession, t.unavailable]
   );
 
   useEffect(() => {
@@ -431,7 +467,7 @@ function ActiveBillClient({ sessionToken, receiptToken = "" }: BillClientProps) 
     };
   }, [fetchBill]);
 
-  useRealtime({
+  const realtimeStatus = useRealtime({
     enabled: Boolean(participantToken),
     target: { kind: "session", token: sessionToken, participantToken: participantToken || undefined },
     onEvent: () => void fetchBill(false, "event"),
@@ -439,9 +475,13 @@ function ActiveBillClient({ sessionToken, receiptToken = "" }: BillClientProps) 
   });
 
   useEffect(() => {
-    const interval = window.setInterval(() => fetchBill(false, "poll"), 6_000);
+    const intervalMs = realtimeStatus === "live" ? 90_000 : 15_000;
+    const interval = window.setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      fetchBill(false, "poll");
+    }, intervalMs);
     return () => window.clearInterval(interval);
-  }, [fetchBill]);
+  }, [fetchBill, realtimeStatus]);
 
   const billUrl =
     typeof window === "undefined"

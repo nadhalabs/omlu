@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { registerAuthenticatedCleanup } from "@/lib/authRuntime.mjs";
 import { RealtimeEvent, useRealtime } from "@/lib/realtime";
 
@@ -53,18 +53,42 @@ export function AdminOperationalCountsProvider({
   const [counts, setCounts] = useState(initialCounts);
   const [paymentNotice, setPaymentNotice] = useState<RealtimeEvent | null>(null);
 
+  const inFlightRef = useRef(false);
+  const pendingFetchRef = useRef(false);
+  const debounceTimerRef = useRef<number | null>(null);
+
   const refresh = useCallback(async () => {
-    const response = await fetch("/api/admin/sidebar-operational-counts", { cache: "no-store" });
-    if (!response.ok) return;
-    const body = (await response.json()) as OperationalCounts;
-    setCounts(body);
+    if (inFlightRef.current) {
+      pendingFetchRef.current = true;
+      return;
+    }
+    inFlightRef.current = true;
+    try {
+      do {
+        pendingFetchRef.current = false;
+        try {
+          const response = await fetch("/api/admin/sidebar-operational-counts", { cache: "no-store" });
+          if (!response.ok) continue;
+          const body = (await response.json()) as OperationalCounts;
+          setCounts(body);
+        } catch {
+        }
+      } while (pendingFetchRef.current);
+    } finally {
+      inFlightRef.current = false;
+    }
   }, []);
+
+  const debouncedRefresh = useCallback(() => {
+    if (debounceTimerRef.current) window.clearTimeout(debounceTimerRef.current);
+    debounceTimerRef.current = window.setTimeout(() => void refresh(), 300);
+  }, [refresh]);
 
   useRealtime({
     target: { kind: "staff", channel: "operations" },
     onEvent: (event) => {
       if (event.type === "bill.payment_pending") setPaymentNotice(event);
-      void refresh();
+      debouncedRefresh();
     },
     onReconnect: refresh,
   });
@@ -73,20 +97,22 @@ export function AdminOperationalCountsProvider({
     const sync = () => void refresh();
     const visible = () => document.visibilityState === "visible" && sync();
     window.addEventListener("focus", sync);
-    window.addEventListener("admin-operational-counts-changed", sync);
+    window.addEventListener("admin-operational-counts-changed", debouncedRefresh);
     document.addEventListener("visibilitychange", visible);
     const unregister = registerAuthenticatedCleanup(() => {
       window.removeEventListener("focus", sync);
-      window.removeEventListener("admin-operational-counts-changed", sync);
+      window.removeEventListener("admin-operational-counts-changed", debouncedRefresh);
       document.removeEventListener("visibilitychange", visible);
+      if (debounceTimerRef.current) window.clearTimeout(debounceTimerRef.current);
     });
     return () => {
       unregister();
       window.removeEventListener("focus", sync);
-      window.removeEventListener("admin-operational-counts-changed", sync);
+      window.removeEventListener("admin-operational-counts-changed", debouncedRefresh);
       document.removeEventListener("visibilitychange", visible);
+      if (debounceTimerRef.current) window.clearTimeout(debounceTimerRef.current);
     };
-  }, [refresh]);
+  }, [debouncedRefresh, refresh]);
 
   const state = paymentNotice?.state || {};
   const billNumber = String(state.bill_number || "");

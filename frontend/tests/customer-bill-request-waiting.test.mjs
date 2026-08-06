@@ -41,7 +41,7 @@ test("waiting state shows safe session context and no ordering or menu action", 
 
 test("issued bill automatically replaces waiting data", () => {
   assert.match(bill, /setWaitingSession\(null\)/);
-  assert.match(bill, /setInterval\(\(\) => fetchBill\(false, "poll"\), 6_000\)/);
+  assert.match(bill, /document\.visibilityState !== "visible"/);
   assert.match(bill, /onEvent: \(\) => void fetchBill\(false, "event"\)/);
 });
 

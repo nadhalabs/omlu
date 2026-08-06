@@ -144,22 +144,34 @@ def load_participant(
             and allow_revoked_for_detached_bill
             and participant.session.status == "detached_awaiting_payment"
         ):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Table access is no longer valid")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail={"code": "INVALID_PARTICIPANT_AUTHORITY", "message": "Table access is no longer valid"}
+            )
     session = participant.session
     if (
         (restaurant_id is not None and participant.restaurant_id != restaurant_id)
         or (table_id is not None and participant.table_id != table_id)
         or (session_token is not None and session.public_token != session_token)
     ):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Table access does not match this session")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "INVALID_PARTICIPANT_AUTHORITY", "message": "Table access does not match this session"}
+        )
     if session.status not in ACTIVE_DINING_SESSION_STATUSES and not (
         allow_revoked_for_detached_bill and session.status == "detached_awaiting_payment"
     ):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Table session has ended")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "PARTICIPANT_AUTHORITY_EXPIRED", "message": "Table session has ended"}
+        )
     if require_open_for_ordering and session.status != "open":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ordering is locked for this table session")
     if not session.restaurant.is_active or not session.table.is_active:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Table access is no longer valid")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "INVALID_PARTICIPANT_AUTHORITY", "message": "Table access is no longer valid"}
+        )
     participant.last_seen_at = datetime.datetime.now(datetime.timezone.utc)
     return participant
 

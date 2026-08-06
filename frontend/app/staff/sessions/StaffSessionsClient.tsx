@@ -74,35 +74,37 @@ export default function StaffSessionsClient() {
   const [closeError, setCloseError] = useState<Record<string, string>>({});
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inFlightRef = useRef(false);
+  const pendingFetchRef = useRef(false);
 
   const fetchSessions = useCallback(async (showLoading = true) => {
-    if (showLoading) setLoading(true);
+    if (inFlightRef.current) {
+      pendingFetchRef.current = true;
+      return;
+    }
+    inFlightRef.current = true;
+    let shouldShowLoading = showLoading;
     try {
-      const data = await getStaffSessions();
-      setSessions(data);
-      setError(null);
-      setLastUpdated(new Date());
-    } catch (err) {
-      if (err instanceof ApiError) setError(err.message);
-      else setError("Failed to load sessions.");
+      do {
+        pendingFetchRef.current = false;
+        if (shouldShowLoading) setLoading(true);
+        try {
+          const data = await getStaffSessions();
+          setSessions(data);
+          setError(null);
+          setLastUpdated(new Date());
+        } catch (err) {
+          if (err instanceof ApiError) setError(err.message);
+          else setError("Failed to load sessions.");
+        } finally {
+          if (shouldShowLoading) setLoading(false);
+          shouldShowLoading = false;
+        }
+      } while (pendingFetchRef.current);
     } finally {
-      if (showLoading) setLoading(false);
+      inFlightRef.current = false;
     }
   }, []);
-
-  useEffect(() => {
-    const timeout = window.setTimeout(() => fetchSessions(true), 0);
-    const interval = setInterval(() => fetchSessions(false), 5_000);
-    const unregister = registerAuthenticatedCleanup(() => {
-      window.clearTimeout(timeout);
-      clearInterval(interval);
-    });
-    return () => {
-      unregister();
-      window.clearTimeout(timeout);
-      clearInterval(interval);
-    };
-  }, [fetchSessions]);
 
   useEffect(() => {
     void getStaffMe().then(setStaffInfo).catch(() => setStaffInfo(null));
@@ -110,9 +112,39 @@ export default function StaffSessionsClient() {
 
   const realtimeStatus = useRealtime({
     target: { kind: "staff", channel: "staff" },
-    onEvent: () => void fetchSessions(false),
+    onEvent: (event) => {
+      if (event.type.startsWith("session.") || event.type.startsWith("bill.")) {
+        void fetchSessions(false);
+      }
+    },
     onReconnect: () => void fetchSessions(false),
   });
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => fetchSessions(true), 0);
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") void fetchSessions(false);
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    const unregister = registerAuthenticatedCleanup(() => {
+      window.clearTimeout(timeout);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    });
+    return () => {
+      unregister();
+      window.clearTimeout(timeout);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [fetchSessions]);
+
+  useEffect(() => {
+    const intervalMs = realtimeStatus === "live" ? 90_000 : 15_000;
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      fetchSessions(false);
+    }, intervalMs);
+    return () => clearInterval(interval);
+  }, [fetchSessions, realtimeStatus]);
   const dashboardHref =
     staffInfo?.role === "owner" || staffInfo?.role === "admin"
       ? "/admin/dashboard"

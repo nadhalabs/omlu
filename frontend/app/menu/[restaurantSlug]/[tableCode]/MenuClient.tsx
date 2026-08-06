@@ -13,6 +13,7 @@ import {
   getTableSessionStatus,
   joinSecureTableSession,
   ApiError,
+  isDefiniteAuthFailure,
 } from "@/lib/api";
 import {
   PublicMenuResponse,
@@ -26,6 +27,7 @@ import {
   clearPublicSessionToken,
   clearParticipantToken,
   readParticipantToken,
+  readSessionParticipantToken,
   saveParticipantToken,
   saveSessionParticipantToken,
   readPublicSessionToken,
@@ -481,7 +483,7 @@ function ActiveMenuClient({
       return;
     }
     const savedToken = readPublicSessionToken(restaurantSlug, tableCode);
-    const savedParticipantToken = readParticipantToken(restaurantSlug, tableCode);
+    let savedParticipantToken = readParticipantToken(restaurantSlug, tableCode);
 
     setSessionLoading(true);
     clearLegacyPublicReceiptToken(restaurantSlug, tableCode);
@@ -493,14 +495,30 @@ function ActiveMenuClient({
     }
 
     let tokenToValidate = queryToken || savedToken;
+
+    if (!savedParticipantToken && tokenToValidate) {
+      savedParticipantToken = readSessionParticipantToken(tokenToValidate);
+      if (savedParticipantToken) {
+        saveParticipantToken(restaurantSlug, tableCode, savedParticipantToken);
+      }
+    }
+
     if (!tokenToValidate && savedParticipantToken) {
       try {
         const active = await getActivePublicDiningSession(restaurantSlug, tableCode);
         if (active?.public_token) {
           tokenToValidate = active.public_token;
           savePublicSessionToken(restaurantSlug, tableCode, tokenToValidate);
+          saveSessionParticipantToken(tokenToValidate, savedParticipantToken);
         }
       } catch {}
+    }
+
+    if (!savedParticipantToken && tokenToValidate) {
+      savedParticipantToken = readSessionParticipantToken(tokenToValidate);
+      if (savedParticipantToken) {
+        saveParticipantToken(restaurantSlug, tableCode, savedParticipantToken);
+      }
     }
 
     if (!tokenToValidate || !savedParticipantToken) {
@@ -545,6 +563,8 @@ function ActiveMenuClient({
       }
 
       savePublicSessionToken(restaurantSlug, tableCode, session.public_token);
+      saveParticipantToken(restaurantSlug, tableCode, savedParticipantToken);
+      saveSessionParticipantToken(session.public_token, savedParticipantToken);
       setParticipantToken(savedParticipantToken);
       setTableOccupied(true);
       clearLegacyPublicReceiptToken(restaurantSlug, tableCode);
@@ -556,20 +576,26 @@ function ActiveMenuClient({
           ? null
           : "This table session is no longer open. New ordering is disabled."
       );
-    } catch {
-      clearPublicSessionToken(restaurantSlug, tableCode);
-      clearParticipantToken(restaurantSlug, tableCode);
-      setParticipantToken(null);
-      clearLegacyPublicReceiptToken(restaurantSlug, tableCode);
-      clearOrderingState();
-      setSessionCompleteNotice(null);
-      if (queryToken) {
-        removeSessionQueryParam();
-        setExpiredSessionNotice("This table session link is no longer valid. Scan the table QR again to start a new order.");
-        setSessionNotice(null);
+    } catch (err) {
+      if (isDefiniteAuthFailure(err)) {
+        clearPublicSessionToken(restaurantSlug, tableCode);
+        clearParticipantToken(restaurantSlug, tableCode);
+        setParticipantToken(null);
+        clearLegacyPublicReceiptToken(restaurantSlug, tableCode);
+        clearOrderingState();
+        setSessionCompleteNotice(null);
+        if (queryToken) {
+          removeSessionQueryParam();
+          setExpiredSessionNotice("This table session link is no longer valid. Scan the table QR again to start a new order.");
+          setSessionNotice(null);
+        } else {
+          setExpiredSessionNotice(null);
+          setSessionNotice(null);
+        }
       } else {
-        setExpiredSessionNotice(null);
-        setSessionNotice(null);
+        // Temporary network/server error or timeout:
+        // Do NOT clear participantToken or public session tokens!
+        setSessionNotice("Connection issue. Retrying table session status...");
       }
     } finally {
       setSessionLoading(false);
@@ -1001,11 +1027,12 @@ function ActiveMenuClient({
     setJoinError(null);
     try {
       const authority = await joinSecureTableSession(restaurantSlug, tableCode, joinCode);
+      const sessionToken = authority.session.public_token;
       saveParticipantToken(restaurantSlug, tableCode, authority.participant_token);
-      savePublicSessionToken(restaurantSlug, tableCode, authority.session.public_id);
-      saveSessionParticipantToken(authority.session.public_id, authority.participant_token);
+      savePublicSessionToken(restaurantSlug, tableCode, sessionToken);
+      saveSessionParticipantToken(sessionToken, authority.participant_token);
       setParticipantToken(authority.participant_token);
-      const session = await getPublicDiningSession(authority.session.public_id, authority.participant_token);
+      const session = await getPublicDiningSession(sessionToken, authority.participant_token);
       setCurrentSession(session);
       setJoinCode("");
     } catch (err) {

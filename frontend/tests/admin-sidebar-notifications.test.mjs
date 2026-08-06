@@ -44,7 +44,8 @@ test("only operational queues receive sidebar badges", () => {
 test("one shared owner refreshes all counts through one realtime subscription without polling", () => {
   assert.equal((sidebar.match(/useRealtime\(/g) || []).length, 1);
   assert.equal((sidebar.match(/\/api\/admin\/sidebar-operational-counts/g) || []).length, 1);
-  assert.doesNotMatch(sidebar, /setInterval|setTimeout/);
+  assert.doesNotMatch(sidebar, /setInterval/);
+  assert.match(sidebar, /debouncedRefresh/);
   assert.match(sidebar, /channel: "operations"/);
   assert.match(sidebar, /admin-operational-counts-changed/);
   assert.match(sidebar, /onReconnect: refresh/);

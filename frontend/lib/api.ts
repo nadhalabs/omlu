@@ -42,35 +42,71 @@ import {
 
 export class ApiError extends Error {
   status: number;
+  code?: string;
   field?: string;
-  constructor(status: number, message: string, field?: string) {
+  constructor(status: number, message: string, code?: string, field?: string) {
     super(message);
     this.status = status;
+    this.code = code;
     this.field = field;
     this.name = "ApiError";
     handleAuthenticationStatus(status);
   }
 }
 
-function parseApiError(data: unknown, fallback: string) {
-  if (
-    data &&
-    typeof data === "object" &&
-    "detail" in data &&
-    data.detail &&
-    typeof data.detail === "object" &&
-    "message" in data.detail
-  ) {
-    const detail = data.detail as { field?: unknown; message?: unknown };
-    return {
-      message: typeof detail.message === "string" ? detail.message : fallback,
-      field: typeof detail.field === "string" ? detail.field : undefined,
-    };
+const DEFINITE_AUTH_FAILURE_CODES = new Set([
+  "INVALID_PARTICIPANT_AUTHORITY",
+  "PARTICIPANT_AUTHORITY_EXPIRED",
+  "SESSION_NOT_FOUND",
+  "SESSION_CLOSED",
+]);
+
+export function isDefiniteAuthFailure(err: unknown): boolean {
+  if (!(err instanceof ApiError)) return false;
+  return Boolean(err.code && DEFINITE_AUTH_FAILURE_CODES.has(err.code));
+}
+
+export type ParsedApiError = {
+  message: string;
+  code?: string;
+  field?: string;
+};
+
+export function parseApiError(data: unknown, fallback: string): ParsedApiError {
+  let message = fallback;
+  let code: string | undefined = undefined;
+  let field: string | undefined = undefined;
+
+  if (data && typeof data === "object") {
+    const obj = data as Record<string, unknown>;
+
+    if (typeof obj.code === "string") {
+      code = obj.code;
+    }
+
+    if ("detail" in obj && obj.detail) {
+      if (typeof obj.detail === "object" && obj.detail !== null) {
+        const detail = obj.detail as Record<string, unknown>;
+        if (typeof detail.message === "string") {
+          message = detail.message;
+        } else if (typeof detail.detail === "string") {
+          message = detail.detail;
+        }
+        if (typeof detail.code === "string") {
+          code = detail.code;
+        }
+        if (typeof detail.field === "string") {
+          field = detail.field;
+        }
+      } else if (typeof obj.detail === "string") {
+        message = obj.detail;
+      }
+    } else if (typeof obj.message === "string") {
+      message = obj.message;
+    }
   }
-  if (data && typeof data === "object" && "detail" in data && typeof data.detail === "string") {
-    return { message: data.detail, field: undefined };
-  }
-  return { message: fallback, field: undefined };
+
+  return { message, code, field };
 }
 
 function publicBackendBaseUrl() {
@@ -250,14 +286,12 @@ export async function getActivePublicDiningSession(
     });
 
     if (!response.ok) {
-      let message = "No active table session found.";
+      let parsed: ParsedApiError = { message: "No active table session found.", code: undefined, field: undefined };
       try {
         const errorData = await response.json();
-        if (errorData && typeof errorData.detail === "string") {
-          message = errorData.detail;
-        }
+        parsed = parseApiError(errorData, "No active table session found.");
       } catch {}
-      throw new ApiError(response.status, message);
+      throw new ApiError(response.status, parsed.message, parsed.code, parsed.field);
     }
 
     return await response.json();
@@ -272,7 +306,7 @@ export async function getActivePublicDiningSession(
 export type TableParticipantAuthority = {
   participant_token: string;
   participant: { public_id: string; joined_at: string; label: string };
-  session: { public_id: string; table_number: string; status: string };
+  session: { public_id: string; public_token: string; table_number: string; status: string };
   join_code: string;
   participant_count: number;
 };
@@ -289,7 +323,10 @@ export async function getTableParticipantAuthority(
     }
   );
   const body = await response.json().catch(() => null);
-  if (!response.ok) throw new ApiError(response.status, body?.detail || "Table access has ended.");
+  if (!response.ok) {
+    const parsed = parseApiError(body, "Table access has ended.");
+    throw new ApiError(response.status, parsed.message, parsed.code, parsed.field);
+  }
   return body;
 }
 
@@ -306,7 +343,10 @@ export async function startSecureTableSession(restaurantSlug: string, tableCode:
     headers: { "Content-Type": "application/json", "X-Device-ID": getOrCreatePublicDeviceId() },
   });
   const body = await response.json().catch(() => null);
-  if (!response.ok) throw new ApiError(response.status, body?.detail || "Could not start table ordering.");
+  if (!response.ok) {
+    const parsed = parseApiError(body, "Could not start table ordering.");
+    throw new ApiError(response.status, parsed.message, parsed.code, parsed.field);
+  }
   return body;
 }
 
@@ -317,7 +357,10 @@ export async function joinSecureTableSession(restaurantSlug: string, tableCode: 
     body: JSON.stringify({ code, device_id: getOrCreatePublicDeviceId() }),
   });
   const body = await response.json().catch(() => null);
-  if (!response.ok) throw new ApiError(response.status, body?.detail || "Could not join table.");
+  if (!response.ok) {
+    const parsed = parseApiError(body, "Could not join table.");
+    throw new ApiError(response.status, parsed.message, parsed.code, parsed.field);
+  }
   return body;
 }
 
@@ -385,14 +428,12 @@ export async function createOrRefreshPublicBill(
     });
 
     if (!response.ok) {
-      let message = "An error occurred while preparing the bill.";
+      let parsed: ParsedApiError = { message: "An error occurred while preparing the bill.", code: undefined, field: undefined };
       try {
         const errorData = await response.json();
-        if (errorData && typeof errorData.detail === "string") {
-          message = errorData.detail;
-        }
+        parsed = parseApiError(errorData, "An error occurred while preparing the bill.");
       } catch {}
-      throw new ApiError(response.status, message);
+      throw new ApiError(response.status, parsed.message, parsed.code, parsed.field);
     }
 
     return await response.json();
@@ -434,14 +475,12 @@ export async function getPublicBill(
     });
 
     if (!response.ok) {
-      let message = "Bill not found.";
+      let parsed: ParsedApiError = { message: "Bill not found.", code: undefined, field: undefined };
       try {
         const errorData = await response.json();
-        if (errorData && typeof errorData.detail === "string") {
-          message = errorData.detail;
-        }
+        parsed = parseApiError(errorData, "Bill not found.");
       } catch {}
-      throw new ApiError(response.status, message);
+      throw new ApiError(response.status, parsed.message, parsed.code, parsed.field);
     }
 
     return await response.json();
@@ -710,12 +749,12 @@ export async function staffLogin(
     });
 
     if (!response.ok) {
-      let parsed = { message: "Login failed.", field: undefined as string | undefined };
+      let parsed: ParsedApiError = { message: "Login failed.", code: undefined, field: undefined };
       try {
         const errorData = await response.json();
         parsed = parseApiError(errorData, "Login failed.");
       } catch {}
-      throw new ApiError(response.status, parsed.message, parsed.field);
+      throw new ApiError(response.status, parsed.message, parsed.code, parsed.field);
     }
 
     await response.json();
@@ -743,12 +782,12 @@ export async function registerRestaurant(
     });
 
     if (!response.ok) {
-      let parsed = { message: "Registration failed.", field: undefined as string | undefined };
+      let parsed: ParsedApiError = { message: "Registration failed.", code: undefined, field: undefined };
       try {
         const errorData = await response.json();
         parsed = parseApiError(errorData, "Registration failed.");
       } catch {}
-      throw new ApiError(response.status, parsed.message, parsed.field);
+      throw new ApiError(response.status, parsed.message, parsed.code, parsed.field);
     }
 
     return await response.json();
@@ -782,12 +821,12 @@ export async function changeStaffPassword(body: {
     });
 
     if (!response.ok) {
-      let parsed = { message: "Password change failed.", field: undefined as string | undefined };
+      let parsed: ParsedApiError = { message: "Password change failed.", code: undefined, field: undefined };
       try {
         const errorData = await response.json();
         parsed = parseApiError(errorData, "Password change failed.");
       } catch {}
-      throw new ApiError(response.status, parsed.message, parsed.field);
+      throw new ApiError(response.status, parsed.message, parsed.code, parsed.field);
     }
 
     await response.json();
@@ -1455,12 +1494,12 @@ export async function createStaffAccount(
       body: JSON.stringify(data),
     });
     if (!res.ok) {
-      let parsed = { message: "Failed to create staff account.", field: undefined as string | undefined };
+      let parsed: ParsedApiError = { message: "Failed to create staff account.", code: undefined, field: undefined };
       try {
         const err = await res.json();
         parsed = parseApiError(err, "Failed to create staff account.");
       } catch {}
-      throw new ApiError(res.status, parsed.message, parsed.field);
+      throw new ApiError(res.status, parsed.message, parsed.code, parsed.field);
     }
     return await res.json();
   } catch (error) {
@@ -1505,12 +1544,12 @@ export async function resetStaffPassword(
       body: JSON.stringify({ temporary_password: temporaryPassword }),
     });
     if (!res.ok) {
-      let parsed = { message: "Failed to reset password.", field: undefined as string | undefined };
+      let parsed: ParsedApiError = { message: "Failed to reset password.", code: undefined, field: undefined };
       try {
         const err = await res.json();
         parsed = parseApiError(err, "Failed to reset password.");
       } catch {}
-      throw new ApiError(res.status, parsed.message, parsed.field);
+      throw new ApiError(res.status, parsed.message, parsed.code, parsed.field);
     }
     return await res.json();
   } catch (error) {

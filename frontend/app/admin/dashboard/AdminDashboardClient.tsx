@@ -70,19 +70,30 @@ export default function AdminDashboardClient() {
     await refetch().catch(() => undefined);
   }, [refetch]);
 
+  const realtimeStatus = useRealtime({
+    target: { kind: "staff", channel: "admin" },
+    onEvent: () => void fetchDashboard(),
+    onReconnect: () => void fetchDashboard(),
+  });
+
   useEffect(() => {
-    // Refresh every 30 seconds automatically
-    const interval = setInterval(() => void fetchDashboard(), 30_000);
+    const intervalMs = realtimeStatus === "live" ? 90_000 : 30_000;
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      void fetchDashboard();
+    }, intervalMs);
     const unregister = registerAuthenticatedCleanup(() => clearInterval(interval));
     return () => {
       unregister();
       clearInterval(interval);
     };
-  }, [fetchDashboard]);
+  }, [fetchDashboard, realtimeStatus]);
 
   useEffect(() => {
     let active = true;
     const checkHealth = async () => {
+      const isVisible = typeof document === "undefined" || document.visibilityState === "visible";
+      if (!isVisible) return;
       try {
         const response = await fetch("/api/health/ready", { cache: "no-store" });
         if (active) setBackendHealthUnavailable(!response.ok);
@@ -91,18 +102,15 @@ export default function AdminDashboardClient() {
       }
     };
     void checkHealth();
-    const interval = window.setInterval(() => void checkHealth(), 30_000);
+    const interval = window.setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      void checkHealth();
+    }, 60_000);
     return () => {
       active = false;
       window.clearInterval(interval);
     };
   }, []);
-
-  const realtimeStatus = useRealtime({
-    target: { kind: "staff", channel: "admin" },
-    onEvent: () => void fetchDashboard(),
-    onReconnect: () => void fetchDashboard(),
-  });
 
   if (loading && !data) {
     return (

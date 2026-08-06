@@ -108,7 +108,7 @@ export function useCachedQuery<T>(
     const current = entryFor<T>(key);
     const stale = Date.now() - current.updatedAt >= staleTime;
     if (current.data === undefined || stale) {
-      void runQuery(key, queryFn, true).catch(() => undefined);
+      void runQuery(key, queryFn, false).catch(() => undefined);
     }
   }, [enabled, key, queryFn, staleTime]);
 

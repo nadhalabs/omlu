@@ -642,7 +642,10 @@ def get_public_session(
     ).first()
 
     if not dining_session:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dining session not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "SESSION_NOT_FOUND", "message": "Dining session not found"}
+        )
 
     load_participant(db, participant_token, session_token=session_token)
     return build_session_response(db, dining_session)

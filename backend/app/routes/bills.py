@@ -328,17 +328,29 @@ def get_public_session_bill(
     ).first()
 
     if not dining_session:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dining session not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "SESSION_NOT_FOUND", "message": "Dining session not found"}
+        )
     bill = db.query(Bill).filter(Bill.dining_session_id == dining_session.id).first()
     if not bill:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "SESSION_NOT_FOUND", "message": "Bill not found"}
+        )
     if receipt_token:
         if bill.receipt_token != receipt_token:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"code": "SESSION_NOT_FOUND", "message": "Bill not found"}
+            )
     elif participant_token:
         load_participant(db, participant_token, session_token=session_token)
     else:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Bill access token is required")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "INVALID_PARTICIPANT_AUTHORITY", "message": "Bill access token is required"}
+        )
 
     return build_bill_response(db, bill)
 

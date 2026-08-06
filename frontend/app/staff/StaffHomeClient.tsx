@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, getStaffServiceRequests, getStaffSessions } from "@/lib/api";
 import { StaffServiceRequestResponse, StaffSessionListItem } from "@/lib/types";
 import { useRealtime } from "@/lib/realtime";
@@ -13,8 +13,11 @@ export default function StaffHomeClient() {
   const [requests, setRequests] = useState<StaffServiceRequestResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const inFlightRef = useRef(false);
 
   const load = useCallback(async () => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     setLoading(true);
     try {
       const [sessionData, requestData] = await Promise.all([
@@ -27,29 +30,42 @@ export default function StaffHomeClient() {
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not load staff home.");
     } finally {
+      inFlightRef.current = false;
       setLoading(false);
     }
   }, []);
-
-  useEffect(() => {
-    const timeout = window.setTimeout(() => load(), 0);
-    const interval = setInterval(load, 15_000);
-    const unregister = registerAuthenticatedCleanup(() => {
-      window.clearTimeout(timeout);
-      clearInterval(interval);
-    });
-    return () => {
-      unregister();
-      window.clearTimeout(timeout);
-      clearInterval(interval);
-    };
-  }, [load]);
 
   const realtimeStatus = useRealtime({
     target: { kind: "staff", channel: "staff" },
     onEvent: () => void load(),
     onReconnect: () => void load(),
   });
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => load(), 0);
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") void load();
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    const unregister = registerAuthenticatedCleanup(() => {
+      window.clearTimeout(timeout);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    });
+    return () => {
+      unregister();
+      window.clearTimeout(timeout);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [load]);
+
+  useEffect(() => {
+    const intervalMs = realtimeStatus === "live" ? 90_000 : 30_000;
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      load();
+    }, intervalMs);
+    return () => clearInterval(interval);
+  }, [load, realtimeStatus]);
 
   const billRequests = requests.filter((request) => request.request_type === "bill");
   const paymentPending = sessions.filter((session) => session.status === "payment_pending" || session.status === "payment_requested");

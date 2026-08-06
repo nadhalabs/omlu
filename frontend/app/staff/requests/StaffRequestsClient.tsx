@@ -30,47 +30,80 @@ export default function StaffRequestsClient() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const alertedIdsRef = useRef<Set<number>>(new Set());
 
-  const fetchRequests = useCallback(async (showLoading = true) => {
-    if (showLoading) setLoading(true);
-    try {
-      const data = await getStaffServiceRequests("all");
-      setRequests(data);
-      setError(null);
-      setLastUpdated(new Date());
+  const inFlightRef = useRef(false);
+  const pendingFetchRef = useRef(false);
 
-      const pendingIds = data.filter((request) => request.status === "pending").map((request) => request.id);
-      const newIds = pendingIds.filter((id) => !alertedIdsRef.current.has(id));
-      if (newIds.length > 0 && audioRef.current) {
-        audioRef.current.currentTime = 0;
-        audioRef.current.play().catch(() => {});
-      }
-      pendingIds.forEach((id) => alertedIdsRef.current.add(id));
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load requests.");
+  const fetchRequests = useCallback(async (showLoading = true) => {
+    if (inFlightRef.current) {
+      pendingFetchRef.current = true;
+      return;
+    }
+    inFlightRef.current = true;
+    let shouldShowLoading = showLoading;
+    try {
+      do {
+        pendingFetchRef.current = false;
+        if (shouldShowLoading) setLoading(true);
+        try {
+          const data = await getStaffServiceRequests("all");
+          setRequests(data);
+          setError(null);
+          setLastUpdated(new Date());
+
+          const pendingIds = data.filter((request) => request.status === "pending").map((request) => request.id);
+          const newIds = pendingIds.filter((id) => !alertedIdsRef.current.has(id));
+          if (newIds.length > 0 && audioRef.current) {
+            audioRef.current.currentTime = 0;
+            audioRef.current.play().catch(() => {});
+          }
+          pendingIds.forEach((id) => alertedIdsRef.current.add(id));
+        } catch (err) {
+          setError(err instanceof ApiError ? err.message : "Could not load requests.");
+        } finally {
+          if (shouldShowLoading) setLoading(false);
+          shouldShowLoading = false;
+        }
+      } while (pendingFetchRef.current);
     } finally {
-      if (showLoading) setLoading(false);
+      inFlightRef.current = false;
     }
   }, []);
 
+  const realtimeStatus = useRealtime({
+    target: { kind: "staff", channel: "staff" },
+    onEvent: (event) => {
+      if (event.type.startsWith("service_request.")) {
+        void fetchRequests(false);
+      }
+    },
+    onReconnect: () => void fetchRequests(false),
+  });
+
   useEffect(() => {
     const timeout = window.setTimeout(() => void fetchRequests(true), 0);
-    const interval = window.setInterval(() => void fetchRequests(false), 15_000);
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") void fetchRequests(false);
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
     const unregister = registerAuthenticatedCleanup(() => {
       window.clearTimeout(timeout);
-      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibility);
     });
     return () => {
       unregister();
       window.clearTimeout(timeout);
-      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, [fetchRequests]);
 
-  useRealtime({
-    target: { kind: "staff", channel: "staff" },
-    onEvent: () => void fetchRequests(false),
-    onReconnect: () => void fetchRequests(false),
-  });
+  useEffect(() => {
+    const intervalMs = realtimeStatus === "live" ? 90_000 : 15_000;
+    const interval = window.setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      void fetchRequests(false);
+    }, intervalMs);
+    return () => window.clearInterval(interval);
+  }, [fetchRequests, realtimeStatus]);
 
   const activeRequests = useMemo(() => requests.filter((request) => request.status === "pending"), [requests]);
   const completedRequests = useMemo(() => requests.filter((request) => request.status !== "pending"), [requests]);
