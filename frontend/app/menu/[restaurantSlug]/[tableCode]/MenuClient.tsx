@@ -129,9 +129,6 @@ function TableOrderStatusCard({
   joining,
   handleJoinTable,
   joinError,
-  handleStartOrdering,
-  isStartingSession,
-  startSessionError,
   sessionToken,
   t,
   router,
@@ -143,39 +140,15 @@ function TableOrderStatusCard({
   joining: boolean;
   handleJoinTable: () => void;
   joinError: string | null;
-  handleStartOrdering: () => void;
-  isStartingSession: boolean;
-  startSessionError: string | null;
+  handleStartOrdering?: () => void;
+  isStartingSession?: boolean;
+  startSessionError?: string | null;
   sessionToken?: string;
   t: Record<string, string>;
   router: ReturnType<typeof useRouter>;
 }) {
   if (menuState === "ready") {
-    return (
-      <section className="rounded-2xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-4 shadow-xs dark:border-[var(--omlu-border)]" aria-labelledby="status-card-title">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h2 id="status-card-title" className="text-sm font-black text-[var(--omlu-text-primary)]">
-              {t.readyToOrderTitle} · {t.table} {tableNumber}
-            </h2>
-            <p className="mt-0.5 text-xs text-[var(--omlu-text-secondary)]">
-              {t.readyToOrderDesc.replace("{table}", tableNumber)}
-            </p>
-          </div>
-          <button
-            type="button"
-            disabled={isStartingSession}
-            onClick={handleStartOrdering}
-            className="shrink-0 min-h-10 rounded-xl bg-orange-600 px-4 py-2 text-xs font-black text-white hover:bg-orange-700 active:bg-orange-800 disabled:opacity-50 cursor-pointer shadow-xs transition"
-          >
-            {isStartingSession ? t.startingOrder : t.startOrdering}
-          </button>
-        </div>
-        {startSessionError && (
-          <p role="alert" className="mt-2 text-xs font-semibold text-red-700 dark:text-red-400">{startSessionError}</p>
-        )}
-      </section>
-    );
+    return null;
   }
 
   if (menuState === "ordering_active") {
@@ -344,7 +317,7 @@ function ActiveMenuClient({
   const [error, setError] = useState<string | null>(null);
   const [language, setLanguage] = useState<"en" | "ml">("en");
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const [activeCategory, setActiveCategory] = useState<number | null>(null);
+  const [activeCategory, setActiveCategory] = useState<number | "all">("all");
   
   // Cart & notes states
   const [cart, setCart] = useState<Record<string, CartLine>>({});
@@ -389,9 +362,9 @@ function ActiveMenuClient({
       const data = await getPublicMenu(restaurantSlug, tableCode);
       setMenuData(data);
       setActiveCategory((current) =>
-        current && data.categories.some((category) => category.id === current)
+        current !== "all" && typeof current === "number" && data.categories.some((category) => category.id === current)
           ? current
-          : data.categories[0]?.id ?? null
+          : "all"
       );
     } catch (err) {
       if (err instanceof ApiError) {
@@ -672,6 +645,7 @@ function ActiveMenuClient({
   const translations = {
     en: {
       dineIn: "Dine-in",
+      allItems: "All Items",
       searchPlaceholder: "Search food and drinks...",
       cart: "Cart",
       subtotal: "Subtotal",
@@ -740,6 +714,7 @@ function ActiveMenuClient({
     },
     ml: {
       dineIn: "ഡൈൻ-ഇൻ",
+      allItems: "എല്ലാ ഇനങ്ങളും",
       searchPlaceholder: "ഭക്ഷണങ്ങളും പാനീയങ്ങളും തിരയുക...",
       cart: "കാർട്ട്",
       subtotal: "ആകെ തുക",
@@ -1098,7 +1073,7 @@ function ActiveMenuClient({
       };
     })
     .filter((category) => category.items.length > 0);
-  const visibleCategories = searchQuery.trim()
+  const visibleCategories = searchQuery.trim() || activeCategory === "all"
     ? displayCategories
     : displayCategories.filter((category) => category.id === activeCategory);
 
@@ -1185,8 +1160,16 @@ function ActiveMenuClient({
   }).format(subtotal);
 
   // Scroll to Category Header
-  const scrollToCategory = (categoryId: number) => {
+  const scrollToCategory = (categoryId: number | "all") => {
     setActiveCategory(categoryId);
+    if (categoryId === "all") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      const tab = document.getElementById("cat-tab-all");
+      if (tab) {
+        tab.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+      }
+      return;
+    }
     const element = document.getElementById(`category-${categoryId}`);
     if (element) {
       const headerOffset = 140; // Approximate height of top sticky bars
@@ -1294,6 +1277,18 @@ function ActiveMenuClient({
           {/* Category Tabs */}
           {displayCategories.length > 0 && !sessionCompleteNotice && !expiredSessionNotice && (
             <div className="flex gap-1.5 overflow-x-auto no-scrollbar py-1">
+              <button
+                key="all"
+                id="cat-tab-all"
+                onClick={() => scrollToCategory("all")}
+                className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-bold whitespace-nowrap cursor-pointer transition ${
+                  activeCategory === "all"
+                    ? "bg-orange-600 text-white shadow-xs"
+                    : "bg-[var(--omlu-muted-surface)] text-[var(--omlu-text-secondary)] hover:bg-[var(--omlu-border)]"
+                }`}
+              >
+                {t.allItems}
+              </button>
               {displayCategories.map((category) => (
                 <button
                   key={category.id}
