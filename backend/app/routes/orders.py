@@ -12,6 +12,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from app.database import get_db
 from app.models.restaurant import Restaurant
 from app.models.restaurant_table import RestaurantTable
+from app.models.bill import Bill
 from app.models.dining_session import DiningSession
 from app.models.order import Order, OrderItem, OrderItemSelectedOption, OrderStatusHistory, RestaurantDailySequence
 from app.models.service_request import ServiceRequest
@@ -24,6 +25,7 @@ from app.services.dining_sessions import (
     find_current_open_session_for_table,
     get_or_create_open_session,
 )
+from app.services.bills import apply_draft_totals
 from app.services.order_pricing import validate_and_price_order_items
 from app.services.idempotency import ensure_same_request, request_hash
 from app.utils.business_date import restaurant_business_date
@@ -359,6 +361,15 @@ def create_order_in_session(
             changed_by_staff_id=created_by_staff_id
         ))
         db.flush()
+
+        bill = db.query(Bill).filter(
+            Bill.dining_session_id == locked_session.id,
+            Bill.status == "draft",
+        ).with_for_update().first()
+        if bill:
+            apply_draft_totals(db, bill)
+            db.flush()
+
         return new_order
 
     except IntegrityError:
