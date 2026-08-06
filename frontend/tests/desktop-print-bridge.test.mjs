@@ -24,12 +24,16 @@ test("Admin Settings renders Desktop Print Bridge section with dynamic status an
   assert.match(settings, /href="\/downloads\/omlu-print-bridge-developer-package\.zip"/);
 });
 
-test("Billing Counter implements real print job submission, token authorization, and browser fallback", () => {
-  assert.match(billingCounter, /checkBridgeHealth/);
-  assert.match(billingCounter, /getStaffBillReceiptPayload/);
-  assert.match(billingCounter, /requestPrintBridgeToken/);
-  assert.match(billingCounter, /sendPrintJobToBridge/);
+test("Billing Counter implements print service integration with Print Bridge and hidden iframe fallback", () => {
+  const printService = read("lib/print_service.ts");
+  assert.match(printService, /checkBridgeHealth/);
+  assert.match(printService, /getStaffBillReceiptPayload/);
+  assert.match(printService, /requestPrintBridgeToken/);
+  assert.match(printService, /sendPrintJobToBridge/);
+  assert.match(printService, /iframe/);
+
+  assert.match(billingCounter, /printIssuedBill/);
   assert.match(billingCounter, /Print complete/);
   assert.match(billingCounter, /Bill issued, but printing failed\./);
-  assert.match(billingCounter, /window\.open\("", "_blank"\)/);
+  assert.doesNotMatch(billingCounter, /window\.open/);
 });

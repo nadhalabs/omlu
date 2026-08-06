@@ -16,6 +16,7 @@ import { useOmluUi } from "@/components/OmluUiProvider";
 import { CounterPaymentMethod, CurrentStaffResponse, StaffServiceRequestResponse } from "@/lib/types";
 import { useRealtime } from "@/lib/realtime";
 import { registerAuthenticatedCleanup } from "@/lib/authRuntime.mjs";
+import { printIssuedBill } from "@/lib/print_service";
 
 const REQUEST_TYPE_LABELS: Record<string, string> = {
   waiter: "🙋 Waiter",
@@ -178,10 +179,6 @@ export default function AdminRequestsClient() {
     if (!req.dining_session_token || issuingId === req.id) return;
     setIssuingId(req.id);
     setError(null);
-    let printWindow: Window | null = null;
-    if (openPrint) {
-      printWindow = window.open("", "_blank");
-    }
     try {
       const bill = req.bill_number
         ? null
@@ -198,19 +195,28 @@ export default function AdminRequestsClient() {
             : item
         )
       );
-      if (openPrint && printWindow && issued.receipt_token) {
-        const printUrl = `/bill/${encodeURIComponent(req.dining_session_token)}?receipt=${encodeURIComponent(issued.receipt_token)}`;
-        printWindow.location.replace(printUrl);
-        printWindow.addEventListener("load", () => printWindow?.print(), { once: true });
-        toast("Bill issued. Print view opened.", "success");
+
+      if (openPrint && issued.receipt_token) {
+        toast("Printing bill…", "information");
+        const printRes = await printIssuedBill({
+          billNumber: issued.bill_number,
+          sessionToken: req.dining_session_token,
+          receiptToken: issued.receipt_token,
+        });
+
+        if (printRes.success) {
+          if (printRes.method === "bridge") {
+            toast("Print complete", "success");
+          }
+        } else {
+          toast("Bill issued, but printing failed.", "error");
+        }
       } else if (openPrint) {
-        printWindow?.close();
-        toast("Bill issued. Open Print Bill to print.", "information");
+        toast("Bill issued, but printing failed.", "error");
       } else {
         toast("Bill issued.", "success");
       }
     } catch (err) {
-      printWindow?.close();
       if (err instanceof ApiError) setError(err.message);
       else if (err instanceof Error) setError(err.message);
       else setError("Failed to issue bill.");

@@ -14,6 +14,7 @@ import { PaymentCodeLookupResponse, PendingPaymentItem } from "@/lib/types";
 import { useRealtime } from "@/lib/realtime";
 import { useOmluUi } from "@/components/OmluUiProvider";
 import { registerAuthenticatedCleanup } from "@/lib/authRuntime.mjs";
+import { printIssuedBill } from "@/lib/print_service";
 
 type PaymentMethod = "counter_cash" | "counter_upi";
 
@@ -147,29 +148,32 @@ export default function PendingPaymentsClient({ actorRole, showQueue = true }: P
     pendingIssueTokens.add(payment.bill_number);
     setIssuingBills((prev) => ({ ...prev, [payment.bill_number]: true }));
 
-    let printWindow: Window | null = null;
-    if (openPrint) {
-      printWindow = window.open("", "_blank");
-    }
-
     try {
       const issued = await issueStaffBill(payment.bill_number);
       await refresh();
       window.dispatchEvent(new Event("admin-operational-counts-changed"));
 
-      if (openPrint && printWindow && issued.receipt_token) {
-        const printUrl = `/bill/${encodeURIComponent(payment.session_token)}?receipt=${encodeURIComponent(issued.receipt_token)}`;
-        printWindow.location.replace(printUrl);
-        printWindow.addEventListener("load", () => printWindow?.print(), { once: true });
-        toast("Bill issued. Print view opened.", "success");
+      if (openPrint && issued.receipt_token) {
+        toast("Printing bill…", "information");
+        const printRes = await printIssuedBill({
+          billNumber: payment.bill_number,
+          sessionToken: payment.session_token,
+          receiptToken: issued.receipt_token,
+        });
+
+        if (printRes.success) {
+          if (printRes.method === "bridge") {
+            toast("Print complete", "success");
+          }
+        } else {
+          toast("Bill issued, but printing failed.", "error");
+        }
       } else if (openPrint) {
-        printWindow?.close();
-        toast("Bill issued. Open Print Bill to print.", "information");
+        toast("Bill issued, but printing failed.", "error");
       } else {
         toast("Bill issued.", "success");
       }
     } catch (err) {
-      printWindow?.close();
       toast(err instanceof ApiError ? err.message : "Failed to issue bill.", "error");
     } finally {
       pendingIssueTokens.delete(payment.bill_number);

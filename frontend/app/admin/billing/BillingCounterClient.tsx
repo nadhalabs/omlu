@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { confirmPendingPayment, getBillingCounter, getStaffBillReceiptPayload, issueStaffBill, reopenBillOrdering, requestPrintBridgeToken } from "@/lib/api";
+import { confirmPendingPayment, getBillingCounter, reopenBillOrdering } from "@/lib/api";
+import { issueStaffBill } from "@/lib/api";
 import { BillingCounterItem, BillingCounterQueues } from "@/lib/types";
 import { useOmluUi } from "@/components/OmluUiProvider";
 import { useRealtime } from "@/lib/realtime";
-import { checkBridgeHealth, sendPrintJobToBridge } from "@/lib/print_bridge";
+import { printIssuedBill } from "@/lib/print_service";
 
 type Tab = "requested" | "awaiting_payment" | "paid_recently";
 type Method = "counter_cash" | "counter_upi";
@@ -41,11 +42,6 @@ export default function BillingCounterClient() {
     onReconnect: refresh,
   });
 
-  const receiptUrl = (item: BillingCounterItem) =>
-    item.receipt_token
-      ? `/bill/${encodeURIComponent(item.session_token)}?receipt=${encodeURIComponent(item.receipt_token)}`
-      : null;
-
   async function issue(item: BillingCounterItem, openPrint: boolean) {
     if (item.status !== "draft" || issuing.current.has(item.bill_number)) return;
     issuing.current.add(item.bill_number);
@@ -53,55 +49,23 @@ export default function BillingCounterClient() {
     try {
       const issued = await issueStaffBill(item.bill_number);
 
-      if (openPrint) {
-        // Attempt local OMLU Print Bridge direct print first
-        const bridge = await checkBridgeHealth();
-        if (bridge && bridge.printer_online && bridge.installation_id) {
-          try {
-            toast("Fetching receipt payload…", "information");
-            const payload = await getStaffBillReceiptPayload(item.bill_number);
+      if (openPrint && issued.receipt_token) {
+        toast("Printing bill…", "information");
+        const printRes = await printIssuedBill({
+          billNumber: item.bill_number,
+          sessionToken: item.session_token,
+          receiptToken: issued.receipt_token,
+        });
 
-            toast("Authorizing print job…", "information");
-            const authRes = await requestPrintBridgeToken("bill:print", bridge.installation_id, item.bill_number);
-
-            const jobId = `job_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-            const jobPayload = {
-              schema_version: "1.0" as const,
-              job_id: jobId,
-              idempotency_key: `idemp_${item.bill_number}_${Date.now()}`,
-              installation_id: bridge.installation_id,
-              tenant_id: bridge.tenant_id || "default",
-              bill_id: item.bill_number,
-              bill_number: item.bill_number,
-              receipt_type: "bill" as const,
-              receipt_data: payload,
-              copy_count: 1,
-              created_at: new Date().toISOString(),
-              expires_at: new Date(Date.now() + 300000).toISOString(),
-              retry_count: 0,
-              signed_token: authRes.token,
-            };
-
-            toast("Printing bill via OMLU Print Bridge…", "information");
-            const printRes = await sendPrintJobToBridge(jobPayload);
-            if (printRes.success) {
-              toast("Print complete", "success");
-            } else {
-              toast(printRes.error || "Bill issued, but printing failed.", "error");
-            }
-          } catch {
-            toast("Bill issued, but printing failed.", "error");
+        if (printRes.success) {
+          if (printRes.method === "bridge") {
+            toast("Print complete", "success");
           }
         } else {
-          // Fall back to system browser print dialog
-          const activeWin = window.open("", "_blank");
-          if (activeWin && issued.receipt_token) {
-            activeWin.location.replace(`/bill/${encodeURIComponent(item.session_token)}?receipt=${encodeURIComponent(issued.receipt_token)}`);
-            activeWin.addEventListener("load", () => activeWin.print(), { once: true });
-          } else {
-            toast("Bill issued. Open Print Bill to print.", "information");
-          }
+          toast("Bill issued, but printing failed.", "error");
         }
+      } else if (openPrint) {
+        toast("Bill issued, but printing failed.", "error");
       } else {
         toast("Bill issued.", "success");
       }
@@ -111,6 +75,31 @@ export default function BillingCounterClient() {
       toast(err instanceof Error ? err.message : "Bill could not be issued.", "error");
     } finally {
       issuing.current.delete(item.bill_number);
+      setBusy(null);
+    }
+  }
+
+  async function handleReprint(item: BillingCounterItem) {
+    if (!item.receipt_token || busy) return;
+    setBusy(item.bill_number);
+    try {
+      toast("Printing bill…", "information");
+      const printRes = await printIssuedBill({
+        billNumber: item.bill_number,
+        sessionToken: item.session_token,
+        receiptToken: item.receipt_token,
+      });
+
+      if (printRes.success) {
+        if (printRes.method === "bridge") {
+          toast("Print complete", "success");
+        }
+      } else {
+        toast(printRes.error || "Bill issued, but printing failed.", "error");
+      }
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Bill issued, but printing failed.", "error");
+    } finally {
       setBusy(null);
     }
   }
@@ -209,8 +198,8 @@ export default function BillingCounterClient() {
         <div className="flex justify-between gap-4"><div><p className="text-xs font-black uppercase text-orange-500">{item.status === "draft" ? "Bill requested" : item.status === "paid" ? "Paid" : "Awaiting payment"}</p><h2 className="text-xl font-black">Table {item.table_number}</h2><p className="text-xs">{item.invoice_number || item.bill_number}</p></div><p className="text-2xl font-black">{money(item.total_amount)}</p></div>
         <dl className="mt-4 grid grid-cols-2 gap-3 text-sm"><div><dt className="text-[var(--omlu-text-secondary)]">Items</dt><dd>{item.item_count}</dd></div><div><dt className="text-[var(--omlu-text-secondary)]">Requested</dt><dd>{new Date(item.requested_at).toLocaleString()}</dd></div><div><dt className="text-[var(--omlu-text-secondary)]">Subtotal</dt><dd>{money(item.subtotal)}</dd></div><div><dt className="text-[var(--omlu-text-secondary)]">GST / Tax</dt><dd>{money(item.tax_amount)}</dd></div></dl>
         {item.status === "draft" && <div className="mt-5 flex flex-wrap gap-2"><Link href={`/staff/tables/${item.table_id}`} className="rounded-xl border px-4 py-2 font-bold">Review Bill</Link><button disabled={busy === item.bill_number} onClick={() => void reopen(item)} className="rounded-xl border border-amber-600 px-4 py-2 font-bold text-amber-700 dark:text-amber-400 disabled:opacity-50">Reopen Ordering</button><button disabled={busy === item.bill_number} onClick={() => void issue(item, true)} className="rounded-xl bg-orange-600 px-4 py-2 font-black text-white disabled:opacity-50">Issue & Open Print</button><button disabled={busy === item.bill_number} onClick={() => void issue(item, false)} className="rounded-xl border px-4 py-2 font-bold disabled:opacity-50">Issue Without Printing</button></div>}
-        {(item.status === "issued" || item.status === "payment_pending") && <div className="mt-5 flex flex-col gap-3">{receiptUrl(item) && <Link href={receiptUrl(item)!} target="_blank" className="rounded-xl border px-4 py-2 text-center font-bold">{item.status === "issued" ? "Print Bill" : "Reprint Bill"}</Link>}<div className="grid grid-cols-2 gap-2">{(["counter_cash", "counter_upi"] as Method[]).map((method) => <button key={method} role="radio" aria-checked={methods[item.bill_number] === method} onClick={() => setMethods((current) => ({...current, [item.bill_number]: method}))} className="rounded-xl border px-3 py-2 font-bold">{method === "counter_cash" ? "Cash" : "UPI"}</button>)}</div><button disabled={!methods[item.bill_number] || busy === item.bill_number} onClick={() => void collect(item)} className="rounded-xl bg-emerald-700 px-4 py-3 font-black text-white disabled:opacity-50">Confirm Payment</button></div>}
-        {item.status === "paid" && <div className="mt-4 text-sm"><p>Method: {item.payment_method || "—"}</p><p>Paid: {item.paid_at ? new Date(item.paid_at).toLocaleString() : "—"}</p>{receiptUrl(item) && <Link href={receiptUrl(item)!} target="_blank" className="mt-3 inline-flex rounded-xl border px-4 py-2 font-bold">Print / Reprint Receipt</Link>}</div>}
+        {(item.status === "issued" || item.status === "payment_pending") && <div className="mt-5 flex flex-col gap-3">{item.receipt_token && <button disabled={busy === item.bill_number} onClick={() => void handleReprint(item)} className="rounded-xl border px-4 py-2 text-center font-bold disabled:opacity-50">{item.status === "issued" ? "Print Bill" : "Reprint Bill"}</button>}<div className="grid grid-cols-2 gap-2">{(["counter_cash", "counter_upi"] as Method[]).map((method) => <button key={method} role="radio" aria-checked={methods[item.bill_number] === method} onClick={() => setMethods((current) => ({...current, [item.bill_number]: method}))} className="rounded-xl border px-3 py-2 font-bold">{method === "counter_cash" ? "Cash" : "UPI"}</button>)}</div><button disabled={!methods[item.bill_number] || busy === item.bill_number} onClick={() => void collect(item)} className="rounded-xl bg-emerald-700 px-4 py-3 font-black text-white disabled:opacity-50">Confirm Payment</button></div>}
+        {item.status === "paid" && <div className="mt-4 text-sm"><p>Method: {item.payment_method || "—"}</p><p>Paid: {item.paid_at ? new Date(item.paid_at).toLocaleString() : "—"}</p>{item.receipt_token && <button disabled={busy === item.bill_number} onClick={() => void handleReprint(item)} className="mt-3 inline-flex rounded-xl border px-4 py-2 font-bold disabled:opacity-50">Print / Reprint Receipt</button>}</div>}
       </article>)}
     </div>}
   </div>;

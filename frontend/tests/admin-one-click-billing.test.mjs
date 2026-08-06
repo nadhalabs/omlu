@@ -14,9 +14,9 @@ test("web admin cashier path exposes one-click Issue & Open Print and Issue With
   assert.doesNotMatch(activeSessions, /Issue Without Printing/);
 });
 
-test("web admin popup blocking displays fallback notification", () => {
+test("web admin printing failure displays fallback notification", () => {
   const counter = read("app/admin/billing/BillingCounterClient.tsx");
-  assert.match(counter, /Bill issued\. Open Print Bill to print\./);
+  assert.match(counter, /Bill issued, but printing failed\./);
 });
 
 test("double-click on web admin issue action is ignored while pending", () => {
