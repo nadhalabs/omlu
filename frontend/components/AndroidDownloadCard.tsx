@@ -130,40 +130,21 @@ export function AndroidDownloadCard({ variant = "landing", dismissible = false, 
             <div className="mx-auto h-2 w-14 rounded-full bg-zinc-800" />
             
             {/* Phone Screen UI Preview */}
-            <div className="mt-3 flex flex-col gap-2 rounded-2xl bg-zinc-900/90 p-3 text-left">
-              {/* App Bar */}
-              <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
-                <div className="flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                  <span className="text-[11px] font-black text-white">OMLU Ops</span>
-                </div>
-                <span className="rounded bg-orange-600 px-1.5 py-0.5 text-[9px] font-black text-white">POS</span>
+            <div className="mt-4 flex flex-col items-center gap-3 text-center">
+              <span className="rounded-2xl bg-orange-600 p-3.5 text-white shadow-md">
+                <AndroidIcon className="h-8 w-8" />
+              </span>
+              <div>
+                <h3 className="text-base font-black text-white">OMLU Operations</h3>
+                <p className="mt-0.5 text-[10px] font-bold uppercase tracking-widest text-zinc-400">Android Application</p>
               </div>
 
-              {/* Live Table Badge Grid */}
-              <div className="grid grid-cols-2 gap-1.5">
-                <div className="rounded-lg bg-zinc-800 p-2 text-center">
-                  <div className="text-[10px] font-black text-zinc-300">Table 01</div>
-                  <div className="text-[9px] font-bold text-amber-400">Ordering</div>
-                </div>
-                <div className="rounded-lg bg-orange-500/20 border border-orange-500/40 p-2 text-center">
-                  <div className="text-[10px] font-black text-orange-400">Table 08</div>
-                  <div className="text-[9px] font-bold text-orange-300">Served</div>
-                </div>
-              </div>
-
-              {/* KDS Live Ticket snippet */}
-              <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-2 text-[10px]">
-                <div className="flex items-center justify-between font-black text-zinc-200">
-                  <span>Order #104</span>
-                  <span className="text-emerald-400">₹640</span>
-                </div>
-                <div className="mt-1 text-[9px] text-zinc-400">1× Butter Chicken, 2× Naan</div>
-              </div>
-
-              {/* Quick Action Button */}
-              <div className="mt-1 rounded-lg bg-orange-600 py-1.5 text-center text-[10px] font-black text-white shadow-xs">
-                + Quick Sale POS
+              {/* Module badges */}
+              <div className="mt-2 grid w-full grid-cols-2 gap-1.5 text-[10px] font-black">
+                <div className="rounded-lg bg-zinc-800 p-2 text-zinc-300">Tables</div>
+                <div className="rounded-lg bg-zinc-800 p-2 text-zinc-300">Kitchen KDS</div>
+                <div className="rounded-lg bg-zinc-800 p-2 text-zinc-300">Billing</div>
+                <div className="rounded-lg bg-orange-600/30 text-orange-400">Quick Sale POS</div>
               </div>
             </div>
 

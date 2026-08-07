@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { AndroidDownloadCard } from "@/components/AndroidDownloadCard";
 import { LandingThemeToggle } from "@/components/LandingThemeToggle";
-import { ConnectedOperationsDemo } from "@/components/ConnectedOperationsDemo";
+import { ConnectedOperations } from "@/components/ConnectedOperations";
 import { ConnectedWorkflow } from "@/components/ConnectedWorkflow";
 
 export default function Home() {
@@ -14,7 +14,7 @@ export default function Home() {
       </header>
 
       <main className="mx-auto flex w-full max-w-6xl flex-col gap-20 px-5 py-12 sm:px-8 sm:py-16">
-        {/* Hero Section & Live Operations Demo */}
+        {/* Hero Section & Connected Operations Module System */}
         <section className="grid gap-12 lg:grid-cols-[1fr_1.1fr] lg:items-center">
           <div className="max-w-2xl py-4 sm:py-6">
             <p className="omlu-animate-hero-1 mb-3 text-xs font-black uppercase tracking-[0.25em] text-orange-600">
@@ -48,13 +48,13 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Live Operations Software UI Demo */}
+          {/* Connected Restaurant Operations System */}
           <div className="w-full">
-            <ConnectedOperationsDemo />
+            <ConnectedOperations />
           </div>
         </section>
 
-        {/* Feature Grid Section with UI snippets & hover elevation */}
+        {/* Feature Grid Section with production-safe capability labels */}
         <section aria-labelledby="connected-system-title">
           <p className="text-xs font-black uppercase tracking-[0.2em] text-orange-600">
             ONE CONNECTED RESTAURANT SYSTEM
@@ -75,11 +75,10 @@ export default function Home() {
               <p className="mt-2 text-sm leading-6 text-[var(--omlu-text-secondary)]">
                 Customers scan their table QR, browse your live menu, and order directly from their phone.
               </p>
-              {/* Mini UI Snippet */}
               <div className="mt-4 rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] p-3 text-xs font-bold text-[var(--omlu-text-secondary)]">
                 <div className="flex items-center justify-between">
-                  <span>Menu • Table 08</span>
-                  <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-600">Scan & Order</span>
+                  <span>Guest Web Access</span>
+                  <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-[10px] font-black text-emerald-600">Scan & Order</span>
                 </div>
               </div>
             </div>
@@ -95,10 +94,9 @@ export default function Home() {
               <p className="mt-2 text-sm leading-6 text-[var(--omlu-text-secondary)]">
                 See which tables are available, ordering, active, waiting for a bill, or completed.
               </p>
-              {/* Mini UI Snippet */}
               <div className="mt-4 flex items-center justify-between rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] p-3 text-xs font-bold">
-                <span className="text-[var(--omlu-text-primary)]">T-01 Available</span>
-                <span className="rounded-full bg-orange-500/10 px-2 py-0.5 text-[10px] text-orange-600">T-08 Served</span>
+                <span className="text-[var(--omlu-text-primary)]">Table Management</span>
+                <span className="rounded-full bg-orange-500/10 px-2 py-0.5 text-[10px] font-black text-orange-600">Lifecycle View</span>
               </div>
             </div>
 
@@ -113,11 +111,10 @@ export default function Home() {
               <p className="mt-2 text-sm leading-6 text-[var(--omlu-text-secondary)]">
                 Orders move directly to your kitchen so your team can prepare and track them in real time.
               </p>
-              {/* Mini UI Snippet */}
               <div className="mt-4 rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] p-3 text-xs font-bold text-[var(--omlu-text-primary)]">
                 <div className="flex items-center justify-between">
-                  <span>KDS Ticket #104</span>
-                  <span className="text-orange-600">Preparing</span>
+                  <span>Kitchen Display System</span>
+                  <span className="text-orange-600 font-black">Direct Dispatch</span>
                 </div>
               </div>
             </div>
@@ -133,9 +130,8 @@ export default function Home() {
               <p className="mt-2 text-sm leading-6 text-[var(--omlu-text-secondary)]">
                 Give your team the access they need while owners and managers stay in control.
               </p>
-              {/* Mini UI Snippet */}
               <div className="mt-4 rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] p-3 text-xs font-bold text-[var(--omlu-text-secondary)]">
-                <span>Role: Waitstaff • Table Assist</span>
+                <span>Role-Based Operational Views</span>
               </div>
             </div>
 
@@ -150,10 +146,9 @@ export default function Home() {
               <p className="mt-2 text-sm leading-6 text-[var(--omlu-text-secondary)]">
                 Review orders, issue bills, print receipts, record payments, and complete the table from the same workflow.
               </p>
-              {/* Mini UI Snippet */}
               <div className="mt-4 flex items-center justify-between rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] p-3 text-xs font-bold">
-                <span className="text-[var(--omlu-text-primary)]">Bill #B-104 • GST Included</span>
-                <span className="text-emerald-600">Paid ✓</span>
+                <span className="text-[var(--omlu-text-primary)]">Orders & Receipts</span>
+                <span className="text-emerald-600 font-black">Payment Completion</span>
               </div>
             </div>
           </div>
