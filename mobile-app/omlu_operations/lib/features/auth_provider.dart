@@ -63,8 +63,10 @@ class AuthStateNotifier extends StateNotifier<AsyncValue<RoleSession?>> {
     state = const AsyncValue.loading();
     try {
       final session = await _repository.restore();
+      if (!mounted) return;
       state = AsyncValue.data(session);
     } catch (e, st) {
+      if (!mounted) return;
       state = AsyncValue.error(e, st);
     }
   }

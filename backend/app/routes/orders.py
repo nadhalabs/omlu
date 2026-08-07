@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, selectinload, joinedload
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from app.config import settings
 from app.database import get_db
 from app.models.restaurant import Restaurant
 from app.models.restaurant_table import RestaurantTable
@@ -48,20 +49,48 @@ from app.services.realtime import (
     table_channel,
 )
 
-router = APIRouter()
+import logging
 
-# Simple in-memory rate limiter: maximum 15 orders per 60 seconds per IP
+router = APIRouter()
+logger = logging.getLogger(__name__)
+
+# In-memory fallback rate limiter: maximum 15 orders per 60 seconds per IP
 order_rate_limit_records = defaultdict(list)
 
 
 def check_rate_limit(client_ip: str) -> bool:
     now = time.time()
-    order_rate_limit_records[client_ip] = [
-        t for t in order_rate_limit_records[client_ip] if now - t < 60
-    ]
-    if len(order_rate_limit_records[client_ip]) >= 15:
+    # 1. Try Redis sliding-window counter if configured
+    if settings.redis_url:
+        try:
+            import redis
+            r = redis.Redis.from_url(settings.redis_url, socket_timeout=1.0, socket_connect_timeout=1.0)
+            key = f"rate_limit:order:{client_ip}"
+            pipe = r.pipeline()
+            pipe.incr(key)
+            pipe.expire(key, 60)
+            count, _ = pipe.execute()
+            if count > 15:
+                return False
+            return True
+        except Exception as e:
+            logger.debug("Redis rate limit check fallback to in-memory: %s", e)
+
+    # 2. In-memory rate limiting with stale key pruning
+    timestamps = [t for t in order_rate_limit_records[client_ip] if now - t < 60]
+    if len(timestamps) >= 15:
+        order_rate_limit_records[client_ip] = timestamps
         return False
-    order_rate_limit_records[client_ip].append(now)
+
+    timestamps.append(now)
+    order_rate_limit_records[client_ip] = timestamps
+
+    # Periodic cleanup of empty or stale IP records to prevent unbounded memory growth
+    if len(order_rate_limit_records) > 200:
+        stale_keys = [ip for ip, ts in order_rate_limit_records.items() if not ts or all(now - t >= 60 for t in ts)]
+        for ip in stale_keys:
+            del order_rate_limit_records[ip]
+
     return True
 
 

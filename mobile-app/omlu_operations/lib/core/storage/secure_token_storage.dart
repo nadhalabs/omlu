@@ -56,6 +56,12 @@ class SecureTokenStorage implements TokenStorage {
       throw const StoredSessionRecoveryException(
         'Saved session format was outdated. Please sign in again.',
       );
+    } catch (_) {
+      // Unknown/unrelated storage failure: do NOT delete valid credentials.
+      // Throw controlled error so no raw exception reaches UI.
+      throw const StoredSessionRecoveryException(
+        'Unable to access saved session. Please sign in again.',
+      );
     }
   }
 
