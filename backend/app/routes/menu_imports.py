@@ -6,8 +6,9 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
-from app.database import get_db
+from app.database import get_db, SessionLocal
 from app.models.menu import MenuCategory, MenuItem, MenuItemOptionGroup, MenuOption, MenuOptionGroup
 from app.models.menu_import import MenuImportDraftItem, MenuImportJob
 from app.models.staff_user import StaffUser
@@ -86,37 +87,46 @@ def serialize_job(job: MenuImportJob, db: Session) -> dict:
     }
 
 
-@router.post("", response_model=MenuImportResponse, dependencies=[admin_access])
-async def create_menu_import(
-    images: Annotated[list[UploadFile], File()],
-    current_user: StaffUser = Depends(get_current_staff_user),
-    db: Session = Depends(get_db),
-):
-    if not images:
-        raise HTTPException(400, "Upload at least one menu image")
-    if len(images) > MAX_IMAGES:
-        raise HTTPException(400, f"Maximum {MAX_IMAGES} images allowed")
+# ---------------------------------------------------------------------------
+# Sync DB helpers for create_menu_import.
+# Each creates/closes its own SessionLocal() inside the worker thread.
+# No live ORM objects are returned to the async layer.
+# ---------------------------------------------------------------------------
 
-    prepared = []
-    for image in images:
-        if image.content_type not in ALLOWED_TYPES:
-            raise HTTPException(400, f"{image.filename}: unsupported file type")
-        content = await image.read(MAX_FILE_SIZE + 1)
-        if len(content) > MAX_FILE_SIZE:
-            raise HTTPException(400, f"{image.filename}: file is too large")
-        prepared.append({"mime_type": image.content_type, "content": content})
+def _create_import_job_sync(restaurant_id: int, created_by: int) -> UUID:
+    """Phase 1: create and commit the import job row, return only job_id.
 
-    job = MenuImportJob(
-        restaurant_id=current_user.restaurant_id,
-        created_by=current_user.id,
-        status="processing",
-    )
-    db.add(job)
-    db.commit()
-    db.refresh(job)
-
+    The session is fully closed before returning so no DB connection is held
+    during the subsequent extract_menu() LLM round-trip.
+    """
+    db = SessionLocal()
     try:
-        extraction = await extract_menu(prepared)
+        job = MenuImportJob(
+            restaurant_id=restaurant_id,
+            created_by=created_by,
+            status="processing",
+        )
+        db.add(job)
+        db.commit()
+        db.refresh(job)
+        return job.id
+    finally:
+        db.close()
+
+
+def _persist_extraction_and_serialize_sync(job_id: UUID, extraction) -> dict:
+    """Phase 3: persist extraction results and serialize to a plain dict.
+
+    Opens a fresh session; reloads the job by job_id. The ORM job object
+    from phase 1 is never used here — only the scalar job_id crosses the
+    extraction boundary.
+    """
+    db = SessionLocal()
+    try:
+        job = db.query(MenuImportJob).filter(MenuImportJob.id == job_id).first()
+        if job is None:
+            raise RuntimeError(f"MenuImportJob {job_id} not found after extraction")
+
         job.original_result = extraction.model_dump(mode="json")
         for category in extraction.categories:
             for item in category.items:
@@ -156,15 +166,78 @@ async def create_menu_import(
         job.status = "review_required"
         db.commit()
         db.refresh(job)
+        # serialize_job returns a plain dict; no ORM objects leave this function.
         return serialize_job(job, db)
-    except Exception as exc:
-        db.rollback()
-        failed_job = db.query(MenuImportJob).filter(MenuImportJob.id == job.id).first()
+    finally:
+        db.close()
+
+
+def _mark_import_failed_sync(job_id: UUID, exc: Exception) -> None:
+    """Failure path: open a fresh session, reload by job_id, persist failure state.
+
+    Preserves the real error class name so log context is not lost.
+    """
+    db = SessionLocal()
+    try:
+        failed_job = db.query(MenuImportJob).filter(MenuImportJob.id == job_id).first()
         if failed_job:
             failed_job.status = "failed"
             failed_job.error_message = "Menu scan failed. Please try again."
             db.commit()
-        logger.exception("event=menu_scan_failure job_id=%s error_type=%s", job.id, exc.__class__.__name__)
+    finally:
+        db.close()
+
+
+@router.post("", response_model=MenuImportResponse, dependencies=[admin_access])
+async def create_menu_import(
+    images: Annotated[list[UploadFile], File()],
+    current_user: StaffUser = Depends(get_current_staff_user),
+):
+    """
+    Import a menu from uploaded images using LLM extraction.
+
+    Session lifecycle:
+      1. Threadpool: create job → commit → get job_id → close session.
+      2. Async: await extract_menu() — no DB connection held during LLM call.
+      3. Threadpool: reload job by job_id → persist extraction → serialize → close session.
+      Failure: Threadpool: reload job by job_id → mark failed → close session.
+    """
+    if not images:
+        raise HTTPException(400, "Upload at least one menu image")
+    if len(images) > MAX_IMAGES:
+        raise HTTPException(400, f"Maximum {MAX_IMAGES} images allowed")
+
+    prepared = []
+    for image in images:
+        if image.content_type not in ALLOWED_TYPES:
+            raise HTTPException(400, f"{image.filename}: unsupported file type")
+        content = await image.read(MAX_FILE_SIZE + 1)
+        if len(content) > MAX_FILE_SIZE:
+            raise HTTPException(400, f"{image.filename}: file is too large")
+        prepared.append({"mime_type": image.content_type, "content": content})
+
+    # Phase 1: create job record; session is closed before the LLM call.
+    job_id: UUID = await run_in_threadpool(
+        _create_import_job_sync,
+        current_user.restaurant_id,
+        current_user.id,
+    )
+
+    try:
+        # Phase 2: async LLM extraction — no DB session held during this await.
+        extraction = await extract_menu(prepared)
+
+        # Phase 3: persist results using a fresh session.
+        result: dict = await run_in_threadpool(
+            _persist_extraction_and_serialize_sync,
+            job_id,
+            extraction,
+        )
+        return result
+    except Exception as exc:
+        # Failure path: fresh session, reload by job_id, persist failure state.
+        await run_in_threadpool(_mark_import_failed_sync, job_id, exc)
+        logger.exception("event=menu_scan_failure job_id=%s error_type=%s", job_id, exc.__class__.__name__)
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, "Menu scan failed. Please try again.") from exc
 
 

@@ -8,8 +8,9 @@ from collections import defaultdict
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, or_, and_, text
+from starlette.concurrency import run_in_threadpool
 
-from app.database import get_db
+from app.database import get_db, SessionLocal
 from app.config import settings
 from app.models.restaurant import Restaurant
 from app.models.restaurant_table import RestaurantTable
@@ -187,70 +188,106 @@ def platform_me(ctx: PlatformContext = Depends(get_platform_context)):
 
 # --- OMLU OBSERVABILITY OVERVIEW ---
 
+def _compute_overview_sync(
+    days: int,
+    restaurant_id: Optional[int],
+    now: datetime.datetime,
+) -> dict:
+    """Run all synchronous DB analytics work inside a worker thread.
+
+    Creates and closes its own SessionLocal(). Returns a plain dict of all
+    DB-derived metrics; no ORM objects escape this function.
+    Sequential DB access only — must not be called concurrently with the
+    same session.
+    """
+    db = SessionLocal()
+    try:
+        r_query = db.query(Restaurant)
+        if restaurant_id:
+            r_query = r_query.filter(Restaurant.id == restaurant_id)
+        restaurants = r_query.all()
+
+        total_restaurants = len(restaurants)
+        active_restaurants = sum(1 for r in restaurants if r.is_active)
+        health_counts: dict = defaultdict(int)
+        attention_restaurants = []
+
+        for r in restaurants:
+            h = evaluate_restaurant_health(db, r, now=now)
+            health_counts[h["status"]] += 1
+            if h["status"] in {"Attention Required", "Critical Inconsistency"}:
+                attention_restaurants.append({
+                    "restaurant_id": r.id,
+                    "restaurant_name": r.name,
+                    "status": h["status"],
+                    "reasons": h["reasons"],
+                })
+
+        # Operational metrics — all synchronous, use the same session sequentially.
+        stuck_issues = detect_stuck_sessions(db, restaurant_id=restaurant_id, now=now)
+        duplicate_violations = service_detect_duplicate_active_sessions(db)
+        separated_billing = calculate_separated_billing_metrics(db, days=days, restaurant_id=restaurant_id, now=now)
+        visualizations = generate_operational_visualizations(db, days=days, restaurant_id=restaurant_id, now=now)
+        insights = generate_plain_language_insights(db, restaurant_id=restaurant_id, days=days, now=now)
+
+        # Determine Overall Platform Operational Status
+        platform_status = "Healthy"
+        if len(duplicate_violations) > 0 or health_counts["Critical Inconsistency"] > 0:
+            platform_status = "Critical Inconsistency Detected"
+        elif health_counts["Attention Required"] > 0 or len(stuck_issues) > 0:
+            platform_status = "Operational Attention Required"
+
+        return {
+            "now_iso": now.isoformat(),
+            "platform_status": platform_status,
+            "total_restaurants": total_restaurants,
+            "active_restaurants": active_restaurants,
+            "health_counts": dict(health_counts),
+            "stuck_issues": stuck_issues,
+            "duplicate_violations": duplicate_violations,
+            "separated_billing": separated_billing,
+            "visualizations": visualizations,
+            "insights": insights,
+            "attention_restaurants": attention_restaurants,
+        }
+    finally:
+        db.close()
+
+
 @router.get("/overview")
 async def platform_overview(
     days: int = Query(default=1, ge=1, le=90),
     restaurant_id: Optional[int] = Query(default=None),
     ctx: PlatformContext = Depends(get_platform_context),
-    db: Session = Depends(get_db)
 ):
     now = datetime.datetime.now(datetime.timezone.utc)
-    period_start = now - datetime.timedelta(days=days)
 
-    r_query = db.query(Restaurant)
-    if restaurant_id:
-        r_query = r_query.filter(Restaurant.id == restaurant_id)
-    restaurants = r_query.all()
+    # Offload all synchronous DB work to the threadpool; session is created/closed
+    # inside the helper — no session is held across the await.
+    sync_data = await run_in_threadpool(_compute_overview_sync, days, restaurant_id, now)
 
-    total_restaurants = len(restaurants)
-    active_restaurants = sum(1 for r in restaurants if r.is_active)
-    health_counts = defaultdict(int)
-    attention_restaurants = []
-
-    for r in restaurants:
-        h = evaluate_restaurant_health(db, r, now=now)
-        health_counts[h["status"]] += 1
-        if h["status"] in {"Attention Required", "Critical Inconsistency"}:
-            attention_restaurants.append({
-                "restaurant_id": r.id,
-                "restaurant_name": r.name,
-                "status": h["status"],
-                "reasons": h["reasons"],
-            })
-
-    # Operational metrics
-    stuck_issues = detect_stuck_sessions(db, restaurant_id=restaurant_id, now=now)
-    duplicate_violations = service_detect_duplicate_active_sessions(db)
-    separated_billing = calculate_separated_billing_metrics(db, days=days, restaurant_id=restaurant_id, now=now)
-    visualizations = generate_operational_visualizations(db, days=days, restaurant_id=restaurant_id, now=now)
-    coverage = monitoring_coverage_metadata()
-    realtime_snap = realtime_metrics_snapshot()
+    # check_redis_health is already async; call it on the event loop.
     redis_health = await check_redis_health()
-    insights = generate_plain_language_insights(db, restaurant_id=restaurant_id, days=days, now=now)
+    realtime_snap = realtime_metrics_snapshot()
+    coverage = monitoring_coverage_metadata()
 
-    # Determine Overall Platform Operational Status
-    platform_status = "Healthy"
-    if len(duplicate_violations) > 0 or health_counts["Critical Inconsistency"] > 0:
-        platform_status = "Critical Inconsistency Detected"
-    elif health_counts["Attention Required"] > 0 or len(stuck_issues) > 0:
-        platform_status = "Operational Attention Required"
-
+    separated_billing = sync_data["separated_billing"]
     return {
         "metadata": {
-            "refreshed_at": now.isoformat(),
+            "refreshed_at": sync_data["now_iso"],
             "period_days": days,
             "scope": f"Restaurant {restaurant_id}" if restaurant_id else "All Platform Restaurants",
             "timezone_normalized": "UTC / Restaurant Local",
         },
-        "platform_status": platform_status,
+        "platform_status": sync_data["platform_status"],
         "kpis": {
-            "total_restaurants": total_restaurants,
-            "total_restaurants_monitored": total_restaurants,
-            "active_restaurants": active_restaurants,
-            "restaurants_healthy": health_counts["Healthy"],
-            "restaurants_requiring_attention": len(attention_restaurants),
-            "stuck_sessions_count": len(stuck_issues),
-            "duplicate_active_sessions_count": len(duplicate_violations),
+            "total_restaurants": sync_data["total_restaurants"],
+            "total_restaurants_monitored": sync_data["total_restaurants"],
+            "active_restaurants": sync_data["active_restaurants"],
+            "restaurants_healthy": sync_data["health_counts"].get("Healthy", 0),
+            "restaurants_requiring_attention": len(sync_data["attention_restaurants"]),
+            "stuck_sessions_count": len(sync_data["stuck_issues"]),
+            "duplicate_active_sessions_count": len(sync_data["duplicate_violations"]),
             "billing_initiation_rate_pct": separated_billing["billing_initiation_rate"]["rate_pct"],
             "billing_completion_rate_pct": separated_billing["billing_completion_rate"]["rate_pct"],
             "post_payment_closure_rate_pct": separated_billing["post_payment_closure_rate"]["rate_pct"],
@@ -263,12 +300,12 @@ async def platform_overview(
             "broker_status": redis_health["broker_status"],
             "mode": "live_websocket" if redis_health["broker_status"] == "healthy" else "polling_fallback",
         },
-        "health_summary": dict(health_counts),
-        "operational_attention_panel": stuck_issues[:10],
-        "duplicate_active_sessions_panel": duplicate_violations[:10],
-        "visualizations": visualizations,
+        "health_summary": sync_data["health_counts"],
+        "operational_attention_panel": sync_data["stuck_issues"][:10],
+        "duplicate_active_sessions_panel": sync_data["duplicate_violations"][:10],
+        "visualizations": sync_data["visualizations"],
         "monitoring_coverage": coverage,
-        "plain_language_insights": insights,
+        "plain_language_insights": sync_data["insights"],
     }
 
 
@@ -531,17 +568,30 @@ def platform_stale_session_close(
 
 # --- SYSTEM TELEMETRY & HEALTH ---
 
+def _check_db_health_sync() -> str:
+    """Execute SELECT 1 inside a worker thread to avoid blocking the event loop.
+
+    Creates and closes its own SessionLocal(). Returns 'healthy' or 'unavailable'.
+    """
+    db = SessionLocal()
+    try:
+        db.execute(text("SELECT 1"))
+        return "healthy"
+    except Exception:
+        return "unavailable"
+    finally:
+        db.close()
+
+
 @router.get("/system-health")
 async def platform_system_health(
     ctx: PlatformContext = Depends(get_platform_context),
-    db: Session = Depends(get_db)
 ):
     now = datetime.datetime.now(datetime.timezone.utc)
-    db_status = "healthy"
-    try:
-        db.execute(text("SELECT 1"))
-    except Exception:
-        db_status = "unavailable"
+
+    # Offload the synchronous SELECT 1 to the threadpool; session is
+    # created/closed inside the helper — not held across the await.
+    db_status = await run_in_threadpool(_check_db_health_sync)
 
     redis_health = await check_redis_health()
     redis_status = redis_health["redis_status"]

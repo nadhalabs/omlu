@@ -4,12 +4,16 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+from starlette.concurrency import run_in_threadpool
 
-from app.database import get_db
+from app.database import get_db, SessionLocal
 from app.services.push_notifications import push_health
 from app.services.realtime import realtime_metrics_snapshot
 from app.services.redis_health import check_redis_health
 from app.config import settings
+
+# NOTE: `Session`, `Depends`, `get_db` are kept for the synchronous
+# `database_health_check` route which uses FastAPI dependency injection.
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -40,6 +44,21 @@ def database_health_check(db: Session = Depends(get_db)):
         )
 
 
+def _check_pg_sync() -> str:
+    """Execute SELECT 1 inside a worker thread to avoid blocking the event loop.
+
+    Creates and closes its own SessionLocal(). Returns 'healthy' or 'unavailable'.
+    """
+    db = SessionLocal()
+    try:
+        db.execute(text("SELECT 1"))
+        return "healthy"
+    except Exception:
+        return "unavailable"
+    finally:
+        db.close()
+
+
 @router.get("/health/realtime")
 async def realtime_health_check():
     redis_health = await check_redis_health()
@@ -61,7 +80,7 @@ async def realtime_health_check():
 
 
 @router.get("/health/ready")
-async def readiness_check(db: Session = Depends(get_db)):
+async def readiness_check():
     """
     Readiness check.
 
@@ -81,20 +100,18 @@ async def readiness_check(db: Session = Depends(get_db)):
     """
     checks: dict[str, str] = {"api": "healthy"}
 
-    # ── PostgreSQL ─────────────────────────────────────────────────────────────
-    try:
-        db.execute(text("SELECT 1"))
-        checks["postgresql"] = "healthy"
-    except Exception:
-        checks["postgresql"] = "unavailable"
+    # ── PostgreSQL ───────────────────────────────────────────────────────────────────────────
+    # Offload the synchronous SELECT 1 to the threadpool; session is
+    # created/closed inside the helper — not held across the await.
+    checks["postgresql"] = await run_in_threadpool(_check_pg_sync)
 
-    # ── Redis & Realtime ──────────────────────────────────────────────────────
+    # ── Redis & Realtime ───────────────────────────────────────────────────────────────────────
     redis_health = await check_redis_health()
     checks["redis"] = redis_health["redis_status"]          # explicit 4-state
     checks["realtime"] = redis_health["broker_status"]      # explicit 4-state
     checks["push"] = push_health()["status"]
 
-    # ── Readiness decision ────────────────────────────────────────────────────
+    # ── Readiness decision ──────────────────────────────────────────────────────────────────────────────
     requires_redis = (
         settings.app_environment == "production" or settings.require_redis
     )
@@ -121,9 +138,9 @@ async def readiness_check(db: Session = Depends(get_db)):
 
 
 @router.get("/ready")
-async def ready(db: Session = Depends(get_db)):
+async def ready():
     """Render-compatible readiness alias with dependency checks."""
-    return await readiness_check(db)
+    return await readiness_check()
 
 
 @router.get("/metrics/realtime")

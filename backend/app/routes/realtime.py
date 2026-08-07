@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session, joinedload
+from starlette.concurrency import run_in_threadpool
 
 from app.config import settings
 from app.database import SessionLocal
@@ -183,6 +184,23 @@ async def _release_connection(websocket: WebSocket, limit_key: str) -> None:
         record_connection_closed()
 
 
+def _check_participant_valid_sync(participant_token: str, participant_session_token: str) -> bool:
+    """Sync helper: validates participant token inside a worker thread.
+
+    Creates and closes its own SessionLocal(). Must not be called concurrently
+    with any other operation on the same session — each call owns its session.
+    Returns True if the participant is still valid, False if revoked/expired.
+    """
+    db = SessionLocal()
+    try:
+        load_participant(db, participant_token, session_token=participant_session_token)
+        return True
+    except HTTPException:
+        return False
+    finally:
+        db.close()
+
+
 async def _event_loop(
     websocket: WebSocket,
     channels: set[str],
@@ -231,19 +249,21 @@ async def _event_loop(
                     continue
                 if staff_authority and (
                     not staff_token
-                    or not _is_current_staff_authority(staff_token, staff_authority)
+                    # _is_current_staff_authority opens/closes its own SessionLocal internally;
+                    # sequential call here — must not be used concurrently.
+                    or not await run_in_threadpool(_is_current_staff_authority, staff_token, staff_authority)
                 ):
                     await websocket.close(code=1008)
                     break
                 participant_is_current = True
                 if participant_token and participant_session_token:
-                    authority_db = SessionLocal()
-                    try:
-                        load_participant(authority_db, participant_token, session_token=participant_session_token)
-                    except HTTPException:
-                        participant_is_current = False
-                    finally:
-                        authority_db.close()
+                    # _check_participant_valid_sync opens/closes its own SessionLocal;
+                    # sequential call — same session must not be shared concurrently.
+                    participant_is_current = await run_in_threadpool(
+                        _check_participant_valid_sync,
+                        participant_token,
+                        participant_session_token,
+                    )
                 terminal_session_event = (
                     not participant_is_current
                     and event.type in {EVENT_BILL_PAID, EVENT_SESSION_FORCE_CLOSED}
@@ -265,7 +285,8 @@ async def _event_loop(
             else:
                 if staff_authority and (
                     not staff_token
-                    or not _is_current_staff_authority(staff_token, staff_authority)
+                    # Sequential threadpool call for heartbeat revalidation.
+                    or not await run_in_threadpool(_is_current_staff_authority, staff_token, staff_authority)
                 ):
                     await websocket.close(code=1008)
                     break
@@ -278,21 +299,30 @@ async def _event_loop(
         await _release_connection(websocket, limit_key)
 
 
-@router.websocket("/ws/staff")
-async def staff_realtime(websocket: WebSocket):
-    token = websocket.query_params.get("token")
-    requested = websocket.query_params.get("channel", "operations")
+# ---------------------------------------------------------------------------
+# Sync handshake helpers — each creates/closes its own SessionLocal().
+# Returns plain data only (frozen dataclass, sets of strings, scalars).
+# No live ORM objects are returned to the async layer.
+# ---------------------------------------------------------------------------
+
+def _staff_handshake_sync(
+    token: str | None,
+    requested: str,
+) -> tuple[StaffConnectionAuthority, set[str]] | None:
+    """Validates staff token and builds channel set inside a worker thread.
+
+    Opens its own SessionLocal(); closes it in finally.
+    Returns (authority, channels) on success, None on any auth failure.
+    """
     db = SessionLocal()
     try:
         context = _staff_context_from_token(db, token)
         if context is None:
-            await websocket.close(code=1008)
-            return
+            return None
         if requested not in ROLE_CHANNELS.get(context.scope.role, set()):
-            await websocket.close(code=1008)
-            return
+            return None
         authority = _connection_authority(context, requested)
-        channels = {
+        channels: set[str] = {
             restaurant_channel(authority.restaurant_id, requested),
             authority_actor_channel(authority.actor_id),
             authority_session_channel(authority.session_key),
@@ -300,8 +330,124 @@ async def staff_realtime(websocket: WebSocket):
         }
         if authority.role != "kitchen":
             channels.add(restaurant_channel(authority.restaurant_id, "operations"))
+        # StaffConnectionAuthority is a frozen dataclass (plain data); channels is a set of strings.
+        return authority, channels
     finally:
         db.close()
+
+
+def _session_handshake_sync(
+    session_token: str,
+    participant_token: str | None,
+) -> tuple[set[str], str] | None:
+    """Validates dining session and participant token inside a worker thread.
+
+    Opens its own SessionLocal(); closes it in finally.
+    Returns (channels, participant_public_id) on success, None on any failure.
+    Preserves exact rejection semantics: missing participant_token → None,
+    inactive session → None, invalid participant → None.
+    """
+    db = SessionLocal()
+    try:
+        session = db.query(DiningSession).filter(DiningSession.public_token == session_token).first()
+        if not session or session.status not in ACTIVE_DINING_SESSION_STATUSES:
+            return None
+        if not participant_token:
+            return None
+        try:
+            participant = load_participant(db, participant_token, session_token=session_token)
+        except HTTPException:
+            return None
+        channels: set[str] = {session_channel(session.public_token)}
+        # Return only plain scalars — no ORM objects.
+        return channels, participant.public_id
+    finally:
+        db.close()
+
+
+def _menu_handshake_sync(
+    restaurant_slug: str,
+    table_code: str,
+) -> tuple[set[str], str] | None:
+    """Validates restaurant slug and table code inside a worker thread.
+
+    Opens its own SessionLocal(); closes it in finally.
+    Returns (channels, limit_key) on success, None if restaurant or table not found.
+    """
+    db = SessionLocal()
+    try:
+        restaurant = db.query(Restaurant).filter(
+            Restaurant.slug == restaurant_slug,
+            Restaurant.is_active == True,
+        ).first()
+        if not restaurant:
+            return None
+        table = db.query(RestaurantTable).filter(
+            RestaurantTable.restaurant_id == restaurant.id,
+            RestaurantTable.table_code == table_code,
+            RestaurantTable.is_active == True,
+        ).first()
+        if not table:
+            return None
+        channels: set[str] = {public_menu_channel(restaurant.id), table_channel(restaurant.id, table.id)}
+        limit_key = f"menu:{restaurant.id}:{table.id}"
+        # Return only plain scalars — no ORM objects.
+        return channels, limit_key
+    finally:
+        db.close()
+
+
+def _order_handshake_sync(
+    public_token: str,
+    participant_token: str | None,
+) -> tuple[set[str], str | None, str] | None:
+    """Validates order public token and participant inside a worker thread.
+
+    Opens its own SessionLocal(); closes it in finally.
+    Returns (channels, participant_session_token, limit_key) on success.
+    Returns None on any failure.
+    Preserves exact rejection semantics: order not found → None,
+    session-linked order with no participant_token → None,
+    invalid participant → None.
+    """
+    db = SessionLocal()
+    try:
+        order = db.query(Order).options(joinedload(Order.dining_session)).filter(Order.public_token == public_token).first()
+        if not order:
+            return None
+        participant_session_token: str | None = None
+        if order.dining_session:
+            if not participant_token:
+                return None
+            try:
+                load_participant(db, participant_token, session_token=order.dining_session.public_token)
+            except HTTPException:
+                return None
+            participant_session_token = order.dining_session.public_token
+        channels: set[str] = {order_channel(order.public_token)}
+        if order.dining_session:
+            channels.add(session_channel(order.dining_session.public_token))
+        limit_key = f"order:{public_token}"
+        # Return only plain scalars/strings — no ORM objects.
+        return channels, participant_session_token, limit_key
+    finally:
+        db.close()
+
+
+# ---------------------------------------------------------------------------
+# WebSocket route handlers
+# ---------------------------------------------------------------------------
+
+@router.websocket("/ws/staff")
+async def staff_realtime(websocket: WebSocket):
+    token = websocket.query_params.get("token")
+    requested = websocket.query_params.get("channel", "operations")
+    # Offload sync DB work to threadpool; session is created/closed inside the helper.
+    result = await run_in_threadpool(_staff_handshake_sync, token, requested)
+    if result is None:
+        await websocket.close(code=1008)
+        return
+    authority, channels = result
     await _event_loop(
         websocket,
         channels,
@@ -314,28 +460,17 @@ async def staff_realtime(websocket: WebSocket):
 
 @router.websocket("/ws/public/sessions/{session_token}")
 async def public_session_realtime(websocket: WebSocket, session_token: str, participant_token: str | None = None):
-    db = SessionLocal()
-    try:
-        session = db.query(DiningSession).filter(DiningSession.public_token == session_token).first()
-        if not session or session.status not in ACTIVE_DINING_SESSION_STATUSES:
-            await websocket.close(code=1008)
-            return
-        if not participant_token:
-            await websocket.close(code=1008)
-            return
-        try:
-            participant = load_participant(db, participant_token, session_token=session_token)
-        except HTTPException:
-            await websocket.close(code=1008)
-            return
-        channels = {session_channel(session.public_token)}
-    finally:
-        db.close()
+    # Offload sync DB work to threadpool; session is created/closed inside the helper.
+    result = await run_in_threadpool(_session_handshake_sync, session_token, participant_token)
+    if result is None:
+        await websocket.close(code=1008)
+        return
+    channels, participant_public_id = result
     await _event_loop(
         websocket,
         channels,
         include_restaurant_id=False,
-        limit_key=f"participant:{participant.public_id}",
+        limit_key=f"participant:{participant_public_id}",
         participant_token=participant_token,
         participant_session_token=session_token,
     )
@@ -343,58 +478,28 @@ async def public_session_realtime(websocket: WebSocket, session_token: str, part
 
 @router.websocket("/ws/public/restaurants/{restaurant_slug}/tables/{table_code}/menu")
 async def public_menu_realtime(websocket: WebSocket, restaurant_slug: str, table_code: str):
-    db = SessionLocal()
-    try:
-        restaurant = db.query(Restaurant).filter(
-            Restaurant.slug == restaurant_slug,
-            Restaurant.is_active == True,
-        ).first()
-        if not restaurant:
-            await websocket.close(code=1008)
-            return
-        table = db.query(RestaurantTable).filter(
-            RestaurantTable.restaurant_id == restaurant.id,
-            RestaurantTable.table_code == table_code,
-            RestaurantTable.is_active == True,
-        ).first()
-        if not table:
-            await websocket.close(code=1008)
-            return
-        channels = {public_menu_channel(restaurant.id), table_channel(restaurant.id, table.id)}
-    finally:
-        db.close()
-    await _event_loop(websocket, channels, include_restaurant_id=False, limit_key=f"menu:{restaurant.id}:{table.id}")
+    # Offload sync DB work to threadpool; session is created/closed inside the helper.
+    result = await run_in_threadpool(_menu_handshake_sync, restaurant_slug, table_code)
+    if result is None:
+        await websocket.close(code=1008)
+        return
+    channels, limit_key = result
+    await _event_loop(websocket, channels, include_restaurant_id=False, limit_key=limit_key)
 
 
 @router.websocket("/ws/public/orders/{public_token}")
 async def public_order_realtime(websocket: WebSocket, public_token: str, participant_token: str | None = None):
-    db = SessionLocal()
-    try:
-        order = db.query(Order).options(joinedload(Order.dining_session)).filter(Order.public_token == public_token).first()
-        if not order:
-            await websocket.close(code=1008)
-            return
-        participant_session_token = None
-        if order.dining_session:
-            if not participant_token:
-                await websocket.close(code=1008)
-                return
-            try:
-                load_participant(db, participant_token, session_token=order.dining_session.public_token)
-            except HTTPException:
-                await websocket.close(code=1008)
-                return
-            participant_session_token = order.dining_session.public_token
-        channels = {order_channel(order.public_token)}
-        if order.dining_session:
-            channels.add(session_channel(order.dining_session.public_token))
-    finally:
-        db.close()
+    # Offload sync DB work to threadpool; session is created/closed inside the helper.
+    result = await run_in_threadpool(_order_handshake_sync, public_token, participant_token)
+    if result is None:
+        await websocket.close(code=1008)
+        return
+    channels, participant_session_token, limit_key = result
     await _event_loop(
         websocket,
         channels,
         include_restaurant_id=False,
-        limit_key=f"order:{public_token}",
+        limit_key=limit_key,
         participant_token=participant_token if participant_session_token else None,
         participant_session_token=participant_session_token,
     )
