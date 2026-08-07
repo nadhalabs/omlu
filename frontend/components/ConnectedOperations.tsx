@@ -72,18 +72,18 @@ const MODULES = [
 export function ConnectedOperations() {
   return (
     <div
-      className="relative overflow-hidden rounded-3xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-6 shadow-xl transition-all duration-300 sm:p-8"
-      aria-label="Connected Restaurant Operations"
+      className="rounded-2xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-6 sm:p-8"
+      aria-label="Connected Restaurant Operations System"
     >
       {/* Header */}
       <div className="flex flex-col gap-2 border-b border-[var(--omlu-border)] pb-5 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h3 className="text-lg font-black tracking-tight text-[var(--omlu-text-primary)]">Connected Restaurant Operations</h3>
-          <p className="text-xs font-semibold text-[var(--omlu-text-secondary)]">Six core modules synchronized across one platform</p>
+          <h3 className="text-xl font-black tracking-tight text-[var(--omlu-text-primary)]">Connected Restaurant Operations</h3>
+          <p className="text-xs font-medium text-[var(--omlu-text-secondary)]">Six core modules synchronized across one unified platform</p>
         </div>
-        <span className="inline-flex items-center gap-1.5 self-start sm:self-auto rounded-full bg-orange-500/10 px-3 py-1 text-xs font-black text-orange-600">
+        <span className="inline-flex items-center gap-1.5 self-start sm:self-auto rounded-md bg-orange-500/10 px-2.5 py-1 text-xs font-bold text-orange-600">
           <span className="h-1.5 w-1.5 rounded-full bg-orange-500" />
-          Unified Architecture
+          System Architecture
         </span>
       </div>
 
@@ -92,23 +92,22 @@ export function ConnectedOperations() {
         {MODULES.map((mod, idx) => (
           <div
             key={mod.id}
-            className="group relative flex flex-col justify-between rounded-2xl border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] p-5 transition-all duration-300 hover:-translate-y-1 hover:border-orange-500/40 hover:shadow-md"
+            className="group flex flex-col justify-between rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] p-5 transition-colors duration-200 hover:border-[var(--omlu-border-strong)]"
           >
             <div>
               <div className="flex items-center justify-between">
-                <div className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-orange-500/10 text-orange-600 transition-transform duration-300 group-hover:scale-110">
+                <div className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-orange-500/10 text-orange-600">
                   {mod.icon}
                 </div>
-                <span className="text-[10px] font-black uppercase tracking-wider text-[var(--omlu-text-secondary)]">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--omlu-text-secondary)]">
                   {mod.badge}
                 </span>
               </div>
-              <h4 className="mt-3 text-base font-black text-[var(--omlu-text-primary)]">{mod.title}</h4>
+              <h4 className="mt-3 text-sm font-black text-[var(--omlu-text-primary)]">{mod.title}</h4>
               <p className="mt-1 text-xs leading-5 text-[var(--omlu-text-secondary)]">{mod.desc}</p>
             </div>
 
-            {/* Connecting flow indicator */}
-            <div className="mt-4 flex items-center gap-1.5 text-[11px] font-bold text-orange-600 opacity-80 group-hover:opacity-100">
+            <div className="mt-4 flex items-center gap-1.5 text-[11px] font-bold text-orange-600">
               <span>Step {idx + 1}</span>
               <span aria-hidden="true">→</span>
             </div>
