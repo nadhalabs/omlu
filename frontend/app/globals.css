@@ -259,6 +259,49 @@ a.text-white[aria-disabled="true"] {
   animation: omlu-scan-line 3s ease-in-out infinite alternate;
 }
 
+@keyframes omlu-fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.omlu-animate-hero-1 {
+  animation: omlu-fade-in-up 0.5s ease-out forwards;
+}
+.omlu-animate-hero-2 {
+  animation: omlu-fade-in-up 0.5s ease-out 0.1s forwards;
+  opacity: 0;
+}
+.omlu-animate-hero-3 {
+  animation: omlu-fade-in-up 0.5s ease-out 0.2s forwards;
+  opacity: 0;
+}
+.omlu-animate-hero-4 {
+  animation: omlu-fade-in-up 0.5s ease-out 0.3s forwards;
+  opacity: 0;
+}
+.omlu-animate-hero-5 {
+  animation: omlu-fade-in-up 0.5s ease-out 0.4s forwards;
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .omlu-animate-hero-1,
+  .omlu-animate-hero-2,
+  .omlu-animate-hero-3,
+  .omlu-animate-hero-4,
+  .omlu-animate-hero-5 {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
 
 @media print {
   .print-hidden {

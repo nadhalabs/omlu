@@ -96,14 +96,79 @@ export function AndroidDownloadCard({ variant = "landing", dismissible = false, 
           <p className="mt-3 text-xs font-semibold text-[var(--omlu-text-muted)]">Direct APK download • Android only • Android 7.0 or later</p>
           <p className="mt-2 text-xs leading-5 text-[var(--omlu-text-secondary)]">Your browser may ask permission to install apps from this source.</p>
           <div className="mt-5 max-w-xl text-sm text-[var(--omlu-text-secondary)]">
-            <button type="button" aria-expanded={helpOpen} aria-controls="omlu-apk-install-help" onClick={() => setHelpOpen((open) => !open)} className="rounded-md font-bold text-orange-500 outline-none focus-visible:ring-2 focus-visible:ring-orange-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--omlu-page-background)]">How to install the APK <span aria-hidden="true">{helpOpen ? "−" : "+"}</span></button>
-            {helpOpen && <ol id="omlu-apk-install-help" className="mt-3 list-decimal space-y-1.5 pl-5 leading-6 text-[var(--omlu-text-secondary)]"><li>Download the OMLU APK.</li><li>Open the downloaded file.</li><li>Allow installation from the browser if Android asks.</li><li>Tap Install.</li><li>Open OMLU and sign in.</li></ol>}
+            <button
+              type="button"
+              aria-expanded={helpOpen}
+              aria-controls="omlu-apk-install-help"
+              onClick={() => setHelpOpen((open) => !open)}
+              className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-bold text-orange-500 transition hover:bg-orange-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400"
+            >
+              <span>How to install the APK</span>
+              <span className={`inline-block text-sm font-black transition-transform duration-200 ${helpOpen ? "rotate-45" : ""}`} aria-hidden="true">+</span>
+            </button>
+            <div
+              id="omlu-apk-install-help"
+              className={`grid transition-all duration-300 ease-in-out ${helpOpen ? "grid-rows-[1fr] opacity-100 mt-3" : "grid-rows-[0fr] opacity-0 overflow-hidden"}`}
+            >
+              <div className="overflow-hidden">
+                <ol className="list-decimal space-y-1.5 pl-5 text-xs leading-6 text-[var(--omlu-text-secondary)]">
+                  <li>Download the OMLU APK.</li>
+                  <li>Open the downloaded file on your Android device.</li>
+                  <li>Allow installation from this source if Android prompts for permission.</li>
+                  <li>Tap Install.</li>
+                  <li>Open OMLU and sign in to access your restaurant workspace.</li>
+                </ol>
+              </div>
+            </div>
           </div>
         </div>
+
+        {/* Realistic Phone Device Preview Mockup */}
         <div className="hidden justify-center lg:flex" aria-hidden="true">
-          <div className="relative h-64 w-40 rotate-2 rounded-[2.25rem] border-[6px] border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-3 shadow-2xl motion-safe:transition-transform motion-safe:hover:-translate-y-1">
-            <div className="mx-auto h-1.5 w-12 rounded-full bg-[var(--omlu-border-strong)]" />
-            <div className="mt-12 flex flex-col items-center text-center"><span className="rounded-2xl bg-orange-600 p-4 text-[var(--omlu-primary-action-text)]"><AndroidIcon className="h-9 w-9" /></span><span className="mt-4 text-xl font-black">OMLU</span><span className="mt-1 text-[10px] font-bold uppercase tracking-widest text-[var(--omlu-text-muted)]">Restaurant operations</span></div>
+          <div className="relative h-[22rem] w-48 rotate-1 rounded-[2.5rem] border-[6px] border-[var(--omlu-border-strong)] bg-[#09090b] p-3 text-white shadow-2xl transition-transform duration-500 hover:rotate-0 hover:scale-[1.03]">
+            {/* Phone Speaker & Camera Bar */}
+            <div className="mx-auto h-2 w-14 rounded-full bg-zinc-800" />
+            
+            {/* Phone Screen UI Preview */}
+            <div className="mt-3 flex flex-col gap-2 rounded-2xl bg-zinc-900/90 p-3 text-left">
+              {/* App Bar */}
+              <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                  <span className="text-[11px] font-black text-white">OMLU Ops</span>
+                </div>
+                <span className="rounded bg-orange-600 px-1.5 py-0.5 text-[9px] font-black text-white">POS</span>
+              </div>
+
+              {/* Live Table Badge Grid */}
+              <div className="grid grid-cols-2 gap-1.5">
+                <div className="rounded-lg bg-zinc-800 p-2 text-center">
+                  <div className="text-[10px] font-black text-zinc-300">Table 01</div>
+                  <div className="text-[9px] font-bold text-amber-400">Ordering</div>
+                </div>
+                <div className="rounded-lg bg-orange-500/20 border border-orange-500/40 p-2 text-center">
+                  <div className="text-[10px] font-black text-orange-400">Table 08</div>
+                  <div className="text-[9px] font-bold text-orange-300">Served</div>
+                </div>
+              </div>
+
+              {/* KDS Live Ticket snippet */}
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-2 text-[10px]">
+                <div className="flex items-center justify-between font-black text-zinc-200">
+                  <span>Order #104</span>
+                  <span className="text-emerald-400">₹640</span>
+                </div>
+                <div className="mt-1 text-[9px] text-zinc-400">1× Butter Chicken, 2× Naan</div>
+              </div>
+
+              {/* Quick Action Button */}
+              <div className="mt-1 rounded-lg bg-orange-600 py-1.5 text-center text-[10px] font-black text-white shadow-xs">
+                + Quick Sale POS
+              </div>
+            </div>
+
+            {/* Bottom Home Indicator */}
+            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 h-1 w-16 rounded-full bg-zinc-700" />
           </div>
         </div>
       </div>
