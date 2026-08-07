@@ -194,3 +194,11 @@ test("Dashboard metric sections and responsive containers", () => {
   
   assert.match(source, /accessibleSummary=/);
 });
+
+test("Custom date range controls and clean error messaging", () => {
+  assert.match(source, /formatDateRangeLabel/);
+  assert.match(source, /isCustomIncomplete/);
+  assert.match(source, /enabled: !isCustomIncomplete/);
+  assert.match(source, /Unable to load analytics\. Try again\./);
+  assert.doesNotMatch(source, /error\.message/);
+});

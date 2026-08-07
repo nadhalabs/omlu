@@ -11,6 +11,25 @@ import {
 import { queryKeys, useCachedQuery } from "@/lib/queryCache";
 import { useRealtime } from "@/lib/realtime";
 import { formatCurrency, formatAverageOrderValue, formatDurationMinutes } from "./performanceFormatters";
+
+function formatDateLabel(dateStr?: string): string {
+  if (!dateStr) return "";
+  const parts = dateStr.split("-");
+  if (parts.length !== 3) return dateStr;
+  const [year, month, day] = parts;
+  const d = new Date(Number(year), Number(month) - 1, Number(day));
+  if (isNaN(d.getTime())) return dateStr;
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function formatDateRangeLabel(start?: string, end?: string): string {
+  const startFmt = formatDateLabel(start);
+  const endFmt = formatDateLabel(end);
+  if (startFmt && endFmt) return `${startFmt} → ${endFmt}`;
+  if (startFmt) return `${startFmt} → Select end date`;
+  if (endFmt) return `Select start date → ${endFmt}`;
+  return "Select custom date range";
+}
 import { TrendChart, HourBarChart, RankedList, ChartEmptyState, ChartSkeleton } from "./PerformanceCharts";
 
 type DatePreset = "today" | "last_7_days" | "month" | "custom";
@@ -192,6 +211,10 @@ export default function PerformanceClient({ initialState }: { initialState: Perf
     start_date: initialState.start,
     end_date: initialState.end,
   });
+  const [customInputsOpen, setCustomInputsOpen] = useState(
+    Boolean(initialState.period === "custom" && (!initialState.start || !initialState.end))
+  );
+  const isCustomIncomplete = filters.preset === "custom" && (!filters.start_date || !filters.end_date);
   const [activeTab, setActiveTab] = useState<AnalyticsTab>(initialState.tab);
   const [pdfLoading, setPdfLoading] = useState<"daily" | "monthly" | "range" | null>(null);
   const [pdfError, setPdfError] = useState<string | null>(null);
@@ -200,15 +223,16 @@ export default function PerformanceClient({ initialState }: { initialState: Perf
   const abortRef = useRef<AbortController | null>(null);
   const filterKey = JSON.stringify(filters);
   const queryFn = useCallback(async () => {
+    if (isCustomIncomplete) return null;
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
     return fetchHistory<PerformanceSummary>("performance", filters, controller.signal);
-  }, [filterKey]); // eslint-disable-line react-hooks/exhaustive-deps
-  const { data, error, isLoading, isRefreshing, refetch } = useCachedQuery<PerformanceSummary>(
+  }, [filterKey, isCustomIncomplete]); // eslint-disable-line react-hooks/exhaustive-deps
+  const { data, error, isLoading, isRefreshing, refetch } = useCachedQuery<PerformanceSummary | null>(
     queryKeys.analytics("performance", filters),
     queryFn,
-    { staleTime: 30_000 },
+    { staleTime: 30_000, enabled: !isCustomIncomplete },
   );
 
   useEffect(() => () => abortRef.current?.abort(), []);
@@ -255,7 +279,10 @@ export default function PerformanceClient({ initialState }: { initialState: Perf
     else if (kind === "monthly") await handlePdfDownload("monthly");
     else await handlePdfDownload("range");
   };
-  const setPreset = (preset: DatePreset) => setFilters((current) => ({ ...current, preset, page: 1 }));
+  const setPreset = (preset: DatePreset) => {
+    if (preset === "custom") setCustomInputsOpen(true);
+    setFilters((current) => ({ ...current, preset, page: 1 }));
+  };
   const handlePresetKeyDown = (e: React.KeyboardEvent, index: number) => {
     if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
     e.preventDefault();
@@ -317,9 +344,73 @@ export default function PerformanceClient({ initialState }: { initialState: Perf
           </div>
         </div>
         {filters.preset === "custom" && (
-          <div className="mt-5 flex flex-wrap gap-3 border-t border-[var(--omlu-border-strong)] pt-5">
-            <label className="text-xs font-bold text-[var(--omlu-text-secondary)]">Start date<input aria-label="Custom range start date" type="date" value={filters.start_date || ""} onChange={(event) => setFilters((current) => ({ ...current, start_date: event.target.value, page: 1 }))} className="ml-2 rounded-xl border border-[var(--omlu-border-strong)] px-3 text-sm" /></label>
-            <label className="text-xs font-bold text-[var(--omlu-text-secondary)]">End date<input aria-label="Custom range end date" type="date" value={filters.end_date || ""} onChange={(event) => setFilters((current) => ({ ...current, end_date: event.target.value, page: 1 }))} className="ml-2 rounded-xl border border-[var(--omlu-border-strong)] px-3 text-sm" /></label>
+          <div className="mt-4 flex flex-col gap-3 border-t border-[var(--omlu-border-strong)] pt-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setCustomInputsOpen((open) => !open)}
+                aria-expanded={customInputsOpen}
+                aria-controls="custom-date-inputs"
+                className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-3.5 text-xs font-bold text-[var(--omlu-text-primary)] shadow-sm transition hover:bg-[var(--omlu-muted-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500"
+              >
+                <span aria-hidden="true">📅</span>
+                <span>{formatDateRangeLabel(filters.start_date, filters.end_date)}</span>
+                <span aria-hidden="true" className="ml-1 text-[9px] text-[var(--omlu-text-secondary)]">
+                  {customInputsOpen ? "▲" : "▼"}
+                </span>
+              </button>
+            </div>
+
+            {customInputsOpen && (
+              <div
+                id="custom-date-inputs"
+                className="flex flex-col gap-3 rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-muted-surface)] p-3.5 sm:flex-row sm:items-center sm:gap-4"
+              >
+                <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2">
+                  <label htmlFor="custom-start-date" className="text-xs font-bold text-[var(--omlu-text-secondary)]">
+                    Start date
+                  </label>
+                  <input
+                    id="custom-start-date"
+                    aria-label="Custom range start date"
+                    type="date"
+                    value={filters.start_date || ""}
+                    onChange={(event) =>
+                      setFilters((current) => ({
+                        ...current,
+                        start_date: event.target.value,
+                        page: 1,
+                      }))
+                    }
+                    className="min-h-9 rounded-lg border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-3 text-xs font-bold text-[var(--omlu-text-primary)] shadow-xs transition hover:border-[var(--omlu-border-hover)] focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20"
+                  />
+                </div>
+
+                <span aria-hidden="true" className="hidden text-xs font-bold text-[var(--omlu-text-secondary)] sm:inline">
+                  →
+                </span>
+
+                <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2">
+                  <label htmlFor="custom-end-date" className="text-xs font-bold text-[var(--omlu-text-secondary)]">
+                    End date
+                  </label>
+                  <input
+                    id="custom-end-date"
+                    aria-label="Custom range end date"
+                    type="date"
+                    value={filters.end_date || ""}
+                    onChange={(event) =>
+                      setFilters((current) => ({
+                        ...current,
+                        end_date: event.target.value,
+                        page: 1,
+                      }))
+                    }
+                    className="min-h-9 rounded-lg border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-3 text-xs font-bold text-[var(--omlu-text-primary)] shadow-xs transition hover:border-[var(--omlu-border-hover)] focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20"
+                  />
+                </div>
+              </div>
+            )}
           </div>
         )}
       </header>
@@ -330,11 +421,26 @@ export default function PerformanceClient({ initialState }: { initialState: Perf
         ))}
       </nav>
 
-      {(error && error.name !== "AbortError") && <div role="alert" className="flex items-center justify-between rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700"><span>{error.message}</span><button onClick={() => void refetch().catch(() => undefined)} className="rounded-lg px-3 text-xs font-black">Retry</button></div>}
+      {error && error.name !== "AbortError" && !isCustomIncomplete && (
+        <div role="alert" className="flex items-center justify-between rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">
+          <span>Unable to load analytics. Try again.</span>
+          <button
+            type="button"
+            onClick={() => void refetch().catch(() => undefined)}
+            className="rounded-lg bg-red-100 px-3 py-1.5 text-xs font-black text-red-800 hover:bg-red-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+          >
+            Retry
+          </button>
+        </div>
+      )}
       {pdfError && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">{pdfError}</div>}
       {isRefreshing && data && <div className="sr-only" aria-live="polite">Refreshing performance data</div>}
 
-      {isLoading && !data ? (
+      {isCustomIncomplete ? (
+        <div className="rounded-2xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-8 text-center text-sm font-semibold text-[var(--omlu-text-secondary)]">
+          Please select both start date and end date to view custom performance metrics.
+        </div>
+      ) : isLoading && !data ? (
         <>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{Array.from({ length: 4 }).map((_, index) => <div key={index} className={`${card} h-44 p-5`}><div className="omlu-skeleton h-10 w-10 rounded-xl" /><div className="omlu-skeleton mt-5 h-3 w-28 rounded" /><div className="omlu-skeleton mt-3 h-8 w-36 rounded" /></div>)}</div>
           <div className="grid gap-5 xl:grid-cols-2"><ChartSkeleton /><ChartSkeleton /></div>
