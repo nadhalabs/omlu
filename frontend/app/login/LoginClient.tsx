@@ -189,6 +189,15 @@ export default function LoginClient() {
             Create Restaurant
           </Link>
         </p>
+        <footer className="mt-6 border-t border-[var(--omlu-border)] pt-4 text-center text-xs text-[var(--omlu-text-secondary)]">
+          <div className="flex flex-wrap items-center justify-center gap-3 font-semibold">
+            <Link href="/terms" className="hover:text-orange-600 underline">Terms</Link>
+            <Link href="/privacy" className="hover:text-orange-600 underline">Privacy</Link>
+            <Link href="/refunds" className="hover:text-orange-600 underline">Refunds</Link>
+            <Link href="/acceptable-use" className="hover:text-orange-600 underline">Acceptable Use</Link>
+            <Link href="/service-policy" className="hover:text-orange-600 underline">Service Policy</Link>
+          </div>
+        </footer>
       </main>
       <AndroidDownloadCard variant="login" className="w-full lg:max-w-sm" />
       </div>

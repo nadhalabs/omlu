@@ -220,5 +220,68 @@ void main() {
       expect(badStorage.targetedDeleteCalled, isTrue);
       expect(badStorage.deleteAllCalled, isFalse);
     });
+
+    test('unknown storage exception does not delete valid authentication data', () async {
+      final unknownStorage = _UnknownExceptionStorage();
+      final storage = SecureTokenStorage(secureStorage: unknownStorage);
+
+      await expectLater(
+        storage.read(),
+        throwsA(
+          isA<StoredSessionRecoveryException>().having(
+            (error) => error.message,
+            'controlled error message',
+            contains('Unable to access saved session'),
+          ),
+        ),
+      );
+
+      // Verify that delete was NOT called
+      expect(unknownStorage.deleteCalled, isFalse);
+      expect(unknownStorage.deleteAllCalled, isFalse);
+    });
   });
+}
+
+class _UnknownExceptionStorage extends FlutterSecureStorage {
+  _UnknownExceptionStorage();
+
+  bool deleteCalled = false;
+  bool deleteAllCalled = false;
+
+  @override
+  Future<String?> read({
+    required String key,
+    IOSOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    MacOsOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) => throw Exception('Transient storage lock');
+
+  @override
+  Future<void> delete({
+    required String key,
+    IOSOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    MacOsOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
+    deleteCalled = true;
+  }
+
+  @override
+  Future<void> deleteAll({
+    IOSOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    MacOsOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
+    deleteAllCalled = true;
+  }
 }

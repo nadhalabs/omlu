@@ -1,3 +1,4 @@
+import logging
 import jwt
 import datetime
 import base64
@@ -12,9 +13,11 @@ from sqlalchemy.orm import Session, joinedload
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
 
-from app.database import get_db
+from app.database import SessionLocal, get_db
 from app.config import settings
 from app.models.staff_user import AuditLog, StaffSession, StaffUser
+
+logger = logging.getLogger(__name__)
 
 security_scheme = HTTPBearer(auto_error=False)
 ph = PasswordHasher()
@@ -238,7 +241,15 @@ def _resolve_authenticated_context(
         )
 
     session.last_active_at = now
-    db.commit()
+    try:
+        with SessionLocal() as auth_db:
+            auth_db.query(StaffSession).filter(
+                StaffSession.id == session.id
+            ).update({StaffSession.last_active_at: now}, synchronize_session=False)
+            auth_db.commit()
+    except Exception as e:
+        logger.warning("Failed to persist staff session last_active_at: %s", e)
+
     scope = TenantScope(
         restaurant_id=staff.restaurant_id,
         actor_id=staff.id,
