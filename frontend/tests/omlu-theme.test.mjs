@@ -41,8 +41,14 @@ test("theme provider supports persistence, system changes, and the html dark cla
   assert.match(provider, /document\.documentElement\.classList\.toggle\("dark"/);
 });
 
-test("Admin exposes an accessible three-state theme control", () => {
-  assert.match(adminLayout, /<ThemeToggle/);
+test("Admin theme control lives in Settings (Appearance section), not in the sidebar", () => {
+  // The sidebar was simplified: ThemeToggle is no longer rendered in the admin layout.
+  assert.doesNotMatch(adminLayout, /<ThemeToggle/);
+  // Verify it has not been accidentally deleted altogether — it must exist in the Settings page.
+  const adminSettings = read("app/admin/settings/AdminSettingsClient.tsx");
+  assert.match(adminSettings, /<ThemeToggle/);
+  assert.match(adminSettings, /Appearance/);
+  // The ThemeToggle component itself must still expose the three-state control.
   assert.match(toggle, /<fieldset/);
   assert.match(toggle, /aria-label="Theme preference"/);
   assert.match(toggle, /aria-pressed=/);
