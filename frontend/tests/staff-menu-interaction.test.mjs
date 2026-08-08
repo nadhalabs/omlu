@@ -10,6 +10,15 @@ function isInsideMenuSystem(target, trigger, menu) {
   return false;
 }
 
+// Menu action execution helper ensuring action invocation occurs before dismissal & prevents focus stealing
+function runMenuAction(action, dismissMenu, restoreTriggerFocus, opensDialog = true) {
+  void action();
+  dismissMenu();
+  if (!opensDialog && restoreTriggerFocus) {
+    restoreTriggerFocus();
+  }
+}
+
 // Helper mock node builder for testing containment behavior without requiring full DOM
 function createMockNode(name = "node", parent = null) {
   const children = new Set();
@@ -72,45 +81,104 @@ test("isInsideMenuSystem correctly identifies true outside target as outside (cl
   assert.equal(isInsideMenuSystem(null, trigger, menu), false);
 });
 
-test("simulated mousedown event handling protects action execution from early unmount regression", () => {
+test("Reset PIN action invocation occurs before menu dismissal and does not steal focus back to trigger", () => {
+  const events = [];
+  let resetModalTarget = null;
   let menuOpen = true;
-  let actionExecuted = false;
 
-  const trigger = createMockNode("trigger");
-  const menu = createMockNode("portaledMenu");
-  const menuItemResetPin = createMockNode("resetPinItem", menu);
-  menu.appendChild(menuItemResetPin);
-
-  const resetPinAction = () => {
-    actionExecuted = true;
+  const openResetPassword = (member) => {
+    events.push("action:openResetPassword");
+    resetModalTarget = member;
+  };
+  const dismissMenu = () => {
+    events.push("dismissMenu");
+    menuOpen = false;
+  };
+  const restoreTriggerFocus = () => {
+    events.push("restoreTriggerFocus");
   };
 
-  // Simulate mousedown event listener behavior on document
-  const handleMousedown = (eventTarget) => {
-    if (!isInsideMenuSystem(eventTarget, trigger, menu)) {
-      menuOpen = false;
-    }
-  };
+  const targetMember = { id: 1, name: "Staff User" };
 
-  // 1. User presses mousedown on "Reset PIN" inside portaled menu
-  handleMousedown(menuItemResetPin);
+  runMenuAction(() => openResetPassword(targetMember), dismissMenu, restoreTriggerFocus, true);
 
-  // 2. Menu must NOT unmount on mousedown
-  assert.equal(menuOpen, true, "Menu must remain mounted on mousedown over menu item");
-
-  // 3. User releases mouse (click event fires) and executes Reset PIN action
-  if (menuOpen) {
-    resetPinAction();
-    menuOpen = false; // Close after action runs
-  }
-
-  assert.equal(actionExecuted, true, "Reset PIN action must execute successfully");
-  assert.equal(menuOpen, false, "Menu closes after action execution");
+  assert.deepEqual(events, ["action:openResetPassword", "dismissMenu"]);
+  assert.equal(resetModalTarget, targetMember, "Reset PIN modal target must be set");
+  assert.equal(menuOpen, false, "Menu must be dismissed after action invocation");
+  assert.equal(events.includes("restoreTriggerFocus"), false, "Focus must not be stolen back to trigger when opening modal");
 });
 
-test("StaffManagementClient source contracts include exported containment helper and menuRef attachment", () => {
+test("Suspend dialog invocation occurs before menu dismissal and does not steal focus back to trigger", () => {
+  const events = [];
+  let suspendDialogOpen = false;
+  let menuOpen = true;
+
+  const changeStatus = (status) => {
+    events.push(`action:changeStatus:${status}`);
+    suspendDialogOpen = true;
+  };
+  const dismissMenu = () => {
+    events.push("dismissMenu");
+    menuOpen = false;
+  };
+  const restoreTriggerFocus = () => {
+    events.push("restoreTriggerFocus");
+  };
+
+  runMenuAction(() => changeStatus("suspended"), dismissMenu, restoreTriggerFocus, true);
+
+  assert.deepEqual(events, ["action:changeStatus:suspended", "dismissMenu"]);
+  assert.equal(suspendDialogOpen, true, "Suspend dialog must open");
+  assert.equal(menuOpen, false, "Menu must be dismissed after action invocation");
+  assert.equal(events.includes("restoreTriggerFocus"), false, "Focus must not be stolen back to trigger when opening suspend dialog");
+});
+
+test("Remove confirmation invocation occurs before menu dismissal and does not steal focus back to trigger", () => {
+  const events = [];
+  let removeConfirmOpen = false;
+  let menuOpen = true;
+
+  const removeAccess = () => {
+    events.push("action:removeAccess");
+    removeConfirmOpen = true;
+  };
+  const dismissMenu = () => {
+    events.push("dismissMenu");
+    menuOpen = false;
+  };
+  const restoreTriggerFocus = () => {
+    events.push("restoreTriggerFocus");
+  };
+
+  runMenuAction(() => removeAccess(), dismissMenu, restoreTriggerFocus, true);
+
+  assert.deepEqual(events, ["action:removeAccess", "dismissMenu"]);
+  assert.equal(removeConfirmOpen, true, "Remove confirmation dialog must open");
+  assert.equal(menuOpen, false, "Menu must be dismissed after action invocation");
+  assert.equal(events.includes("restoreTriggerFocus"), false, "Focus must not be stolen back to trigger when opening remove confirmation");
+});
+
+test("Menu actions that do not open a dialog restore focus to trigger after dismissal", () => {
+  const events = [];
+
+  const simpleAction = () => {
+    events.push("action:simple");
+  };
+  const dismissMenu = () => {
+    events.push("dismissMenu");
+  };
+  const restoreTriggerFocus = () => {
+    events.push("restoreTriggerFocus");
+  };
+
+  runMenuAction(simpleAction, dismissMenu, restoreTriggerFocus, false);
+
+  assert.deepEqual(events, ["action:simple", "dismissMenu", "restoreTriggerFocus"]);
+});
+
+test("StaffManagementClient source contracts include exported helpers and runMenuAction invocation", () => {
   const source = readFileSync(new URL("../app/admin/staff/StaffManagementClient.tsx", import.meta.url), "utf8");
   assert.match(source, /export function isInsideMenuSystem/);
-  assert.match(source, /isInsideMenuSystem\(event\.target as Node, triggerRef\.current, menuRef\.current\)/);
-  assert.match(source, /<ActionMenuPopover triggerRect=\{triggerRect\} menuRef=\{menuRef\}>/);
+  assert.match(source, /export function runMenuAction/);
+  assert.match(source, /runMenuAction\(\s*action,\s*\(\) => setOpenMenu\(false\),\s*\(\) => triggerRef\.current\?\.focus\(\),\s*opensDialog\s*\)/);
 });
