@@ -197,6 +197,12 @@ class BillResponse(BaseModel):
     registered_billing_address: Optional[str] = None
     state_name: Optional[str] = None
     state_code: Optional[str] = None
+    customer_tax_type: str = "b2c"
+    customer_gstin_snapshot: Optional[str] = None
+    customer_legal_name_snapshot: Optional[str] = None
+    customer_state_code_snapshot: Optional[str] = None
+    customer_state_name_snapshot: Optional[str] = None
+    place_of_supply_code_snapshot: Optional[str] = None
     session_status: str
     payment_requested_at: Optional[datetime] = None
     detached_at: Optional[datetime] = None

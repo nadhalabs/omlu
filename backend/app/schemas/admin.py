@@ -45,8 +45,22 @@ class MenuItemCreate(BaseModel):
     description_ml: Optional[str] = Field(None, max_length=1024)
     price: Decimal = Field(..., ge=0)
     image_url: Optional[str] = Field(None, max_length=1024)
+    hsn_sac_code: Optional[str] = Field(None, max_length=20)
     is_available: bool = True
     display_order: int = Field(default=0, ge=0)
+
+    @field_validator("hsn_sac_code")
+    @classmethod
+    def validate_hsn_sac_code(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        v_strip = v.strip().upper()
+        if not v_strip:
+            return None
+        import re
+        if not re.fullmatch(r"[A-Z0-9]{2,20}", v_strip):
+            raise ValueError("HSN/SAC code must be 2 to 20 alphanumeric characters.")
+        return v_strip
 
     @field_validator("image_url")
     @classmethod
@@ -68,8 +82,22 @@ class MenuItemUpdate(BaseModel):
     description_ml: Optional[str] = Field(None, max_length=1024)
     price: Optional[Decimal] = Field(None, ge=0)
     image_url: Optional[str] = Field(None, max_length=1024)
+    hsn_sac_code: Optional[str] = Field(None, max_length=20)
     is_available: Optional[bool] = None
     display_order: Optional[int] = Field(None, ge=0)
+
+    @field_validator("hsn_sac_code")
+    @classmethod
+    def validate_hsn_sac_code(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        v_strip = v.strip().upper()
+        if not v_strip:
+            return None
+        import re
+        if not re.fullmatch(r"[A-Z0-9]{2,20}", v_strip):
+            raise ValueError("HSN/SAC code must be 2 to 20 alphanumeric characters.")
+        return v_strip
 
     @field_validator("image_url")
     @classmethod
@@ -93,6 +121,7 @@ class MenuItemResponse(BaseModel):
     description_ml: Optional[str]
     price: Decimal
     image_url: Optional[str]
+    hsn_sac_code: Optional[str] = None
     is_available: bool
     display_order: int
 

@@ -365,7 +365,9 @@ def create_order_in_session(
                 quantity=item_data.quantity,
                 unit_price=item_data.unit_price,
                 total_price=item_data.total_price,
-                item_note=item_data.item_note
+                item_note=item_data.item_note,
+                hsn_sac_code_snapshot=item_data.hsn_sac_code_snapshot,
+                gst_rate_snapshot=item_data.gst_rate_snapshot,
             )
             db.add(order_item)
             db.flush()

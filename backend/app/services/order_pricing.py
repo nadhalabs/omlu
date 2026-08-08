@@ -10,6 +10,9 @@ from app.models.menu import MenuItem, MenuItemOptionGroup, MenuOption, MenuOptio
 from app.schemas.order import PublicOrderCreateRequest
 
 
+from app.models.restaurant import Restaurant
+
+
 @dataclass(frozen=True)
 class PricedSelectedOption:
     menu_option_id: int
@@ -35,6 +38,8 @@ class PricedOrderItem:
     total_price: Decimal
     item_note: str | None
     selected_options: tuple[PricedSelectedOption, ...]
+    hsn_sac_code_snapshot: str | None = None
+    gst_rate_snapshot: Decimal | None = None
 
 
 def _selection_key(selected_options: Iterable) -> tuple[tuple[int, int, int], ...]:
@@ -67,6 +72,8 @@ def validate_and_price_order_items(
 ) -> tuple[Decimal, list[PricedOrderItem]]:
     if not order_req.items:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Empty cart")
+
+    restaurant = db.query(Restaurant).filter(Restaurant.id == restaurant_id).first()
 
     merged = {}
     for item in order_req.items:
@@ -124,6 +131,8 @@ def validate_and_price_order_items(
                 total_price=total_price,
                 item_note=line["item_note"],
                 selected_options=tuple(selected_options),
+                hsn_sac_code_snapshot=menu_item.hsn_sac_code,
+                gst_rate_snapshot=None,
             )
         )
 

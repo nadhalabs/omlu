@@ -323,11 +323,16 @@ def apply_draft_totals(
     is_gst = bill.gst_enabled_snapshot
 
     if is_gst:
+        pos_code = bill.place_of_supply_code_snapshot or bill.customer_state_code_snapshot
+        rest_state = restaurant.gst_state_code
+        interstate = bool(pos_code and rest_state and pos_code.strip() != rest_state.strip())
+
         totals = calculate_gst_totals(
             subtotal=subtotal,
             discount_amount=bill.discount_amount or Decimal("0.00"),
             gst_rate=bill.gst_rate or restaurant.default_gst_rate,
             tax_mode=bill.tax_mode_snapshot or restaurant.tax_mode,
+            interstate=interstate,
         )
         bill.gst_enabled_snapshot = True
         bill.subtotal = totals.subtotal
@@ -443,8 +448,26 @@ def issue_bill(db: Session, bill: Bill) -> Bill:
             detail="Bill lines do not match the authoritative subtotal. Correct the order before issuing.",
         )
     restaurant = locked_session.restaurant
-    if locked_bill.gst_enabled_snapshot and not locked_bill.invoice_number:
-        locked_bill.invoice_number, locked_bill.invoice_date = generate_invoice_number(db, restaurant)
+    if locked_bill.gst_enabled_snapshot:
+        if locked_bill.customer_tax_type == "b2b":
+            if not locked_bill.customer_gstin_snapshot:
+                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Customer GSTIN is required for B2B GST bills")
+            if not locked_bill.customer_legal_name_snapshot or not locked_bill.customer_legal_name_snapshot.strip():
+                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Customer Legal Name is required for B2B GST bills")
+            if not locked_bill.customer_state_code_snapshot:
+                locked_bill.customer_state_code_snapshot = locked_bill.customer_gstin_snapshot[:2]
+            if not locked_bill.place_of_supply_code_snapshot:
+                locked_bill.place_of_supply_code_snapshot = locked_bill.customer_state_code_snapshot
+
+        if not locked_bill.invoice_number:
+            locked_bill.invoice_number, locked_bill.invoice_date = generate_invoice_number(db, restaurant)
+
+        # Freeze line-level gst_rate_snapshot from the final authoritative bill rate
+        final_gst_rate = locked_bill.gst_rate
+        for order in billable_orders:
+            for item in order.items:
+                if item.gst_rate_snapshot is None:
+                    item.gst_rate_snapshot = final_gst_rate
 
     locked_bill.status = "issued"
     locked_session.status = "payment_requested"

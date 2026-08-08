@@ -146,6 +146,12 @@ class OrderItem(Base):
         CheckConstraint("total_price >= 0", name="chk_order_item_total_price_positive")
     )
     item_note: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    hsn_sac_code_snapshot: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    gst_rate_snapshot: Mapped[Optional[Decimal]] = mapped_column(Numeric(5, 2), nullable=True)
+    taxable_amount_snapshot: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
+    cgst_amount_snapshot: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
+    sgst_amount_snapshot: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
+    igst_amount_snapshot: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
 
     # Relationships
     order: Mapped["Order"] = relationship(

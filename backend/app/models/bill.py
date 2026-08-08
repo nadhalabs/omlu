@@ -94,6 +94,12 @@ class Bill(Base):
     billing_address_snapshot: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
     state_name_snapshot: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     state_code_snapshot: Mapped[Optional[str]] = mapped_column(String(2), nullable=True)
+    customer_tax_type: Mapped[str] = mapped_column(String(10), default="b2c", server_default="b2c", nullable=False)
+    customer_gstin_snapshot: Mapped[Optional[str]] = mapped_column(String(15), nullable=True)
+    customer_legal_name_snapshot: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    customer_state_code_snapshot: Mapped[Optional[str]] = mapped_column(String(2), nullable=True)
+    customer_state_name_snapshot: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    place_of_supply_code_snapshot: Mapped[Optional[str]] = mapped_column(String(2), nullable=True)
     currency: Mapped[str] = mapped_column(String(10), nullable=False, default="INR", server_default="INR")
     generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     paid_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -153,6 +159,7 @@ class Bill(Base):
         CheckConstraint("tax_amount >= 0", name="chk_bill_tax_amount_non_negative"),
         CheckConstraint("discount_amount >= 0", name="chk_bill_discount_amount_non_negative"),
         CheckConstraint("total_amount >= 0", name="chk_bill_total_amount_non_negative"),
+        CheckConstraint("customer_tax_type IN ('b2c', 'b2b')", name="chk_bill_customer_tax_type"),
         Index("ix_bills_restaurant_status", "restaurant_id", "status"),
         Index("ix_bills_restaurant_bill_number", "restaurant_id", "bill_number"),
         Index("ix_bills_restaurant_generated_at", "restaurant_id", "generated_at"),

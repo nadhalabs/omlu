@@ -19,7 +19,7 @@ from app.schemas.quick_sale import QuickSaleCreate, QuickSalePayment
 from app.services.menu_options import serialize_item_option_groups
 from app.services.order_pricing import validate_and_price_order_items
 from app.services.idempotency import ensure_same_request, request_hash, require_key
-from app.services.bills import calculate_gst_totals
+from app.services.bills import calculate_gst_totals, generate_invoice_number
 from app.services.realtime import EVENT_ORDER_CREATED, EVENT_QUICK_SALE_COMPLETED, publish_event, restaurant_channel
 from app.utils.auth import RoleChecker
 from app.utils.business_date import current_business_day_bounds_utc, restaurant_business_date
@@ -36,6 +36,8 @@ def _serialize(sale: QuickSale, *, financial: bool = True) -> dict:
         "discount_amount": f"{sale.discount_amount:.2f}",
         "taxable_amount": f"{sale.taxable_amount:.2f}" if sale.taxable_amount is not None else None,
         "gst_enabled": sale.gst_enabled_snapshot,
+        "invoice_number": sale.invoice_number,
+        "invoice_date": sale.invoice_date.isoformat() if sale.invoice_date else None,
         "gst_rate": f"{sale.gst_rate:.2f}" if sale.gst_rate is not None else None,
         "cgst_amount": f"{sale.cgst_amount:.2f}" if sale.cgst_amount is not None else None,
         "sgst_amount": f"{sale.sgst_amount:.2f}" if sale.sgst_amount is not None else None,
@@ -44,6 +46,12 @@ def _serialize(sale: QuickSale, *, financial: bool = True) -> dict:
         "gstin": sale.gstin_snapshot, "legal_business_name": sale.legal_business_name_snapshot,
         "registered_billing_address": sale.billing_address_snapshot,
         "state_name": sale.state_name_snapshot, "state_code": sale.state_code_snapshot,
+        "customer_tax_type": sale.customer_tax_type,
+        "customer_gstin": sale.customer_gstin_snapshot,
+        "customer_legal_name": sale.customer_legal_name_snapshot,
+        "customer_state_code": sale.customer_state_code_snapshot,
+        "customer_state_name": sale.customer_state_name_snapshot,
+        "place_of_supply_code": sale.place_of_supply_code_snapshot,
         "total": f"{sale.total_amount:.2f}", "grand_total": f"{sale.total_amount:.2f}", "entered_by_id": sale.entered_by_staff_id,
         "entered_by_name": sale.entered_by_name, "entered_by_role": sale.entered_by_role,
         "created_at": sale.created_at.isoformat(), "completed_at": sale.completed_at.isoformat() if sale.completed_at else None,
@@ -55,6 +63,8 @@ def _serialize(sale: QuickSale, *, financial: bool = True) -> dict:
             "unit_price": f"{item.unit_price:.2f}",
             "total_price": f"{item.total_price:.2f}",
             "item_note": item.item_note,
+            "hsn_sac_code": item.hsn_sac_code_snapshot,
+            "gst_rate": f"{item.gst_rate_snapshot:.2f}" if item.gst_rate_snapshot is not None else None,
             "selected_options": [{
                 "menu_option_id": option.menu_option_id,
                 "menu_option_group_id": option.menu_option_group_id,
@@ -100,11 +110,16 @@ def _price_quick_sale(body: QuickSaleCreate, current_user: StaffUser, db: Sessio
         ),
     )
     restaurant = current_user.restaurant
+    pos_code = body.place_of_supply_code or body.customer_state_code
+    rest_state = restaurant.gst_state_code
+    interstate = bool(pos_code and rest_state and pos_code.strip() != rest_state.strip())
+
     totals = calculate_gst_totals(
         subtotal=subtotal,
         discount_amount=Decimal("0.00"),
         gst_rate=restaurant.default_gst_rate if restaurant.gst_enabled else Decimal("0.00"),
         tax_mode=restaurant.tax_mode,
+        interstate=interstate,
     )
     return totals, priced_items
 
@@ -180,13 +195,41 @@ def create_quick_sale(
     if existing:
         ensure_same_request(existing.idempotency_request_hash, payload_hash)
         return _serialize(existing)
-    totals, priced_items = _price_quick_sale(body, current_user, db)
+
     restaurant = current_user.restaurant
+    customer_tax_type = body.customer_tax_type or "b2c"
+    customer_gstin = body.customer_gstin
+    customer_legal_name = body.customer_legal_name
+    customer_state_code = body.customer_state_code
+    customer_state_name = body.customer_state_name
+    place_of_supply_code = body.place_of_supply_code
+
+    if restaurant.gst_enabled and customer_tax_type == "b2b":
+        if not customer_gstin:
+            raise HTTPException(status_code=422, detail="Customer GSTIN is required for B2B GST quick sales")
+        if not customer_legal_name or not customer_legal_name.strip():
+            raise HTTPException(status_code=422, detail="Customer Legal Name is required for B2B GST quick sales")
+        if not customer_state_code:
+            customer_state_code = customer_gstin[:2]
+        if not place_of_supply_code:
+            place_of_supply_code = customer_state_code
+
+    body.customer_state_code = customer_state_code
+    body.place_of_supply_code = place_of_supply_code
+
+    totals, priced_items = _price_quick_sale(body, current_user, db)
     now = datetime.datetime.now(datetime.timezone.utc)
+    is_completed = (body.sale_type == "late_entry")
+
+    invoice_number = None
+    invoice_date = None
+    if restaurant.gst_enabled and is_completed:
+        invoice_number, invoice_date = generate_invoice_number(db, restaurant, now=now)
+
     sale = QuickSale(
         restaurant_id=current_user.restaurant_id, order_number="PENDING", public_token=f"qs_{secrets.token_urlsafe(24)}",
         idempotency_key=key, idempotency_request_hash=payload_hash, sale_type=body.sale_type, source=body.sale_type,
-        status="completed" if body.sale_type == "late_entry" else "pending", note=body.note,
+        status="completed" if is_completed else "pending", note=body.note,
         reason=(body.reason or "Unrecorded verbal order") if body.sale_type == "late_entry" else None,
         subtotal=totals.subtotal, discount_amount=totals.discount_amount,
         taxable_amount=totals.taxable_amount, tax_amount=totals.tax_amount,
@@ -199,12 +242,20 @@ def create_quick_sale(
         billing_address_snapshot=restaurant.registered_billing_address if restaurant.gst_enabled else None,
         state_name_snapshot=restaurant.gst_state_name if restaurant.gst_enabled else None,
         state_code_snapshot=restaurant.gst_state_code if restaurant.gst_enabled else None,
+        customer_tax_type=customer_tax_type,
+        customer_gstin_snapshot=customer_gstin if (restaurant.gst_enabled and customer_tax_type == "b2b") else None,
+        customer_legal_name_snapshot=customer_legal_name if (restaurant.gst_enabled and customer_tax_type == "b2b") else None,
+        customer_state_code_snapshot=customer_state_code if restaurant.gst_enabled else None,
+        customer_state_name_snapshot=customer_state_name if restaurant.gst_enabled else None,
+        place_of_supply_code_snapshot=place_of_supply_code if restaurant.gst_enabled else None,
+        invoice_number=invoice_number,
+        invoice_date=invoice_date,
         payment_method=body.payment_method,
         entered_by_staff_id=current_user.id, entered_by_name=current_user.name, entered_by_role=current_user.role,
-        paid_by_staff_id=current_user.id if body.sale_type == "late_entry" else None,
-        paid_by_name=current_user.name if body.sale_type == "late_entry" else None,
-        paid_by_role=current_user.role if body.sale_type == "late_entry" else None,
-        completed_at=now if body.sale_type == "late_entry" else None,
+        paid_by_staff_id=current_user.id if is_completed else None,
+        paid_by_name=current_user.name if is_completed else None,
+        paid_by_role=current_user.role if is_completed else None,
+        completed_at=now if is_completed else None,
     )
     business_date = restaurant_business_date(current_user.restaurant, now=now)
     sequence = db.execute(
@@ -233,6 +284,8 @@ def create_quick_sale(
             unit_price=priced.unit_price,
             total_price=priced.total_price,
             item_note=priced.item_note,
+            hsn_sac_code_snapshot=priced.hsn_sac_code_snapshot,
+            gst_rate_snapshot=sale.gst_rate if (is_completed and sale.gst_enabled_snapshot) else None,
         )
         for option in priced.selected_options:
             sale_item.selected_options.append(QuickSaleItemSelectedOption(
@@ -309,6 +362,14 @@ def confirm_quick_sale_payment(
     if sale.sale_type != "takeaway" or sale.status != "served":
         raise HTTPException(status_code=409, detail="Only a served unpaid Takeaway can be completed")
     now = datetime.datetime.now(datetime.timezone.utc)
+
+    if sale.gst_enabled_snapshot:
+        if not sale.invoice_number:
+            sale.invoice_number, sale.invoice_date = generate_invoice_number(db, current_user.restaurant, now=now)
+        for item in sale.items:
+            if item.gst_rate_snapshot is None:
+                item.gst_rate_snapshot = sale.gst_rate
+
     sale.status = "completed"; sale.payment_method = body.method; sale.payment_idempotency_key = key; sale.payment_request_hash = payload_hash; sale.paid_by_staff_id = current_user.id; sale.paid_by_name = current_user.name; sale.paid_by_role = current_user.role; sale.completed_at = now
     payment = Payment(restaurant_id=current_user.restaurant_id, quick_sale_id=sale.id, idempotency_key=key, method=body.method, amount=sale.total_amount, recorded_by_staff_id=current_user.id)
     db.add(payment); db.flush()
