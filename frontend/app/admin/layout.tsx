@@ -6,7 +6,6 @@ import AdminLogoutButton from "./AdminLogoutButton";
 import { backendUrl } from "@/lib/backendUrl";
 import { AdminOperationalCountsProvider, AdminOperationalSidebarLink, OperationalCounts } from "./AdminOperationalSidebar";
 import { WebAuthScope } from "@/components/WebAuthScope";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import { IconBuilding } from "./AdminNavIcon";
 
 export default async function AdminLayout({
@@ -92,8 +91,8 @@ export default async function AdminLayout({
     <WebAuthScope scope={staffInfo.scope}>
     <div className="omlu-admin-shell flex min-h-screen min-w-0 flex-col bg-[var(--omlu-page-background)] text-[var(--omlu-text-primary)] lg:flex-row">
       {/* Sidebar Navigation */}
-      <aside className="sticky top-0 z-30 flex w-full shrink-0 flex-col justify-between border-b border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-4 shadow-sm lg:static lg:w-64 lg:border-b-0 lg:border-r lg:p-6 lg:shadow-none print:hidden">
-        <div>
+      <aside className="sticky top-0 z-30 flex w-full shrink-0 flex-col justify-between border-b border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-4 shadow-sm lg:sticky lg:top-0 lg:h-dvh lg:w-64 lg:border-b-0 lg:border-r lg:p-6 lg:shadow-none print:hidden">
+        <div className="lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
           {/* Brand/Logo */}
           <div className="mb-3 min-w-0 lg:mb-8">
             <span className="text-orange-500 font-extrabold uppercase tracking-widest text-[10px]">
@@ -107,7 +106,7 @@ export default async function AdminLayout({
           </div>
 
           {/* Navigation Links */}
-          <nav className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 lg:mx-0 lg:flex-col lg:overflow-visible lg:px-0 lg:pb-0" aria-label="Admin navigation">
+          <nav className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 lg:mx-0 lg:flex-col lg:overflow-y-auto lg:min-h-0 lg:px-0 lg:pb-0" aria-label="Admin navigation">
             <AdminOperationalCountsProvider initialCounts={operationalCounts}>
             <AdminSidebarLink href="/admin/dashboard" label="Dashboard" icon="dashboard" />
             <AdminOperationalSidebarLink href="/admin/quick-sale" label="Quick Sale" queue="activeTakeaways" icon="quick-sale" />
@@ -132,7 +131,6 @@ export default async function AdminLayout({
               Role: {staffInfo.role}
             </p>
           </div>
-          <ThemeToggle className="mb-4" />
           <AdminLogoutButton />
         </div>
       </aside>

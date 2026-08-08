@@ -53,7 +53,10 @@ test("Kitchen status stages remain text-labelled and visually distinct", () => {
 
 test("Phase 2 reuses the single Phase 1 preference and provider", () => {
   assert.match(themeProvider, /THEME_STORAGE_KEY = "omlu_theme"/);
-  assert.match(adminLayout, /<ThemeToggle/);
+  // ThemeToggle was moved out of the sidebar into /admin/settings (Appearance section).
+  assert.doesNotMatch(adminLayout, /<ThemeToggle/);
+  const adminSettings = read("app/admin/settings/AdminSettingsClient.tsx");
+  assert.match(adminSettings, /<ThemeToggle/);
   assert.doesNotMatch(`${staff}\n${kitchenSources}`, /localStorage\.(?:getItem|setItem)\([^)]*theme/i);
   assert.doesNotMatch(`${staff}\n${kitchenSources}`, /createContext<.*Theme|function ThemeProvider/);
 });
