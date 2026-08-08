@@ -64,13 +64,15 @@ const tabsList: { value: TabKey; label: string }[] = [
 const cardStyle =
   "rounded-2xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-5 shadow-[0_1px_2px_rgba(24,24,27,0.04),0_10px_28px_rgba(24,24,27,0.035)]";
 
-function fmtCurrency(amountStr: string | number | null | undefined): string {
+function fmtCurrency(amountStr: unknown): string {
   if (amountStr === null || amountStr === undefined) return "N/A";
-  const num = typeof amountStr === "number" ? amountStr : parseFloat(amountStr || "0");
+  const str = String(amountStr);
+  const num = parseFloat(str);
+  if (isNaN(num)) return "N/A";
   return new Intl.NumberFormat("en-IN", {
     style: "currency",
     currency: "INR",
-    maximumFractionDigits: 2,
+    minimumFractionDigits: 2,
   }).format(num);
 }
 
@@ -91,8 +93,16 @@ export default function GstClient() {
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<GstSummaryResponse | null>(null);
 
+interface TabDataResponse {
+  gst_enabled?: boolean;
+  records?: Array<Record<string, unknown>>;
+  audit?: Record<string, unknown>;
+  tax_allocation_notice?: string;
+  [key: string]: unknown;
+}
+
   // Tab specific data state
-  const [tabData, setTabData] = useState<any>(null);
+  const [tabData, setTabData] = useState<TabDataResponse | null>(null);
   const [tabLoading, setTabLoading] = useState<boolean>(false);
   const [page, setPage] = useState<number>(1);
 
@@ -146,7 +156,7 @@ export default function GstClient() {
         const json = await res.json();
         setTabData(json);
       }
-    } catch (e) {
+    } catch {
       // Ignore tab fetch error
     } finally {
       setTabLoading(false);
@@ -154,14 +164,41 @@ export default function GstClient() {
   }, [activeTab, preset, startDate, endDate, page]);
 
   useEffect(() => {
-    fetchSummary();
+    const run = async () => {
+      await fetchSummary();
+    };
+    void run();
   }, [fetchSummary]);
 
   useEffect(() => {
-    fetchTabData();
+    const run = async () => {
+      await fetchTabData();
+    };
+    void run();
   }, [fetchTabData]);
 
   const isGstEnabled = data?.gst_enabled ?? false;
+
+  const handleDownloadExport = (type: string, format: string = "xlsx") => {
+    const params = new URLSearchParams();
+    params.set("preset", preset);
+    params.set("format", format);
+    if (preset === "custom") {
+      if (startDate) params.set("start_date", startDate);
+      if (endDate) params.set("end_date", endDate);
+    }
+    window.open(`/api/admin/gst/export/${type}?${params.toString()}`, "_blank");
+  };
+
+  const handleDownloadCaPackage = () => {
+    const params = new URLSearchParams();
+    params.set("preset", preset);
+    if (preset === "custom") {
+      if (startDate) params.set("start_date", startDate);
+      if (endDate) params.set("end_date", endDate);
+    }
+    window.open(`/api/admin/gst/export/ca-package?${params.toString()}`, "_blank");
+  };
 
   return (
     <div className="space-y-6 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
@@ -190,6 +227,15 @@ export default function GstClient() {
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            onClick={handleDownloadCaPackage}
+            className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-indigo-700 transition-all flex items-center gap-1.5"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            Download CA Package
+          </button>
           <button
             onClick={() => {
               fetchSummary();
@@ -411,7 +457,23 @@ export default function GstClient() {
           {/* TAB 2: SALES REGISTER */}
           {activeTab === "sales_register" && (
             <div className={cardStyle}>
-              <h3 className="text-sm font-bold text-[var(--omlu-text-primary)] mb-4">Sales Register</h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-bold text-[var(--omlu-text-primary)]">Sales Register</h3>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleDownloadExport("sales-register", "xlsx")}
+                    className="rounded-lg border border-[var(--omlu-border-strong)] bg-[var(--omlu-secondary-surface)] px-2.5 py-1 text-xs font-semibold text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-hover-surface)] transition-all"
+                  >
+                    Export XLSX
+                  </button>
+                  <button
+                    onClick={() => handleDownloadExport("sales-register", "csv")}
+                    className="rounded-lg border border-[var(--omlu-border-strong)] bg-[var(--omlu-secondary-surface)] px-2.5 py-1 text-xs font-semibold text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-hover-surface)] transition-all"
+                  >
+                    Export CSV
+                  </button>
+                </div>
+              </div>
               {tabLoading ? (
                 <p className="text-xs text-[var(--omlu-text-secondary)] py-6 text-center">Loading sales register...</p>
               ) : tabData?.records ? (
@@ -432,13 +494,13 @@ export default function GstClient() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[var(--omlu-border-subtle)]">
-                      {tabData.records.map((r: any) => (
-                        <tr key={r.id} className="hover:bg-[var(--omlu-hover-surface)]">
-                          <td className="py-2.5 px-3 whitespace-nowrap">{formatDate(r.invoice_date?.split("T")[0])}</td>
-                          <td className="py-2.5 px-3 font-medium">{r.document_number}</td>
-                          <td className="py-2.5 px-3 font-medium text-emerald-600 dark:text-emerald-400">{r.invoice_number || "—"}</td>
-                          <td className="py-2.5 px-3 capitalize">{r.document_type}</td>
-                          <td className="py-2.5 px-3 uppercase font-bold text-[10px]">{r.customer_tax_type}</td>
+                      {tabData.records.map((r: Record<string, unknown>, idx: number) => (
+                        <tr key={String(r.id || idx)} className="hover:bg-[var(--omlu-hover-surface)]">
+                          <td className="py-2.5 px-3 whitespace-nowrap">{formatDate(typeof r.invoice_date === "string" ? r.invoice_date.split("T")[0] : "")}</td>
+                          <td className="py-2.5 px-3 font-medium">{String(r.document_number ?? "")}</td>
+                          <td className="py-2.5 px-3 font-medium text-emerald-600 dark:text-emerald-400">{String(r.invoice_number || "—")}</td>
+                          <td className="py-2.5 px-3 capitalize">{String(r.document_type ?? "")}</td>
+                          <td className="py-2.5 px-3 uppercase font-bold text-[10px]">{String(r.customer_tax_type ?? "")}</td>
                           <td className="py-2.5 px-3 text-right">{fmtCurrency(r.subtotal)}</td>
                           <td className="py-2.5 px-3 text-right">{fmtCurrency(r.taxable_amount)}</td>
                           <td className="py-2.5 px-3 text-right">{fmtCurrency(r.cgst_amount)}</td>
@@ -475,16 +537,16 @@ export default function GstClient() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[var(--omlu-border-subtle)]">
-                      {tabData.records.map((r: any, idx: number) => (
+                      {tabData.records.map((r: Record<string, unknown>, idx: number) => (
                         <tr key={idx} className="hover:bg-[var(--omlu-hover-surface)]">
-                          <td className="py-2.5 px-3 font-bold">{r.gst_rate}%</td>
-                          <td className="py-2.5 px-3 uppercase font-semibold">{r.customer_tax_type}</td>
+                          <td className="py-2.5 px-3 font-bold">{String(r.gst_rate)}%</td>
+                          <td className="py-2.5 px-3 uppercase font-semibold">{String(r.customer_tax_type)}</td>
                           <td className="py-2.5 px-3 text-right">{fmtCurrency(r.taxable_amount)}</td>
                           <td className="py-2.5 px-3 text-right">{fmtCurrency(r.cgst_amount)}</td>
                           <td className="py-2.5 px-3 text-right">{fmtCurrency(r.sgst_amount)}</td>
                           <td className="py-2.5 px-3 text-right">{fmtCurrency(r.igst_amount)}</td>
                           <td className="py-2.5 px-3 text-right font-bold text-emerald-600 dark:text-emerald-400">{fmtCurrency(r.total_gst)}</td>
-                          <td className="py-2.5 px-3 text-right font-medium">{r.document_count}</td>
+                          <td className="py-2.5 px-3 text-right font-medium">{String(r.document_count)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -522,16 +584,19 @@ export default function GstClient() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-[var(--omlu-border-subtle)]">
-                        {tabData.records.map((r: any, idx: number) => (
-                          <tr key={idx} className="hover:bg-[var(--omlu-hover-surface)]">
-                            <td className="py-2.5 px-3 font-mono font-bold text-amber-600 dark:text-amber-400">{r.hsn_sac_code}</td>
-                            <td className="py-2.5 px-3">{r.description}</td>
-                            <td className="py-2.5 px-3 text-right font-bold">{r.total_quantity}</td>
-                            <td className="py-2.5 px-3 text-right">{r.line_count}</td>
-                            <td className="py-2.5 px-3">{r.gst_rates_used?.join("%, ") || "—"}%</td>
-                            <td className="py-2.5 px-3 text-right text-[var(--omlu-text-secondary)] italic">Unallocated</td>
-                          </tr>
-                        ))}
+                        {tabData.records.map((r: Record<string, unknown>, idx: number) => {
+                          const rates = Array.isArray(r.gst_rates_used) ? r.gst_rates_used.join("%, ") : "";
+                          return (
+                            <tr key={idx} className="hover:bg-[var(--omlu-hover-surface)]">
+                              <td className="py-2.5 px-3 font-mono font-bold text-amber-600 dark:text-amber-400">{String(r.hsn_sac_code ?? "")}</td>
+                              <td className="py-2.5 px-3">{String(r.description ?? "")}</td>
+                              <td className="py-2.5 px-3 text-right font-bold">{String(r.total_quantity ?? 0)}</td>
+                              <td className="py-2.5 px-3 text-right">{String(r.line_count ?? 0)}</td>
+                              <td className="py-2.5 px-3">{rates ? `${rates}%` : "—"}</td>
+                              <td className="py-2.5 px-3 text-right text-[var(--omlu-text-secondary)] italic">Unallocated</td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -562,11 +627,11 @@ export default function GstClient() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[var(--omlu-border-subtle)]">
-                      {tabData.records.map((r: any) => (
-                        <tr key={r.id} className="hover:bg-[var(--omlu-hover-surface)]">
-                          <td className="py-2.5 px-3 font-bold text-emerald-600 dark:text-emerald-400">{r.invoice_number || r.document_number}</td>
-                          <td className="py-2.5 px-3 font-mono font-semibold">{r.customer_gstin || "N/A"}</td>
-                          <td className="py-2.5 px-3 font-medium">{r.customer_legal_name || "B2B Customer"}</td>
+                      {tabData.records.map((r: Record<string, unknown>, idx: number) => (
+                        <tr key={String(r.id || idx)} className="hover:bg-[var(--omlu-hover-surface)]">
+                          <td className="py-2.5 px-3 font-bold text-emerald-600 dark:text-emerald-400">{String(r.invoice_number || r.document_number || "—")}</td>
+                          <td className="py-2.5 px-3 font-mono font-semibold">{String(r.customer_gstin || "N/A")}</td>
+                          <td className="py-2.5 px-3 font-medium">{String(r.customer_legal_name || "B2B Customer")}</td>
                           <td className="py-2.5 px-3 text-right">{fmtCurrency(r.taxable_amount)}</td>
                           <td className="py-2.5 px-3 text-right">{fmtCurrency(r.cgst_amount)}</td>
                           <td className="py-2.5 px-3 text-right">{fmtCurrency(r.sgst_amount)}</td>
@@ -602,11 +667,11 @@ export default function GstClient() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[var(--omlu-border-subtle)]">
-                      {tabData.records.map((r: any) => (
-                        <tr key={r.id} className="hover:bg-[var(--omlu-hover-surface)]">
-                          <td className="py-2.5 px-3 whitespace-nowrap">{formatDate(r.invoice_date?.split("T")[0])}</td>
-                          <td className="py-2.5 px-3 font-medium">{r.document_number}</td>
-                          <td className="py-2.5 px-3 font-medium text-emerald-600 dark:text-emerald-400">{r.invoice_number || "—"}</td>
+                      {tabData.records.map((r: Record<string, unknown>, idx: number) => (
+                        <tr key={String(r.id || idx)} className="hover:bg-[var(--omlu-hover-surface)]">
+                          <td className="py-2.5 px-3 whitespace-nowrap">{formatDate(typeof r.invoice_date === "string" ? r.invoice_date.split("T")[0] : "")}</td>
+                          <td className="py-2.5 px-3 font-medium">{String(r.document_number ?? "")}</td>
+                          <td className="py-2.5 px-3 font-medium text-emerald-600 dark:text-emerald-400">{String(r.invoice_number || "—")}</td>
                           <td className="py-2.5 px-3 text-right">{fmtCurrency(r.subtotal)}</td>
                           <td className="py-2.5 px-3 text-right">{fmtCurrency(r.taxable_amount)}</td>
                           <td className="py-2.5 px-3 text-right">{fmtCurrency(r.tax_amount)}</td>
@@ -623,11 +688,12 @@ export default function GstClient() {
           {/* TAB 7: DOCUMENTS ISSUED */}
           {activeTab === "documents_issued" && (
             <div className="space-y-4">
-              {tabData?.audit?.sequence_gaps?.length > 0 && (
+              {Array.isArray((tabData?.audit as Record<string, unknown> | undefined)?.sequence_gaps) &&
+              ((tabData?.audit as Record<string, unknown>).sequence_gaps as unknown[]).length > 0 && (
                 <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-amber-900 dark:text-amber-200">
                   <p className="font-bold">Invoice Sequence Gaps Detected (Needs Review)</p>
                   <p className="mt-1">
-                    Detected {tabData.audit.sequence_gaps.length} missing contiguous invoice number range(s). Unexplained gaps require operational review.
+                    Detected {((tabData?.audit as Record<string, unknown>).sequence_gaps as unknown[]).length} missing contiguous invoice number range(s). Unexplained gaps require operational review.
                   </p>
                 </div>
               )}
@@ -649,13 +715,13 @@ export default function GstClient() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-[var(--omlu-border-subtle)]">
-                        {tabData.records.map((r: any, idx: number) => (
+                        {tabData.records.map((r: Record<string, unknown>, idx: number) => (
                           <tr key={idx} className="hover:bg-[var(--omlu-hover-surface)]">
-                            <td className="py-2.5 px-3 font-mono font-bold text-emerald-600 dark:text-emerald-400">{r.invoice_number}</td>
-                            <td className="py-2.5 px-3 whitespace-nowrap">{formatDate(r.invoice_date?.split("T")[0])}</td>
-                            <td className="py-2.5 px-3 capitalize">{r.document_type}</td>
-                            <td className="py-2.5 px-3 font-medium">{r.document_number}</td>
-                            <td className="py-2.5 px-3 font-bold uppercase text-[10px]">{r.status}</td>
+                            <td className="py-2.5 px-3 font-mono font-bold text-emerald-600 dark:text-emerald-400">{String(r.invoice_number ?? "")}</td>
+                            <td className="py-2.5 px-3 whitespace-nowrap">{formatDate(typeof r.invoice_date === "string" ? r.invoice_date.split("T")[0] : "")}</td>
+                            <td className="py-2.5 px-3 capitalize">{String(r.document_type ?? "")}</td>
+                            <td className="py-2.5 px-3 font-medium">{String(r.document_number ?? "")}</td>
+                            <td className="py-2.5 px-3 font-bold uppercase text-[10px]">{String(r.status ?? "")}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -691,12 +757,12 @@ export default function GstClient() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[var(--omlu-border-subtle)]">
-                      {tabData.records.map((r: any) => (
-                        <tr key={r.id} className="hover:bg-[var(--omlu-hover-surface)]">
-                          <td className="py-2.5 px-3 whitespace-nowrap">{formatDate(r.created_at?.split("T")[0])}</td>
-                          <td className="py-2.5 px-3 font-medium text-red-600 dark:text-red-400">{r.document_number}</td>
-                          <td className="py-2.5 px-3 font-medium">{r.invoice_number || "—"}</td>
-                          <td className="py-2.5 px-3 text-right">{fmtCurrency(r.subtotal)}</td>
+                      {tabData.records.map((r: Record<string, unknown>, idx: number) => (
+                        <tr key={String(r.id || idx)} className="hover:bg-[var(--omlu-hover-surface)]">
+                          <td className="py-2.5 px-3 whitespace-nowrap">{formatDate(typeof r.created_at === "string" ? r.created_at.split("T")[0] : "")}</td>
+                          <td className="py-2.5 px-3 font-medium text-red-600 dark:text-red-400">{String(r.document_number ?? "")}</td>
+                          <td className="py-2.5 px-3 font-medium">{String(r.invoice_number || "—")}</td>
+                          <td className="py-2.5 px-3 text-right">{fmtCurrency(r.taxable_amount)}</td>
                           <td className="py-2.5 px-3 text-right">{fmtCurrency(r.taxable_amount)}</td>
                           <td className="py-2.5 px-3 text-right">{fmtCurrency(r.cgst_amount)}</td>
                           <td className="py-2.5 px-3 text-right">{fmtCurrency(r.sgst_amount)}</td>
