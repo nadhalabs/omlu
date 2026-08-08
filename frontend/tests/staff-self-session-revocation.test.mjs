@@ -25,7 +25,7 @@ test("other-account revocation updates only that member and does not invoke tear
 test("failed revocation preserves authentication and reports the existing error state", () => {
   assert.match(staff, /const updated = await revokeStaffSessions[\s\S]*catch \(err\)/);
   assert.match(staff, /setError\(message\)/);
-  assert.match(staff, /setToast\(message\)/);
+  assert.match(staff, /uiToast\(message, "error"\)/);
   assert.match(staff, /staffLogout\(\)[\s\S]*return;[\s\S]*replaceStaff\(updated\)[\s\S]*catch/);
 });
 

@@ -29,6 +29,21 @@ test("staff mutations use row-scoped progress without blocking unrelated account
   }
 });
 
+test("global operations utilize busy state protection and progress text", () => {
+  assert.match(source, /operationsBusy/);
+  assert.match(source, /setOperationsBusy\(true\)/);
+  assert.match(source, /Locking all staff\.\.\./);
+  assert.match(source, /Unlocking all staff\.\.\./);
+  assert.match(source, /Updating status\.\.\./);
+  assert.match(source, /disabled=\{operationsBusy\}/);
+});
+
+test("mutation errors prefer detailed ApiError messages and credential field validation scoping", () => {
+  assert.match(source, /err instanceof ApiError \? err\.message/);
+  assert.match(source, /const isCredentialField = err\.field === "temporary_password" \|\| err\.field === "pin" \|\| err\.field === "password"/);
+  assert.match(source, /setResetPasswordError\(isCredentialField \? err\.message : undefined\)/);
+});
+
 test("create fields have labels and associated inline errors", () => {
   for (const label of ["Full name", "Username", "6-digit PIN", "Confirm PIN"]) assert.ok(source.includes(`label="${label}"`));
   assert.match(source, /aria-describedby=\{error \? errorId : hint \? hintId : undefined\}/);
