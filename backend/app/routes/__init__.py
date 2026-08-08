@@ -21,6 +21,7 @@ from app.routes.menu_imports import router as menu_imports_router
 from app.routes.table_participants import router as table_participants_router
 from app.routes.platform import router as platform_router
 from app.routes.print_bridge import router as print_bridge_router
+from app.routes.gst import router as gst_router
 
 __all__ = [
     "public_menu_router",
@@ -46,4 +47,5 @@ __all__ = [
     "table_participants_router",
     "platform_router",
     "print_bridge_router",
+    "gst_router",
 ]

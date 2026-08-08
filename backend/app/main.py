@@ -173,6 +173,7 @@ from app.routes import (
     table_participants_router,
     platform_router,
     print_bridge_router,
+    gst_router,
 )
 
 app.include_router(health_router)
@@ -198,6 +199,7 @@ app.include_router(push_router)
 app.include_router(quick_sales_router)
 app.include_router(menu_imports_router)
 app.include_router(table_participants_router)
+app.include_router(gst_router)
 
 
 @app.on_event("shutdown")

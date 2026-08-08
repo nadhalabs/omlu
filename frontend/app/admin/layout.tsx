@@ -118,6 +118,7 @@ export default async function AdminLayout({
             <AdminSidebarLink href="/admin/menu" label="Menu Items" icon="menu" />
             <AdminSidebarLink href="/admin/staff" label="Staff Management" icon="staff" />
             <AdminSidebarLink href="/admin/performance" label="Performance" icon="performance" />
+            <AdminSidebarLink href="/admin/gst" label="GST Center" icon="gst" />
             <AdminSidebarLink href="/admin/settings" label="Settings" icon="settings" />
             </AdminOperationalCountsProvider>
           </nav>
