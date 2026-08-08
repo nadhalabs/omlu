@@ -1,6 +1,7 @@
 from typing import Literal, Optional
 from pydantic import BaseModel, Field, field_validator
 from app.schemas.order import SelectedOptionRequest
+from app.utils.gst import normalize_gstin, normalize_gst_state_code
 
 
 class QuickSaleItemCreate(BaseModel):
@@ -26,24 +27,12 @@ class QuickSaleCreate(BaseModel):
     @field_validator("customer_gstin")
     @classmethod
     def validate_customer_gstin(cls, v: Optional[str]) -> Optional[str]:
-        if v is None or not v.strip():
-            return None
-        normalized = v.strip().upper()
-        import re
-        if not re.fullmatch(r"[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]", normalized):
-            raise ValueError("GSTIN must be a valid 15-character GST identification number.")
-        return normalized
+        return normalize_gstin(v)
 
     @field_validator("customer_state_code", "place_of_supply_code")
     @classmethod
     def validate_state_code(cls, v: Optional[str]) -> Optional[str]:
-        if v is None or not v.strip():
-            return None
-        normalized = v.strip()
-        import re
-        if not re.fullmatch(r"\d{2}", normalized) or not 1 <= int(normalized) <= 38:
-            raise ValueError("State code must be a two-digit Indian GST state code.")
-        return normalized
+        return normalize_gst_state_code(v)
 
 
 class QuickSalePayment(BaseModel):

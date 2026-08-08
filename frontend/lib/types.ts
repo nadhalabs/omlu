@@ -272,6 +272,12 @@ export interface BillResponse {
   registered_billing_address: string | null;
   state_name: string | null;
   state_code: string | null;
+  customer_tax_type: "b2c" | "b2b";
+  customer_gstin_snapshot: string | null;
+  customer_legal_name_snapshot: string | null;
+  customer_state_code_snapshot: string | null;
+  customer_state_name_snapshot: string | null;
+  place_of_supply_code_snapshot: string | null;
   session_status: DiningSessionStatus;
   payment_requested_at: string | null;
   detached_at: string | null;
@@ -759,6 +765,10 @@ export interface BillingCounterItem {
   payment_method: string | null;
   paid_at: string | null;
   receipt_token: string | null;
+  gst_enabled: boolean;
+  has_customer_gst_details: boolean;
+  customer_gstin: string | null;
+  customer_legal_name: string | null;
 }
 
 export interface BillingCounterQueues {

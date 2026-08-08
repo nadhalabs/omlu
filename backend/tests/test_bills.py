@@ -1,7 +1,7 @@
 import datetime
 import json
 import uuid
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from decimal import Decimal
 
 import pytest
@@ -29,6 +29,7 @@ from app.services.bills import (
     find_unresolved_bill_by_payment_code,
     generate_invoice_number,
     indian_financial_year,
+    issue_bill,
     payment_code_digest,
 )
 from app.services.dining_sessions import find_current_open_session_for_table
@@ -501,6 +502,10 @@ def test_billing_counter_classifies_authoritative_tenant_scoped_queues(bill_cont
     assert requested_item["item_count"] == 1
     assert requested_item["subtotal"] == "100.00"
     assert requested_item["receipt_token"] is None
+    assert requested_item["gst_enabled"] is False
+    assert requested_item["has_customer_gst_details"] is False
+    assert requested_item["customer_gstin"] is None
+    assert requested_item["customer_legal_name"] is None
 
     issued = issue_bill_for(bill_context, token_key="admin_token")
     awaiting = client.get("/staff/bills/billing-counter", headers=owner_headers).json()
@@ -2754,3 +2759,189 @@ def test_receipt_response_schema_enforces_canonical_item_contract():
         ReceiptPayloadResponse.model_validate(invalid)
     with pytest.raises(ValidationError):
         ReceiptPayloadResponse.model_validate({**payload, "status": "draft"})
+
+
+def _put_customer_gst(data, bill_number, payload, token_key="owner_token"):
+    return client.put(
+        f"/staff/bills/{bill_number}/customer-gst-details",
+        json=payload,
+        headers={"Authorization": f"Bearer {data[token_key]}"},
+    )
+
+
+def test_draft_customer_gst_details_add_edit_remove_and_audit(bill_context):
+    _enable_gst(bill_context)
+    add_order(bill_context)
+    draft = create_bill(bill_context).json()
+    assert draft["customer_tax_type"] == "b2c"
+    assert draft["cgst_amount"] == draft["sgst_amount"] == "2.50"
+    assert draft["igst_amount"] == "0.00"
+
+    added_response = _put_customer_gst(bill_context, draft["bill_number"], {
+        "customer_gstin": "27aaaaa0000a1z5",
+        "customer_legal_name": "  Acme Maharashtra Pvt Ltd  ",
+    })
+    assert added_response.status_code == 200
+    added = added_response.json()
+    assert added["customer_tax_type"] == "b2b"
+    assert added["customer_gstin_snapshot"] == "27AAAAA0000A1Z5"
+    assert added["customer_legal_name_snapshot"] == "Acme Maharashtra Pvt Ltd"
+    assert added["customer_state_code_snapshot"] == "27"
+    assert added["customer_state_name_snapshot"] == "Maharashtra"
+    assert added["place_of_supply_code_snapshot"] == "27"
+    assert added["cgst_amount"] == added["sgst_amount"] == "0.00"
+    assert added["igst_amount"] == "5.00"
+    counter_item = client.get(
+        "/staff/bills/billing-counter",
+        headers={"Authorization": f"Bearer {bill_context['owner_token']}"},
+    ).json()["requested"][0]
+    assert counter_item["has_customer_gst_details"] is True
+    assert counter_item["gst_enabled"] is True
+    assert counter_item["customer_gstin"] == "27AAAAA0000A1Z5"
+    assert counter_item["customer_legal_name"] == "Acme Maharashtra Pvt Ltd"
+
+    edited = _put_customer_gst(bill_context, draft["bill_number"], {
+        "customer_gstin": "32bbbbb1111b2z6",
+        "customer_legal_name": "Kerala Trading Co",
+    }).json()
+    assert edited["customer_gstin_snapshot"] == "32BBBBB1111B2Z6"
+    assert edited["place_of_supply_code_snapshot"] == "32"
+    assert edited["cgst_amount"] == edited["sgst_amount"] == "2.50"
+    assert edited["igst_amount"] == "0.00"
+
+    removed = _put_customer_gst(bill_context, draft["bill_number"], {
+        "customer_gstin": None, "customer_legal_name": None,
+    }).json()
+    assert removed["customer_tax_type"] == "b2c"
+    for field in (
+        "customer_gstin_snapshot", "customer_legal_name_snapshot",
+        "customer_state_code_snapshot", "customer_state_name_snapshot",
+        "place_of_supply_code_snapshot",
+    ):
+        assert removed[field] is None
+
+    db = SessionLocal()
+    actions = [row.action for row in db.query(AuditLog).filter(
+        AuditLog.restaurant_id == bill_context["restaurant_id"],
+        AuditLog.target_type == "bill",
+    ).order_by(AuditLog.id).all()]
+    last_log = db.query(AuditLog).filter(
+        AuditLog.action == "bill.customer_gst_details.removed"
+    ).order_by(AuditLog.id.desc()).first()
+    db.close()
+    assert actions[-3:] == [
+        "bill.customer_gst_details.added",
+        "bill.customer_gst_details.edited",
+        "bill.customer_gst_details.removed",
+    ]
+    assert json.loads(last_log.new_value)["actor_id"] == bill_context["owner_id"]
+
+
+@pytest.mark.parametrize("payload", [
+    {"customer_gstin": "INVALID", "customer_legal_name": "Acme"},
+    {"customer_gstin": "32AAAAA0000A1Z5", "customer_legal_name": None},
+    {"customer_gstin": None, "customer_legal_name": "Acme"},
+])
+def test_draft_customer_gst_details_reject_invalid_or_incomplete_payload(bill_context, payload):
+    add_order(bill_context)
+    draft = create_bill(bill_context).json()
+    response = _put_customer_gst(bill_context, draft["bill_number"], payload)
+    assert response.status_code == 422
+
+
+def test_customer_gst_details_permission_and_tenant_scope(bill_context):
+    add_order(bill_context)
+    number = create_bill(bill_context).json()["bill_number"]
+    payload = {"customer_gstin": "32AAAAA0000A1Z5", "customer_legal_name": "Acme"}
+    assert _put_customer_gst(bill_context, number, payload, "staff_token").status_code == 403
+    assert _put_customer_gst(bill_context, number, payload, "other_token").status_code == 404
+    assert _put_customer_gst(bill_context, number, payload, "admin_token").status_code == 200
+
+
+@pytest.mark.parametrize("bill_status", ["issued", "payment_pending", "paid", "cancelled"])
+def test_customer_gst_details_are_immutable_after_draft(bill_context, bill_status):
+    add_order(bill_context)
+    number = create_bill(bill_context).json()["bill_number"]
+    db = SessionLocal()
+    bill = db.query(Bill).filter(Bill.bill_number == number).one()
+    bill.status = bill_status
+    bill.customer_tax_type = "b2b"
+    bill.customer_gstin_snapshot = "32AAAAA0000A1Z5"
+    bill.customer_legal_name_snapshot = "Frozen Customer"
+    db.commit()
+    db.close()
+
+    response = _put_customer_gst(bill_context, number, {
+        "customer_gstin": None, "customer_legal_name": None,
+    })
+    assert response.status_code == 409
+    db = SessionLocal()
+    frozen = db.query(Bill).filter(Bill.bill_number == number).one()
+    assert frozen.customer_gstin_snapshot == "32AAAAA0000A1Z5"
+    assert frozen.customer_legal_name_snapshot == "Frozen Customer"
+    db.close()
+
+
+def test_customer_gst_mutation_waiting_on_bill_lock_is_rejected_when_issuance_wins(bill_context):
+    _enable_gst(bill_context)
+    add_order(bill_context)
+    number = create_bill(bill_context).json()["bill_number"]
+
+    issuing_db = SessionLocal()
+    locked_bill = issuing_db.query(Bill).filter(
+        Bill.restaurant_id == bill_context["restaurant_id"],
+        Bill.bill_number == number,
+    ).with_for_update().one()
+
+    def mutate_customer_gst():
+        local_client = TestClient(app)
+        return local_client.put(
+            f"/staff/bills/{number}/customer-gst-details",
+            json={
+                "customer_gstin": "27AAAAA0000A1Z5",
+                "customer_legal_name": "Racing Customer Pvt Ltd",
+            },
+            headers={"Authorization": f"Bearer {bill_context['owner_token']}"},
+        )
+
+    executor = ThreadPoolExecutor(max_workers=1)
+    mutation = executor.submit(mutate_customer_gst)
+    try:
+        with pytest.raises(FutureTimeoutError):
+            mutation.result(timeout=0.5)
+
+        issued = issue_bill(issuing_db, locked_bill)
+        assert issued.status == "issued"
+        issuing_db.commit()
+        response = mutation.result(timeout=5)
+    finally:
+        issuing_db.rollback()
+        issuing_db.close()
+        executor.shutdown(wait=True)
+
+    assert response.status_code == 409
+    db = SessionLocal()
+    frozen = db.query(Bill).filter(Bill.bill_number == number).one()
+    assert frozen.status == "issued"
+    assert frozen.customer_tax_type == "b2c"
+    assert frozen.customer_gstin_snapshot is None
+    assert frozen.customer_legal_name_snapshot is None
+    db.close()
+
+
+def test_existing_issuance_still_rejects_incomplete_b2b_snapshot(bill_context):
+    _enable_gst(bill_context)
+    add_order(bill_context)
+    number = create_bill(bill_context).json()["bill_number"]
+    db = SessionLocal()
+    bill = db.query(Bill).filter(Bill.bill_number == number).one()
+    bill.customer_tax_type = "b2b"
+    bill.customer_gstin_snapshot = "32AAAAA0000A1Z5"
+    bill.customer_legal_name_snapshot = None
+    db.commit()
+    db.close()
+    response = client.post(
+        f"/staff/bills/{number}/issue",
+        headers={"Authorization": f"Bearer {bill_context['owner_token']}", "Idempotency-Key": "incomplete-b2b"},
+    )
+    assert response.status_code == 422

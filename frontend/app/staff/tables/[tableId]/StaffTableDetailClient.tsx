@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getStaffMe, resolveStaffServiceRequest } from "@/lib/api";
+import { getStaffMe, resolveStaffServiceRequest, updateBillCustomerGstDetails } from "@/lib/api";
 import {
   getStaffTableDetail,
   getStaffTableParticipants,
@@ -16,6 +16,7 @@ import {
 import { useRealtime } from "@/lib/realtime";
 import { CurrentStaffResponse } from "@/lib/types";
 import { useOmluUi } from "@/components/OmluUiProvider";
+import { CustomerGstDetails, CustomerGstValue } from "@/components/billing/CustomerGstDetails";
 
 export default function StaffTableDetailClient({ tableId }: { tableId: number }) {
   const { confirm: confirmDialog } = useOmluUi();
@@ -107,6 +108,15 @@ export default function StaffTableDetailClient({ tableId }: { tableId: number })
   const canRequestBill = Boolean(detail?.session && hasValidOrder && !bill && !pendingBillRequest && !sessionClosedForBilling);
   const billUrl = detail?.session?.session_token ? `/bill/${encodeURIComponent(detail.session.session_token)}` : null;
   const activeParticipants = participants?.participants.filter((participant) => !participant.revoked_at) || [];
+  const canManageCustomerGst = staffInfo?.role === "owner" || staffInfo?.role === "admin";
+  const customerGstValue = bill?.customer_gstin_snapshot && bill.customer_legal_name_snapshot
+    ? { gstin: bill.customer_gstin_snapshot, businessName: bill.customer_legal_name_snapshot }
+    : null;
+  const saveCustomerGst = async (details: CustomerGstValue | null) => {
+    if (!bill || bill.status !== "draft" || !canManageCustomerGst) return;
+    await updateBillCustomerGstDetails(bill.bill_number, details);
+    await load();
+  };
   return (
     <div className="min-h-screen bg-[var(--omlu-page-background)] px-3 py-5 text-[var(--omlu-text-secondary)] sm:px-4 sm:py-8">
       <div className="mx-auto flex max-w-6xl flex-col gap-5">
@@ -219,6 +229,7 @@ export default function StaffTableDetailClient({ tableId }: { tableId: number })
                   </div>
                   {!hasValidOrder && !bill && <div className="mt-4 text-sm text-[var(--omlu-text-secondary)]">Add at least one order before requesting a bill.</div>}
                   {bill && <div className="mt-4 text-sm text-[var(--omlu-text-secondary)]">Bill {bill.bill_number} · ₹{bill.total_amount} · {bill.status}</div>}
+                  {bill && canManageCustomerGst && (customerGstValue || (bill.status === "draft" && bill.gst_enabled)) && <CustomerGstDetails value={customerGstValue} editable={bill.status === "draft" && bill.gst_enabled} disabled={Boolean(busy)} onSave={(details) => saveCustomerGst(details)} onRemove={() => saveCustomerGst(null)} />}
                   {staffInfo?.role === "staff" && <div className="mt-3 text-xs text-[var(--omlu-text-secondary)]">You can review provisional totals and notify the counter. Only an owner or admin can issue, print, or collect payment.</div>}
                 </div>
               </div>

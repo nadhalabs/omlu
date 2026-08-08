@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRealtime } from "@/lib/realtime";
 import { useOmluUi } from "@/components/OmluUiProvider";
 import { MenuOptionGroup, SelectedOptionRequest } from "@/lib/types";
+import { CustomerGstDetails, CustomerGstValue } from "@/components/billing/CustomerGstDetails";
 
 type SaleType = "takeaway" | "late_entry";
 type PaymentMethod = "cash" | "upi";
@@ -31,6 +32,7 @@ export default function QuickSaleClient() {
   const [preview, setPreview] = useState<QuickSalePreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [customerGst, setCustomerGst] = useState<CustomerGstValue | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [customisingItem, setCustomisingItem] = useState<MenuItem | null>(null);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -69,6 +71,13 @@ export default function QuickSaleClient() {
   useRealtime({ target: { kind: "staff", channel: "staff" }, onEvent: () => void load(), onReconnect: () => void load() });
 
   const visibleMenu = useMemo(() => (data?.menu_items || []).filter((item) => item.name.toLowerCase().includes(search.toLowerCase())), [data, search]);
+  const customerGstPayload = useMemo(() => customerGst ? {
+    customer_tax_type: "b2b",
+    customer_gstin: customerGst.gstin,
+    customer_legal_name: customerGst.businessName,
+    customer_state_code: customerGst.gstin.slice(0, 2),
+    place_of_supply_code: customerGst.gstin.slice(0, 2),
+  } : {}, [customerGst]);
   useEffect(() => {
     const requestId = ++previewRequest.current;
     let controller: AbortController | null = null;
@@ -91,6 +100,7 @@ export default function QuickSaleClient() {
           sale_type: saleType,
           items: cart.map((line) => ({ menu_item_id: line.menu_item_id, quantity: line.quantity, selected_options: line.selected_options })),
           payment_method: saleType === "late_entry" ? payment : null,
+          ...customerGstPayload,
         }),
       }).then((response) => parseResponse<QuickSalePreview>(response)).then((result) => {
         if (requestId === previewRequest.current) setPreview(result);
@@ -102,7 +112,7 @@ export default function QuickSaleClient() {
       });
     }, 0);
     return () => { window.clearTimeout(timeout); controller?.abort(); };
-  }, [cart, payment, saleType]);
+  }, [cart, customerGstPayload, payment, saleType]);
 
   const previewDetails = (value: QuickSalePreview) => {
     const details = [`Subtotal: ₹${value.subtotal}`];
@@ -184,7 +194,7 @@ export default function QuickSaleClient() {
     const confirmedPreview = preview;
     await confirmDialog({ title: isLate ? (payment === "upi" ? "Confirm UPI payment" : "Record late entry") : "Send takeaway to Kitchen?", message: isLate ? (payment === "upi" ? "Confirm that the payment has been received in the restaurant’s UPI account." : "This sale will be recorded as paid and included in today’s revenue.") : "Kitchen will receive this order immediately for preparation.", details: [...previewDetails(confirmedPreview), ...(isLate && payment === "cash" ? ["Payment method: Cash"] : [])], confirmLabel: `${isLate ? (payment === "upi" ? "Payment received" : "Confirm payment") : "Send to Kitchen"} — ₹${confirmedPreview.grand_total}`, onConfirm: async () => {
       setSaving(true); setError(null);
-      try { const created = await parseResponse<QuickSale>(await fetch("/api/admin/quick-sales", { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey.current }, body: JSON.stringify({ sale_type: saleType, items: cart.map((line) => ({ menu_item_id: line.menu_item_id, quantity: line.quantity, selected_options: line.selected_options })), note: note || null, payment_method: isLate ? payment : null }) })); setCart([]); setNote(""); setSaleType(null); idempotencyKey.current = crypto.randomUUID(); localStorage.setItem("omlu:quick-sale:draft-key", idempotencyKey.current); await load(); window.dispatchEvent(new Event("admin-operational-counts-changed")); toast(isLate ? `Late Entry recorded. Total ₹${created.total}.` : "Takeaway sent to Kitchen.", "success"); }
+      try { const created = await parseResponse<QuickSale>(await fetch("/api/admin/quick-sales", { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey.current }, body: JSON.stringify({ sale_type: saleType, items: cart.map((line) => ({ menu_item_id: line.menu_item_id, quantity: line.quantity, selected_options: line.selected_options })), note: note || null, payment_method: isLate ? payment : null, ...customerGstPayload }) })); setCart([]); setNote(""); setCustomerGst(null); setSaleType(null); idempotencyKey.current = crypto.randomUUID(); localStorage.setItem("omlu:quick-sale:draft-key", idempotencyKey.current); await load(); window.dispatchEvent(new Event("admin-operational-counts-changed")); toast(isLate ? `Late Entry recorded. Total ₹${created.total}.` : "Takeaway sent to Kitchen.", "success"); }
       catch (err) { const message = err instanceof Error ? err.message : "Could not save Quick Sale."; setError(message); toast(message, "error"); }
       finally { setSaving(false); }
     }});
@@ -257,6 +267,7 @@ export default function QuickSaleClient() {
             <div className="flex justify-between border-t border-[var(--omlu-border-strong)] pt-3 text-xl font-black text-[var(--omlu-text-primary)]"><span>Grand total</span><span>₹{preview.grand_total}</span></div>
           </>}
         </div>
+        {(preview?.gst_enabled || customerGst) && <CustomerGstDetails value={customerGst} editable={Boolean(preview?.gst_enabled)} disabled={saving} onSave={(details) => setCustomerGst(details)} onRemove={() => setCustomerGst(null)} />}
         <label className="mt-5 block text-xs font-bold text-[var(--omlu-text-secondary)]">Order note <span className="font-medium text-[var(--omlu-text-secondary)]">(optional)</span><textarea value={note} onChange={(e) => setNote(e.target.value)} maxLength={1024} placeholder="Add preparation or counter notes" className="mt-2 min-h-20 w-full resize-y rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-muted-surface)] p-3 text-sm text-[var(--omlu-text-primary)] outline-none placeholder:text-[var(--omlu-text-secondary)] focus:border-orange-500 focus:ring-2 focus:ring-orange-100" /></label>
         <div className="mt-4 rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-muted-surface)] p-3">
           {saleType === "late_entry" ? <fieldset><legend className="text-xs font-black text-[var(--omlu-text-primary)]">Payment received</legend><div className="mt-2 grid grid-cols-2 gap-2">{(["cash", "upi"] as PaymentMethod[]).map((method) => <button type="button" aria-pressed={payment === method} key={method} onClick={() => setPayment(method)} className={`min-h-11 rounded-lg border px-4 py-2 text-sm font-black uppercase ${payment === method ? "border-orange-500 bg-orange-600 text-[var(--omlu-primary-action-text)]" : "border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] text-[var(--omlu-text-primary)] hover:border-[var(--omlu-border-strong)]"}`}>{method}</button>)}</div></fieldset> : <div><p className="text-xs font-black text-[var(--omlu-text-primary)]">Payment after preparation</p><p className="mt-1 text-xs text-[var(--omlu-text-secondary)]">Takeaway payment is confirmed after the Kitchen marks it served.</p></div>}
