@@ -40,8 +40,19 @@ export async function proxyAdminRequest(
       body,
     });
 
+    if (!res.ok) {
+      let errDetail: unknown = `API Request failed with status ${res.status}`;
+      try {
+        const errJson = await res.json();
+        if (errJson && (typeof errJson.detail === "string" || typeof errJson.detail === "object")) {
+          errDetail = errJson.detail;
+        }
+      } catch {}
+      return NextResponse.json({ detail: errDetail }, { status: res.status });
+    }
+
     if (options.isBinary) {
-      // Forward raw binary buffer (e.g. dynamic QR PNG images)
+      // Forward raw binary buffer (e.g. dynamic QR PNG images, ZIP, XLSX, PDF)
       const data = await res.arrayBuffer();
       const headersOut: HeadersInit = {};
       const contentType = res.headers.get("content-type");
@@ -54,17 +65,6 @@ export async function proxyAdminRequest(
         status: res.status,
         headers: headersOut,
       });
-    }
-
-    if (!res.ok) {
-      let errDetail: unknown = `API Request failed with status ${res.status}`;
-      try {
-        const errJson = await res.json();
-        if (errJson && (typeof errJson.detail === "string" || typeof errJson.detail === "object")) {
-          errDetail = errJson.detail;
-        }
-      } catch {}
-      return NextResponse.json({ detail: errDetail }, { status: res.status });
     }
 
     if (res.status === 204) {
