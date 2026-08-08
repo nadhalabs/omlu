@@ -20,6 +20,7 @@ from app.services.gst_exports import (
     generate_ca_package_zip,
     sanitize_filename,
 )
+from app.services.gst_data_health import evaluate_gst_data_health
 from app.services.gst_reports import (
     get_b2b_register,
     get_b2c_register,
@@ -46,6 +47,23 @@ def gst_center_summary(
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     return get_gst_center_summary(
+        db,
+        staff=current_user,
+        preset=preset,
+        start_date=start_date,
+        end_date=end_date,
+    )
+
+
+@router.get("/data-health")
+def gst_data_health(
+    preset: str | None = Query("today"),
+    start_date: date | None = None,
+    end_date: date | None = None,
+    current_user: StaffUser = Depends(_owner_admin),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    return evaluate_gst_data_health(
         db,
         staff=current_user,
         preset=preset,

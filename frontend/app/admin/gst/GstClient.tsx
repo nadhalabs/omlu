@@ -12,7 +12,8 @@ export type TabKey =
   | "b2b_register"
   | "b2c_register"
   | "documents_issued"
-  | "cancelled_documents";
+  | "cancelled_documents"
+  | "data_health";
 
 export type GstSummaryResponse = {
   gst_enabled: boolean;
@@ -59,6 +60,7 @@ const tabsList: { value: TabKey; label: string }[] = [
   { value: "b2c_register", label: "B2C Register" },
   { value: "documents_issued", label: "Documents Issued" },
   { value: "cancelled_documents", label: "Cancelled Documents" },
+  { value: "data_health", label: "Data Health" },
 ];
 
 const cardStyle =
@@ -150,6 +152,7 @@ interface TabDataResponse {
       if (activeTab === "b2c_register") endpoint = `/api/admin/gst/b2c-register`;
       if (activeTab === "documents_issued") endpoint = `/api/admin/gst/documents-issued`;
       if (activeTab === "cancelled_documents") endpoint = `/api/admin/gst/cancelled-documents`;
+      if (activeTab === "data_health") endpoint = `/api/admin/gst/data-health`;
 
       const res = await fetch(`${endpoint}?${params.toString()}`);
       if (res.ok) {
@@ -771,6 +774,123 @@ interface TabDataResponse {
                       ))}
                     </tbody>
                   </table>
+                </div>
+              ) : null}
+            </div>
+          )}
+
+          {/* TAB 9: DATA HEALTH */}
+          {activeTab === "data_health" && (
+            <div className="space-y-4">
+              {tabLoading ? (
+                <p className="text-xs text-[var(--omlu-text-secondary)] py-6 text-center">Evaluating GST data health...</p>
+              ) : tabData ? (
+                <div className="space-y-4">
+                  {/* Readiness Banner */}
+                  <div className="rounded-2xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-5 shadow-sm">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                      <div>
+                        <h3 className="text-base font-extrabold text-[var(--omlu-text-primary)]">
+                          GST Data Health & Reconciliation Summary
+                        </h3>
+                        <p className={`mt-1 text-sm font-semibold ${tabData.scan_limit_reached ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+                          {String(
+                            (tabData.summary as Record<string, unknown> | undefined)?.summary_text ||
+                              "GST Data Health Audit Complete"
+                          )}
+                        </p>
+                        {tabData.scan_limit_reached ? (
+                          <div className="mt-2 text-xs font-medium text-amber-700 dark:text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-lg p-2">
+                            ⚠️ {String(tabData.scan_warning || "Partial evaluation: Scan limit reached. Please select a custom or narrower date range for complete audit.")}
+                          </div>
+                        ) : null}
+                      </div>
+                      <span className="text-xs text-[var(--omlu-text-secondary)]">
+                        Checked at {formatDate(String(tabData.checked_at || "").split("T")[0])}
+                      </span>
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div className="rounded-xl border border-[var(--omlu-border-subtle)] bg-[var(--omlu-secondary-surface)] p-3">
+                        <p className="text-xs text-[var(--omlu-text-secondary)]">Checked Docs</p>
+                        <p className="text-lg font-bold text-[var(--omlu-text-primary)]">
+                          {String((tabData.summary as Record<string, unknown> | undefined)?.total_documents_checked ?? 0)}
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
+                        <p className="text-xs text-emerald-700 dark:text-emerald-400">Ready (Clean)</p>
+                        <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
+                          {String((tabData.summary as Record<string, unknown> | undefined)?.ready_count ?? 0)}
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
+                        <p className="text-xs text-amber-700 dark:text-amber-400">Warnings</p>
+                        <p className="text-lg font-bold text-amber-600 dark:text-amber-400">
+                          {String((tabData.summary as Record<string, unknown> | undefined)?.warning_count ?? 0)}
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-3">
+                        <p className="text-xs text-red-700 dark:text-red-400">Needs Review</p>
+                        <p className="text-lg font-bold text-red-600 dark:text-red-400">
+                          {String((tabData.summary as Record<string, unknown> | undefined)?.needs_review_count ?? 0)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Issues Table */}
+                  <div className={cardStyle}>
+                    <h4 className="text-sm font-bold text-[var(--omlu-text-primary)] mb-4">Detected Review Items</h4>
+                    {Array.isArray(tabData.issues) && tabData.issues.length > 0 ? (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs">
+                          <thead>
+                            <tr className="border-b border-[var(--omlu-border-strong)] text-[var(--omlu-text-secondary)]">
+                              <th className="py-2 px-3">Severity</th>
+                              <th className="py-2 px-3">Doc #</th>
+                              <th className="py-2 px-3">Invoice #</th>
+                              <th className="py-2 px-3">Type</th>
+                              <th className="py-2 px-3">Date</th>
+                              <th className="py-2 px-3">Plain-Language Explanation</th>
+                              <th className="py-2 px-3">Suggested Review Action</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-[var(--omlu-border-subtle)]">
+                            {(tabData.issues as Record<string, unknown>[]).map((iss, idx) => {
+                              const sev = String(iss.severity || "");
+                              return (
+                                <tr key={idx} className="hover:bg-[var(--omlu-hover-surface)]">
+                                  <td className="py-2.5 px-3 whitespace-nowrap font-bold">
+                                    {sev === "needs_review" ? (
+                                      <span className="inline-flex items-center rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-bold text-red-600 dark:text-red-400 border border-red-500/20">
+                                        NEEDS REVIEW
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                                        WARNING
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="py-2.5 px-3 font-medium">{String(iss.document_number ?? "")}</td>
+                                  <td className="py-2.5 px-3 font-mono font-bold">{String(iss.invoice_number ?? "")}</td>
+                                  <td className="py-2.5 px-3 capitalize">{String(iss.document_type ?? "")}</td>
+                                  <td className="py-2.5 px-3 whitespace-nowrap">{formatDate(String(iss.document_date ?? ""))}</td>
+                                  <td className="py-2.5 px-3 max-w-xs">{String(iss.explanation ?? "")}</td>
+                                  <td className="py-2.5 px-3 text-[var(--omlu-text-secondary)] italic max-w-xs">
+                                    {String(iss.suggested_action ?? "")}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="py-8 text-center text-xs text-[var(--omlu-text-secondary)]">
+                        No data health issues or sequence anomalies detected for this period. All checked documents are Ready.
+                      </div>
+                    )}
+                  </div>
                 </div>
               ) : null}
             </div>
