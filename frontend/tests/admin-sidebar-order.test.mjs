@@ -22,6 +22,7 @@ test("admin sidebar uses the required navigation order without duplicate entries
     "Menu Items",
     "Staff Management",
     "Performance",
+    "GST Center",
     "Settings",
   ]);
 });

@@ -16,6 +16,7 @@ from app.schemas.bill import (
     BillingReasonRequest,
     BillResponse,
     CounterPaymentRequest,
+    CustomerGSTDetailsRequest,
     DetachedPendingBillResponse,
     IssueAndReleaseRequest,
     IssueAndReleaseResponse,
@@ -37,11 +38,13 @@ from app.services.bills import (
     get_billable_orders,
     issue_bill,
     send_bill_to_counter,
+    apply_draft_totals,
 )
 from app.services.dining_sessions import find_current_open_session_for_table
 from app.services.table_participants import authority_hash, enforce_session_action_rate, load_participant, participant_token_header
 from app.services.table_participants import invalidate_session_participants
 from app.utils.auth import BillingRoleChecker, OperationalWriteChecker, RoleChecker
+from app.utils.gst import GST_STATE_NAMES
 from app.services.realtime import (
     EVENT_BILL_GENERATED,
     EVENT_BILL_DETACHED_FOR_PAYMENT,
@@ -527,6 +530,10 @@ def _billing_counter_item(db: Session, bill: Bill) -> dict:
         "payment_method": bill.payment_method,
         "paid_at": bill.paid_at.isoformat() if bill.paid_at else None,
         "receipt_token": bill.receipt_token if bill.status in {"issued", "payment_pending", "paid"} else None,
+        "gst_enabled": bill.gst_enabled_snapshot,
+        "has_customer_gst_details": bool(bill.customer_gstin_snapshot),
+        "customer_gstin": bill.customer_gstin_snapshot,
+        "customer_legal_name": bill.customer_legal_name_snapshot,
     }
 
 
@@ -788,6 +795,91 @@ def get_staff_bill(
     ).first()
     if not bill:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
+    return build_bill_response(db, bill)
+
+
+@router.put("/staff/bills/{bill_number}/customer-gst-details", response_model=BillResponse)
+def update_customer_gst_details(
+    bill_number: str,
+    payload: CustomerGSTDetailsRequest,
+    current_user: StaffUser = Depends(_official_billing_roles),
+    db: Session = Depends(get_db),
+):
+    bill = db.query(Bill).filter(
+        Bill.restaurant_id == current_user.restaurant_id,
+        Bill.bill_number == bill_number,
+    ).with_for_update().first()
+    if not bill:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
+    if bill.status != "draft":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Customer GST details can only be changed while the bill is a draft.",
+        )
+
+    gstin = payload.customer_gstin
+    legal_name = payload.customer_legal_name
+    removing = gstin is None and legal_name is None
+    if not removing and (gstin is None or legal_name is None):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Customer GSTIN and Legal Business Name are both required.",
+        )
+
+    previous = {
+        "customer_tax_type": bill.customer_tax_type,
+        "customer_gstin": bill.customer_gstin_snapshot,
+        "customer_legal_name": bill.customer_legal_name_snapshot,
+        "customer_state_code": bill.customer_state_code_snapshot,
+        "customer_state_name": bill.customer_state_name_snapshot,
+        "place_of_supply_code": bill.place_of_supply_code_snapshot,
+    }
+    if removing:
+        bill.customer_tax_type = "b2c"
+        bill.customer_gstin_snapshot = None
+        bill.customer_legal_name_snapshot = None
+        bill.customer_state_code_snapshot = None
+        bill.customer_state_name_snapshot = None
+        bill.place_of_supply_code_snapshot = None
+        action = "bill.customer_gst_details.removed"
+    else:
+        state_code = gstin[:2]
+        bill.customer_tax_type = "b2b"
+        bill.customer_gstin_snapshot = gstin
+        bill.customer_legal_name_snapshot = legal_name
+        bill.customer_state_code_snapshot = state_code
+        bill.customer_state_name_snapshot = GST_STATE_NAMES.get(state_code)
+        bill.place_of_supply_code_snapshot = state_code
+        action = (
+            "bill.customer_gst_details.added"
+            if previous["customer_tax_type"] != "b2b"
+            else "bill.customer_gst_details.edited"
+        )
+
+    apply_draft_totals(db, bill)
+    new_value = {
+        "actor_id": current_user.id,
+        "actor_name": current_user.name,
+        "actor_username": current_user.username,
+        "actor_role": current_user.role,
+        "customer_tax_type": bill.customer_tax_type,
+        "customer_gstin": bill.customer_gstin_snapshot,
+        "customer_legal_name": bill.customer_legal_name_snapshot,
+        "customer_state_code": bill.customer_state_code_snapshot,
+        "customer_state_name": bill.customer_state_name_snapshot,
+        "place_of_supply_code": bill.place_of_supply_code_snapshot,
+    }
+    db.add(AuditLog(
+        restaurant_id=current_user.restaurant_id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role,
+        target_type="bill",
+        target_id=str(bill.id),
+        action=action,
+        previous_value=json.dumps(previous, sort_keys=True),
+        new_value=json.dumps(new_value, sort_keys=True),
+    ))
+    db.commit()
     return build_bill_response(db, bill)
 
 

@@ -1663,6 +1663,26 @@ export async function getBillingCounter(): Promise<BillingCounterQueues> {
   return body;
 }
 
+export async function updateBillCustomerGstDetails(
+  billNumber: string,
+  details: { gstin: string; businessName: string } | null,
+): Promise<BillResponse> {
+  const res = await fetch(`/api/staff/bills/${encodeURIComponent(billNumber)}/customer-gst-details`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      customer_gstin: details?.gstin ?? null,
+      customer_legal_name: details?.businessName ?? null,
+    }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const detail = typeof body.detail === "string" ? body.detail : body.detail?.message;
+    throw new ApiError(res.status, detail || "Could not update customer GST details.");
+  }
+  return body;
+}
+
 export async function issueAndReleaseBill(
   billNumber: string,
   idempotencyKey: string,

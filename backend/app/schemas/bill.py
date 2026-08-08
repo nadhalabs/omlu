@@ -4,9 +4,28 @@ from typing import List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 from app.schemas.order import OrderItemSelectedOptionResponse
+from app.utils.gst import normalize_gstin
 
 
 CounterPaymentMethod = Literal["counter_cash", "counter_upi"]
+
+
+class CustomerGSTDetailsRequest(BaseModel):
+    customer_gstin: Optional[str] = Field(max_length=15)
+    customer_legal_name: Optional[str] = Field(max_length=255)
+
+    @field_validator("customer_gstin")
+    @classmethod
+    def validate_customer_gstin(cls, value: Optional[str]) -> Optional[str]:
+        return normalize_gstin(value)
+
+    @field_validator("customer_legal_name")
+    @classmethod
+    def normalize_legal_name(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
 
 
 class CounterPaymentRequest(BaseModel):

@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { confirmPendingPayment, getBillingCounter, reopenBillOrdering } from "@/lib/api";
+import { confirmPendingPayment, getBillingCounter, reopenBillOrdering, updateBillCustomerGstDetails } from "@/lib/api";
 import { issueStaffBill } from "@/lib/api";
 import { BillingCounterItem, BillingCounterQueues } from "@/lib/types";
 import { useOmluUi } from "@/components/OmluUiProvider";
 import { useRealtime } from "@/lib/realtime";
 import { printIssuedBill } from "@/lib/print_service";
+import { CustomerGstDetails, CustomerGstValue } from "@/components/billing/CustomerGstDetails";
 
 type Tab = "requested" | "awaiting_payment" | "paid_recently";
 type Method = "counter_cash" | "counter_upi";
@@ -149,6 +150,12 @@ export default function BillingCounterClient() {
     } finally { setBusy(null); }
   }
 
+  async function saveCustomerGst(item: BillingCounterItem, details: CustomerGstValue | null) {
+    await updateBillCustomerGstDetails(item.bill_number, details);
+    toast(details ? "Customer GST details saved." : "Customer GST details removed.", "success");
+    await refresh();
+  }
+
   const tabs: Array<[Tab, string, number]> = [
     ["requested", "Requested Bills", queues.requested.length],
     ["awaiting_payment", "Issued / Awaiting Payment", queues.awaiting_payment.length],
@@ -197,6 +204,7 @@ export default function BillingCounterClient() {
       {items.map((item) => <article key={item.bill_id} className="rounded-2xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-5">
         <div className="flex justify-between gap-4"><div><p className="text-xs font-black uppercase text-orange-500">{item.status === "draft" ? "Bill requested" : item.status === "paid" ? "Paid" : "Awaiting payment"}</p><h2 className="text-xl font-black">Table {item.table_number}</h2><p className="text-xs">{item.invoice_number || item.bill_number}</p></div><p className="text-2xl font-black">{money(item.total_amount)}</p></div>
         <dl className="mt-4 grid grid-cols-2 gap-3 text-sm"><div><dt className="text-[var(--omlu-text-secondary)]">Items</dt><dd>{item.item_count}</dd></div><div><dt className="text-[var(--omlu-text-secondary)]">Requested</dt><dd>{new Date(item.requested_at).toLocaleString()}</dd></div><div><dt className="text-[var(--omlu-text-secondary)]">Subtotal</dt><dd>{money(item.subtotal)}</dd></div><div><dt className="text-[var(--omlu-text-secondary)]">GST / Tax</dt><dd>{money(item.tax_amount)}</dd></div></dl>
+        {item.has_customer_gst_details || (item.status === "draft" && item.gst_enabled) ? <CustomerGstDetails value={item.has_customer_gst_details && item.customer_gstin && item.customer_legal_name ? { gstin: item.customer_gstin, businessName: item.customer_legal_name } : null} editable={item.status === "draft" && item.gst_enabled} disabled={busy === item.bill_number} onSave={(details) => saveCustomerGst(item, details)} onRemove={() => saveCustomerGst(item, null)} /> : null}
         {item.status === "draft" && <div className="mt-5 flex flex-wrap gap-2"><Link href={`/staff/tables/${item.table_id}`} className="rounded-xl border px-4 py-2 font-bold">Review Bill</Link><button disabled={busy === item.bill_number} onClick={() => void reopen(item)} className="rounded-xl border border-amber-600 px-4 py-2 font-bold text-amber-700 dark:text-amber-400 disabled:opacity-50">Reopen Ordering</button><button disabled={busy === item.bill_number} onClick={() => void issue(item, true)} className="rounded-xl bg-orange-600 px-4 py-2 font-black text-white disabled:opacity-50">Issue & Open Print</button><button disabled={busy === item.bill_number} onClick={() => void issue(item, false)} className="rounded-xl border px-4 py-2 font-bold disabled:opacity-50">Issue Without Printing</button></div>}
         {(item.status === "issued" || item.status === "payment_pending") && <div className="mt-5 flex flex-col gap-3">{item.receipt_token && <button disabled={busy === item.bill_number} onClick={() => void handleReprint(item)} className="rounded-xl border px-4 py-2 text-center font-bold disabled:opacity-50">{item.status === "issued" ? "Print Bill" : "Reprint Bill"}</button>}<div className="grid grid-cols-2 gap-2">{(["counter_cash", "counter_upi"] as Method[]).map((method) => <button key={method} role="radio" aria-checked={methods[item.bill_number] === method} onClick={() => setMethods((current) => ({...current, [item.bill_number]: method}))} className="rounded-xl border px-3 py-2 font-bold">{method === "counter_cash" ? "Cash" : "UPI"}</button>)}</div><button disabled={!methods[item.bill_number] || busy === item.bill_number} onClick={() => void collect(item)} className="rounded-xl bg-emerald-700 px-4 py-3 font-black text-white disabled:opacity-50">Confirm Payment</button></div>}
         {item.status === "paid" && <div className="mt-4 text-sm"><p>Method: {item.payment_method || "—"}</p><p>Paid: {item.paid_at ? new Date(item.paid_at).toLocaleString() : "—"}</p>{item.receipt_token && <button disabled={busy === item.bill_number} onClick={() => void handleReprint(item)} className="mt-3 inline-flex rounded-xl border px-4 py-2 font-bold disabled:opacity-50">Print / Reprint Receipt</button>}</div>}
