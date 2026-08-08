@@ -78,7 +78,7 @@ export default function StaffManagementClient() {
   const [operationsBusyAction, setOperationsBusyAction] = useState<string | null>(null);
   const [busyMemberId, setBusyMemberId] = useState<number | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
-  const [openMenuId, setOpenMenuId] = useState<number | null>(null);
+  const [openMenuState, setOpenMenuState] = useState<{ memberId: number; presentation: "desktop" | "mobile" } | null>(null);
   const [selfSessionRevoked, setSelfSessionRevoked] = useState(false);
   const pendingSessionRevocationsRef = useRef<Set<number>>(new Set());
   const createFieldOrder: (keyof StaffAccountCreateRequest)[] = ["name", "username", "role", "email", "temporary_password", "pin", "confirm_pin"];
@@ -391,9 +391,9 @@ export default function StaffManagementClient() {
         {loading && staff.length === 0 ? <div className="rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-6 text-sm font-medium text-[var(--omlu-text-secondary)]">Loading staff accounts...</div> : staff.length === 0 ? <div className="rounded-xl border border-dashed border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-8 text-center text-sm font-medium text-[var(--omlu-text-secondary)]">No staff accounts yet.</div> : <>
           <div className="hidden overflow-visible rounded-2xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] shadow-sm lg:block">
             <table className="w-full table-fixed text-sm"><thead className="bg-[var(--omlu-primary-surface)] text-left text-[11px] uppercase tracking-wider text-[var(--omlu-text-primary)]"><tr><th className="w-[25%] p-4">Staff member</th><th className="w-[14%] p-4">Role</th><th className="w-[13%] p-4">Status</th><th className="w-[15%] p-4">Last active</th><th className="w-[13%] p-4">Sessions</th><th className="w-[20%] p-4">Actions</th></tr></thead>
-            <tbody className="divide-y divide-zinc-200">{staff.map((member) => <StaffRow key={member.id} member={member} busy={busyMemberId === member.id} busyAction={busyAction} openMenu={openMenuId === member.id} setOpenMenu={(open) => setOpenMenuId(open ? member.id : null)} changeRole={changeRole} changeStatus={changeStatus} openResetPassword={openResetPassword} signOutAll={signOutAll} toggleMemberLock={toggleMemberLock} removeAccess={removeAccess} />)}</tbody></table>
+            <tbody className="divide-y divide-zinc-200">{staff.map((member) => <StaffRow key={member.id} member={member} busy={busyMemberId === member.id} busyAction={busyAction} openMenu={isMenuInstanceOpen(openMenuState, member.id, "desktop")} setOpenMenu={(open) => setOpenMenuState(open ? { memberId: member.id, presentation: "desktop" } : null)} changeRole={changeRole} changeStatus={changeStatus} openResetPassword={openResetPassword} signOutAll={signOutAll} toggleMemberLock={toggleMemberLock} removeAccess={removeAccess} />)}</tbody></table>
           </div>
-          <div className="grid gap-4 lg:hidden">{staff.map((member) => <StaffCard key={member.id} member={member} busy={busyMemberId === member.id} busyAction={busyAction} openMenu={openMenuId === member.id} setOpenMenu={(open) => setOpenMenuId(open ? member.id : null)} changeRole={changeRole} changeStatus={changeStatus} openResetPassword={openResetPassword} signOutAll={signOutAll} toggleMemberLock={toggleMemberLock} removeAccess={removeAccess} />)}</div>
+          <div className="grid gap-4 lg:hidden">{staff.map((member) => <StaffCard key={member.id} member={member} busy={busyMemberId === member.id} busyAction={busyAction} openMenu={isMenuInstanceOpen(openMenuState, member.id, "mobile")} setOpenMenu={(open) => setOpenMenuState(open ? { memberId: member.id, presentation: "mobile" } : null)} changeRole={changeRole} changeStatus={changeStatus} openResetPassword={openResetPassword} signOutAll={signOutAll} toggleMemberLock={toggleMemberLock} removeAccess={removeAccess} />)}</div>
         </>}
       </section>
       {resetTarget && (
@@ -480,6 +480,18 @@ function RoleControl({ member, busy, changeRole }: Pick<StaffPresentationProps, 
         <option value="kitchen">Kitchen</option>
       </select>
     </div>
+  );
+}
+
+export function isMenuInstanceOpen(
+  activeState: { memberId: number; presentation: "desktop" | "mobile" } | null,
+  memberId: number,
+  presentation: "desktop" | "mobile"
+): boolean {
+  return Boolean(
+    activeState &&
+    activeState.memberId === memberId &&
+    activeState.presentation === presentation
   );
 }
 
