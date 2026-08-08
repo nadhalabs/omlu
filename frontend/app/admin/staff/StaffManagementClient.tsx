@@ -494,6 +494,19 @@ export function isInsideMenuSystem(
   return false;
 }
 
+export function runMenuAction(
+  action: () => void | Promise<void>,
+  dismissMenu: () => void,
+  restoreTriggerFocus?: () => void,
+  opensDialog = true
+): void {
+  void action();
+  dismissMenu();
+  if (!opensDialog && restoreTriggerFocus) {
+    restoreTriggerFocus();
+  }
+}
+
 function ActionMenuPopover({
   triggerRect,
   menuRef: externalRef,
@@ -611,10 +624,13 @@ function MemberActions(props: StaffPresentationProps) {
     };
   }, [openMenu, setOpenMenu]);
 
-  const run = (action: () => void | Promise<void>) => {
-    setOpenMenu(false);
-    triggerRef.current?.focus();
-    void action();
+  const run = (action: () => void | Promise<void>, opensDialog = true) => {
+    runMenuAction(
+      action,
+      () => setOpenMenu(false),
+      () => triggerRef.current?.focus(),
+      opensDialog
+    );
   };
 
   const owner = member.role === "owner";
