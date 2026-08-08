@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, useCallback } from "react";
-import { getRestaurantSettings, updateRestaurantSettings, ApiError } from "@/lib/api";
-import { RestaurantSettingsResponse, RestaurantSettingsUpdate } from "@/lib/types";
+import { FormEvent, ReactNode, useCallback, useEffect, useState } from "react";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { ApiError, getRestaurantSettings, updateRestaurantSettings } from "@/lib/api";
+import { checkBridgeHealth } from "@/lib/print_bridge";
+import { RestaurantSettingsResponse, RestaurantSettingsUpdate } from "@/lib/types";
 
 const TIMEZONES = [
   "Asia/Kolkata",
@@ -17,14 +18,22 @@ const TIMEZONES = [
   "America/Los_Angeles",
 ];
 
+const LEGAL_LINKS = [
+  { href: "/terms", label: "Terms of Service" },
+  { href: "/privacy", label: "Privacy Policy" },
+  { href: "/refunds", label: "Refund & Cancellation" },
+  { href: "/acceptable-use", label: "Acceptable Use Policy" },
+  { href: "/service-policy", label: "Service & Support Policy" },
+];
+
 export default function AdminSettingsClient() {
   const [settings, setSettings] = useState<RestaurantSettingsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [bridgeStatus, setBridgeStatus] = useState<"checking" | "connected" | "disconnected">("checking");
 
-  // Editable form state
   const [timezone, setTimezone] = useState("");
   const [orderPrefix, setOrderPrefix] = useState("");
   const [serviceRequestsEnabled, setServiceRequestsEnabled] = useState(true);
@@ -38,7 +47,7 @@ export default function AdminSettingsClient() {
   const [taxMode, setTaxMode] = useState<"inclusive" | "exclusive">("exclusive");
   const [invoicePrefix, setInvoicePrefix] = useState("INV");
 
-  const applySettings = (data: RestaurantSettingsResponse) => {
+  const applySettings = useCallback((data: RestaurantSettingsResponse) => {
     setSettings(data);
     setTimezone(data.timezone);
     setOrderPrefix(data.order_prefix);
@@ -52,31 +61,38 @@ export default function AdminSettingsClient() {
     setGstRate(data.default_gst_rate);
     setTaxMode(data.tax_mode);
     setInvoicePrefix(data.invoice_prefix);
-  };
+  }, []);
 
   const loadSettings = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await getRestaurantSettings();
-      applySettings(data);
+      applySettings(await getRestaurantSettings());
       setError(null);
     } catch (err) {
-      if (err instanceof ApiError) {
-        setError(err.message);
-      } else {
-        setError("Could not load settings.");
-      }
+      setError(err instanceof ApiError ? err.message : "Could not load settings.");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [applySettings]);
 
   useEffect(() => {
-    const timeout = window.setTimeout(() => loadSettings(), 0);
+    const timeout = window.setTimeout(() => void loadSettings(), 0);
     return () => window.clearTimeout(timeout);
   }, [loadSettings]);
 
-  const handleSave = async () => {
+  useEffect(() => {
+    let active = true;
+    void checkBridgeHealth().then((health) => {
+      if (active) setBridgeStatus(health ? "connected" : "disconnected");
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleSave = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (saving) return;
     setSaving(true);
     setError(null);
     setSuccess(null);
@@ -99,11 +115,7 @@ export default function AdminSettingsClient() {
       applySettings(updated);
       setSuccess("Settings saved successfully.");
     } catch (err) {
-      if (err instanceof ApiError) {
-        setError(err.message);
-      } else {
-        setError("Failed to save settings.");
-      }
+      setError(err instanceof ApiError ? err.message : "Failed to save settings.");
     } finally {
       setSaving(false);
     }
@@ -113,285 +125,142 @@ export default function AdminSettingsClient() {
     return (
       <div className="flex flex-1 items-center justify-center py-20">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-10 h-10 border-t-2 border-b-2 border-orange-500 rounded-full animate-spin" />
-          <p className="text-[var(--omlu-text-secondary)] font-semibold text-sm">Loading settings…</p>
+          <div className="h-10 w-10 animate-spin rounded-full border-b-2 border-t-2 border-orange-500" />
+          <p className="text-sm font-semibold text-[var(--omlu-text-secondary)]">Loading settings…</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-8 max-w-2xl">
-      <div>
+    <div className="mx-auto flex w-full max-w-5xl min-w-0 flex-col gap-6 pb-8">
+      <header>
         <h1 className="text-2xl font-black text-[var(--omlu-text-primary)]">Restaurant Settings</h1>
-        <p className="text-[var(--omlu-text-secondary)] text-sm mt-1">
-          Only owners can modify settings. Changes apply immediately.
-        </p>
-      </div>
+        <p className="mt-1 text-sm text-[var(--omlu-text-secondary)]">Manage how your restaurant operates, bills customers, and prints receipts.</p>
+      </header>
 
-      <section className="rounded-2xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-6" aria-labelledby="appearance-heading">
-        <h2 id="appearance-heading" className="text-lg font-black text-[var(--omlu-text-primary)]">Appearance</h2>
-        <p className="mb-4 mt-1 text-xs text-[var(--omlu-text-secondary)]">Choose how OMLU Admin looks on this device.</p>
-        <ThemeToggle />
-      </section>
+      {error && <div role="alert" className="rounded-xl border border-red-700/40 bg-red-950/20 px-4 py-3 text-sm font-semibold text-red-600 dark:text-red-400">{error}</div>}
+      {success && <div role="status" className="rounded-xl border border-emerald-700/40 bg-emerald-950/20 px-4 py-3 text-sm font-semibold text-emerald-700 dark:text-emerald-400">{success}</div>}
 
-      {/* Error / Success Banner */}
-      {error && (
-        <div className="bg-red-950/20 border border-red-800/40 text-red-400 rounded-xl px-4 py-3 text-sm font-semibold">
-          ⚠️ {error}
-        </div>
-      )}
-      {success && (
-        <div className="bg-emerald-950/20 border border-emerald-700/40 text-emerald-400 rounded-xl px-4 py-3 text-sm font-semibold">
-          ✓ {success}
-        </div>
-      )}
-
-      {/* Form */}
-      <div className="bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border)] rounded-2xl p-6 flex flex-col gap-6">
-
-        {/* Timezone */}
-        <div className="flex flex-col gap-2">
-          <label className="text-xs font-bold text-[var(--omlu-text-secondary)] uppercase tracking-wider">
-            Timezone
-          </label>
-          <p className="text-[var(--omlu-text-secondary)] text-xs">
-            Used for dashboard metrics and daily revenue calculations.
-          </p>
-          <select
-            value={timezone}
-            onChange={(e) => setTimezone(e.target.value)}
-            className="bg-[var(--omlu-muted-surface)] border border-[var(--omlu-border)] rounded-xl px-4 py-2.5 text-[var(--omlu-text-primary)] text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-orange-500"
-          >
-            {TIMEZONES.map((tz) => (
-              <option key={tz} value={tz}>
-                {tz}
-              </option>
-            ))}
-            {/* Allow current value if not in list */}
-            {timezone && !TIMEZONES.includes(timezone) && (
-              <option value={timezone}>{timezone}</option>
-            )}
-          </select>
-        </div>
-
-        {/* Currency (read-only for MVP) */}
-        <div className="flex flex-col gap-2">
-          <label className="text-xs font-bold text-[var(--omlu-text-secondary)] uppercase tracking-wider">
-            Currency
-          </label>
-          <p className="text-[var(--omlu-text-secondary)] text-xs">
-            INR is the only supported currency for this MVP.
-          </p>
-          <div className="bg-[var(--omlu-muted-surface)] border border-[var(--omlu-border)] rounded-xl px-4 py-2.5 text-[var(--omlu-text-secondary)] text-sm font-semibold">
-            {settings?.currency || "INR"} (Indian Rupee ₹)
+      <form onSubmit={handleSave} className="flex min-w-0 flex-col gap-6">
+        <SettingsSection title="General" description="Your restaurant’s core display and numbering preferences.">
+          <div className="grid gap-5 md:grid-cols-2">
+            <Field label="Timezone" htmlFor="timezone" help="Used for dashboard metrics, order timestamps, and daily revenue calculations.">
+              <select id="timezone" value={timezone} onChange={(event) => setTimezone(event.target.value)} className={controlClass}>
+                {TIMEZONES.map((item) => <option key={item} value={item}>{item}</option>)}
+                {timezone && !TIMEZONES.includes(timezone) && <option value={timezone}>{timezone}</option>}
+              </select>
+            </Field>
+            <Field label="Currency" htmlFor="currency" help="Currency is read-only in the current OMLU release.">
+              <input id="currency" disabled value={`${settings?.currency || "INR"} — Indian Rupee (₹)`} className={`${controlClass} cursor-not-allowed opacity-75`} />
+            </Field>
+            <Field label="Order number prefix" htmlFor="order-prefix" help={<>Orders will appear as: <code className="font-mono font-bold text-[var(--omlu-text-primary)]">{(orderPrefix || "NS").toUpperCase()}-20260712-0001</code></>}>
+              <input id="order-prefix" value={orderPrefix} onChange={(event) => setOrderPrefix(event.target.value.toUpperCase())} maxLength={6} placeholder="NS" className={`${controlClass} uppercase`} />
+            </Field>
           </div>
-        </div>
+        </SettingsSection>
 
-        {/* Order Prefix */}
-        <div className="flex flex-col gap-2">
-          <label
-            htmlFor="order-prefix"
-            className="text-xs font-bold text-[var(--omlu-text-secondary)] uppercase tracking-wider"
-          >
-            Order Number Prefix
-          </label>
-          <p className="text-[var(--omlu-text-secondary)] text-xs">
-            2–6 uppercase letters/numbers. Orders will appear as:{" "}
-            <strong className="text-orange-500">
-              {(orderPrefix || "NS").toUpperCase()}-20260712-0001
-            </strong>
-          </p>
-          <input
-            id="order-prefix"
-            type="text"
-            value={orderPrefix}
-            onChange={(e) => setOrderPrefix(e.target.value.toUpperCase())}
-            maxLength={6}
-            placeholder="NS"
-            className="bg-[var(--omlu-muted-surface)] border border-[var(--omlu-border)] rounded-xl px-4 py-2.5 text-[var(--omlu-text-primary)] text-sm font-semibold uppercase focus:outline-none focus:ring-2 focus:ring-orange-500 w-40"
-          />
-        </div>
-
-        {/* Service Requests Toggle */}
-        <div className="flex items-start gap-4">
-          <div className="flex-1">
-            <label className="text-xs font-bold text-[var(--omlu-text-secondary)] uppercase tracking-wider">
-              Customer Service Requests
-            </label>
-            <p className="text-[var(--omlu-text-secondary)] text-xs mt-1">
-              When enabled, customers can request a waiter, water, or assistance from their table.
-            </p>
+        <SettingsSection title="Billing &amp; GST" description="Configure the tax details used when OMLU generates customer bills and tax invoices.">
+          <SwitchRow label="Enable GST" description="Apply your saved GST configuration when the backend generates bills and tax invoices." checked={gstEnabled} onChange={setGstEnabled} />
+          <div className={`grid gap-5 md:grid-cols-2 ${gstEnabled ? "" : "opacity-60"}`} aria-disabled={!gstEnabled}>
+            <SettingsInput id="gstin" label="GSTIN" value={gstin} onChange={(value) => setGstin(value.toUpperCase())} maxLength={15} required={gstEnabled} disabled={!gstEnabled} />
+            <SettingsInput id="legal-business-name" label="Legal business name" value={legalBusinessName} onChange={setLegalBusinessName} required={gstEnabled} disabled={!gstEnabled} />
+            <SettingsInput id="gst-state-name" label="State" value={gstStateName} onChange={setGstStateName} required={gstEnabled} disabled={!gstEnabled} />
+            <SettingsInput id="gst-state-code" label="State code" value={gstStateCode} onChange={setGstStateCode} maxLength={2} required={gstEnabled} disabled={!gstEnabled} />
+            <Field label="Default GST rate" htmlFor="gst-rate">
+              <div className="relative"><input id="gst-rate" value={gstRate} onChange={(event) => setGstRate(event.target.value)} inputMode="decimal" required={gstEnabled} disabled={!gstEnabled} className={`${controlClass} pr-10`} /><span className="pointer-events-none absolute inset-y-0 right-4 flex items-center font-bold text-[var(--omlu-text-secondary)]">%</span></div>
+            </Field>
+            <SettingsInput id="invoice-prefix" label="Invoice prefix" value={invoicePrefix} onChange={(value) => setInvoicePrefix(value.toUpperCase())} maxLength={10} required />
           </div>
-          <button
-            id="toggle-service-requests"
-            type="button"
-            onClick={() => setServiceRequestsEnabled(!serviceRequestsEnabled)}
-            className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-orange-500 shrink-0 mt-1 cursor-pointer ${
-              serviceRequestsEnabled ? "bg-orange-600" : "bg-[var(--omlu-muted-surface)]"
-            }`}
-            aria-label={`Service requests ${serviceRequestsEnabled ? "enabled" : "disabled"}`}
-          >
-            <span
-              className={`inline-block h-5 w-5 transform rounded-full bg-[var(--omlu-primary-surface)] shadow transition-transform duration-200 ${
-                serviceRequestsEnabled ? "translate-x-6" : "translate-x-1"
-              }`}
-            />
-          </button>
-        </div>
-
-        <section className="flex flex-col gap-5 border-t border-[var(--omlu-border)] pt-6">
-          <div>
-            <h2 className="text-lg font-black text-[var(--omlu-text-primary)]">Billing &amp; GST</h2>
-            <p className="mt-1 text-xs text-[var(--omlu-text-secondary)]">GST is calculated only by the backend when a bill is generated.</p>
-          </div>
-          <label className="flex items-center justify-between gap-4">
-            <span className="text-sm font-bold text-[var(--omlu-text-secondary)]">GST enabled</span>
-            <input type="checkbox" checked={gstEnabled} onChange={(event) => setGstEnabled(event.target.checked)} className="h-5 w-5 accent-orange-600" />
-          </label>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <SettingsInput label="GSTIN" value={gstin} onChange={(value) => setGstin(value.toUpperCase())} maxLength={15} required={gstEnabled} />
-            <SettingsInput label="Legal business name" value={legalBusinessName} onChange={setLegalBusinessName} required={gstEnabled} />
-            <SettingsInput label="State name" value={gstStateName} onChange={setGstStateName} required={gstEnabled} />
-            <SettingsInput label="State code" value={gstStateCode} onChange={setGstStateCode} maxLength={2} required={gstEnabled} />
-            <SettingsInput label="Default GST rate (%)" value={gstRate} onChange={setGstRate} inputMode="decimal" required={gstEnabled} />
-            <SettingsInput label="Invoice prefix" value={invoicePrefix} onChange={(value) => setInvoicePrefix(value.toUpperCase())} maxLength={10} required />
-          </div>
-          <label className="flex flex-col gap-2 text-xs font-bold uppercase tracking-wider text-[var(--omlu-text-secondary)]">
-            Tax mode
-            <select value={taxMode} onChange={(event) => setTaxMode(event.target.value as "inclusive" | "exclusive")} className="rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] px-4 py-2.5 text-sm font-semibold normal-case text-[var(--omlu-text-primary)]">
-              <option value="exclusive">Exclusive — GST added to menu prices</option>
-              <option value="inclusive">Inclusive — GST included in menu prices</option>
-            </select>
-          </label>
-          <label className="flex flex-col gap-2 text-xs font-bold uppercase tracking-wider text-[var(--omlu-text-secondary)]">
-            Registered billing address
-            <textarea value={billingAddress} onChange={(event) => setBillingAddress(event.target.value)} required={gstEnabled} rows={3} className="rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] px-4 py-2.5 text-sm font-semibold normal-case text-[var(--omlu-text-primary)]" />
-          </label>
-        </section>
-
-        {/* Printing Section */}
-        <section id="printing" className="flex flex-col gap-4 border-t border-[var(--omlu-border)] pt-6">
-          <div>
-            <h2 className="text-lg font-black text-[var(--omlu-text-primary)]">Printing</h2>
-            <p className="mt-1 text-xs font-semibold text-[var(--omlu-text-secondary)]">
-              Browser printing uses your system print dialog.
-            </p>
-            <p className="mt-0.5 text-xs font-semibold text-[var(--omlu-text-secondary)]">
-              Direct LAN thermal printing is configured locally in the OMLU Operations Android app.
-            </p>
-            <p className="mt-0.5 text-xs font-semibold text-orange-500">
-              🖥️ Windows PCs use the local OMLU Print Bridge for direct USB, TCP/LAN, and Bluetooth COM printing.
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] p-5 flex flex-col gap-4">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <h3 className="text-sm font-black text-[var(--omlu-text-primary)]">🖥️ OMLU Desktop Print Bridge (Windows)</h3>
-                <p className="text-xs text-[var(--omlu-text-secondary)] mt-0.5">
-                  Direct thermal-printer bridge running on <code className="font-mono text-orange-500">127.0.0.1:24242</code>.
-                </p>
-              </div>
-              <span className="shrink-0 rounded-full bg-amber-950/40 border border-amber-700/60 px-3 py-1 text-xs font-bold text-amber-400">
-                ● Not detected
-              </span>
+          <fieldset disabled={!gstEnabled} className={`min-w-0 ${gstEnabled ? "" : "opacity-60"}`}>
+            <legend className="text-sm font-bold text-[var(--omlu-text-primary)]">Tax mode</legend>
+            <div className="mt-2 grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Tax mode">
+              <TaxModeCard value="exclusive" selected={taxMode === "exclusive"} onChange={setTaxMode} title="Exclusive" description="GST is added to menu prices." />
+              <TaxModeCard value="inclusive" selected={taxMode === "inclusive"} onChange={setTaxMode} title="Inclusive" description="GST is already included in menu prices." />
             </div>
+          </fieldset>
+          <Field label="Registered billing address" htmlFor="billing-address">
+            <textarea id="billing-address" value={billingAddress} onChange={(event) => setBillingAddress(event.target.value)} required={gstEnabled} disabled={!gstEnabled} rows={4} className={`${controlClass} min-h-28 resize-y`} />
+          </Field>
+        </SettingsSection>
 
-            <div className="text-xs text-[var(--omlu-text-secondary)] flex flex-col gap-1.5 border-t border-[var(--omlu-border)] pt-3">
-              <p>• Supported Transports: Windows RAW Spooler, Windows Driver Spooler, TCP/LAN Network Printers, Bluetooth Serial COM Ports.</p>
-              <p>• Emergency Fallback: Standard browser print dialog remains available if the bridge is offline or uninstalled.</p>
-              <p>• Developer / Hardware Test Package: Requires Node.js v18+ on target PC. Run <code className="font-mono text-orange-400">npm install --omit=dev && npm start</code> inside extracted archive.</p>
+        <SettingsSection title="Operations" description="Control customer-facing restaurant operations.">
+          <SwitchRow label="Customer service requests" description="Allow customers to request a waiter, water, or assistance from their table." checked={serviceRequestsEnabled} onChange={setServiceRequestsEnabled} />
+        </SettingsSection>
+
+        <SettingsSection id="printing" title="Printing" description="Choose the printing option that fits each billing device.">
+          <div className="grid gap-4 lg:grid-cols-3">
+            <InfoCard title="Browser Printing" description="Print bills and receipts using your system print dialog." />
+            <InfoCard title="Windows Printer Bridge" description="Connect supported receipt printers directly from a Windows billing PC.">
+              <BridgeStatus status={bridgeStatus} />
+              <a href="/downloads/omlu-print-bridge-developer-package.zip" download className={primaryLinkClass}>Download Windows Bridge (Developer / Hardware Test Package)</a>
+            </InfoCard>
+            <InfoCard title="OMLU Operations App" description="Use the Android Operations app for direct LAN thermal printing.">
+              <a href="/downloads/omlu.apk" download className={secondaryLinkClass}>Download Operations App</a>
+            </InfoCard>
+          </div>
+          <details className="rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)]">
+            <summary className="cursor-pointer px-4 py-3 text-sm font-bold text-[var(--omlu-text-primary)]">Advanced / Troubleshooting</summary>
+            <div className="space-y-2 border-t border-[var(--omlu-border)] px-4 py-4 text-xs leading-5 text-[var(--omlu-text-secondary)]">
+              <p>The Windows bridge runs locally at <code className="font-mono">127.0.0.1:24242</code> and supports Windows RAW Spooler, Driver Spooler, TCP/LAN, and Bluetooth COM transports.</p>
+              <p>Browser printing remains available when the bridge is offline. The developer / hardware test package requires Node.js v18+ and uses <code className="font-mono">npm install --omit=dev &amp;&amp; npm start</code>.</p>
+              <p>Thermal printers and the Android device must be connected to the same local network.</p>
+              <p>Direct ESC/POS printing (IP address, port, paper width, and copies) is configured directly inside the Android app settings.</p>
+              <p>Web admin does not store raw TCP printer IP addresses, ports, paper widths, or copy preferences.</p>
             </div>
-          </div>
+          </details>
+        </SettingsSection>
 
-          <div className="rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] p-4 text-xs text-[var(--omlu-text-secondary)] flex flex-col gap-2">
-            <p>• Thermal printers and the Android device must be connected to the same local network.</p>
-            <p>• Direct ESC/POS printing (IP address, port, paper width, and copies) is configured directly inside the Android app settings.</p>
-            <p>• Web admin does not store raw TCP printer IP addresses, ports, paper widths, or copy preferences.</p>
-          </div>
+        <SettingsSection title="Appearance" description="Choose how OMLU Admin looks on this device.">
+          <div className="max-w-md"><ThemeToggle /></div>
+          <p className="text-xs text-[var(--omlu-text-secondary)]">Appearance is saved on this device immediately and is separate from restaurant settings.</p>
+        </SettingsSection>
 
-          <div className="flex flex-wrap items-center gap-3 pt-1">
-            <a
-              href="/downloads/omlu-print-bridge-developer-package.zip"
-              download
-              className="px-4 py-2.5 bg-orange-600 hover:bg-orange-700 text-white text-xs font-black rounded-xl transition inline-flex items-center gap-2"
-            >
-              🖥️ Download Windows Bridge (Developer / Hardware Test Package)
-            </a>
-            <a
-              href="/downloads/omlu.apk"
-              download
-              className="px-4 py-2.5 border border-[var(--omlu-border)] hover:bg-[var(--omlu-muted-surface)] text-[var(--omlu-text-primary)] text-xs font-bold rounded-xl transition inline-flex items-center gap-2"
-            >
-              📱 Download Operations App
-            </a>
+        <SettingsSection title="Legal &amp; Policies" description="Review the policies governing your restaurant account and use of OMLU.">
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {LEGAL_LINKS.map((item) => <Link key={item.href} href={item.href} target="_blank" className="flex min-h-11 items-center justify-between rounded-xl border border-[var(--omlu-border)] px-4 py-3 text-sm font-bold text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-muted-surface)]"><span>{item.label}</span><span aria-hidden="true">↗</span></Link>)}
           </div>
-        </section>
+        </SettingsSection>
 
-        {/* Legal & Compliance References */}
-        <section className="space-y-4 rounded-2xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-6 shadow-sm">
-          <div>
-            <h2 className="text-base font-bold text-[var(--omlu-text-primary)]">Legal & Policy Terms</h2>
-            <p className="text-xs text-[var(--omlu-text-secondary)]">Review the governing terms, privacy rules, tax compliance disclosures, and support guidelines for your restaurant account.</p>
-          </div>
-          <div className="flex flex-wrap gap-2 pt-1">
-            <Link href="/terms" target="_blank" className="px-3.5 py-2 border border-[var(--omlu-border)] hover:bg-[var(--omlu-muted-surface)] text-[var(--omlu-text-primary)] text-xs font-bold rounded-xl transition inline-flex items-center gap-1.5">
-              📜 Terms of Service
-            </Link>
-            <Link href="/privacy" target="_blank" className="px-3.5 py-2 border border-[var(--omlu-border)] hover:bg-[var(--omlu-muted-surface)] text-[var(--omlu-text-primary)] text-xs font-bold rounded-xl transition inline-flex items-center gap-1.5">
-              🛡️ Privacy Policy
-            </Link>
-            <Link href="/refunds" target="_blank" className="px-3.5 py-2 border border-[var(--omlu-border)] hover:bg-[var(--omlu-muted-surface)] text-[var(--omlu-text-primary)] text-xs font-bold rounded-xl transition inline-flex items-center gap-1.5">
-              💳 Refund & Cancellation
-            </Link>
-            <Link href="/acceptable-use" target="_blank" className="px-3.5 py-2 border border-[var(--omlu-border)] hover:bg-[var(--omlu-muted-surface)] text-[var(--omlu-text-primary)] text-xs font-bold rounded-xl transition inline-flex items-center gap-1.5">
-              ⚖️ Acceptable Use Policy
-            </Link>
-            <Link href="/service-policy" target="_blank" className="px-3.5 py-2 border border-[var(--omlu-border)] hover:bg-[var(--omlu-muted-surface)] text-[var(--omlu-text-primary)] text-xs font-bold rounded-xl transition inline-flex items-center gap-1.5">
-              🛠️ Service & Support Policy
-            </Link>
-          </div>
-        </section>
-
-        {/* Save Button */}
-        <div className="flex items-center gap-4 pt-2 border-t border-[var(--omlu-border)]">
-          <button
-            id="save-settings-btn"
-            type="button"
-            onClick={handleSave}
-            disabled={saving}
-            className="px-6 py-2.5 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-[var(--omlu-primary-action-text)] font-bold rounded-xl transition cursor-pointer"
-          >
-            {saving ? "Saving…" : "Save Settings"}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              if (settings) {
-                setTimezone(settings.timezone);
-                setOrderPrefix(settings.order_prefix);
-                setServiceRequestsEnabled(settings.service_requests_enabled);
-                applySettings(settings);
-                setError(null);
-                setSuccess(null);
-              }
-            }}
-            className="text-sm text-[var(--omlu-text-secondary)] hover:text-[var(--omlu-text-secondary)] transition font-semibold cursor-pointer"
-          >
-            Reset
-          </button>
+        <div className="flex flex-col-reverse gap-3 rounded-2xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-4 sm:flex-row sm:items-center sm:justify-end">
+          <button type="button" onClick={() => { if (settings) applySettings(settings); setError(null); setSuccess(null); }} disabled={saving} className="min-h-11 rounded-xl border border-[var(--omlu-border-strong)] px-5 text-sm font-bold text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-muted-surface)] disabled:opacity-50">Reset</button>
+          <button id="save-settings-btn" type="submit" disabled={saving} className="min-h-11 rounded-xl bg-orange-600 px-6 text-sm font-black text-white hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-50">{saving ? "Saving…" : "Save Settings"}</button>
         </div>
-      </div>
+      </form>
     </div>
   );
 }
 
-function SettingsInput({ label, value, onChange, maxLength, required, inputMode }: { label: string; value: string; onChange: (value: string) => void; maxLength?: number; required?: boolean; inputMode?: "text" | "decimal" }) {
-  return (
-    <label className="flex flex-col gap-2 text-xs font-bold uppercase tracking-wider text-[var(--omlu-text-secondary)]">
-      {label}
-      <input value={value} onChange={(event) => onChange(event.target.value)} maxLength={maxLength} required={required} inputMode={inputMode} className="rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] px-4 py-2.5 text-sm font-semibold normal-case text-[var(--omlu-text-primary)]" />
-    </label>
-  );
+const controlClass = "min-h-11 w-full min-w-0 rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] px-4 py-2.5 text-sm font-semibold text-[var(--omlu-text-primary)] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 disabled:cursor-not-allowed";
+const primaryLinkClass = "inline-flex min-h-10 w-full items-center justify-center rounded-xl bg-orange-600 px-3 py-2 text-center text-xs font-black text-white hover:bg-orange-700";
+const secondaryLinkClass = "inline-flex min-h-10 w-full items-center justify-center rounded-xl border border-[var(--omlu-border-strong)] px-3 py-2 text-center text-xs font-black text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-hover-background)]";
+
+function SettingsSection({ id, title, description, children }: { id?: string; title: string; description: string; children: ReactNode }) {
+  const headingId = `${id || title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-heading`;
+  return <section id={id} aria-labelledby={headingId} className="min-w-0 space-y-5 rounded-2xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-5 shadow-sm sm:p-6"><div><h2 id={headingId} className="text-lg font-black text-[var(--omlu-text-primary)]">{title}</h2><p className="mt-1 text-sm text-[var(--omlu-text-secondary)]">{description}</p></div>{children}</section>;
+}
+
+function Field({ label, htmlFor, help, children }: { label: string; htmlFor: string; help?: ReactNode; children: ReactNode }) {
+  return <div className="min-w-0"><label htmlFor={htmlFor} className="block text-sm font-bold text-[var(--omlu-text-primary)]">{label}</label><div className="mt-2">{children}</div>{help && <p className="mt-2 text-xs leading-5 text-[var(--omlu-text-secondary)]">{help}</p>}</div>;
+}
+
+function SettingsInput({ id, label, value, onChange, maxLength, required, disabled }: { id: string; label: string; value: string; onChange: (value: string) => void; maxLength?: number; required?: boolean; disabled?: boolean }) {
+  return <Field label={label} htmlFor={id}><input id={id} value={value} onChange={(event) => onChange(event.target.value)} maxLength={maxLength} required={required} disabled={disabled} className={controlClass} /></Field>;
+}
+
+function SwitchRow({ label, description, checked, onChange }: { label: string; description: string; checked: boolean; onChange: (checked: boolean) => void }) {
+  return <div className="flex min-w-0 items-start justify-between gap-4 rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] p-4"><div className="min-w-0"><p className="text-sm font-bold text-[var(--omlu-text-primary)]">{label}</p><p className="mt-1 text-xs leading-5 text-[var(--omlu-text-secondary)]">{description}</p></div><button type="button" role="switch" aria-checked={checked} aria-label={label} onClick={() => onChange(!checked)} className={`relative mt-0.5 inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 ${checked ? "bg-orange-600" : "bg-[var(--omlu-border-strong)]"}`}><span className={`h-5 w-5 rounded-full bg-white shadow transition-transform ${checked ? "translate-x-6" : "translate-x-1"}`} /></button></div>;
+}
+
+function TaxModeCard({ value, selected, onChange, title, description }: { value: "inclusive" | "exclusive"; selected: boolean; onChange: (value: "inclusive" | "exclusive") => void; title: string; description: string }) {
+  return <label className={`flex cursor-pointer gap-3 rounded-xl border p-4 ${selected ? "border-orange-500 bg-orange-500/10" : "border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)]"}`}><input type="radio" name="tax-mode" value={value} checked={selected} onChange={() => onChange(value)} className="mt-0.5 h-4 w-4 accent-orange-600" /><span><span className="block text-sm font-bold text-[var(--omlu-text-primary)]">{title}</span><span className="mt-1 block text-xs text-[var(--omlu-text-secondary)]">{description}</span></span></label>;
+}
+
+function InfoCard({ title, description, children }: { title: string; description: string; children?: ReactNode }) {
+  return <div className="flex min-w-0 flex-col gap-4 rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] p-4"><div className="flex-1"><h3 className="text-sm font-black text-[var(--omlu-text-primary)]">{title}</h3><p className="mt-1 text-xs leading-5 text-[var(--omlu-text-secondary)]">{description}</p></div>{children}</div>;
+}
+
+function BridgeStatus({ status }: { status: "checking" | "connected" | "disconnected" }) {
+  const label = status === "checking" ? "Checking…" : status === "connected" ? "Connected" : "Not connected";
+  return <span role="status" className={`w-fit rounded-full border px-3 py-1 text-xs font-bold ${status === "connected" ? "border-emerald-600/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "border-[var(--omlu-border-strong)] text-[var(--omlu-text-secondary)]"}`}>{label}</span>;
 }

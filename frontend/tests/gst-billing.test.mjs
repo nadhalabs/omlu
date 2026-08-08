@@ -7,10 +7,12 @@ const bill = fs.readFileSync(new URL("../app/bill/[sessionToken]/BillClient.tsx"
 
 test("Admin Settings exposes restaurant-scoped Billing and GST configuration", () => {
   for (const label of [
-    "Billing &amp; GST", "GST enabled", "GSTIN", "Legal business name",
-    "Registered billing address", "State name", "State code",
-    "Default GST rate (%)", "Tax mode", "Invoice prefix",
+    "Billing &amp; GST", "Enable GST", "GSTIN", "Legal business name",
+    "Registered billing address", "State", "State code",
+    "Default GST rate", "Tax mode", "Invoice prefix",
   ]) assert.ok(settings.includes(label), `missing ${label}`);
+  assert.match(settings, /value="exclusive"/);
+  assert.match(settings, /value="inclusive"/);
 });
 
 test("customer printable bill displays backend-provided GST snapshots", () => {
