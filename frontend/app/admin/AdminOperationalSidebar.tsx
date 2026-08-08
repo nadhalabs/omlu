@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-import type { ComponentType } from "react";
+import { NAV_ICONS, type NavIconId } from "./AdminNavIcon";
 import { registerAuthenticatedCleanup } from "@/lib/authRuntime.mjs";
 import { RealtimeEvent, useRealtime } from "@/lib/realtime";
 
@@ -133,12 +133,13 @@ export function AdminOperationalCountsProvider({
   );
 }
 
-export function AdminOperationalSidebarLink({ href, label, queue, icon: Icon }: { href: string; label: string; queue: Queue; icon?: ComponentType<{ className?: string; "aria-hidden"?: boolean }> }) {
+export function AdminOperationalSidebarLink({ href, label, queue, icon }: { href: string; label: string; queue: Queue; /** Serializable icon identifier resolved to a component on the client. */ icon?: NavIconId }) {
   const pathname = usePathname();
   const counts = useContext(OperationalCountsContext);
   if (!counts) throw new Error("AdminOperationalSidebarLink must be inside AdminOperationalCountsProvider");
   const count = counts[queue];
   const active = pathname === href || pathname?.startsWith(`${href}/`);
+  const Icon = icon ? NAV_ICONS[icon] : null;
 
   return (
     <Link aria-current={active ? "page" : undefined} href={href} className={`flex min-h-11 shrink-0 items-center justify-between gap-3 whitespace-nowrap rounded-xl px-4 py-3 text-sm font-bold transition lg:w-full ${active ? "bg-orange-600 text-[var(--omlu-primary-action-text)]" : "text-[var(--omlu-text-secondary)] hover:bg-[var(--omlu-primary-surface)] hover:text-[var(--omlu-text-secondary)]"}`}>

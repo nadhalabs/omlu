@@ -7,20 +7,7 @@ import { backendUrl } from "@/lib/backendUrl";
 import { AdminOperationalCountsProvider, AdminOperationalSidebarLink, OperationalCounts } from "./AdminOperationalSidebar";
 import { WebAuthScope } from "@/components/WebAuthScope";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import {
-  IconLayoutDashboard,
-  IconReceiptText,
-  IconCalculator,
-  IconChefHat,
-  IconBell,
-  IconHistory,
-  IconLayoutGrid,
-  IconUtensilsCrossed,
-  IconUsers,
-  IconTrendingUp,
-  IconSettings,
-  IconBuilding,
-} from "./AdminNavIcon";
+import { IconBuilding } from "./AdminNavIcon";
 
 export default async function AdminLayout({
   children,
@@ -122,17 +109,17 @@ export default async function AdminLayout({
           {/* Navigation Links */}
           <nav className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 lg:mx-0 lg:flex-col lg:overflow-visible lg:px-0 lg:pb-0" aria-label="Admin navigation">
             <AdminOperationalCountsProvider initialCounts={operationalCounts}>
-            <AdminSidebarLink href="/admin/dashboard" label="Dashboard" icon={IconLayoutDashboard} />
-            <AdminOperationalSidebarLink href="/admin/quick-sale" label="Quick Sale" queue="activeTakeaways" icon={IconReceiptText} />
-            <AdminOperationalSidebarLink href="/admin/billing" label="Billing Counter" queue="pendingPayments" icon={IconCalculator} />
-            <AdminSidebarLink href={`/kitchen/${staffInfo.restaurant_slug}`} label="Kitchen Dashboard" icon={IconChefHat} />
-            <AdminOperationalSidebarLink href="/admin/requests" label="Service Requests" queue="unresolvedRequests" icon={IconBell} />
-            <AdminSidebarLink href="/admin/history?view=orders" label="History" icon={IconHistory} />
-            <AdminSidebarLink href="/admin/tables" label="Tables Map" icon={IconLayoutGrid} />
-            <AdminSidebarLink href="/admin/menu" label="Menu Items" icon={IconUtensilsCrossed} />
-            <AdminSidebarLink href="/admin/staff" label="Staff Management" icon={IconUsers} />
-            <AdminSidebarLink href="/admin/performance" label="Performance" icon={IconTrendingUp} />
-            <AdminSidebarLink href="/admin/settings" label="Settings" icon={IconSettings} />
+            <AdminSidebarLink href="/admin/dashboard" label="Dashboard" icon="dashboard" />
+            <AdminOperationalSidebarLink href="/admin/quick-sale" label="Quick Sale" queue="activeTakeaways" icon="quick-sale" />
+            <AdminOperationalSidebarLink href="/admin/billing" label="Billing Counter" queue="pendingPayments" icon="billing" />
+            <AdminSidebarLink href={`/kitchen/${staffInfo.restaurant_slug}`} label="Kitchen Dashboard" icon="kitchen" />
+            <AdminOperationalSidebarLink href="/admin/requests" label="Service Requests" queue="unresolvedRequests" icon="requests" />
+            <AdminSidebarLink href="/admin/history?view=orders" label="History" icon="history" />
+            <AdminSidebarLink href="/admin/tables" label="Tables Map" icon="tables" />
+            <AdminSidebarLink href="/admin/menu" label="Menu Items" icon="menu" />
+            <AdminSidebarLink href="/admin/staff" label="Staff Management" icon="staff" />
+            <AdminSidebarLink href="/admin/performance" label="Performance" icon="performance" />
+            <AdminSidebarLink href="/admin/settings" label="Settings" icon="settings" />
             </AdminOperationalCountsProvider>
           </nav>
         </div>

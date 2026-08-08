@@ -2,7 +2,28 @@
  * Inline SVG icons for the admin sidebar.
  * These follow the Lucide icon design language: 24×24 viewBox, 2px stroke,
  * round linecap/join, currentColor. They scale via w-/h- utility classes.
+ *
+ * IMPORTANT – serialization boundary:
+ * NavIconId is a plain string union that can safely cross the Next.js
+ * Server Component → Client Component boundary. The actual React component
+ * functions never leave this module; client components import NAV_ICONS and
+ * resolve the component locally via the id string.
  */
+
+/** Serializable discriminant used by server-rendered layout props. */
+export type NavIconId =
+  | "dashboard"
+  | "quick-sale"
+  | "billing"
+  | "kitchen"
+  | "requests"
+  | "history"
+  | "tables"
+  | "menu"
+  | "staff"
+  | "performance"
+  | "settings"
+  | "building";
 
 type IconProps = {
   className?: string;
@@ -30,7 +51,7 @@ function Icon({ d, className = "", ...rest }: IconProps & { d: string | string[]
   );
 }
 
-export function IconLayoutDashboard(props: IconProps) {
+function IconLayoutDashboard(props: IconProps) {
   return (
     <Icon
       d={[
@@ -42,7 +63,7 @@ export function IconLayoutDashboard(props: IconProps) {
   );
 }
 
-export function IconReceiptText(props: IconProps) {
+function IconReceiptText(props: IconProps) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -61,7 +82,7 @@ export function IconReceiptText(props: IconProps) {
   );
 }
 
-export function IconCalculator(props: IconProps) {
+function IconCalculator(props: IconProps) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -86,7 +107,7 @@ export function IconCalculator(props: IconProps) {
   );
 }
 
-export function IconChefHat(props: IconProps) {
+function IconChefHat(props: IconProps) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -103,7 +124,7 @@ export function IconChefHat(props: IconProps) {
   );
 }
 
-export function IconBell(props: IconProps) {
+function IconBell(props: IconProps) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -120,7 +141,7 @@ export function IconBell(props: IconProps) {
   );
 }
 
-export function IconHistory(props: IconProps) {
+function IconHistory(props: IconProps) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -138,7 +159,7 @@ export function IconHistory(props: IconProps) {
   );
 }
 
-export function IconLayoutGrid(props: IconProps) {
+function IconLayoutGrid(props: IconProps) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -157,7 +178,7 @@ export function IconLayoutGrid(props: IconProps) {
   );
 }
 
-export function IconUtensilsCrossed(props: IconProps) {
+function IconUtensilsCrossed(props: IconProps) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -176,7 +197,7 @@ export function IconUtensilsCrossed(props: IconProps) {
   );
 }
 
-export function IconUsers(props: IconProps) {
+function IconUsers(props: IconProps) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -195,7 +216,7 @@ export function IconUsers(props: IconProps) {
   );
 }
 
-export function IconTrendingUp(props: IconProps) {
+function IconTrendingUp(props: IconProps) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -212,7 +233,7 @@ export function IconTrendingUp(props: IconProps) {
   );
 }
 
-export function IconSettings(props: IconProps) {
+function IconSettings(props: IconProps) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -249,3 +270,23 @@ export function IconBuilding(props: IconProps) {
     </svg>
   );
 }
+
+/**
+ * Client-side lookup map from serializable NavIconId → React component.
+ * Import this inside Client Components only; never serialize this object
+ * or its values across the Server → Client boundary.
+ */
+export const NAV_ICONS: Record<NavIconId, (props: IconProps) => React.JSX.Element> = {
+  dashboard: IconLayoutDashboard,
+  "quick-sale": IconReceiptText,
+  billing: IconCalculator,
+  kitchen: IconChefHat,
+  requests: IconBell,
+  history: IconHistory,
+  tables: IconLayoutGrid,
+  menu: IconUtensilsCrossed,
+  staff: IconUsers,
+  performance: IconTrendingUp,
+  settings: IconSettings,
+  building: IconBuilding,
+};

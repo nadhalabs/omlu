@@ -2,20 +2,22 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ComponentType } from "react";
+import { NAV_ICONS, type NavIconId } from "./AdminNavIcon";
 
 export default function AdminSidebarLink({
   href,
   label,
-  icon: Icon,
+  icon,
 }: {
   href: string;
   label: string;
-  icon?: ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
+  /** Serializable icon identifier resolved to a component on the client. */
+  icon?: NavIconId;
 }) {
   const pathname = usePathname();
   const hrefPathname = href.split("?", 1)[0];
   const isActive = pathname === hrefPathname || pathname?.startsWith(hrefPathname + "/");
+  const Icon = icon ? NAV_ICONS[icon] : null;
 
   return (
     <Link
