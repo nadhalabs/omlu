@@ -285,3 +285,20 @@ def test_export_query_bounds_and_memory_safety(p4_gst_context):
     # Max rows is safely bounded
     assert ws.max_row <= 10005
 
+
+def test_export_all_individual_endpoints_exist_and_succeed(p4_gst_context):
+    """Test that all 8 backend export endpoints exist under /admin/gst/export/* and return 200 OK."""
+    headers = {"Authorization": f"Bearer {p4_gst_context['token_owner_gst']}"}
+    endpoints = [
+        "/admin/gst/export/ca-package",
+        "/admin/gst/export/sales-register",
+        "/admin/gst/export/rate-summary",
+        "/admin/gst/export/hsn-summary",
+        "/admin/gst/export/b2b-register",
+        "/admin/gst/export/b2c-register",
+        "/admin/gst/export/documents-issued",
+        "/admin/gst/export/cancelled-documents",
+    ]
+    for ep in endpoints:
+        res = client.get(f"{ep}?preset=today", headers=headers)
+        assert res.status_code == 200, f"Endpoint {ep} failed with status {res.status_code}"
