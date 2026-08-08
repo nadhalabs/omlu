@@ -40,6 +40,14 @@ class QuickSale(Base):
     billing_address_snapshot: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
     state_name_snapshot: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     state_code_snapshot: Mapped[Optional[str]] = mapped_column(String(2), nullable=True)
+    customer_tax_type: Mapped[str] = mapped_column(String(10), default="b2c", server_default="b2c", nullable=False)
+    customer_gstin_snapshot: Mapped[Optional[str]] = mapped_column(String(15), nullable=True)
+    customer_legal_name_snapshot: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    customer_state_code_snapshot: Mapped[Optional[str]] = mapped_column(String(2), nullable=True)
+    customer_state_name_snapshot: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    place_of_supply_code_snapshot: Mapped[Optional[str]] = mapped_column(String(2), nullable=True)
+    invoice_number: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    invoice_date: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     payment_method: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     entered_by_staff_id: Mapped[int] = mapped_column(ForeignKey("staff_users.id", ondelete="RESTRICT"), nullable=False, index=True)
     entered_by_name: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -56,6 +64,7 @@ class QuickSale(Base):
         UniqueConstraint("restaurant_id", "order_number", name="uq_quick_sale_restaurant_order_number"),
         UniqueConstraint("restaurant_id", "idempotency_key", name="uq_quick_sale_restaurant_idempotency"),
         UniqueConstraint("restaurant_id", "payment_idempotency_key", name="uq_quick_sale_payment_idempotency"),
+        UniqueConstraint("restaurant_id", "invoice_number", name="uq_quick_sales_restaurant_invoice_number"),
         UniqueConstraint("restaurant_id", "id", name="uq_quick_sales_restaurant_id_id"),
         CheckConstraint("sale_type IN ('takeaway', 'late_entry')", name="chk_quick_sale_type"),
         CheckConstraint("source IN ('takeaway', 'late_entry')", name="chk_quick_sale_source"),
@@ -64,6 +73,7 @@ class QuickSale(Base):
         CheckConstraint("subtotal >= 0 AND total_amount >= 0", name="chk_quick_sale_amounts"),
         CheckConstraint("discount_amount >= 0", name="chk_quick_sale_discount_nonnegative"),
         CheckConstraint("tax_amount >= 0", name="chk_quick_sale_tax_nonnegative"),
+        CheckConstraint("customer_tax_type IN ('b2c', 'b2b')", name="chk_quick_sale_customer_tax_type"),
     )
 
 
@@ -81,6 +91,12 @@ class QuickSaleItem(Base):
     unit_price: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
     total_price: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
     item_note: Mapped[Optional[str]] = mapped_column(String(300), nullable=True)
+    hsn_sac_code_snapshot: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    gst_rate_snapshot: Mapped[Optional[Decimal]] = mapped_column(Numeric(5, 2), nullable=True)
+    taxable_amount_snapshot: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
+    cgst_amount_snapshot: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
+    sgst_amount_snapshot: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
+    igst_amount_snapshot: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
 
     sale: Mapped[QuickSale] = relationship("QuickSale", back_populates="items")
     selected_options: Mapped[List["QuickSaleItemSelectedOption"]] = relationship(

@@ -51,6 +51,7 @@ class MenuItem(Base):
     )
     image_url: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
     food_type: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    hsn_sac_code: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     is_available: Mapped[bool] = mapped_column(Boolean, default=True)
     display_order: Mapped[int] = mapped_column(default=0)
 
