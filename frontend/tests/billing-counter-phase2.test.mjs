@@ -13,7 +13,7 @@ const sessionClient = read("app/session/[sessionToken]/SessionClient.tsx");
 const staffDetail = read("app/staff/tables/[tableId]/StaffTableDetailClient.tsx");
 
 test("owner/admin Billing Counter route is prominent and directly protected", () => {
-  assert.match(layout, /href="\/admin\/billing" label="🧾 Billing Counter"/);
+  assert.match(layout, /href="\/admin\/billing" label="Billing Counter"/);
   assert.match(page, /requireStaffRole\(\["owner", "admin"\]\)/);
   assert.match(proxy, /staff_token/);
   assert.match(proxy, /\/staff\/bills\/billing-counter/);

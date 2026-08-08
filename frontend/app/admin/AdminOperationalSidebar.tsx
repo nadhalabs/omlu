@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import type { ComponentType } from "react";
 import { registerAuthenticatedCleanup } from "@/lib/authRuntime.mjs";
 import { RealtimeEvent, useRealtime } from "@/lib/realtime";
 
@@ -132,7 +133,7 @@ export function AdminOperationalCountsProvider({
   );
 }
 
-export function AdminOperationalSidebarLink({ href, label, queue }: { href: string; label: string; queue: Queue }) {
+export function AdminOperationalSidebarLink({ href, label, queue, icon: Icon }: { href: string; label: string; queue: Queue; icon?: ComponentType<{ className?: string; "aria-hidden"?: boolean }> }) {
   const pathname = usePathname();
   const counts = useContext(OperationalCountsContext);
   if (!counts) throw new Error("AdminOperationalSidebarLink must be inside AdminOperationalCountsProvider");
@@ -141,7 +142,10 @@ export function AdminOperationalSidebarLink({ href, label, queue }: { href: stri
 
   return (
     <Link aria-current={active ? "page" : undefined} href={href} className={`flex min-h-11 shrink-0 items-center justify-between gap-3 whitespace-nowrap rounded-xl px-4 py-3 text-sm font-bold transition lg:w-full ${active ? "bg-orange-600 text-[var(--omlu-primary-action-text)]" : "text-[var(--omlu-text-secondary)] hover:bg-[var(--omlu-primary-surface)] hover:text-[var(--omlu-text-secondary)]"}`}>
-      <span className="min-w-0 whitespace-nowrap">{label}</span>
+      <span className="flex min-w-0 items-center gap-2 whitespace-nowrap">
+        {Icon && <Icon aria-hidden={true} className="h-[18px] w-[18px] shrink-0" />}
+        {label}
+      </span>
       {count > 0 && (
         <span aria-label={countLabel(queue, count)} className={`inline-flex h-6 w-9 shrink-0 items-center justify-center whitespace-nowrap rounded-full text-xs font-black leading-none ring-1 ${queueDetails[queue].badgeClass}`}>
           <span aria-hidden="true">{badgeText(count)}</span>
