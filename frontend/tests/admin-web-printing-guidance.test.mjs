@@ -7,13 +7,12 @@ const settings = read("app/admin/settings/AdminSettingsClient.tsx");
 const billingCounter = read("app/admin/billing/BillingCounterClient.tsx");
 
 test("Settings contains Printing section with stable id='printing'", () => {
-  assert.match(settings, /<section id="printing"/);
-  assert.match(settings, /<h2 className="text-lg font-black text-\[var\(--omlu-text-primary\)\]">Printing<\/h2>/);
+  assert.match(settings, /<SettingsSection id="printing" title="Printing"/);
 });
 
 test("Settings explains browser printing vs Android direct thermal printing", () => {
-  assert.ok(settings.includes("Browser printing uses your system print dialog."));
-  assert.ok(settings.includes("Direct LAN thermal printing is configured locally in the OMLU Operations Android app."));
+  assert.ok(settings.includes("Print bills and receipts using your system print dialog."));
+  assert.ok(settings.includes("Use the Android Operations app for direct LAN thermal printing."));
   assert.ok(settings.includes("Thermal printers and the Android device must be connected to the same local network."));
   assert.ok(settings.includes("Direct ESC/POS printing (IP address, port, paper width, and copies) is configured directly inside the Android app settings."));
   assert.ok(settings.includes("Web admin does not store raw TCP printer IP addresses, ports, paper widths, or copy preferences."));
@@ -46,7 +45,7 @@ test("Printer Setup is rendered as guidance section and not treated as a bill qu
 
 test("Settings no longer contains outdated 'Billing uses Pending Payments' text", () => {
   assert.doesNotMatch(settings, /Billing uses Pending Payments/);
-  assert.ok(settings.includes("When enabled, customers can request a waiter, water, or assistance from their table."));
+  assert.ok(settings.includes("Allow customers to request a waiter, water, or assistance from their table."));
 });
 
 test("Direct TCP printer fields (IP, port, paper width, copies) are absent from web settings", () => {
