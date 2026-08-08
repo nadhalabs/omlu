@@ -2,6 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
 
+// Helper checking presentation-scoped menu ownership
+function isMenuInstanceOpen(activeState, memberId, presentation) {
+  return Boolean(
+    activeState &&
+    activeState.memberId === memberId &&
+    activeState.presentation === presentation
+  );
+}
+
 // The outside-click containment decision function extracted for interaction testing
 function isInsideMenuSystem(target, trigger, menu) {
   if (!target) return false;
@@ -41,6 +50,39 @@ function createMockNode(name = "node", parent = null) {
   };
   return node;
 }
+
+test("isMenuInstanceOpen enforces single presentation ownership per member (prevents duplicate desktop & mobile portals)", () => {
+  // 1. When desktop member 10 opens the menu
+  let activeState = { memberId: 10, presentation: "desktop" };
+
+  assert.equal(isMenuInstanceOpen(activeState, 10, "desktop"), true, "Desktop member 10 menu must be open");
+  assert.equal(isMenuInstanceOpen(activeState, 10, "mobile"), false, "Mobile member 10 menu must NOT be open");
+  assert.equal(isMenuInstanceOpen(activeState, 11, "desktop"), false, "Desktop member 11 menu must NOT be open");
+  assert.equal(isMenuInstanceOpen(activeState, 11, "mobile"), false, "Mobile member 11 menu must NOT be open");
+
+  // 2. When mobile member 10 opens the menu
+  activeState = { memberId: 10, presentation: "mobile" };
+
+  assert.equal(isMenuInstanceOpen(activeState, 10, "desktop"), false, "Desktop member 10 menu must NOT be open");
+  assert.equal(isMenuInstanceOpen(activeState, 10, "mobile"), true, "Mobile member 10 menu must be open");
+  assert.equal(isMenuInstanceOpen(activeState, 11, "desktop"), false, "Desktop member 11 menu must NOT be open");
+  assert.equal(isMenuInstanceOpen(activeState, 11, "mobile"), false, "Mobile member 11 menu must NOT be open");
+
+  // 3. Opening member 11 replaces member 10
+  activeState = { memberId: 11, presentation: "desktop" };
+
+  assert.equal(isMenuInstanceOpen(activeState, 10, "desktop"), false, "Member 10 desktop menu must be closed when member 11 opens");
+  assert.equal(isMenuInstanceOpen(activeState, 10, "mobile"), false, "Member 10 mobile menu must be closed when member 11 opens");
+  assert.equal(isMenuInstanceOpen(activeState, 11, "desktop"), true, "Member 11 desktop menu must be open");
+
+  // 4. Closing active menu clears ownership
+  activeState = null;
+
+  assert.equal(isMenuInstanceOpen(activeState, 10, "desktop"), false);
+  assert.equal(isMenuInstanceOpen(activeState, 10, "mobile"), false);
+  assert.equal(isMenuInstanceOpen(activeState, 11, "desktop"), false);
+  assert.equal(isMenuInstanceOpen(activeState, 11, "mobile"), false);
+});
 
 test("isInsideMenuSystem correctly identifies trigger target as inside (stays open)", () => {
   const trigger = createMockNode("trigger");
@@ -178,7 +220,10 @@ test("Menu actions that do not open a dialog restore focus to trigger after dism
 
 test("StaffManagementClient source contracts include exported helpers and runMenuAction invocation", () => {
   const source = readFileSync(new URL("../app/admin/staff/StaffManagementClient.tsx", import.meta.url), "utf8");
+  assert.match(source, /export function isMenuInstanceOpen/);
   assert.match(source, /export function isInsideMenuSystem/);
   assert.match(source, /export function runMenuAction/);
+  assert.match(source, /isMenuInstanceOpen\(openMenuState, member\.id, "desktop"\)/);
+  assert.match(source, /isMenuInstanceOpen\(openMenuState, member\.id, "mobile"\)/);
   assert.match(source, /runMenuAction\(\s*action,\s*\(\) => setOpenMenu\(false\),\s*\(\) => triggerRef\.current\?\.focus\(\),\s*opensDialog\s*\)/);
 });
