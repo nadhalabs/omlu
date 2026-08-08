@@ -74,6 +74,8 @@ export default function StaffManagementClient() {
   const [resetPasswordValue, setResetPasswordValue] = useState("");
   const [resetPasswordError, setResetPasswordError] = useState<string | undefined>();
   const [resetSaving, setResetSaving] = useState(false);
+  const [operationsBusy, setOperationsBusy] = useState(false);
+  const [operationsBusyAction, setOperationsBusyAction] = useState<string | null>(null);
   const [busyMemberId, setBusyMemberId] = useState<number | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
@@ -149,10 +151,11 @@ export default function StaffManagementClient() {
           focusField(field);
         }
         setError(err.message);
-        setToast(err.message);
+        uiToast(err.message, "error");
       } else {
-        setError("Could not create staff account.");
-        setToast("Could not create staff account.");
+        const msg = "Could not create staff account.";
+        setError(msg);
+        uiToast(msg, "error");
       }
     } finally {
       setSaving(false);
@@ -162,9 +165,12 @@ export default function StaffManagementClient() {
   const changeRole = async (member: StaffAccountResponse, role: string) => {
     if (!await confirmDialog({ title: `Change ${member.name}'s role?`, message: `Their role will change from ${member.role} to ${role}. Active permissions will refresh immediately.`, confirmLabel: "Change role" })) return;
     setBusyMemberId(member.id); setBusyAction("Updating role...");
-    try { replaceStaff(await updateStaffAccount(member.id, { role })); uiToast(`${member.name}'s role was updated.`, "success"); }
-    catch { uiToast("Could not update this staff role.", "error"); }
-    finally { setBusyMemberId(null); setBusyAction(null); }
+    try {
+      replaceStaff(await updateStaffAccount(member.id, { role }));
+      uiToast(`${member.name}'s role was updated.`, "success");
+    } catch (err) {
+      uiToast(err instanceof ApiError ? err.message : "Could not update this staff role.", "error");
+    } finally { setBusyMemberId(null); setBusyAction(null); }
   };
 
   const changeStatus = async (member: StaffAccountResponse, status: string) => {
@@ -172,9 +178,12 @@ export default function StaffManagementClient() {
     if (status === "active") { if (!await confirmDialog({ title: `Reactivate ${member.name}?`, message: "Account access will be restored immediately.", confirmLabel: "Reactivate account" })) return; }
     else { const entered = await inputDialog({ title: `Suspend ${member.name}?`, message: "They will be signed out immediately and will not be able to log in until reactivated.", label: "Reason", placeholder: "Shift completed", required: false, confirmLabel: "Suspend account", tone: "destructive" }); if (entered === null) return; reason = entered || undefined; }
     setBusyMemberId(member.id); setBusyAction(status === "active" ? "Resuming..." : "Suspending...");
-    try { replaceStaff(await updateStaffAccount(member.id, { status, reason })); uiToast(`${member.name}'s account is now ${status}.`, "success"); }
-    catch { uiToast("Could not update this staff account.", "error"); }
-    finally { setBusyMemberId(null); setBusyAction(null); }
+    try {
+      replaceStaff(await updateStaffAccount(member.id, { status, reason }));
+      uiToast(`${member.name}'s account is now ${status}.`, "success");
+    } catch (err) {
+      uiToast(err instanceof ApiError ? err.message : `Could not ${status === "active" ? "resume" : "suspend"} this staff account.`, "error");
+    } finally { setBusyMemberId(null); setBusyAction(null); }
   };
 
   const openResetPassword = (member: StaffAccountResponse) => {
@@ -202,14 +211,18 @@ export default function StaffManagementClient() {
       uiToast(`${resetTarget.role === "staff" || resetTarget.role === "kitchen" ? "PIN" : "Password"} reset successfully.`, "success");
       setResetTarget(null);
       setResetPasswordValue("");
+      setError(null);
     } catch (err) {
       if (err instanceof ApiError) {
-        setResetPasswordError(err.field ? err.message : undefined);
+        const isCredentialField = err.field === "temporary_password" || err.field === "pin" || err.field === "password";
+        setResetPasswordError(isCredentialField ? err.message : undefined);
         setError(err.message);
-        setToast(err.message);
+        uiToast(err.message, "error");
       } else {
-        setError("Could not reset password.");
-        setToast("Could not reset password.");
+        setResetPasswordError(undefined);
+        const fallback = "Could not reset password.";
+        setError(fallback);
+        uiToast(fallback, "error");
       }
     } finally {
       setResetSaving(false);
@@ -237,7 +250,7 @@ export default function StaffManagementClient() {
     } catch (err) {
       const message = err instanceof ApiError ? err.message : "Could not sign out staff sessions.";
       setError(message);
-      setToast(message);
+      uiToast(message, "error");
     } finally {
       pendingSessionRevocationsRef.current.delete(member.id);
       if (!selfRevocationSucceeded) {
@@ -254,20 +267,22 @@ export default function StaffManagementClient() {
       await removeStaffAccess(member.id);
       setStaff((prev) => prev.filter((item) => item.id !== member.id));
       uiToast(`${member.name}'s access was removed.`, "success");
-    } catch {
-      uiToast("Could not remove this staff account.", "error");
+    } catch (err) {
+      uiToast(err instanceof ApiError ? err.message : "Could not remove this staff account.", "error");
     } finally { setBusyMemberId(null); setBusyAction(null); }
   };
 
   const toggleAllStaff = async () => {
-    if (!operations) return;
+    if (!operations || operationsBusy) return;
     const locking = !operations.locked;
     const warnings = `${operations.occupied_tables} active tables, ${operations.unserved_orders} unserved orders, ${operations.pending_requests} pending requests, and ${operations.bills_waiting_for_payment} bills waiting for payment.`;
     let reason: string | undefined;
     if (locking) { const entered = await inputDialog({ title: "Lock all Staff?", message: "Staff will immediately lose access to operational actions. Owner, Admin, and Kitchen access remain available.", details: [warnings], label: "Reason", placeholder: "Restaurant closed", confirmLabel: "Lock all Staff", tone: "destructive" }); if (entered === null) return; reason = entered || undefined; }
     else if (!await confirmDialog({ title: "Unlock all Staff?", message: "Operational access will be restored immediately for Staff accounts that are not individually locked.", confirmLabel: "Unlock Staff" })) return;
+    setOperationsBusy(true); setOperationsBusyAction(locking ? "Locking all staff..." : "Unlocking all staff...");
     try { setOperations(await setAllStaffLocked(locking, reason, true)); uiToast(locking ? "Staff operations are now read-only." : "Staff operations were restored.", "success"); }
     catch (err) { uiToast(err instanceof ApiError ? err.message : "Could not update Staff operations.", "error"); }
+    finally { setOperationsBusy(false); setOperationsBusyAction(null); }
   };
 
   const toggleMemberLock = async (member: StaffAccountResponse) => {
@@ -282,11 +297,13 @@ export default function StaffManagementClient() {
   };
 
   const changeRestaurantStatus = async (nextStatus: "open" | "closing" | "closed") => {
-    if (!operations || nextStatus === operations.operating_status) return;
+    if (!operations || operationsBusy || nextStatus === operations.operating_status) return;
     const copy = nextStatus === "closed" ? "New QR sessions and customer orders will be blocked. Staff operational actions will also be locked. Existing records will not be deleted." : nextStatus === "closing" ? "New customer sessions will be blocked while existing operations may continue." : "Customer ordering and normal restaurant operations will resume.";
     if (!await confirmDialog({ title: `Set restaurant as ${nextStatus}?`, message: copy, confirmLabel: `Set as ${nextStatus[0].toUpperCase()}${nextStatus.slice(1)}`, tone: nextStatus === "closed" ? "destructive" : "default" })) return;
+    setOperationsBusy(true); setOperationsBusyAction("Updating status...");
     try { setOperations(await setRestaurantOperatingStatus(nextStatus)); uiToast(`Restaurant status changed to ${nextStatus}.`, "success"); }
     catch (err) { uiToast(err instanceof ApiError ? err.message : "Could not update restaurant status.", "error"); }
+    finally { setOperationsBusy(false); setOperationsBusyAction(null); }
   };
 
   if (selfSessionRevoked) {
@@ -330,12 +347,12 @@ export default function StaffManagementClient() {
             </div>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
               <label className="text-xs font-bold text-[var(--omlu-text-primary)]">Restaurant operational status
-              <select value={operations.operating_status} onChange={(e) => void changeRestaurantStatus(e.target.value as "open" | "closing" | "closed")} className="mt-1 block min-h-11 w-full rounded-lg border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-3 py-2 text-sm font-semibold text-[var(--omlu-text-primary)] focus-visible:outline-2 focus-visible:outline-orange-500">
+              <select disabled={operationsBusy} value={operations.operating_status} onChange={(e) => void changeRestaurantStatus(e.target.value as "open" | "closing" | "closed")} className="mt-1 block min-h-11 w-full rounded-lg border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-3 py-2 text-sm font-semibold text-[var(--omlu-text-primary)] focus-visible:outline-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)]">
                 <option value="open">Open</option><option value="closing">Closing</option><option value="closed">Closed</option>
               </select>
               </label>
-              <button onClick={toggleAllStaff} className={`min-h-11 rounded-lg border px-4 py-2 text-sm font-black transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 ${operations.locked ? "border-emerald-700 bg-emerald-700 text-[var(--omlu-strong-action-text)] hover:bg-emerald-800" : "border-red-300 bg-[var(--omlu-primary-surface)] text-red-700 hover:bg-red-50"}`}>
-                {operations.locked ? "Unlock all staff" : "Lock all staff"}
+              <button disabled={operationsBusy} onClick={toggleAllStaff} className={`min-h-11 rounded-lg border px-4 py-2 text-sm font-black transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:border-[var(--omlu-border-strong)] disabled:bg-[var(--omlu-muted-surface)] disabled:text-[var(--omlu-text-secondary)] ${operations.locked ? "border-emerald-700 bg-emerald-700 text-[var(--omlu-strong-action-text)] hover:bg-emerald-800" : "border-red-300 bg-[var(--omlu-primary-surface)] text-red-700 hover:bg-red-50"}`}>
+                {operationsBusy ? operationsBusyAction : operations.locked ? "Unlock all staff" : "Lock all staff"}
               </button>
             </div>
           </div>
@@ -466,14 +483,28 @@ function RoleControl({ member, busy, changeRole }: Pick<StaffPresentationProps, 
   );
 }
 
+export function isInsideMenuSystem(
+  target: Node | null,
+  trigger: Node | null,
+  menu: Node | null
+): boolean {
+  if (!target) return false;
+  if (trigger && trigger.contains(target)) return true;
+  if (menu && menu.contains(target)) return true;
+  return false;
+}
+
 function ActionMenuPopover({
   triggerRect,
+  menuRef: externalRef,
   children,
 }: {
   triggerRect: DOMRect | null;
+  menuRef?: React.RefObject<HTMLDivElement | null>;
   children: React.ReactNode;
 }) {
-  const menuRef = useRef<HTMLDivElement>(null);
+  const internalRef = useRef<HTMLDivElement>(null);
+  const menuRef = externalRef || internalRef;
   const [position, setPosition] = useState<{ top?: number; bottom?: number; right: number }>({ right: 16 });
 
   const updatePosition = useCallback(() => {
@@ -494,7 +525,7 @@ function ActionMenuPopover({
         right,
       });
     }
-  }, [triggerRect]);
+  }, [triggerRect, menuRef]);
 
   useLayoutEffect(() => {
     updatePosition();
@@ -514,7 +545,7 @@ function ActionMenuPopover({
       window.removeEventListener("scroll", updatePosition, true);
       resizeObserver?.disconnect();
     };
-  }, [triggerRect, updatePosition]);
+  }, [triggerRect, updatePosition, menuRef]);
 
   if (typeof document === "undefined" || !triggerRect) return null;
 
@@ -539,6 +570,7 @@ function ActionMenuPopover({
 function MemberActions(props: StaffPresentationProps) {
   const { member, busy, busyAction, openMenu, setOpenMenu, changeStatus, openResetPassword, signOutAll, toggleMemberLock, removeAccess } = props;
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const [triggerRect, setTriggerRect] = useState<DOMRect | null>(null);
 
   const toggleMenu = () => {
@@ -556,9 +588,10 @@ function MemberActions(props: StaffPresentationProps) {
     if (!openMenu) return;
     const handleScrollOrResize = () => setOpenMenu(false);
     const close = (event: MouseEvent) => {
-      if (triggerRef.current && !triggerRef.current.contains(event.target as Node)) {
-        setOpenMenu(false);
+      if (isInsideMenuSystem(event.target as Node, triggerRef.current, menuRef.current)) {
+        return;
       }
+      setOpenMenu(false);
     };
     const escape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -629,7 +662,7 @@ function MemberActions(props: StaffPresentationProps) {
           ⋮
         </button>
         {openMenu && (
-          <ActionMenuPopover triggerRect={triggerRect}>
+          <ActionMenuPopover triggerRect={triggerRect} menuRef={menuRef}>
             <MenuAction
               label={member.role === "staff" || member.role === "kitchen" ? "Reset PIN" : "Reset password"}
               onClick={() => run(() => openResetPassword(member))}
