@@ -121,9 +121,58 @@ export function HistorySkeleton() {
   );
 }
 
-export function formatDateTime(value: string | null) {
+const PAYMENT_METHOD_MAP: Record<string, string> = {
+  counter_cash: "Cash",
+  counter_upi: "UPI",
+  counter_card: "Card",
+  online: "Online",
+};
+
+const PAYMENT_STATUS_MAP: Record<string, string> = {
+  paid: "Paid",
+  unpaid: "Unpaid",
+  payment_pending: "Payment Pending",
+  void: "Void",
+};
+
+export function formatPaymentMethod(method: string | null | undefined): string {
+  if (!method) return "-";
+  const key = method.trim().toLowerCase();
+  if (PAYMENT_METHOD_MAP[key]) {
+    return PAYMENT_METHOD_MAP[key];
+  }
+  return method.replace(/_/g, " ");
+}
+
+export function formatPaymentStatus(status: string | null | undefined): string {
+  if (!status) return "-";
+  const key = status.trim().toLowerCase();
+  if (PAYMENT_STATUS_MAP[key]) {
+    return PAYMENT_STATUS_MAP[key];
+  }
+  return status.replace(/_/g, " ");
+}
+
+export function formatCurrencyINR(value: string | number | null | undefined): string {
+  if (value === null || value === undefined || value === "") return "₹0.00";
+  const num = typeof value === "string" ? parseFloat(value) : value;
+  if (isNaN(num)) return "₹0.00";
+  const formatted = new Intl.NumberFormat("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(num);
+  return `₹${formatted}`;
+}
+
+export function formatDateTime(value: string | null | undefined) {
   if (!value) return "-";
-  return new Date(value).toLocaleString();
+  const date = new Date(value);
+  if (isNaN(date.getTime())) return value;
+  const day = date.toLocaleDateString("en-IN", { day: "2-digit" });
+  const month = date.toLocaleDateString("en-IN", { month: "short" });
+  const year = date.getFullYear();
+  const time = date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
+  return `${day} ${month} ${year}, ${time}`;
 }
 
 export function formatMinutes(value: number | null) {
@@ -132,3 +181,4 @@ export function formatMinutes(value: number | null) {
   const minutes = value % 60;
   return hours ? `${hours}h ${minutes}m` : `${minutes}m`;
 }
+
