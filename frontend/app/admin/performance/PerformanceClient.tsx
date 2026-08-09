@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   fetchHistory,
   downloadHistoryPdf,
   exportHistory,
+  exportHistoryXlsx,
   HistoryFilters,
   PerformanceSummary,
 } from "@/lib/adminHistory";
@@ -136,24 +137,7 @@ function OperationalStrip({ metrics }: { metrics: Record<string, string | number
 }
 
 function Insights({ data }: { data: PerformanceSummary }) {
-  const insights = useMemo(() => {
-    const result: string[] = [];
-    if (data.orders_by_hour.length) {
-      const peak = data.orders_by_hour.reduce((best, row) => row.orders > best.orders ? row : best);
-      const start = new Date(2020, 0, 1, peak.hour).toLocaleTimeString("en-IN", { hour: "numeric" });
-      const end = new Date(2020, 0, 1, (peak.hour + 1) % 24).toLocaleTimeString("en-IN", { hour: "numeric" });
-      result.push(`${start}–${end} was the busiest hour with ${peak.orders} orders.`);
-    }
-    if (data.category_performance.length) {
-      const best = [...data.category_performance].sort((a, b) => Number(b.revenue) - Number(a.revenue))[0];
-      result.push(`${best.category_name} generated the highest category revenue at ${formatCurrency(best.revenue)}.`);
-    }
-    if (data.top_selling_items.length) {
-      const best = [...data.top_selling_items].sort((a, b) => b.quantity - a.quantity)[0];
-      result.push(`${best.item_name} was the most ordered item with ${best.quantity} sold.`);
-    }
-    return result.slice(0, 3);
-  }, [data]);
+  const insights = data.owner_insights;
   if (!insights.length) return null;
   return (
     <section aria-labelledby="performance-insights" className={`${card} overflow-hidden p-5`}>
@@ -169,6 +153,24 @@ function Insights({ data }: { data: PerformanceSummary }) {
           <div key={insight} className="rounded-xl bg-orange-50/70 p-4 text-sm font-semibold leading-6 text-[var(--omlu-text-primary)]">
             <span className="mr-2 font-black text-orange-600">0{index + 1}</span>{insight}
           </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function SalesMix({ data }: { data: PerformanceSummary["sales_mix"] }) {
+  return (
+    <section aria-labelledby="sales-mix" className={`${card} p-5`}>
+      <h2 id="sales-mix" className="font-extrabold text-[var(--omlu-text-primary)]">Sales mix</h2>
+      <p className="mt-1 text-xs text-[var(--omlu-text-secondary)]">Collected revenue by sale type</p>
+      <div className="mt-5 grid gap-3 sm:grid-cols-3">
+        {data.map((row) => (
+          <article key={row.label} className="rounded-xl bg-[var(--omlu-muted-surface)] p-4">
+            <p className="text-xs font-bold text-[var(--omlu-text-secondary)]">{row.label}</p>
+            <p className="mt-1 text-xl font-black text-[var(--omlu-text-primary)]">{formatCurrency(row.revenue)}</p>
+            <p className="mt-1 text-xs font-semibold text-[var(--omlu-text-secondary)]">{Number(row.contribution_percentage).toFixed(1)}% of collected revenue</p>
+          </article>
         ))}
       </div>
     </section>
@@ -333,6 +335,7 @@ export default function PerformanceClient({ initialState }: { initialState: Perf
               {exportOpen && (
                 <div role="menu" className="absolute right-0 z-50 mt-2 w-56 overflow-hidden rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-1.5 shadow-xl">
                   <button role="menuitem" onClick={() => { exportHistory("performance", filters); setExportOpen(false); }} className="w-full rounded-lg px-3 py-2 text-left text-xs font-bold text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-muted-surface)]">Export CSV</button>
+                  <button role="menuitem" onClick={() => { exportHistoryXlsx("performance", filters); setExportOpen(false); }} className="w-full rounded-lg px-3 py-2 text-left text-xs font-bold text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-muted-surface)]">Export XLSX Report</button>
                   {(["daily", "monthly", "range"] as const).map((kind) => (
                     <button key={kind} role="menuitem" disabled={Boolean(pdfLoading)} onClick={async () => { setExportOpen(false); await downloadSelectedPdf(kind); }} className="w-full rounded-lg px-3 py-2 text-left text-xs font-bold text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-muted-surface)] disabled:opacity-50">
                       {pdfLoading === kind ? "Generating…" : `Export ${kind === "range" ? "Active Range" : kind[0].toUpperCase() + kind.slice(1)} PDF`}
@@ -459,6 +462,7 @@ export default function PerformanceClient({ initialState }: { initialState: Perf
           {activeTab === "overview" && (
             <>
               <OperationalStrip metrics={metrics} />
+              <SalesMix data={data.sales_mix} />
               <Insights data={data} />
               {!hasData ? <ChartEmptyState message="No performance metrics were recorded for this period." /> : (
                 <section aria-label="Sales and Orders Trends" className="grid gap-5 xl:grid-cols-2">
@@ -476,6 +480,7 @@ export default function PerformanceClient({ initialState }: { initialState: Perf
 
           {activeTab === "sales" && (
             <>
+              <SalesMix data={data.sales_mix} />
               <section className="grid gap-5 xl:grid-cols-2">
                 <TrendChart title="Revenue trend" isCurrency data={data.revenue_by_day.map((row) => ({ label: dateLabel(row.date), value: Number(row.revenue) }))} explanation="Paid bill and completed quick-sale revenue, grouped by local day." accessibleSummary={`Revenue trend for the selected period. Maximum is ${formatCurrency(Math.max(...revenueTrend, 0))}.`} />
                 <TrendChart title="Orders trend" data={data.orders_by_day.map((row) => ({ label: dateLabel(row.date), value: row.orders }))} explanation="Compare order volume with revenue movement." accessibleSummary={`Order trend for the selected period. Maximum is ${Math.max(...ordersTrend, 0)} orders.`} />

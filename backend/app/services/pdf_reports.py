@@ -8,6 +8,8 @@ from reportlab.lib.enums import TA_RIGHT
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
+from reportlab.graphics.charts.linecharts import HorizontalLineChart
+from reportlab.graphics.shapes import Drawing
 from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 
@@ -95,6 +97,27 @@ def _styles():
     return styles
 
 
+def _revenue_chart(rows: list[dict[str, Any]]) -> Drawing | None:
+    if len(rows) < 2:
+        return None
+    drawing = Drawing(480, 150)
+    chart = HorizontalLineChart()
+    chart.x = 48
+    chart.y = 30
+    chart.width = 410
+    chart.height = 100
+    chart.data = [[float(Decimal(str(row["revenue"]))) for row in rows]]
+    chart.categoryAxis.categoryNames = [row["date"][5:] for row in rows]
+    chart.categoryAxis.labels.fontSize = 6
+    chart.categoryAxis.labels.angle = 30
+    chart.valueAxis.valueMin = 0
+    chart.valueAxis.labels.fontSize = 7
+    chart.lines[0].strokeColor = colors.HexColor("#ea580c")
+    chart.lines[0].strokeWidth = 2
+    drawing.add(chart)
+    return drawing
+
+
 def build_performance_pdf(context: dict[str, Any]) -> bytes:
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
@@ -104,7 +127,7 @@ def build_performance_pdf(context: dict[str, Any]) -> bytes:
         leftMargin=18 * mm,
         topMargin=16 * mm,
         bottomMargin=18 * mm,
-        title="OMLU Performance Report",
+        title=context["report"]["title"],
         author="OMLU",
     )
     styles = _styles()
@@ -116,75 +139,52 @@ def build_performance_pdf(context: dict[str, Any]) -> bytes:
 
     logo = _maybe_logo(restaurant.get("logo_url"))
     header_left = [
-        Paragraph("OMLU", styles["Brand"]),
+        Paragraph(report["title"], styles["Brand"]),
         Paragraph(restaurant.get("name") or "Restaurant", styles["ReportMeta"]),
-        Paragraph(report["type"], styles["ReportMeta"]),
-        Paragraph(f"Period: {report['start_date']} to {report['end_date']}", styles["ReportMeta"]),
-        Paragraph(f"Timezone: {restaurant.get('timezone') or 'Asia/Kolkata'}", styles["ReportMeta"]),
+        Paragraph(f"Selected reporting period: {report['start_date']} to {report['end_date']}", styles["ReportMeta"]),
         Paragraph(f"Generated: {report['generated_at']}", styles["ReportMeta"]),
     ]
     story.append(Table([[header_left, logo or ""]], colWidths=[120 * mm, 38 * mm]))
     story.append(Spacer(1, 8))
 
-    _section(story, styles, "Summary")
+    _section(story, styles, "Executive Summary")
     summary_rows = [
-        ["Total Revenue", _money(metrics["total_revenue"]), "Total Orders", _number(metrics["total_orders"])],
-        ["Average Order Value", _money(metrics["average_order_value"]), "Bills Created", _number(metrics["total_bills"])],
-        ["Paid Bills", _number(metrics["paid_bills"]), "Unpaid Bills", _number(metrics["unpaid_bills"])],
-        ["Rejected Orders", _number(metrics["rejected_orders"]), "Average Table Session", f"{_number(metrics['average_session_duration_minutes'])} min"],
+        ["Total Revenue", _money(metrics["total_revenue"]), "Collected Revenue", _money(metrics["collected_revenue"])],
+        ["Pending Collection", _money(metrics["pending_collection"]), "Total Orders", _number(metrics["total_orders"])],
+        ["Average Order Value", _money(metrics["average_order_value"]), "Total Bills", _number(metrics["total_bills"])],
     ]
     story.append(_table(styles, ["Metric", "Value", "Metric", "Value"], summary_rows, [44 * mm, 32 * mm, 48 * mm, 34 * mm]))
 
-    _section(story, styles, "Payment Breakdown")
-    story.append(
-        _table(
-            styles,
-            ["Method", "Bills", "Amount", "Share"],
-            [[row["method"], row["bill_count"], _money(row["amount"]), f"{row['percentage']}%"] for row in context["payment_breakdown"]],
-            [46 * mm, 24 * mm, 44 * mm, 28 * mm],
-        )
-    )
+    _section(story, styles, "Sales Mix")
+    story.append(_table(styles, ["Sale Type", "Revenue", "Contribution"], [[row["label"], _money(row["revenue"]), f"{row['contribution_percentage']}%"] for row in context["sales_mix"]], [58 * mm, 45 * mm, 38 * mm]))
 
-    _section(story, styles, "Revenue By Day")
+    _section(story, styles, "Revenue Trend")
+    chart = _revenue_chart(summary["revenue_by_day"])
+    if chart:
+        story.append(chart)
+        story.append(Spacer(1, 4))
     story.append(_table(styles, ["Date", "Revenue"], [[row["date"], _money(row["revenue"])] for row in summary["revenue_by_day"]], [50 * mm, 40 * mm]))
 
-    _section(story, styles, "Orders By Day")
-    story.append(_table(styles, ["Date", "Orders"], [[row["date"], row["orders"]] for row in summary["orders_by_day"]], [50 * mm, 35 * mm]))
+    _section(story, styles, "Order Health")
+    story.append(_table(styles, ["Measure", "Value"], [
+        ["Cancelled Orders", "Not tracked"],
+        ["Rejected Orders", _number(metrics["rejected_orders"])],
+        ["Payment Failures", "Not tracked"],
+    ], [70 * mm, 35 * mm]))
 
-    _section(story, styles, "Sales Performance")
-    story.append(_table(styles, ["Top-selling item", "Qty", "Revenue"], [[row["item_name"], row["quantity"], _money(row["revenue"])] for row in summary["top_selling_items"][:10]], [78 * mm, 22 * mm, 38 * mm]))
-    story.append(Spacer(1, 6))
-    story.append(_table(styles, ["Lowest-selling item", "Qty", "Revenue"], [[row["item_name"], row["quantity"], _money(row["revenue"])] for row in summary["lowest_selling_items"][:10]], [78 * mm, 22 * mm, 38 * mm]))
+    _section(story, styles, "Operations")
+    story.append(_table(styles, ["Measure", "Value"], [
+        ["Average Table Session", f"{_number(metrics['average_session_duration_minutes'])} min"],
+        ["Active Table Time", f"{_number(metrics['active_table_time_minutes'])} min"],
+    ], [70 * mm, 35 * mm]))
 
-    _section(story, styles, "Category Performance")
-    story.append(_table(styles, ["Category", "Qty", "Revenue"], [[row["category_name"], row["quantity"], _money(row["revenue"])] for row in summary["category_performance"]], [72 * mm, 24 * mm, 42 * mm]))
+    _section(story, styles, "Top Performance")
+    story.append(_table(styles, ["Top-selling Item", "Quantity Sold", "Revenue"], [[row["item_name"], row["quantity"], _money(row["revenue"])] for row in summary["top_selling_items"][:10]], [78 * mm, 30 * mm, 38 * mm]))
 
-    _section(story, styles, "Busy Hours")
-    story.append(_table(styles, ["Hour", "Orders"], [[f"{row['hour']:02d}:00", row["orders"]] for row in summary["orders_by_hour"]], [40 * mm, 35 * mm]))
-
-    _section(story, styles, "Most-used Tables")
-    story.append(_table(styles, ["Table", "Sessions", "Orders", "Revenue"], [[row["table_number"], row["sessions"], row["orders"], _money(row["revenue"])] for row in summary["table_usage"]], [36 * mm, 28 * mm, 28 * mm, 42 * mm]))
-
-    _section(story, styles, "Staff Activity")
-    story.append(
-        _table(
-            styles,
-            ["Staff", "Orders", "Requests", "Bills", "Payments", "Opened", "Closed"],
-            [
-                [
-                    row["staff_name"],
-                    row["orders_created"],
-                    row["requests_resolved"],
-                    row["bills_generated"],
-                    row["payments_recorded"],
-                    row["sessions_opened"],
-                    row["sessions_closed"],
-                ]
-                for row in context["staff_activity_detail"]
-            ],
-            [45 * mm, 18 * mm, 22 * mm, 18 * mm, 22 * mm, 18 * mm, 18 * mm],
-        )
-    )
+    _section(story, styles, "Owner Insights")
+    for insight in context["owner_insights"] or ["No owner insights are available for this period."]:
+        story.append(Paragraph(f"• {insight}", styles["TableCell"]))
+        story.append(Spacer(1, 3))
 
     doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
     return buffer.getvalue()

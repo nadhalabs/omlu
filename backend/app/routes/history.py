@@ -19,6 +19,12 @@ from app.models.service_request import ServiceRequest
 from app.models.staff_user import StaffUser
 from app.models.quick_sale import QuickSale, QuickSaleItem
 from app.services.pdf_reports import build_performance_pdf
+from app.services.performance_reports import (
+    build_performance_xlsx,
+    owner_insights,
+    performance_filename,
+    performance_report_title,
+)
 from app.services.revenue import collected_revenue
 from app.utils.auth import RoleChecker
 from app.utils.business_date import (
@@ -647,7 +653,23 @@ def performance_summary(
         .all()
     ]
 
-    return {
+    takeaway_revenue = sum((sale.total_amount for sale in paid_quick_sales if sale.sale_type == "takeaway"), Decimal("0.00"))
+    quick_sale_revenue = sum((sale.total_amount for sale in paid_quick_sales if sale.sale_type == "late_entry"), Decimal("0.00"))
+    collected_total = revenue.collected_revenue
+    sales_mix = []
+    for label, amount in (
+        ("Dine-in", revenue.paid_bill_revenue),
+        ("Takeaway", takeaway_revenue),
+        ("Quick Sale", quick_sale_revenue),
+    ):
+        contribution = (amount / collected_total * Decimal("100")) if collected_total else Decimal("0")
+        sales_mix.append({
+            "label": label,
+            "revenue": _money(amount),
+            "contribution_percentage": f"{contribution.quantize(Decimal('0.01'))}",
+        })
+
+    response = {
         "metrics": {
             "total_revenue": _money(total_revenue),
             "collected_revenue": _money(revenue.collected_revenue),
@@ -672,7 +694,10 @@ def performance_summary(
         "category_performance": category_performance,
         "table_usage": table_usage,
         "staff_activity": staff_activity,
+        "sales_mix": sales_mix,
     }
+    response["owner_insights"] = owner_insights(response["metrics"], sales_mix, top_items)
+    return response
 
 
 @router.get("/performance/summary")
@@ -790,15 +815,6 @@ def _report_type(preset: str | None, start_local: date, end_local: date) -> str:
     if normalized in {"month", "monthly", "this_month"}:
         return "Monthly report"
     return "Custom date range report"
-
-
-def _safe_report_filename(preset: str | None, start_local: date, end_local: date) -> str:
-    normalized = (preset or "today").strip().lower()
-    if normalized == "today" and start_local == end_local:
-        return f"omlu-daily-report-{start_local.isoformat()}.pdf"
-    if normalized in {"month", "monthly", "this_month"}:
-        return f"omlu-monthly-report-{start_local.strftime('%Y-%m')}.pdf"
-    return f"omlu-report-{start_local.isoformat()}-to-{end_local.isoformat()}.pdf"
 
 
 def _payment_method_label(method: str | None) -> str:
@@ -928,6 +944,7 @@ def _performance_pdf_context(
     total_revenue = Decimal(str(summary["metrics"]["total_revenue"] or 0))
     tz = _restaurant_timezone(current_user)
     generated_at = datetime.now(tz)
+    report_type = _report_type(preset, start_local, end_local)
     context = {
         "restaurant": {
             "name": current_user.restaurant.name if current_user.restaurant else "Restaurant",
@@ -935,16 +952,19 @@ def _performance_pdf_context(
             "timezone": _restaurant_timezone(current_user).key,
         },
         "report": {
-            "type": _report_type(preset, start_local, end_local),
+            "type": report_type,
+            "title": performance_report_title(report_type),
             "start_date": start_local.isoformat(),
             "end_date": end_local.isoformat(),
             "generated_at": generated_at.strftime("%Y-%m-%d %H:%M:%S %Z"),
         },
         "summary": summary,
+        "sales_mix": summary["sales_mix"],
+        "owner_insights": summary["owner_insights"],
         "payment_breakdown": _payment_breakdown(db, current_user, start_utc, end_utc, total_revenue),
         "staff_activity_detail": _detailed_staff_activity(db, current_user, start_utc, end_utc),
     }
-    return context, _safe_report_filename(preset, start_local, end_local)
+    return context, performance_filename(current_user.restaurant.name, start_local, end_local, "pdf")
 
 
 @router.get("/orders/export")
@@ -1097,7 +1117,8 @@ def export_performance(
     current_user: StaffUser = Depends(_owner_admin),
     db: Session = Depends(get_db),
 ):
-    response = performance_summary(preset, start_date, end_date, current_user, db)
+    context, _ = _performance_pdf_context(preset=preset, start_date=start_date, end_date=end_date, current_user=current_user, db=db)
+    response = context["summary"]
     metric_labels = {
         "total_revenue": "Total Revenue",
         "collected_revenue": "Collected Revenue",
@@ -1114,8 +1135,47 @@ def export_performance(
         "active_table_time_minutes": "Active Table Time (Minutes)",
         "average_session_duration_minutes": "Average Table Session (Minutes)",
     }
-    rows = [{"Metric": metric_labels[key], "Value": value} for key, value in response["metrics"].items()]
-    return _csv_response("performance-summary.csv", rows)
+    money_metrics = {"total_revenue", "collected_revenue", "pending_collection", "completed_quick_sale_revenue", "average_order_value"}
+    duration_metrics = {"active_table_time_minutes", "average_session_duration_minutes"}
+    unavailable_health_metrics = {"cancelled_orders", "payment_failures"}
+    rows = []
+    for key, value in response["metrics"].items():
+        if key in unavailable_health_metrics:
+            export_value, unit = "Not tracked", "Status"
+        elif key in money_metrics:
+            export_value, unit = value, "INR"
+        elif key in duration_metrics:
+            export_value, unit = value, "Minutes"
+        else:
+            export_value, unit = value, "Count"
+        rows.append({"Section": "Executive Summary", "Measure": metric_labels[key], "Value": export_value, "Unit": unit})
+    rows.extend({"Section": "Sales Mix", "Measure": row["label"], "Value": row["revenue"], "Unit": "INR"} for row in response["sales_mix"])
+    rows.extend({"Section": "Sales Mix", "Measure": f"{row['label']} Contribution", "Value": row["contribution_percentage"], "Unit": "Percent"} for row in response["sales_mix"])
+    rows.extend({"Section": "Revenue Trend", "Measure": row["date"], "Value": row["revenue"], "Unit": "INR"} for row in response["revenue_by_day"])
+    rows.extend({"Section": "Top Performance", "Measure": row["item_name"], "Value": row["revenue"], "Unit": "INR"} for row in response["top_selling_items"])
+    start_local = date.fromisoformat(context["report"]["start_date"])
+    end_local = date.fromisoformat(context["report"]["end_date"])
+    filename = performance_filename(current_user.restaurant.name, start_local, end_local, "csv")
+    return _csv_response(filename, rows)
+
+
+@router.get("/performance/export.xlsx")
+def export_performance_xlsx(
+    preset: str | None = Query("today"),
+    start_date: date | None = None,
+    end_date: date | None = None,
+    current_user: StaffUser = Depends(_owner_admin),
+    db: Session = Depends(get_db),
+):
+    context, _ = _performance_pdf_context(preset=preset, start_date=start_date, end_date=end_date, current_user=current_user, db=db)
+    start_local = date.fromisoformat(context["report"]["start_date"])
+    end_local = date.fromisoformat(context["report"]["end_date"])
+    filename = performance_filename(current_user.restaurant.name, start_local, end_local, "xlsx")
+    return Response(
+        content=build_performance_xlsx(context),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/performance/export.pdf")

@@ -5,6 +5,7 @@ from decimal import Decimal
 from zoneinfo import ZoneInfo
 
 import pytest
+import openpyxl
 from fastapi.testclient import TestClient
 from pypdf import PdfReader
 
@@ -283,6 +284,13 @@ def test_performance_revenue_and_top_selling(history_data):
     assert {row["table_number"] for row in body["table_usage"]} == {"1", "2"}
     assert next(row for row in body["table_usage"] if row["table_number"] == "1")["revenue"] == "300.00"
     assert next(row for row in body["table_usage"] if row["table_number"] == "2")["revenue"] == "0.00"
+    assert body["sales_mix"] == [
+        {"label": "Dine-in", "revenue": "300.00", "contribution_percentage": "85.71"},
+        {"label": "Takeaway", "revenue": "50.00", "contribution_percentage": "14.29"},
+        {"label": "Quick Sale", "revenue": "0.00", "contribution_percentage": "0.00"},
+    ]
+    assert "Takeaway contributed 14.3% of collected revenue." in body["owner_insights"]
+    assert "Average order value was INR 175.00." in body["owner_insights"]
 
 
 @pytest.mark.parametrize("preset", ["today", "last_7_days", "month"])
@@ -300,6 +308,8 @@ def test_performance_populated_presets_serialize_all_tabs(history_data, preset):
         "category_performance",
         "table_usage",
         "staff_activity",
+        "sales_mix",
+        "owner_insights",
     }
     assert all(isinstance(body[field], list) for field in set(body) - {"metrics"})
     restaurant_today = datetime.datetime.now(ZoneInfo("Asia/Kolkata")).date()
@@ -332,7 +342,12 @@ def test_performance_custom_empty_period_serializes_all_tabs(history_data):
     body = response.json()
     assert body["metrics"]["total_revenue"] == "0.00"
     assert body["metrics"]["pending_collection"] == "0.00"
-    assert all(body[field] == [] for field in set(body) - {"metrics"})
+    assert all(body[field] == [] for field in set(body) - {"metrics", "sales_mix"})
+    assert body["sales_mix"] == [
+        {"label": "Dine-in", "revenue": "0.00", "contribution_percentage": "0.00"},
+        {"label": "Takeaway", "revenue": "0.00", "contribution_percentage": "0.00"},
+        {"label": "Quick Sale", "revenue": "0.00", "contribution_percentage": "0.00"},
+    ]
 
 
 def test_custom_range_empty_and_csv_export(history_data):
@@ -370,18 +385,19 @@ def test_performance_pdf_daily_content_type_filename_and_totals(history_data):
 
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/pdf"
-    assert response.headers["content-disposition"].startswith("attachment; filename=\"omlu-daily-report-")
+    assert response.headers["content-disposition"].startswith('attachment; filename="omlu-history-test-performance-')
     text = _pdf_text(response)
-    assert "OMLU" in text
+    assert "OMLU Daily Performance Report" in text
     assert "History Test" in text
-    assert "Daily report" in text
-    assert "Asia/Kolkata" in text
+    assert "Selected reporting period" in text
     assert f"INR {summary['metrics']['total_revenue']}" in text
     assert "Total Orders" in text
     assert "Average Table Session" in text
     assert str(summary["metrics"]["total_orders"]) in text
-    assert "Cash" in text
-    assert "100.00%" in text
+    assert "Sales Mix" in text
+    assert "Takeaway" in text
+    assert "14.29%" in text
+    assert "Owner Insights" in text
 
 
 def test_performance_pdf_monthly_and_custom_date_ranges(history_data):
@@ -392,12 +408,12 @@ def test_performance_pdf_monthly_and_custom_date_ranges(history_data):
     )
 
     assert monthly.status_code == 200
-    assert "omlu-monthly-report-" in monthly.headers["content-disposition"]
-    assert "Monthly report" in _pdf_text(monthly)
+    assert "omlu-history-test-performance-" in monthly.headers["content-disposition"]
+    assert "OMLU Monthly Performance Report" in _pdf_text(monthly)
     assert custom.status_code == 200
-    assert "omlu-report-2000-01-01-to-2000-01-02.pdf" in custom.headers["content-disposition"]
+    assert "omlu-history-test-performance-2000-01-01-to-2000-01-02.pdf" in custom.headers["content-disposition"]
     custom_text = _pdf_text(custom)
-    assert "Custom date range report" in custom_text
+    assert "OMLU Performance Report" in custom_text
     assert "No data available" in custom_text
 
 
@@ -411,17 +427,36 @@ def test_performance_pdf_restaurant_isolation_and_logo_fallback(history_data):
     assert "INR 300.00" not in text
 
 
-def test_performance_csv_export_still_unchanged(history_data):
+def test_performance_csv_is_spreadsheet_friendly(history_data):
     response = client.get("/admin/history/performance/export?preset=today", headers=_auth(history_data["owner_token"]))
 
     assert response.status_code == 200
     assert "text/csv" in response.headers["content-type"]
-    assert response.headers["content-disposition"] == 'attachment; filename="performance-summary.csv"'
-    assert "Metric,Value" in response.text
-    assert "Total Revenue,350.00" in response.text
+    assert 'filename="omlu-history-test-performance-' in response.headers["content-disposition"]
+    assert "Section,Measure,Value,Unit" in response.text
+    assert "Executive Summary,Total Revenue,350.00,INR" in response.text
     assert "Quick Sale Revenue" in response.text
+    assert "Sales Mix,Takeaway,50.00,INR" in response.text
+    assert "Sales Mix,Takeaway Contribution,14.29,Percent" in response.text
     assert "total_revenue" not in response.text
     assert "completed_quick_sale_revenue" not in response.text
+
+
+def test_performance_xlsx_management_report(history_data):
+    response = client.get("/admin/history/performance/export.xlsx?preset=month", headers=_auth(history_data["owner_token"]))
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    assert 'filename="omlu-history-test-performance-' in response.headers["content-disposition"]
+    workbook = openpyxl.load_workbook(io.BytesIO(response.content))
+    assert workbook.sheetnames == ["Management Report", "Revenue Trend"]
+    report = workbook["Management Report"]
+    assert report["A1"].value == "OMLU Monthly Performance Report"
+    values = [cell.value for row in report.iter_rows() for cell in row]
+    for heading in ("Executive Summary", "Sales Mix", "Revenue Trend", "Order Health", "Operations", "Top Performance", "Owner Insights"):
+        if heading != "Revenue Trend":
+            assert heading in values
+    assert "total_revenue" not in " ".join(str(value) for value in values if value is not None)
+    assert workbook["Revenue Trend"]._charts
 
 
 def test_category_performance_and_order_history_survive_menu_item_deletion(history_data):

@@ -171,6 +171,7 @@ test("Period presets and active selectors", () => {
 
 test("Export dropdown menu interaction and keyboard safety", () => {
   assert.match(source, /exportHistory\("performance", filters\)/);
+  assert.match(source, /exportHistoryXlsx\("performance", filters\)/);
   assert.match(source, /handlePdfDownload\("daily"\)/);
   assert.match(source, /handlePdfDownload\("monthly"\)/);
   assert.match(source, /handlePdfDownload\("range"\)/);
@@ -180,6 +181,16 @@ test("Export dropdown menu interaction and keyboard safety", () => {
   assert.match(source, /e\.key === "Escape"/);
   
   assert.match(source, /disabled=\{Boolean\(pdfLoading\)\}/);
+});
+
+test("owner report presents deterministic insights and sales mix", () => {
+  assert.match(source, /data\.owner_insights/);
+  assert.match(source, /function SalesMix/);
+  assert.match(source, /contribution_percentage/);
+  assert.match(source, /Export XLSX/);
+  assert.doesNotMatch(source, />total_revenue</);
+  assert.doesNotMatch(source, />completed_quick_sale_revenue</);
+  assert.doesNotMatch(source, />average_session_duration_minutes</);
 });
 
 test("Dashboard metric sections and responsive containers", () => {
