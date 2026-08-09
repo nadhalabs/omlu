@@ -454,6 +454,8 @@ def issue_bill(db: Session, bill: Bill) -> Bill:
                 raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Customer GSTIN is required for B2B GST bills")
             if not locked_bill.customer_legal_name_snapshot or not locked_bill.customer_legal_name_snapshot.strip():
                 raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Customer Legal Name is required for B2B GST bills")
+            if not locked_bill.customer_billing_address_snapshot or not locked_bill.customer_billing_address_snapshot.strip():
+                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Customer Billing Address is required for B2B GST bills")
             if not locked_bill.customer_state_code_snapshot:
                 locked_bill.customer_state_code_snapshot = locked_bill.customer_gstin_snapshot[:2]
             if not locked_bill.place_of_supply_code_snapshot:
@@ -895,6 +897,7 @@ def build_bill_response(db: Session, bill: Bill):
         "customer_tax_type": bill.customer_tax_type,
         "customer_gstin_snapshot": bill.customer_gstin_snapshot,
         "customer_legal_name_snapshot": bill.customer_legal_name_snapshot,
+        "customer_billing_address_snapshot": bill.customer_billing_address_snapshot,
         "customer_state_code_snapshot": bill.customer_state_code_snapshot,
         "customer_state_name_snapshot": bill.customer_state_name_snapshot,
         "place_of_supply_code_snapshot": bill.place_of_supply_code_snapshot,
@@ -952,6 +955,11 @@ def build_receipt_payload(db: Session, bill: Bill) -> dict:
         "gstin": bill.gstin_snapshot or bill.restaurant.gstin or None,
         "state_name": bill.state_name_snapshot or bill.restaurant.gst_state_name or None,
         "state_code": bill.state_code_snapshot or bill.restaurant.gst_state_code or None,
+        "customer_gstin": bill.customer_gstin_snapshot if bill.customer_tax_type == "b2b" else None,
+        "customer_legal_name": bill.customer_legal_name_snapshot if bill.customer_tax_type == "b2b" else None,
+        "customer_billing_address": bill.customer_billing_address_snapshot if bill.customer_tax_type == "b2b" else None,
+        "customer_state_name": bill.customer_state_name_snapshot if bill.customer_tax_type == "b2b" else None,
+        "customer_state_code": bill.customer_state_code_snapshot if bill.customer_tax_type == "b2b" else None,
         "table_number": bill.dining_session.table.table_number,
         "staff_name": bill.generated_by_staff.name if bill.generated_by_staff else "Staff",
         "created_at": (bill.invoice_date or bill.generated_at).isoformat(),

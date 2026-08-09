@@ -534,6 +534,9 @@ def _billing_counter_item(db: Session, bill: Bill) -> dict:
         "has_customer_gst_details": bool(bill.customer_gstin_snapshot),
         "customer_gstin": bill.customer_gstin_snapshot,
         "customer_legal_name": bill.customer_legal_name_snapshot,
+        "customer_billing_address": bill.customer_billing_address_snapshot,
+        "customer_state_code": bill.customer_state_code_snapshot,
+        "customer_state_name": bill.customer_state_name_snapshot,
     }
 
 
@@ -819,17 +822,29 @@ def update_customer_gst_details(
 
     gstin = payload.customer_gstin
     legal_name = payload.customer_legal_name
-    removing = gstin is None and legal_name is None
-    if not removing and (gstin is None or legal_name is None):
+    billing_address = payload.customer_billing_address
+    state_name = payload.customer_state_name
+    state_code = payload.customer_state_code
+    removing = all(value is None for value in (gstin, legal_name, billing_address, state_name, state_code))
+    if not removing and any(value is None for value in (gstin, legal_name, billing_address, state_name, state_code)):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Customer GSTIN and Legal Business Name are both required.",
+            detail="Customer GSTIN, Legal Business Name, Billing Address, State, and State Code are all required.",
         )
+    if not removing:
+        gstin_state_code = gstin[:2]
+        canonical_state_name = GST_STATE_NAMES.get(state_code)
+        if state_code != gstin_state_code:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Customer State Code must match the GSTIN.")
+        if canonical_state_name is None or state_name.casefold() != canonical_state_name.casefold():
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Customer State must match the GSTIN State Code.")
+        state_name = canonical_state_name
 
     previous = {
         "customer_tax_type": bill.customer_tax_type,
         "customer_gstin": bill.customer_gstin_snapshot,
         "customer_legal_name": bill.customer_legal_name_snapshot,
+        "customer_billing_address": bill.customer_billing_address_snapshot,
         "customer_state_code": bill.customer_state_code_snapshot,
         "customer_state_name": bill.customer_state_name_snapshot,
         "place_of_supply_code": bill.place_of_supply_code_snapshot,
@@ -838,17 +853,18 @@ def update_customer_gst_details(
         bill.customer_tax_type = "b2c"
         bill.customer_gstin_snapshot = None
         bill.customer_legal_name_snapshot = None
+        bill.customer_billing_address_snapshot = None
         bill.customer_state_code_snapshot = None
         bill.customer_state_name_snapshot = None
         bill.place_of_supply_code_snapshot = None
         action = "bill.customer_gst_details.removed"
     else:
-        state_code = gstin[:2]
         bill.customer_tax_type = "b2b"
         bill.customer_gstin_snapshot = gstin
         bill.customer_legal_name_snapshot = legal_name
+        bill.customer_billing_address_snapshot = billing_address
         bill.customer_state_code_snapshot = state_code
-        bill.customer_state_name_snapshot = GST_STATE_NAMES.get(state_code)
+        bill.customer_state_name_snapshot = state_name
         bill.place_of_supply_code_snapshot = state_code
         action = (
             "bill.customer_gst_details.added"
@@ -865,6 +881,7 @@ def update_customer_gst_details(
         "customer_tax_type": bill.customer_tax_type,
         "customer_gstin": bill.customer_gstin_snapshot,
         "customer_legal_name": bill.customer_legal_name_snapshot,
+        "customer_billing_address": bill.customer_billing_address_snapshot,
         "customer_state_code": bill.customer_state_code_snapshot,
         "customer_state_name": bill.customer_state_name_snapshot,
         "place_of_supply_code": bill.place_of_supply_code_snapshot,

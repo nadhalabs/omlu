@@ -4,28 +4,36 @@ from typing import List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 from app.schemas.order import OrderItemSelectedOptionResponse
-from app.utils.gst import normalize_gstin
+from app.utils.gst import normalize_gstin, normalize_gst_state_code
 
 
 CounterPaymentMethod = Literal["counter_cash", "counter_upi"]
 
 
 class CustomerGSTDetailsRequest(BaseModel):
-    customer_gstin: Optional[str] = Field(max_length=15)
-    customer_legal_name: Optional[str] = Field(max_length=255)
+    customer_gstin: Optional[str] = Field(default=None, max_length=15)
+    customer_legal_name: Optional[str] = Field(default=None, max_length=255)
+    customer_billing_address: Optional[str] = Field(default=None, max_length=1024)
+    customer_state_name: Optional[str] = Field(default=None, max_length=100)
+    customer_state_code: Optional[str] = Field(default=None, max_length=2)
 
     @field_validator("customer_gstin")
     @classmethod
     def validate_customer_gstin(cls, value: Optional[str]) -> Optional[str]:
         return normalize_gstin(value)
 
-    @field_validator("customer_legal_name")
+    @field_validator("customer_legal_name", "customer_billing_address", "customer_state_name")
     @classmethod
     def normalize_legal_name(cls, value: Optional[str]) -> Optional[str]:
         if value is None:
             return None
         normalized = value.strip()
         return normalized or None
+
+    @field_validator("customer_state_code")
+    @classmethod
+    def validate_customer_state_code(cls, value: Optional[str]) -> Optional[str]:
+        return normalize_gst_state_code(value)
 
 
 class CounterPaymentRequest(BaseModel):
@@ -152,6 +160,11 @@ class ReceiptPayloadResponse(BaseModel):
     gstin: Optional[str] = None
     state_name: Optional[str] = None
     state_code: Optional[str] = None
+    customer_gstin: Optional[str] = None
+    customer_legal_name: Optional[str] = None
+    customer_billing_address: Optional[str] = None
+    customer_state_name: Optional[str] = None
+    customer_state_code: Optional[str] = None
     table_number: str
     staff_name: str
     created_at: datetime
@@ -219,6 +232,7 @@ class BillResponse(BaseModel):
     customer_tax_type: str = "b2c"
     customer_gstin_snapshot: Optional[str] = None
     customer_legal_name_snapshot: Optional[str] = None
+    customer_billing_address_snapshot: Optional[str] = None
     customer_state_code_snapshot: Optional[str] = None
     customer_state_name_snapshot: Optional[str] = None
     place_of_supply_code_snapshot: Optional[str] = None

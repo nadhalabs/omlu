@@ -263,6 +263,9 @@ def test_b2b_validation_and_authoritative_snapshots(gst_foundation_context):
             "customer_tax_type": "b2b",
             "customer_gstin": "33AAAAA0000A1Z5",
             "customer_legal_name": "Acme Trade Corp",
+            "customer_billing_address": "14 Anna Salai, Chennai",
+            "customer_state_name": "Tamil Nadu",
+            "customer_state_code": "33",
             "items": [{"menu_item_id": gst_foundation_context["item_gst_id"], "quantity": 1}],
             "payment_method": "cash",
         },
@@ -273,6 +276,8 @@ def test_b2b_validation_and_authoritative_snapshots(gst_foundation_context):
     assert data["customer_tax_type"] == "b2b"
     assert data["customer_gstin"] == "33AAAAA0000A1Z5"
     assert data["customer_legal_name"] == "Acme Trade Corp"
+    assert data["customer_billing_address"] == "14 Anna Salai, Chennai"
+    assert data["customer_state_name"] == "Tamil Nadu"
     assert data["customer_state_code"] == "33"
     assert data["place_of_supply_code"] == "33"
     # IGST applied for interstate!
@@ -498,4 +503,3 @@ def test_gst_rate_snapshot_timing_and_immutability(gst_foundation_context):
     db.refresh(refreshed_item)
     assert refreshed_item.gst_rate_snapshot == Decimal("18.00")
     db.close()
-

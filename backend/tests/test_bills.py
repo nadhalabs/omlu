@@ -2780,12 +2780,16 @@ def test_draft_customer_gst_details_add_edit_remove_and_audit(bill_context):
     added_response = _put_customer_gst(bill_context, draft["bill_number"], {
         "customer_gstin": "27aaaaa0000a1z5",
         "customer_legal_name": "  Acme Maharashtra Pvt Ltd  ",
+        "customer_billing_address": "12 Market Road, Mumbai",
+        "customer_state_name": "Maharashtra",
+        "customer_state_code": "27",
     })
     assert added_response.status_code == 200
     added = added_response.json()
     assert added["customer_tax_type"] == "b2b"
     assert added["customer_gstin_snapshot"] == "27AAAAA0000A1Z5"
     assert added["customer_legal_name_snapshot"] == "Acme Maharashtra Pvt Ltd"
+    assert added["customer_billing_address_snapshot"] == "12 Market Road, Mumbai"
     assert added["customer_state_code_snapshot"] == "27"
     assert added["customer_state_name_snapshot"] == "Maharashtra"
     assert added["place_of_supply_code_snapshot"] == "27"
@@ -2799,10 +2803,16 @@ def test_draft_customer_gst_details_add_edit_remove_and_audit(bill_context):
     assert counter_item["gst_enabled"] is True
     assert counter_item["customer_gstin"] == "27AAAAA0000A1Z5"
     assert counter_item["customer_legal_name"] == "Acme Maharashtra Pvt Ltd"
+    assert counter_item["customer_billing_address"] == "12 Market Road, Mumbai"
+    assert counter_item["customer_state_name"] == "Maharashtra"
+    assert counter_item["customer_state_code"] == "27"
 
     edited = _put_customer_gst(bill_context, draft["bill_number"], {
         "customer_gstin": "32bbbbb1111b2z6",
         "customer_legal_name": "Kerala Trading Co",
+        "customer_billing_address": "MG Road, Kochi",
+        "customer_state_name": "Kerala",
+        "customer_state_code": "32",
     }).json()
     assert edited["customer_gstin_snapshot"] == "32BBBBB1111B2Z6"
     assert edited["place_of_supply_code_snapshot"] == "32"
@@ -2853,6 +2863,7 @@ def test_customer_gst_details_permission_and_tenant_scope(bill_context):
     add_order(bill_context)
     number = create_bill(bill_context).json()["bill_number"]
     payload = {"customer_gstin": "32AAAAA0000A1Z5", "customer_legal_name": "Acme"}
+    payload.update({"customer_billing_address": "MG Road, Kochi", "customer_state_name": "Kerala", "customer_state_code": "32"})
     assert _put_customer_gst(bill_context, number, payload, "staff_token").status_code == 403
     assert _put_customer_gst(bill_context, number, payload, "other_token").status_code == 404
     assert _put_customer_gst(bill_context, number, payload, "admin_token").status_code == 200
@@ -2868,6 +2879,7 @@ def test_customer_gst_details_are_immutable_after_draft(bill_context, bill_statu
     bill.customer_tax_type = "b2b"
     bill.customer_gstin_snapshot = "32AAAAA0000A1Z5"
     bill.customer_legal_name_snapshot = "Frozen Customer"
+    bill.customer_billing_address_snapshot = "Frozen Billing Address"
     db.commit()
     db.close()
 
@@ -2879,6 +2891,7 @@ def test_customer_gst_details_are_immutable_after_draft(bill_context, bill_statu
     frozen = db.query(Bill).filter(Bill.bill_number == number).one()
     assert frozen.customer_gstin_snapshot == "32AAAAA0000A1Z5"
     assert frozen.customer_legal_name_snapshot == "Frozen Customer"
+    assert frozen.customer_billing_address_snapshot == "Frozen Billing Address"
     db.close()
 
 
@@ -2900,6 +2913,9 @@ def test_customer_gst_mutation_waiting_on_bill_lock_is_rejected_when_issuance_wi
             json={
                 "customer_gstin": "27AAAAA0000A1Z5",
                 "customer_legal_name": "Racing Customer Pvt Ltd",
+                "customer_billing_address": "12 Market Road, Mumbai",
+                "customer_state_name": "Maharashtra",
+                "customer_state_code": "27",
             },
             headers={"Authorization": f"Bearer {bill_context['owner_token']}"},
         )
@@ -2945,3 +2961,48 @@ def test_existing_issuance_still_rejects_incomplete_b2b_snapshot(bill_context):
         headers={"Authorization": f"Bearer {bill_context['owner_token']}", "Idempotency-Key": "incomplete-b2b"},
     )
     assert response.status_code == 422
+
+
+def test_issued_b2b_receipt_contains_complete_recipient_snapshot(bill_context):
+    _enable_gst(bill_context)
+    add_order(bill_context)
+    draft = create_bill(bill_context).json()
+    details = {
+        "customer_gstin": "27AAAAA0000A1Z5",
+        "customer_legal_name": "Acme Maharashtra Pvt Ltd",
+        "customer_billing_address": "12 Market Road, Mumbai 400001",
+        "customer_state_name": "Maharashtra",
+        "customer_state_code": "27",
+    }
+    saved = _put_customer_gst(bill_context, draft["bill_number"], details)
+    assert saved.status_code == 200
+
+    issued = issue_bill_for(bill_context)
+    payload = client.get(
+        f"/staff/bills/{issued['bill_number']}/receipt-payload",
+        headers={"Authorization": f"Bearer {bill_context['owner_token']}"},
+    )
+    assert payload.status_code == 200
+    recipient = {
+        "customer_gstin": details["customer_gstin"],
+        "customer_legal_name": details["customer_legal_name"],
+        "customer_billing_address": details["customer_billing_address"],
+        "customer_state_name": details["customer_state_name"],
+        "customer_state_code": details["customer_state_code"],
+    }
+    assert {field: payload.json()[field] for field in recipient} == recipient
+
+
+def test_b2c_receipt_has_no_recipient_business_section_data(bill_context):
+    _enable_gst(bill_context)
+    add_order(bill_context)
+    issued = issue_bill_for(bill_context)
+    payload = client.get(
+        f"/staff/bills/{issued['bill_number']}/receipt-payload",
+        headers={"Authorization": f"Bearer {bill_context['owner_token']}"},
+    ).json()
+    for field in (
+        "customer_gstin", "customer_legal_name", "customer_billing_address",
+        "customer_state_name", "customer_state_code",
+    ):
+        assert payload[field] is None
