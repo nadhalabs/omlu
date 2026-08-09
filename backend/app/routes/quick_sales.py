@@ -86,7 +86,7 @@ def _serialize(sale: QuickSale, *, financial: bool = True) -> dict:
     return result
 
 
-def _completed_takeaway(db: Session, current_user: StaffUser, public_token: str) -> tuple[QuickSale, Restaurant]:
+def _completed_quick_sale(db: Session, current_user: StaffUser, public_token: str) -> tuple[QuickSale, Restaurant]:
     sale = db.query(QuickSale).options(
         selectinload(QuickSale.items).selectinload(QuickSaleItem.selected_options)
     ).filter(
@@ -95,8 +95,8 @@ def _completed_takeaway(db: Session, current_user: StaffUser, public_token: str)
     ).first()
     if not sale:
         raise HTTPException(status_code=404, detail="Quick Sale not found")
-    if sale.sale_type != "takeaway" or sale.status != "completed":
-        raise HTTPException(status_code=409, detail="Only completed Takeaway receipts can be printed")
+    if sale.sale_type not in ("takeaway", "late_entry") or sale.status != "completed":
+        raise HTTPException(status_code=409, detail="Only completed Quick Sales (Takeaway or Late Entry) can be printed")
     restaurant = db.query(Restaurant).filter(Restaurant.id == sale.restaurant_id).one()
     return sale, restaurant
 
@@ -119,13 +119,14 @@ def _quick_sale_print_document(sale: QuickSale, restaurant: Restaurant) -> dict:
         } for option in item.selected_options],
     } for item in sale.items]
     completed_at = sale.completed_at or sale.created_at
+    table_label = "Takeaway" if sale.sale_type == "takeaway" else "Late Entry"
     return {
         "bill_number": sale.order_number,
         "receipt_token": sale.public_token,
         "restaurant_name": restaurant.name,
         "restaurant_slug": restaurant.slug,
-        "table_number": "Takeaway",
-        "table_code": "takeaway",
+        "table_number": table_label,
+        "table_code": sale.sale_type,
         "session_token": sale.public_token,
         "status": "paid",
         "orders": [{"order_number": sale.order_number, "status": "served", "subtotal": sale.subtotal, "items": items}],
@@ -164,7 +165,7 @@ def _quick_sale_print_document(sale: QuickSale, restaurant: Restaurant) -> dict:
         "place_of_supply_code_snapshot": sale.place_of_supply_code_snapshot,
         "session_status": "closed",
         "amount_due": sale.total_amount,
-        "original_table": "Takeaway",
+        "original_table": table_label,
         "issued_at": completed_at,
         "detached_session_status": "closed",
         "receipt_access": sale.public_token,
@@ -173,6 +174,7 @@ def _quick_sale_print_document(sale: QuickSale, restaurant: Restaurant) -> dict:
 
 def _quick_sale_receipt_payload(sale: QuickSale, restaurant: Restaurant) -> dict:
     document = _quick_sale_print_document(sale, restaurant)
+    table_label = "Takeaway" if sale.sale_type == "takeaway" else "Late Entry"
     return {
         "bill_number": sale.order_number,
         "invoice_number": sale.invoice_number,
@@ -189,7 +191,7 @@ def _quick_sale_receipt_payload(sale: QuickSale, restaurant: Restaurant) -> dict
         "customer_billing_address": sale.customer_billing_address_snapshot if sale.customer_tax_type == "b2b" else None,
         "customer_state_name": sale.customer_state_name_snapshot if sale.customer_tax_type == "b2b" else None,
         "customer_state_code": sale.customer_state_code_snapshot if sale.customer_tax_type == "b2b" else None,
-        "table_number": "Takeaway",
+        "table_number": table_label,
         "staff_name": sale.entered_by_name,
         "created_at": sale.invoice_date or sale.completed_at or sale.created_at,
         "paid_at": sale.completed_at,
@@ -301,13 +303,13 @@ def quick_sale_home(current_user: StaffUser = Depends(_owner_admin), db: Session
 
 @router.get("/{public_token}/print-document", response_model=BillResponse)
 def get_quick_sale_print_document(public_token: str, current_user: StaffUser = Depends(_owner_admin), db: Session = Depends(get_db)):
-    sale, restaurant = _completed_takeaway(db, current_user, public_token)
+    sale, restaurant = _completed_quick_sale(db, current_user, public_token)
     return _quick_sale_print_document(sale, restaurant)
 
 
 @router.get("/{public_token}/receipt-payload", response_model=ReceiptPayloadResponse)
 def get_quick_sale_receipt_payload(public_token: str, current_user: StaffUser = Depends(_owner_admin), db: Session = Depends(get_db)):
-    sale, restaurant = _completed_takeaway(db, current_user, public_token)
+    sale, restaurant = _completed_quick_sale(db, current_user, public_token)
     return _quick_sale_receipt_payload(sale, restaurant)
 
 

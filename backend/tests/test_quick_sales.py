@@ -292,7 +292,9 @@ def test_completed_takeaway_print_document_and_b2b_receipt(quick_sale_context):
     assert receipt.json()["customer_state_code"] == "32"
 
     late_entry = client.post("/admin/quick-sales", headers=auth(quick_sale_context, "owner"), json=payload(quick_sale_context, "late_entry")).json()
-    assert client.get(f"/admin/quick-sales/{late_entry['public_token']}/print-document", headers=auth(quick_sale_context, "owner")).status_code == 409
+    late_doc = client.get(f"/admin/quick-sales/{late_entry['public_token']}/print-document", headers=auth(quick_sale_context, "owner"))
+    assert late_doc.status_code == 200
+    assert late_doc.json()["table_number"] == "Late Entry"
 
 
 def test_gst_disabled_and_inclusive_rounding_preserve_financial_conventions(quick_sale_context):
@@ -684,3 +686,61 @@ def test_quick_sale_financial_and_option_snapshots_survive_menu_item_deletion(qu
     stale = client.post("/admin/quick-sales", headers=auth(quick_sale_context, "owner"), json=stale_body)
     assert stale.status_code == 404
     assert "not found" in stale.json()["detail"].lower()
+
+
+def test_completed_late_entry_quick_sale_printing_and_receipt_payload(quick_sale_context):
+    """Test that a completed late_entry Quick Sale can generate print-document and receipt-payload with table_number 'Late Entry'."""
+    headers = auth(quick_sale_context, "owner")
+    body = payload(quick_sale_context, "late_entry")
+    create_res = client.post("/admin/quick-sales", headers=headers, json=body)
+    assert create_res.status_code == 201
+    sale = create_res.json()
+    assert sale["sale_type"] == "late_entry"
+    assert sale["status"] == "completed"
+
+    # 1. Fetch print document
+    doc_res = client.get(f"/admin/quick-sales/{sale['public_token']}/print-document", headers=headers)
+    assert doc_res.status_code == 200
+    doc = doc_res.json()
+    assert doc["table_number"] == "Late Entry"
+    assert doc["original_table"] == "Late Entry"
+    assert doc["bill_number"] == sale["order_number"]
+
+    # 2. Fetch receipt payload
+    rcpt_res = client.get(f"/admin/quick-sales/{sale['public_token']}/receipt-payload", headers=headers)
+    assert rcpt_res.status_code == 200
+    rcpt = rcpt_res.json()
+    assert rcpt["table_number"] == "Late Entry"
+    assert rcpt["bill_number"] == sale["order_number"]
+
+
+def test_incomplete_late_entry_quick_sale_print_blocked(quick_sale_context):
+    """Test that a non-completed Quick Sale cannot be printed and returns 409 Conflict."""
+    headers = auth(quick_sale_context, "owner")
+    # Takeaway order created but not served or completed
+    body = payload(quick_sale_context, "takeaway")
+    create_res = client.post("/admin/quick-sales", headers=headers, json=body)
+    assert create_res.status_code == 201
+    sale = create_res.json()
+    assert sale["status"] == "pending"
+
+    # Attempt print document on active uncompleted takeaway
+    doc_res = client.get(f"/admin/quick-sales/{sale['public_token']}/print-document", headers=headers)
+    assert doc_res.status_code == 409
+    assert "completed" in doc_res.json()["detail"].lower()
+
+
+def test_print_document_is_read_only(quick_sale_context):
+    """Test that requesting print document does not alter or mutate the completed transaction state."""
+    headers = auth(quick_sale_context, "owner")
+    body = payload(quick_sale_context, "late_entry")
+    sale = client.post("/admin/quick-sales", headers=headers, json=body).json()
+
+    # Print document request
+    client.get(f"/admin/quick-sales/{sale['public_token']}/print-document", headers=headers)
+
+    # Verify database state remains unchanged
+    db = SessionLocal()
+    persisted = db.query(QuickSale).filter(QuickSale.public_token == sale["public_token"]).one()
+    assert persisted.status == "completed"
+    db.close()
