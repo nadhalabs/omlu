@@ -17,6 +17,7 @@ import { useRealtime } from "@/lib/realtime";
 import { CurrentStaffResponse } from "@/lib/types";
 import { useOmluUi } from "@/components/OmluUiProvider";
 import { CustomerGstDetails, CustomerGstValue } from "@/components/billing/CustomerGstDetails";
+import { displayStatus } from "@/lib/presentation";
 
 export default function StaffTableDetailClient({ tableId }: { tableId: number }) {
   const { confirm: confirmDialog } = useOmluUi();
@@ -154,7 +155,7 @@ export default function StaffTableDetailClient({ tableId }: { tableId: number })
               <div className="rounded-lg border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-4"><div className="text-xs text-[var(--omlu-text-secondary)]">Subtotal</div><div className="text-2xl font-black">₹{detail.session.running_subtotal}</div></div>
               <div className="rounded-lg border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-4"><div className="text-xs text-[var(--omlu-text-secondary)]">Orders</div><div className="text-2xl font-black">{detail.session.orders.length}</div></div>
               <div className="rounded-lg border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-4"><div className="text-xs text-[var(--omlu-text-secondary)]">Requests</div><div className="text-2xl font-black">{detail.requests.length}</div></div>
-              <div className="rounded-lg border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-4"><div className="text-xs text-[var(--omlu-text-secondary)]">Payment</div><div className="text-lg font-black">{bill?.status || detail.session.status}</div></div>
+              <div className="rounded-lg border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-4"><div className="text-xs text-[var(--omlu-text-secondary)]">Payment</div><div className="text-lg font-black">{displayStatus(bill?.status || detail.session.status)}</div></div>
             </section>
             {staffInfo?.role === "staff" && (
               <section className="rounded-lg border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-5">
@@ -183,7 +184,7 @@ export default function StaffTableDetailClient({ tableId }: { tableId: number })
                   <div className="mt-4 grid gap-3">
                     {detail.session.orders.map((order) => (
                       <div key={order.id} className="rounded-lg bg-[var(--omlu-page-background)] p-4">
-                        <div className="flex justify-between gap-3"><div className="font-black">{order.order_number}</div><div className="text-sm text-[var(--omlu-text-secondary)]">{order.status}</div></div>
+                        <div className="flex justify-between gap-3"><div className="font-black">{order.order_number}</div><div className="text-sm text-[var(--omlu-text-secondary)]">{displayStatus(order.status)}</div></div>
                         <div className="mt-2 text-sm text-[var(--omlu-text-secondary)]">₹{order.subtotal} · {order.source} · {new Date(order.created_at).toLocaleTimeString()}</div>
                         <div className="mt-3 grid gap-1 text-sm">{order.items.map((item, index) => <div key={index}>{item.quantity} x {item.item_name} <span className="text-[var(--omlu-text-secondary)]">₹{item.total_price}</span></div>)}</div>
                       </div>
@@ -228,7 +229,7 @@ export default function StaffTableDetailClient({ tableId }: { tableId: number })
                     )}
                   </div>
                   {!hasValidOrder && !bill && <div className="mt-4 text-sm text-[var(--omlu-text-secondary)]">Add at least one order before requesting a bill.</div>}
-                  {bill && <div className="mt-4 text-sm text-[var(--omlu-text-secondary)]">Bill {bill.bill_number} · ₹{bill.total_amount} · {bill.status}</div>}
+                  {bill && <div className="mt-4 text-sm text-[var(--omlu-text-secondary)]">Bill {bill.bill_number} · ₹{bill.total_amount} · {displayStatus(bill.status)}</div>}
                   {bill && canManageCustomerGst && (customerGstValue || (bill.status === "draft" && bill.gst_enabled)) && <CustomerGstDetails value={customerGstValue} editable={bill.status === "draft" && bill.gst_enabled} disabled={Boolean(busy)} onSave={(details) => saveCustomerGst(details)} onRemove={() => saveCustomerGst(null)} />}
                   {staffInfo?.role === "staff" && <div className="mt-3 text-xs text-[var(--omlu-text-secondary)]">You can review provisional totals and notify the counter. Only an owner or admin can issue, print, or collect payment.</div>}
                 </div>

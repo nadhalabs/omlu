@@ -8,10 +8,9 @@ import {
   Pager,
   formatCurrencyINR,
   formatDateTime,
-  formatPaymentMethod,
-  formatPaymentStatus,
 } from "../../historyControls";
 import { BillHistoryRow, fetchHistory, HistoryFilters, PaginatedResponse } from "@/lib/adminHistory";
+import { displayPaymentMethod, displayStatus } from "@/lib/presentation";
 
 export default function BillHistoryClient() {
   const [filters, setFilters] = useState<HistoryFilters>({ preset: "today", page: 1, page_size: 25 });
@@ -49,7 +48,7 @@ export default function BillHistoryClient() {
           <option value="">All statuses</option>
           {["paid", "unpaid", "payment_pending", "void"].map((status) => (
             <option key={status} value={status}>
-              {formatPaymentStatus(status)}
+              {displayStatus(status)}
             </option>
           ))}
         </select></label>
@@ -57,7 +56,7 @@ export default function BillHistoryClient() {
           <option value="">All methods</option>
           {["counter_cash", "counter_upi", "counter_card", "online"].map((method) => (
             <option key={method} value={method}>
-              {formatPaymentMethod(method)}
+              {displayPaymentMethod(method)}
             </option>
           ))}
         </select></label>
@@ -110,8 +109,8 @@ export default function BillHistoryClient() {
                     </td>
                     <td className="whitespace-nowrap p-3">{formatCurrencyINR(bill.discount_amount)}</td>
                     <td className="whitespace-nowrap p-3 font-bold">{formatCurrencyINR(bill.grand_total)}</td>
-                    <td className="whitespace-nowrap p-3">{formatPaymentStatus(bill.payment_status)}</td>
-                    <td className="whitespace-nowrap p-3">{formatPaymentMethod(bill.payment_method)}</td>
+                    <td className="whitespace-nowrap p-3">{displayStatus(bill.payment_status)}</td>
+                    <td className="whitespace-nowrap p-3">{displayPaymentMethod(bill.payment_method)}</td>
                     <td className="whitespace-nowrap p-3">{formatDateTime(bill.paid_at)}</td>
                   </tr>
                 );
@@ -124,4 +123,3 @@ export default function BillHistoryClient() {
     </div>
   );
 }
-

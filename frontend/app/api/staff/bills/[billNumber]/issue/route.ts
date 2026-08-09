@@ -27,7 +27,7 @@ export async function POST(
     });
 
     if (!res.ok) {
-      let errDetail = `Backend error: ${res.status}`;
+      let errDetail = "The bill could not be issued.";
       try {
         const errJson = await res.json();
         if (errJson && typeof errJson.detail === "string") errDetail = errJson.detail;

@@ -23,7 +23,7 @@ export async function PATCH(
     });
 
     if (!res.ok) {
-      let errDetail = `Backend error: ${res.status}`;
+      let errDetail = "The service request could not be completed.";
       try {
         const errJson = await res.json();
         if (errJson && typeof errJson.detail === "string") errDetail = errJson.detail;
