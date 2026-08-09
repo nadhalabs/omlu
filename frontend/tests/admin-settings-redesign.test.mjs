@@ -44,3 +44,22 @@ test("Appearance stays device-local and outside restaurant save semantics", () =
   const payload = settings.match(/const updateData:[\s\S]*?\n      };/)?.[0] || "";
   assert.doesNotMatch(payload, /theme/i);
 });
+
+test("Billing and GST defaults to a summary with an explicit edit workflow", () => {
+  assert.match(settings, /useState\(false\).*gstEditing|gstEditing.*useState\(false\)/s);
+  for (const label of [
+    "GST status", "GSTIN", "Legal business name", "State + state code",
+    "Default GST rate", "Tax mode", "Invoice prefix", "Registered billing address",
+  ]) assert.ok(settings.includes(label), `missing summary field ${label}`);
+  assert.match(settings, /Edit GST settings/);
+  assert.match(settings, />Cancel<\/button>/);
+  assert.match(settings, /Save GST settings/);
+  assert.match(settings, /data-save-scope="gst"/);
+  assert.match(settings, /setGstEditing\(false\)/);
+});
+
+test("owner-facing GST copy avoids backend implementation language", () => {
+  const billingSection = settings.match(/<SettingsSection title="Billing &amp; GST"[\s\S]*?<SettingsSection title="Operations"/)?.[0] || "";
+  assert.doesNotMatch(billingSection, /backend/i);
+  assert.match(billingSection, /used on customer bills and tax invoices/);
+});

@@ -33,6 +33,7 @@ export default function AdminSettingsClient() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [bridgeStatus, setBridgeStatus] = useState<"checking" | "connected" | "disconnected">("checking");
+  const [gstEditing, setGstEditing] = useState(false);
 
   const [timezone, setTimezone] = useState("");
   const [orderPrefix, setOrderPrefix] = useState("");
@@ -93,14 +94,12 @@ export default function AdminSettingsClient() {
   const handleSave = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (saving) return;
+    const saveGstOnly = (event.nativeEvent as SubmitEvent).submitter?.getAttribute("data-save-scope") === "gst";
     setSaving(true);
     setError(null);
     setSuccess(null);
     try {
-      const updateData: RestaurantSettingsUpdate = {
-        timezone: timezone || undefined,
-        order_prefix: orderPrefix.toUpperCase() || undefined,
-        service_requests_enabled: serviceRequestsEnabled,
+      const gstUpdateData: RestaurantSettingsUpdate = {
         gst_enabled: gstEnabled,
         gstin: gstin || null,
         legal_business_name: legalBusinessName || null,
@@ -111,9 +110,31 @@ export default function AdminSettingsClient() {
         tax_mode: taxMode,
         invoice_prefix: invoicePrefix.toUpperCase(),
       };
+      const updateData: RestaurantSettingsUpdate = saveGstOnly ? gstUpdateData : {
+        timezone: timezone || undefined,
+        order_prefix: orderPrefix.toUpperCase() || undefined,
+        service_requests_enabled: serviceRequestsEnabled,
+        ...gstUpdateData,
+      };
       const updated = await updateRestaurantSettings(updateData);
-      applySettings(updated);
-      setSuccess("Settings saved successfully.");
+      if (saveGstOnly) {
+        setSettings(updated);
+        setGstEnabled(updated.gst_enabled);
+        setGstin(updated.gstin || "");
+        setLegalBusinessName(updated.legal_business_name || "");
+        setBillingAddress(updated.registered_billing_address || "");
+        setGstStateName(updated.gst_state_name || "");
+        setGstStateCode(updated.gst_state_code || "");
+        setGstRate(updated.default_gst_rate);
+        setTaxMode(updated.tax_mode);
+        setInvoicePrefix(updated.invoice_prefix);
+        setGstEditing(false);
+        setSuccess("GST settings saved successfully.");
+      } else {
+        applySettings(updated);
+        setGstEditing(false);
+        setSuccess("Settings saved successfully.");
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to save settings.");
     } finally {
@@ -160,28 +181,52 @@ export default function AdminSettingsClient() {
           </div>
         </SettingsSection>
 
-        <SettingsSection title="Billing &amp; GST" description="Configure the tax details used when OMLU generates customer bills and tax invoices.">
-          <SwitchRow label="Enable GST" description="Apply your saved GST configuration when the backend generates bills and tax invoices." checked={gstEnabled} onChange={setGstEnabled} />
-          <div className={`grid gap-5 md:grid-cols-2 ${gstEnabled ? "" : "opacity-60"}`} aria-disabled={!gstEnabled}>
-            <SettingsInput id="gstin" label="GSTIN" value={gstin} onChange={(value) => setGstin(value.toUpperCase())} maxLength={15} required={gstEnabled} disabled={!gstEnabled} />
-            <SettingsInput id="legal-business-name" label="Legal business name" value={legalBusinessName} onChange={setLegalBusinessName} required={gstEnabled} disabled={!gstEnabled} />
-            <SettingsInput id="gst-state-name" label="State" value={gstStateName} onChange={setGstStateName} required={gstEnabled} disabled={!gstEnabled} />
-            <SettingsInput id="gst-state-code" label="State code" value={gstStateCode} onChange={setGstStateCode} maxLength={2} required={gstEnabled} disabled={!gstEnabled} />
-            <Field label="Default GST rate" htmlFor="gst-rate">
-              <div className="relative"><input id="gst-rate" value={gstRate} onChange={(event) => setGstRate(event.target.value)} inputMode="decimal" required={gstEnabled} disabled={!gstEnabled} className={`${controlClass} pr-10`} /><span className="pointer-events-none absolute inset-y-0 right-4 flex items-center font-bold text-[var(--omlu-text-secondary)]">%</span></div>
-            </Field>
-            <SettingsInput id="invoice-prefix" label="Invoice prefix" value={invoicePrefix} onChange={(value) => setInvoicePrefix(value.toUpperCase())} maxLength={10} required />
-          </div>
-          <fieldset disabled={!gstEnabled} className={`min-w-0 ${gstEnabled ? "" : "opacity-60"}`}>
-            <legend className="text-sm font-bold text-[var(--omlu-text-primary)]">Tax mode</legend>
-            <div className="mt-2 grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Tax mode">
-              <TaxModeCard value="exclusive" selected={taxMode === "exclusive"} onChange={setTaxMode} title="Exclusive" description="GST is added to menu prices." />
-              <TaxModeCard value="inclusive" selected={taxMode === "inclusive"} onChange={setTaxMode} title="Inclusive" description="GST is already included in menu prices." />
+        <SettingsSection title="Billing &amp; GST" description="Configure the tax details used on customer bills and tax invoices.">
+          {!gstEditing ? (
+            <div className="space-y-5">
+              <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
+                <SummaryItem label="GST status" value={gstEnabled ? "Enabled" : "Disabled"} status={gstEnabled ? "positive" : "neutral"} />
+                <SummaryItem label="GSTIN" value={gstin || "Not provided"} mono />
+                <SummaryItem label="Legal business name" value={legalBusinessName || "Not provided"} />
+                <SummaryItem label="State + state code" value={gstStateName || gstStateCode ? `${gstStateName || "State"} (${gstStateCode || "—"})` : "Not provided"} />
+                <SummaryItem label="Default GST rate" value={`${gstRate}%`} />
+                <SummaryItem label="Tax mode" value={taxMode === "exclusive" ? "Exclusive — GST is added to menu prices" : "Inclusive — GST is included in menu prices"} />
+                <SummaryItem label="Invoice prefix" value={invoicePrefix || "Not provided"} />
+                <SummaryItem label="Registered billing address" value={billingAddress || "Not provided"} className="sm:col-span-2" />
+              </div>
+              <div className="flex justify-end border-t border-[var(--omlu-border)] pt-4">
+                <button type="button" onClick={() => { setGstEditing(true); setError(null); setSuccess(null); }} className="min-h-11 rounded-xl border border-[var(--omlu-border-strong)] px-5 text-sm font-black text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-muted-surface)]">Edit GST settings</button>
+              </div>
             </div>
-          </fieldset>
-          <Field label="Registered billing address" htmlFor="billing-address">
-            <textarea id="billing-address" value={billingAddress} onChange={(event) => setBillingAddress(event.target.value)} required={gstEnabled} disabled={!gstEnabled} rows={4} className={`${controlClass} min-h-28 resize-y`} />
-          </Field>
+          ) : (
+            <div className="space-y-5">
+              <SwitchRow label="Enable GST" description="Use your saved GST details on bills and tax invoices." checked={gstEnabled} onChange={setGstEnabled} />
+              <div className={`grid gap-5 md:grid-cols-2 ${gstEnabled ? "" : "opacity-60"}`} aria-disabled={!gstEnabled}>
+                <SettingsInput id="gstin" label="GSTIN" value={gstin} onChange={(value) => setGstin(value.toUpperCase())} maxLength={15} required={gstEnabled} disabled={!gstEnabled} />
+                <SettingsInput id="legal-business-name" label="Legal business name" value={legalBusinessName} onChange={setLegalBusinessName} required={gstEnabled} disabled={!gstEnabled} />
+                <SettingsInput id="gst-state-name" label="State" value={gstStateName} onChange={setGstStateName} required={gstEnabled} disabled={!gstEnabled} />
+                <SettingsInput id="gst-state-code" label="State code" value={gstStateCode} onChange={setGstStateCode} maxLength={2} required={gstEnabled} disabled={!gstEnabled} />
+                <Field label="Default GST rate" htmlFor="gst-rate">
+                  <div className="relative"><input id="gst-rate" value={gstRate} onChange={(event) => setGstRate(event.target.value)} inputMode="decimal" required={gstEnabled} disabled={!gstEnabled} className={`${controlClass} pr-10`} /><span className="pointer-events-none absolute inset-y-0 right-4 flex items-center font-bold text-[var(--omlu-text-secondary)]">%</span></div>
+                </Field>
+                <SettingsInput id="invoice-prefix" label="Invoice prefix" value={invoicePrefix} onChange={(value) => setInvoicePrefix(value.toUpperCase())} maxLength={10} required />
+              </div>
+              <fieldset disabled={!gstEnabled} className={`min-w-0 ${gstEnabled ? "" : "opacity-60"}`}>
+                <legend className="text-sm font-bold text-[var(--omlu-text-primary)]">Tax mode</legend>
+                <div className="mt-2 grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Tax mode">
+                  <TaxModeCard value="exclusive" selected={taxMode === "exclusive"} onChange={setTaxMode} title="Exclusive" description="GST is added to menu prices." />
+                  <TaxModeCard value="inclusive" selected={taxMode === "inclusive"} onChange={setTaxMode} title="Inclusive" description="GST is already included in menu prices." />
+                </div>
+              </fieldset>
+              <Field label="Registered billing address" htmlFor="billing-address">
+                <textarea id="billing-address" value={billingAddress} onChange={(event) => setBillingAddress(event.target.value)} required={gstEnabled} disabled={!gstEnabled} rows={4} className={`${controlClass} min-h-28 resize-y`} />
+              </Field>
+              <div className="flex flex-col-reverse gap-3 border-t border-[var(--omlu-border)] pt-4 sm:flex-row sm:justify-end">
+                <button type="button" onClick={() => { if (settings) { setGstEnabled(settings.gst_enabled); setGstin(settings.gstin || ""); setLegalBusinessName(settings.legal_business_name || ""); setBillingAddress(settings.registered_billing_address || ""); setGstStateName(settings.gst_state_name || ""); setGstStateCode(settings.gst_state_code || ""); setGstRate(settings.default_gst_rate); setTaxMode(settings.tax_mode); setInvoicePrefix(settings.invoice_prefix); } setGstEditing(false); setError(null); setSuccess(null); }} disabled={saving} className="min-h-11 rounded-xl border border-[var(--omlu-border-strong)] px-5 text-sm font-bold text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-muted-surface)] disabled:opacity-50">Cancel</button>
+                <button type="submit" data-save-scope="gst" disabled={saving} className="min-h-11 rounded-xl bg-orange-600 px-6 text-sm font-black text-white hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-50">{saving ? "Saving…" : "Save GST settings"}</button>
+              </div>
+            </div>
+          )}
         </SettingsSection>
 
         <SettingsSection title="Operations" description="Control customer-facing restaurant operations.">
@@ -223,7 +268,7 @@ export default function AdminSettingsClient() {
         </SettingsSection>
 
         <div className="flex flex-col-reverse gap-3 rounded-2xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-4 sm:flex-row sm:items-center sm:justify-end">
-          <button type="button" onClick={() => { if (settings) applySettings(settings); setError(null); setSuccess(null); }} disabled={saving} className="min-h-11 rounded-xl border border-[var(--omlu-border-strong)] px-5 text-sm font-bold text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-muted-surface)] disabled:opacity-50">Reset</button>
+          <button type="button" onClick={() => { if (settings) applySettings(settings); setGstEditing(false); setError(null); setSuccess(null); }} disabled={saving} className="min-h-11 rounded-xl border border-[var(--omlu-border-strong)] px-5 text-sm font-bold text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-muted-surface)] disabled:opacity-50">Reset</button>
           <button id="save-settings-btn" type="submit" disabled={saving} className="min-h-11 rounded-xl bg-orange-600 px-6 text-sm font-black text-white hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-50">{saving ? "Saving…" : "Save Settings"}</button>
         </div>
       </form>
@@ -246,6 +291,10 @@ function Field({ label, htmlFor, help, children }: { label: string; htmlFor: str
 
 function SettingsInput({ id, label, value, onChange, maxLength, required, disabled }: { id: string; label: string; value: string; onChange: (value: string) => void; maxLength?: number; required?: boolean; disabled?: boolean }) {
   return <Field label={label} htmlFor={id}><input id={id} value={value} onChange={(event) => onChange(event.target.value)} maxLength={maxLength} required={required} disabled={disabled} className={controlClass} /></Field>;
+}
+
+function SummaryItem({ label, value, mono, status, className = "" }: { label: string; value: string; mono?: boolean; status?: "positive" | "neutral"; className?: string }) {
+  return <div className={`min-w-0 ${className}`}><p className="text-xs font-bold uppercase tracking-wide text-[var(--omlu-text-secondary)]">{label}</p>{status ? <span className={`mt-2 inline-flex rounded-full border px-2.5 py-1 text-xs font-bold ${status === "positive" ? "border-emerald-600/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "border-[var(--omlu-border-strong)] text-[var(--omlu-text-secondary)]"}`}>{value}</span> : <p className={`mt-1 break-words text-sm font-semibold leading-6 text-[var(--omlu-text-primary)] ${mono ? "font-mono" : ""}`}>{value}</p>}</div>;
 }
 
 function SwitchRow({ label, description, checked, onChange }: { label: string; description: string; checked: boolean; onChange: (checked: boolean) => void }) {
