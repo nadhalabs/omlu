@@ -740,9 +740,9 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false }
                 <p className="text-sm font-black text-[var(--omlu-text-primary)] print:text-black">
                   {bill.restaurant_name}
                 </p>
-                <h1 className="mt-1 text-2xl font-black">{quickSale ? "Takeaway Receipt" : t.title}</h1>
+                <h1 className="mt-1 text-2xl font-black">{quickSale ? (bill.table_number === "Late Entry" ? "Late Entry Receipt" : "Takeaway Receipt") : t.title}</h1>
                 <p className="mt-1 text-sm font-bold text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)] print:text-black">
-                  {quickSale ? "Takeaway" : `${t.table} ${bill.table_number}`}
+                  {quickSale ? (bill.table_number === "Late Entry" ? "Late Entry" : "Takeaway") : `${t.table} ${bill.table_number}`}
                 </p>
                 {bill.gst_enabled && (
                   <div className="mt-3 text-xs text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)] print:text-black">
