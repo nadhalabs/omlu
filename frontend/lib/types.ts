@@ -80,6 +80,7 @@ export interface PublicOrderCreateRequest {
 }
 
 export interface PublicOrderResponseItem {
+  id: number;
   menu_item_id: number | null;
   item_name: string;
   quantity: number;
@@ -87,6 +88,10 @@ export interface PublicOrderResponseItem {
   total_price: string;
   item_note: string | null;
   selected_options: OrderItemSelectedOption[];
+  cancellation_status: "active" | "cancelled";
+  cancellation_reason: string | null;
+  cancelled_at: string | null;
+  cancellation_actor_type: "customer" | "staff" | null;
 }
 
 export interface OrderItemSelectedOption {
@@ -134,6 +139,7 @@ export type DiningSessionStatus =
   | "cancelled";
 
 export interface DiningSessionOrderItem {
+  id: number;
   menu_item_id: number | null;
   item_name: string;
   quantity: number;
@@ -141,6 +147,10 @@ export interface DiningSessionOrderItem {
   total_price: string;
   item_note: string | null;
   selected_options: OrderItemSelectedOption[];
+  cancellation_status: "active" | "cancelled";
+  cancellation_reason: string | null;
+  cancelled_at: string | null;
+  cancellation_actor_type: "customer" | "staff" | null;
 }
 
 export interface DiningSessionOrder {
@@ -360,12 +370,17 @@ export type CounterPaymentMethod = "counter_cash" | "counter_upi";
 export type CounterPaymentResponse = BillResponse;
 
 export interface KitchenOrderItemResponse {
+  id?: number | null;
   item_name: string;
   quantity: number;
   unit_price: string;
   total_price: string;
   item_note: string | null;
   selected_options: OrderItemSelectedOption[];
+  cancellation_status?: "active" | "cancelled";
+  cancellation_reason?: string | null;
+  cancelled_at?: string | null;
+  cancellation_actor_type?: "customer" | "staff" | null;
 }
 
 export interface KitchenOrderResponse {

@@ -27,11 +27,12 @@ export type StaffTableDetail = {
     orders: {
       id: number;
       order_number: string;
+      public_token: string;
       status: string;
       subtotal: string;
       source: string;
       created_at: string;
-      items: { item_name: string; quantity: number; unit_price: string; total_price: string; item_note: string | null }[];
+      items: { id: number; item_name: string; quantity: number; unit_price: string; total_price: string; item_note: string | null; cancellation_status: "active" | "cancelled"; cancellation_reason: string | null; cancelled_at: string | null; cancellation_actor_type: "customer" | "staff" | null }[];
     }[];
   };
   requests: { id: number; request_type: string; created_at: string; status: string }[];
@@ -89,6 +90,16 @@ export async function createStaffTableOrder(tableId: number, payload: ManualOrde
   });
   if (!res.ok) throw new Error(await parseError(res, "Could not submit order."));
   localStorage.removeItem(storageKey);
+  return res.json();
+}
+
+export async function cancelStaffOrderItem(tableId: number, orderPublicToken: string, orderItemId: number, reason: string): Promise<PublicOrderResponse> {
+  const res = await fetch(`/api/staff/tables/${tableId}/orders/${encodeURIComponent(orderPublicToken)}/items/${orderItemId}/cancel`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ reason }),
+  });
+  if (!res.ok) throw new Error(await parseError(res, "Could not cancel this item."));
   return res.json();
 }
 

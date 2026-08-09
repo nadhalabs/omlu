@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { PublicThemeControl } from "@/components/PublicThemeControl";
 import {
   ApiError,
+  cancelPublicOrderItem,
   createPublicServiceRequest,
   requestPublicSessionBill,
   getPublicDiningSession,
@@ -27,6 +28,7 @@ import { clearCustomerCartState, completionPath, markCompletedSession, readCompl
 import { useRealtime } from "@/lib/realtime";
 import { customerPushSupported, enableCustomerPush } from "@/lib/customerPush";
 import { detachedBillPath, markDetachedSession, readDetachedSession } from "@/lib/customerDetachment";
+import { useOmluUi } from "@/components/OmluUiProvider";
 
 interface SessionClientProps {
   sessionToken: string;
@@ -86,6 +88,7 @@ export default function SessionClient(props: SessionClientProps) {
 
 function ActiveSessionClient({ sessionToken }: SessionClientProps) {
   const router = useRouter();
+  const { confirm: confirmDialog, toast } = useOmluUi();
   const [session, setSession] = useState<PublicDiningSessionResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -98,6 +101,7 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
   const [pushStatus, setPushStatus] = useState<"idle" | "loading" | "enabled" | "unsupported" | "error">("idle");
   const [pushMessage, setPushMessage] = useState<string | null>(null);
   const [reopenNotice, setReopenNotice] = useState<string | null>(null);
+  const [cancellingItemId, setCancellingItemId] = useState<number | null>(null);
   const [participantToken, setParticipantToken] = useState<string | null>(() => readSessionParticipantToken(sessionToken));
   const [visibleJoinCode, setVisibleJoinCode] = useState<string | null>(null);
   const [joinCodeCopied, setJoinCodeCopied] = useState(false);
@@ -437,6 +441,33 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
     { type: "waiter", label: t.callWaiter },
     { type: "water", label: t.water },
   ] as const;
+
+  const cancelItem = async (orderPublicToken: string, item: PublicDiningSessionResponse["orders"][number]["items"][number]) => {
+    if (!participantToken || cancellingItemId !== null) return;
+    const confirmed = await confirmDialog({
+      title: `Cancel ${item.item_name}?`,
+      message: `This item will be removed from your current bill.${item.quantity > 1 ? ` Quantity: ${item.quantity}.` : ""}`,
+      confirmLabel: "Cancel item",
+      cancelLabel: "Keep item",
+      tone: "destructive",
+    });
+    if (!confirmed || cancellingItemId !== null) return;
+    setCancellingItemId(item.id);
+    try {
+      const updated = await cancelPublicOrderItem(sessionToken, orderPublicToken, item.id, participantToken);
+      setSession(updated);
+      setError(null);
+    } catch (reason) {
+      await fetchSession(false);
+      if (reason instanceof ApiError && reason.status === 409) {
+        toast("Preparation has already started. Please ask a staff member for help.", "warning");
+      } else {
+        toast(reason instanceof Error ? reason.message : "Could not cancel this item.", "error");
+      }
+    } finally {
+      setCancellingItemId(null);
+    }
+  };
 
   const handleAddMore = () => {
     if (!session) return;
@@ -1054,13 +1085,19 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
                   )}
 
                   <div className="mt-4 flex flex-col gap-3">
-                    {order.items.map((item, itemIndex) => (
+                    {order.items.map((item) => {
+                      const cancelled = item.cancellation_status === "cancelled";
+                      const canCancel = !cancelled && (order.status === "pending" || order.status === "accepted") && session.status === "open" && Boolean(participantToken);
+                      return (
                       <div
-                        key={`${order.public_token}-${itemIndex}`}
-                        className="flex items-start justify-between gap-4"
+                        key={item.id}
+                        className={`flex items-start justify-between gap-3 rounded-xl px-2 py-1 ${cancelled ? "bg-[var(--omlu-muted-surface)] opacity-70" : ""}`}
                       >
                         <div>
-                          <p className="text-sm font-bold">{item.item_name}</p>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className={`text-sm font-bold ${cancelled ? "line-through" : ""}`}>{item.item_name}</p>
+                            {cancelled && <span className="rounded-full bg-[var(--omlu-muted-surface)] px-2 py-0.5 text-[10px] font-black uppercase text-[var(--omlu-text-secondary)]">Cancelled</span>}
+                          </div>
                           <p className="text-xs font-semibold text-[var(--omlu-text-secondary)]">
                             ₹{Number(item.unit_price).toFixed(2)} × {item.quantity}
                           </p>
@@ -1069,12 +1106,13 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
                               {t.note}: {item.item_note}
                             </p>
                           )}
+                          {canCancel && <button type="button" disabled={cancellingItemId !== null} onClick={() => void cancelItem(order.public_token, item)} className="mt-1 min-h-9 rounded-lg px-2 text-xs font-bold text-red-700 underline-offset-2 hover:underline disabled:text-[var(--omlu-text-muted)] dark:text-red-300">{cancellingItemId === item.id ? "Cancelling…" : "Cancel"}</button>}
                         </div>
-                        <p className="text-sm font-black">
+                        <p className={`text-sm font-black ${cancelled ? "line-through" : ""}`}>
                           ₹{Number(item.total_price).toFixed(2)}
                         </p>
                       </div>
-                    ))}
+                    );})}
                   </div>
 
                   {order.customer_note && (

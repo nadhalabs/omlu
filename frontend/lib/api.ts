@@ -267,6 +267,25 @@ export async function getPublicDiningSession(
   }
 }
 
+export async function cancelPublicOrderItem(
+  sessionToken: string,
+  orderPublicToken: string,
+  orderItemId: number,
+  participantToken: string,
+): Promise<PublicDiningSessionResponse> {
+  const response = await fetch(
+    `${publicBackendBaseUrl()}/public/sessions/${encodeURIComponent(sessionToken)}/orders/${encodeURIComponent(orderPublicToken)}/items/${orderItemId}/cancel`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Participant-Token": participantToken },
+      body: JSON.stringify({ reason: "customer_cancelled" }),
+    },
+  );
+  const body = await response.json().catch(() => null);
+  if (!response.ok) throw new ApiError(response.status, parseApiError(body, "Could not cancel this item.").message);
+  return body;
+}
+
 export async function getActivePublicDiningSession(
   restaurantSlug: string,
   tableCode: string

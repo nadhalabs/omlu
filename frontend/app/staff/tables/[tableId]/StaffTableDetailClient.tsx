@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { getStaffMe, resolveStaffServiceRequest, updateBillCustomerGstDetails } from "@/lib/api";
 import {
   getStaffTableDetail,
+  cancelStaffOrderItem,
   getStaffTableParticipants,
   requestStaffTableBill,
   revokeStaffTableParticipant,
@@ -20,7 +21,7 @@ import { CustomerGstDetails, CustomerGstValue } from "@/components/billing/Custo
 import { displayStatus } from "@/lib/presentation";
 
 export default function StaffTableDetailClient({ tableId }: { tableId: number }) {
-  const { confirm: confirmDialog } = useOmluUi();
+  const { confirm: confirmDialog, input: inputDialog, toast } = useOmluUi();
   const [detail, setDetail] = useState<StaffTableDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
@@ -51,7 +52,14 @@ export default function StaffTableDetailClient({ tableId }: { tableId: number })
 
   const realtimeStatus = useRealtime({
     target: { kind: "staff", channel: "staff" },
-    onEvent: () => void load(),
+    onEvent: (event) => {
+      if (event.type === "order.item_cancelled" && event.state?.cancellation_actor_type === "customer") {
+        const quantity = Number(event.state.quantity || 1);
+        const itemName = String(event.state.item_name || "Item");
+        toast(`Item cancelled by customer · Table ${detail?.table.table_number || tableId} · ${quantity} × ${itemName} · No action required`, "information");
+      }
+      void load();
+    },
     onReconnect: () => void load(),
   });
 
@@ -101,6 +109,23 @@ export default function StaffTableDetailClient({ tableId }: { tableId: number })
     } finally {
       setBusy(null);
     }
+  };
+  const cancelStaffItem = async (orderPublicToken: string, itemId: number, itemName: string) => {
+    if (busy) return;
+    const reason = await inputDialog({
+      title: `Cancel ${itemName}?`,
+      message: "This item will be removed from the current bill. Preparation must not have started.",
+      details: ["Suggested: Customer changed mind · Ordered by mistake · Duplicate item · Item unavailable · Other"],
+      label: "Reason",
+      placeholder: "Customer changed mind",
+      required: true,
+      maxLength: 300,
+      confirmLabel: "Cancel item",
+      cancelLabel: "Keep item",
+      tone: "destructive",
+    });
+    if (reason === null) return;
+    await run(`cancel-item-${itemId}`, () => cancelStaffOrderItem(tableId, orderPublicToken, itemId, reason));
   };
   const bill = detail?.session?.bill;
   const hasValidOrder = Boolean(detail?.session?.orders.some((order) => order.status !== "rejected"));
@@ -186,7 +211,7 @@ export default function StaffTableDetailClient({ tableId }: { tableId: number })
                       <div key={order.id} className="rounded-lg bg-[var(--omlu-page-background)] p-4">
                         <div className="flex justify-between gap-3"><div className="font-black">{order.order_number}</div><div className="text-sm text-[var(--omlu-text-secondary)]">{displayStatus(order.status)}</div></div>
                         <div className="mt-2 text-sm text-[var(--omlu-text-secondary)]">₹{order.subtotal} · {order.source} · {new Date(order.created_at).toLocaleTimeString()}</div>
-                        <div className="mt-3 grid gap-1 text-sm">{order.items.map((item, index) => <div key={index}>{item.quantity} x {item.item_name} <span className="text-[var(--omlu-text-secondary)]">₹{item.total_price}</span></div>)}</div>
+                        <div className="mt-3 grid gap-2 text-sm">{order.items.map((item) => { const cancelled = item.cancellation_status === "cancelled"; const canCancel = !cancelled && (order.status === "pending" || order.status === "accepted") && detail.session?.status === "open"; return <div key={item.id} className={`flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 ${cancelled ? "opacity-60" : ""}`}><span className={cancelled ? "line-through" : ""}>{item.quantity} x {item.item_name}</span> <span className={`text-[var(--omlu-text-secondary)] ${cancelled ? "line-through" : ""}`}>₹{item.total_price}</span>{cancelled && <span className="rounded-full bg-[var(--omlu-muted-surface)] px-2 py-0.5 text-[10px] font-black uppercase">Cancelled</span>}{canCancel && <button type="button" disabled={Boolean(busy)} onClick={() => void cancelStaffItem(order.public_token, item.id, item.item_name)} className="min-h-9 rounded-lg px-2 text-xs font-bold text-red-700 hover:underline disabled:text-[var(--omlu-text-muted)] dark:text-red-300">{busy === `cancel-item-${item.id}` ? "Cancelling…" : "Cancel item"}</button>}</div>;})}</div>
                       </div>
                     ))}
                   </div>

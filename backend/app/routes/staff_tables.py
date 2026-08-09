@@ -351,6 +351,7 @@ def get_staff_table(
                 {
                     "id": order.id,
                     "order_number": order.order_number,
+                    "public_token": order.public_token,
                     "status": order.status,
                     "subtotal": _money(order.subtotal),
                     "source": order.source,

@@ -103,11 +103,12 @@ export function KitchenOrderCard({
 
       {/* Item List: High Distance Contrast */}
       <div className="flex flex-col gap-3.5">
-        {order.items.map((item, idx) => (
-          <div key={idx} className="min-w-0">
-            <p className="break-words text-base md:text-lg font-black leading-snug text-[var(--omlu-text-primary)]">
+        {order.items.map((item, idx) => { const cancelled = item.cancellation_status === "cancelled"; return (
+          <div key={item.id ?? idx} className={`min-w-0 rounded-xl p-2 transition-colors ${cancelled ? "bg-[var(--omlu-muted-surface)] opacity-60" : ""}`}>
+            <p className={`break-words text-base md:text-lg font-black leading-snug text-[var(--omlu-text-primary)] ${cancelled ? "line-through" : ""}`}>
               <span className="text-orange-400 font-black text-lg md:text-xl mr-1">{item.quantity} ×</span>
               {item.item_name}
+              {cancelled && <span className="ml-2 inline-block rounded-full border border-[var(--omlu-border)] px-2 py-0.5 align-middle text-[10px] font-black uppercase no-underline">Cancelled</span>}
             </p>
 
             {/* Custom Options / Variants */}
@@ -129,7 +130,7 @@ export function KitchenOrderCard({
               </div>
             )}
           </div>
-        ))}
+        );})}
       </div>
 
       {/* Customer Order Note: Impossible to Overlook */}
