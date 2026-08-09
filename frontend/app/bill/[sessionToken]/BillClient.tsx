@@ -814,7 +814,7 @@ function ActiveBillClient({ sessionToken, receiptToken = "" }: BillClientProps) 
                         snapshot that is confusing to customers. Replace with a friendly receipt label.
                         The raw status is unchanged in the backend payload. */}
                     <p className="text-xs font-bold uppercase text-[var(--omlu-text-secondary)]">
-                      {isPaid ? t.receiptOrderStatus : order.status}
+                      {isPaid ? t.receiptOrderStatus : (t.statusLabels[order.status] || t.statusLabels.pending)}
                     </p>
                   </div>
                   <div className="flex flex-col gap-2">

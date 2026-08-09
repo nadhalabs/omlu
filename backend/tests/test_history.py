@@ -346,7 +346,8 @@ def test_custom_range_empty_and_csv_export(history_data):
     csv_response = client.get("/admin/history/orders/export?preset=today", headers=_auth(history_data["owner_token"]))
     assert csv_response.status_code == 200
     assert "text/csv" in csv_response.headers["content-type"]
-    assert "order_number" in csv_response.text
+    assert "Order Number" in csv_response.text
+    assert "order_number" not in csv_response.text
 
 
 def test_performance_pdf_owner_admin_access_and_rejections(history_data):
@@ -376,7 +377,8 @@ def test_performance_pdf_daily_content_type_filename_and_totals(history_data):
     assert "Daily report" in text
     assert "Asia/Kolkata" in text
     assert f"INR {summary['metrics']['total_revenue']}" in text
-    assert "Total orders" in text
+    assert "Total Orders" in text
+    assert "Average Table Session" in text
     assert str(summary["metrics"]["total_orders"]) in text
     assert "Cash" in text
     assert "100.00%" in text
@@ -415,7 +417,11 @@ def test_performance_csv_export_still_unchanged(history_data):
     assert response.status_code == 200
     assert "text/csv" in response.headers["content-type"]
     assert response.headers["content-disposition"] == 'attachment; filename="performance-summary.csv"'
-    assert "total_revenue,350.00" in response.text
+    assert "Metric,Value" in response.text
+    assert "Total Revenue,350.00" in response.text
+    assert "Quick Sale Revenue" in response.text
+    assert "total_revenue" not in response.text
+    assert "completed_quick_sale_revenue" not in response.text
 
 
 def test_category_performance_and_order_history_survive_menu_item_deletion(history_data):

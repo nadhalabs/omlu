@@ -30,7 +30,7 @@ export async function POST(
     });
 
     if (!res.ok) {
-      let errDetail = `Backend error: ${res.status}`;
+      let errDetail = "Ordering could not be reopened.";
       try {
         const errJson = await res.json();
         if (errJson && typeof errJson.detail === "string") errDetail = errJson.detail;

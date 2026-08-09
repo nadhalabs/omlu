@@ -128,10 +128,10 @@ def build_performance_pdf(context: dict[str, Any]) -> bytes:
 
     _section(story, styles, "Summary")
     summary_rows = [
-        ["Total revenue", _money(metrics["total_revenue"]), "Total orders", _number(metrics["total_orders"])],
-        ["Average order value", _money(metrics["average_order_value"]), "Generated bills", _number(metrics["total_bills"])],
-        ["Paid bills", _number(metrics["paid_bills"]), "Unpaid bills", _number(metrics["unpaid_bills"])],
-        ["Rejected orders", _number(metrics["rejected_orders"]), "Average session duration", f"{_number(metrics['average_session_duration_minutes'])} min"],
+        ["Total Revenue", _money(metrics["total_revenue"]), "Total Orders", _number(metrics["total_orders"])],
+        ["Average Order Value", _money(metrics["average_order_value"]), "Bills Created", _number(metrics["total_bills"])],
+        ["Paid Bills", _number(metrics["paid_bills"]), "Unpaid Bills", _number(metrics["unpaid_bills"])],
+        ["Rejected Orders", _number(metrics["rejected_orders"]), "Average Table Session", f"{_number(metrics['average_session_duration_minutes'])} min"],
     ]
     story.append(_table(styles, ["Metric", "Value", "Metric", "Value"], summary_rows, [44 * mm, 32 * mm, 48 * mm, 34 * mm]))
 

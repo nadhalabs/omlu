@@ -290,7 +290,7 @@ export default function StaffSessionsClient() {
                   : "bg-[var(--omlu-muted-surface)]";
               const orderLabel =
                 s.latest_order_status
-                  ? ORDER_STATUS_LABEL[s.latest_order_status] ?? s.latest_order_status
+                  ? ORDER_STATUS_LABEL[s.latest_order_status] ?? "Order Updated"
                   : null;
 
               return (
@@ -313,7 +313,7 @@ export default function StaffSessionsClient() {
                         STATUS_PILL[s.status] ?? "bg-[var(--omlu-muted-surface)] border-[var(--omlu-border)] text-[var(--omlu-text-secondary)]"
                       }`}
                     >
-                      {STATUS_LABEL[s.status] ?? s.status}
+                      {STATUS_LABEL[s.status] ?? "Session Updated"}
                     </span>
                   </div>
 

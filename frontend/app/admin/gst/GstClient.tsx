@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { displayCustomerTaxType, displayStatus } from "@/lib/presentation";
 
 export type PeriodPreset = "today" | "this_month" | "last_month" | "quarter" | "financial_year" | "custom";
 export type TabKey =
@@ -503,7 +504,7 @@ interface TabDataResponse {
                           <td className="py-2.5 px-3 font-medium">{String(r.document_number ?? "")}</td>
                           <td className="py-2.5 px-3 font-medium text-emerald-600 dark:text-emerald-400">{String(r.invoice_number || "—")}</td>
                           <td className="py-2.5 px-3 capitalize">{String(r.document_type ?? "")}</td>
-                          <td className="py-2.5 px-3 uppercase font-bold text-[10px]">{String(r.customer_tax_type ?? "")}</td>
+                          <td className="py-2.5 px-3 font-bold text-[10px]">{displayCustomerTaxType(r.customer_tax_type)}</td>
                           <td className="py-2.5 px-3 text-right">{fmtCurrency(r.subtotal)}</td>
                           <td className="py-2.5 px-3 text-right">{fmtCurrency(r.taxable_amount)}</td>
                           <td className="py-2.5 px-3 text-right">{fmtCurrency(r.cgst_amount)}</td>
@@ -543,7 +544,7 @@ interface TabDataResponse {
                       {tabData.records.map((r: Record<string, unknown>, idx: number) => (
                         <tr key={idx} className="hover:bg-[var(--omlu-hover-surface)]">
                           <td className="py-2.5 px-3 font-bold">{String(r.gst_rate)}%</td>
-                          <td className="py-2.5 px-3 uppercase font-semibold">{String(r.customer_tax_type)}</td>
+                          <td className="py-2.5 px-3 font-semibold">{displayCustomerTaxType(r.customer_tax_type)}</td>
                           <td className="py-2.5 px-3 text-right">{fmtCurrency(r.taxable_amount)}</td>
                           <td className="py-2.5 px-3 text-right">{fmtCurrency(r.cgst_amount)}</td>
                           <td className="py-2.5 px-3 text-right">{fmtCurrency(r.sgst_amount)}</td>
@@ -724,7 +725,7 @@ interface TabDataResponse {
                             <td className="py-2.5 px-3 whitespace-nowrap">{formatDate(typeof r.invoice_date === "string" ? r.invoice_date.split("T")[0] : "")}</td>
                             <td className="py-2.5 px-3 capitalize">{String(r.document_type ?? "")}</td>
                             <td className="py-2.5 px-3 font-medium">{String(r.document_number ?? "")}</td>
-                            <td className="py-2.5 px-3 font-bold uppercase text-[10px]">{String(r.status ?? "")}</td>
+                            <td className="py-2.5 px-3 font-bold text-[10px]">{displayStatus(typeof r.status === "string" ? r.status : undefined)}</td>
                           </tr>
                         ))}
                       </tbody>

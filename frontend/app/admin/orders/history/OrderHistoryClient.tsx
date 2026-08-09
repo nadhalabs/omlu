@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { DateFilters, EmptyState, HistorySkeleton, Pager, formatDateTime } from "../../historyControls";
 import { fetchHistory, HistoryFilters, OrderHistoryDetail, OrderHistoryRow, PaginatedResponse } from "@/lib/adminHistory";
+import { displayStatus } from "@/lib/presentation";
 
 export default function OrderHistoryClient() {
   const [filters, setFilters] = useState<HistoryFilters>({ preset: "today", page: 1, page_size: 25 });
@@ -60,7 +61,7 @@ export default function OrderHistoryClient() {
         <label className="text-xs font-bold text-[var(--omlu-text-secondary)]">Staff ID<input inputMode="numeric" placeholder="Staff ID" value={filters.staff_id || ""} onChange={(event) => setFilters({ ...filters, staff_id: event.target.value, page: 1 })} className="mt-1 block rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-3 text-sm" /></label>
         <label className="text-xs font-bold text-[var(--omlu-text-secondary)]">Order status<select value={filters.status_filter || ""} onChange={(event) => setFilters({ ...filters, status_filter: event.target.value, page: 1 })} className="mt-1 block rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-3 text-sm">
           <option value="">Completed only</option>
-          {["pending", "accepted", "preparing", "ready", "served", "rejected"].map((status) => <option key={status} value={status}>{status}</option>)}
+          {["pending", "accepted", "preparing", "ready", "served", "rejected"].map((status) => <option key={status} value={status}>{displayStatus(status)}</option>)}
         </select></label>
       </div>
       {error && <div className="border border-red-900 bg-red-950/30 p-3 text-sm text-red-200">{error}</div>}
@@ -80,7 +81,7 @@ export default function OrderHistoryClient() {
                   <td className="p-3">{order.table_number || "-"}</td>
                   <td className="max-w-48 break-all p-3 text-xs text-[var(--omlu-text-secondary)]">{order.session_token || "-"}</td>
                   <td className="p-3">{order.item_count}</td>
-                  <td className="p-3">{order.status}</td>
+                  <td className="p-3">{displayStatus(order.status)}</td>
                   <td className="p-3">₹{order.total}</td>
                   <td className="p-3">{order.accepted_by || "-"}</td>
                   <td className="p-3">{order.served_by || "-"}</td>
@@ -97,7 +98,7 @@ export default function OrderHistoryClient() {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h2 id="order-detail-title" className="break-words text-xl font-black text-[var(--omlu-text-primary)]">{detail.order_number}</h2>
-                <p className="text-sm text-[var(--omlu-text-secondary)]">{formatDateTime(detail.created_at)} · {detail.status}</p>
+                <p className="text-sm text-[var(--omlu-text-secondary)]">{formatDateTime(detail.created_at)} · {displayStatus(detail.status)}</p>
               </div>
               <button onClick={() => setDetail(null)} className="rounded bg-[var(--omlu-muted-surface)] px-3 py-1 text-sm font-bold">Close</button>
             </div>
@@ -120,7 +121,7 @@ export default function OrderHistoryClient() {
                 <div className="mt-2 divide-y divide-zinc-800">
                   {detail.status_history.map((item, index) => (
                     <div key={index} className="py-2 text-sm">
-                      <div className="font-bold text-[var(--omlu-text-primary)]">{item.old_status || "created"} to {item.new_status}</div>
+                      <div className="font-bold text-[var(--omlu-text-primary)]">{item.old_status ? displayStatus(item.old_status) : "Created"} to {displayStatus(item.new_status)}</div>
                       <div className="text-[var(--omlu-text-secondary)]">{formatDateTime(item.changed_at)} · {item.changed_by || "System"}</div>
                     </div>
                   ))}
@@ -128,7 +129,7 @@ export default function OrderHistoryClient() {
               </section>
             </div>
             <div className="mt-5 grid gap-2 text-sm text-[var(--omlu-text-secondary)] md:grid-cols-3">
-              {["accepted_at", "preparing_at", "ready_at", "served_at", "rejected_at"].map((key) => <div key={key}>{key.replace("_", " ")}: {formatDateTime(detail[key as keyof OrderHistoryDetail] as string | null)}</div>)}
+              {["accepted_at", "preparing_at", "ready_at", "served_at", "rejected_at"].map((key) => <div key={key}>{displayStatus(key.slice(0, -3))}: {formatDateTime(detail[key as keyof OrderHistoryDetail] as string | null)}</div>)}
               <div>Cancel reason: {detail.cancel_reason || "-"}</div>
               <div>Notes: {detail.customer_note || "-"}</div>
             </div>

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { DateFilters, EmptyState, HistorySkeleton, Pager, formatDateTime } from "../../historyControls";
 import { BillHistoryRow, fetchHistory, HistoryFilters, PaginatedResponse } from "@/lib/adminHistory";
+import { displayPaymentMethod, displayStatus } from "@/lib/presentation";
 
 export default function BillHistoryClient() {
   const [filters, setFilters] = useState<HistoryFilters>({ preset: "today", page: 1, page_size: 25 });
@@ -38,11 +39,11 @@ export default function BillHistoryClient() {
       <div className="flex flex-wrap gap-3">
         <label className="text-xs font-bold text-[var(--omlu-text-secondary)]">Payment status<select value={filters.status_filter || ""} onChange={(event) => setFilters({ ...filters, status_filter: event.target.value, page: 1 })} className="mt-1 block rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-3 text-sm">
           <option value="">All statuses</option>
-          {["paid", "unpaid", "payment_pending", "void"].map((status) => <option key={status} value={status}>{status}</option>)}
+          {["paid", "unpaid", "payment_pending", "void"].map((status) => <option key={status} value={status}>{displayStatus(status)}</option>)}
         </select></label>
         <label className="text-xs font-bold text-[var(--omlu-text-secondary)]">Payment method<select value={filters.payment_method || ""} onChange={(event) => setFilters({ ...filters, payment_method: event.target.value, page: 1 })} className="mt-1 block rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-3 text-sm">
           <option value="">All methods</option>
-          {["counter_cash", "counter_upi", "counter_card", "online"].map((method) => <option key={method} value={method}>{method}</option>)}
+          {["counter_cash", "counter_upi", "counter_card", "online"].map((method) => <option key={method} value={method}>{displayPaymentMethod(method)}</option>)}
         </select></label>
         <label className="text-xs font-bold text-[var(--omlu-text-secondary)]">Table ID<input inputMode="numeric" placeholder="Table ID" value={filters.table_id || ""} onChange={(event) => setFilters({ ...filters, table_id: event.target.value, page: 1 })} className="mt-1 block rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-3 text-sm" /></label>
       </div>
@@ -72,8 +73,8 @@ export default function BillHistoryClient() {
                   </td>
                   <td className="p-3">₹{bill.discount_amount}</td>
                   <td className="p-3 font-bold">₹{bill.grand_total}</td>
-                  <td className="p-3">{bill.payment_status}</td>
-                  <td className="p-3">{bill.payment_method || "-"}</td>
+                  <td className="p-3">{displayStatus(bill.payment_status)}</td>
+                  <td className="p-3">{bill.payment_method ? displayPaymentMethod(bill.payment_method) : "-"}</td>
                   <td className="p-3">{formatDateTime(bill.paid_at)}</td>
                 </tr>
               ))}

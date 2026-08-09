@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
     });
 
     if (!res.ok) {
-      let errDetail = `Backend error: ${res.status}`;
+      let errDetail = "Service requests could not be loaded.";
       try {
         const errJson = await res.json();
         if (errJson && typeof errJson.detail === "string") errDetail = errJson.detail;

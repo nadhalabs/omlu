@@ -7,6 +7,7 @@ import { StaffServiceRequestResponse, StaffSessionListItem } from "@/lib/types";
 import { useRealtime } from "@/lib/realtime";
 import { AndroidDownloadCard } from "@/components/AndroidDownloadCard";
 import { registerAuthenticatedCleanup } from "@/lib/authRuntime.mjs";
+import { displayStatus } from "@/lib/presentation";
 
 export default function StaffHomeClient() {
   const [sessions, setSessions] = useState<StaffSessionListItem[]>([]);
@@ -124,11 +125,11 @@ export default function StaffHomeClient() {
                       <div key={session.session_token} className="bg-[var(--omlu-page-background)] border border-[var(--omlu-border)] rounded-lg p-4">
                         <div className="flex justify-between gap-3">
                           <div className="font-black text-[var(--omlu-text-primary)]">Table {session.table_number}</div>
-                          <div className="text-xs text-[var(--omlu-text-secondary)]">{session.status}</div>
+                          <div className="text-xs text-[var(--omlu-text-secondary)]">{displayStatus(session.status)}</div>
                         </div>
                         <div className="text-xs text-[var(--omlu-text-secondary)] mt-2">
                           {session.order_count} orders · ₹{session.combined_subtotal}
-                          {session.latest_order_status && <span className="block mt-1">Latest order: {session.latest_order_status}</span>}
+                          {session.latest_order_status && <span className="block mt-1">Latest order: {displayStatus(session.latest_order_status)}</span>}
                         </div>
                       </div>
                     ))}

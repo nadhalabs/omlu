@@ -730,6 +730,42 @@ def staff_activity(
     return {"items": performance_summary(preset, start_date, end_date, current_user, db)["staff_activity"]}
 
 
+EXPORT_VALUE_LABELS = {
+    "counter_cash": "Cash",
+    "counter_upi": "UPI",
+    "counter_card": "Card",
+    "online": "Online",
+    "dining": "Table Service",
+    "quick_sale": "Quick Sale",
+    "late_entry": "Late Entry",
+    "takeaway": "Takeaway",
+    "payment_pending": "Payment Pending",
+    "payment_requested": "Payment Requested",
+    "cancelled": "Cancelled",
+    "completed": "Completed",
+    "accepted": "Accepted",
+    "preparing": "Preparing",
+    "ready": "Ready",
+    "served": "Served",
+    "rejected": "Rejected",
+    "paid": "Paid",
+    "issued": "Issued",
+    "closed": "Closed",
+    "open": "Open",
+}
+
+
+def _export_value(value):
+    return EXPORT_VALUE_LABELS.get(value, value)
+
+
+def _export_rows(rows: list[dict], columns: list[tuple[str, str]]) -> list[dict]:
+    return [
+        {heading: _export_value(row.get(key)) for key, heading in columns}
+        for row in rows
+    ]
+
+
 def _csv_response(filename: str, rows: list[dict]) -> StreamingResponse:
     output = io.StringIO()
     fieldnames = list(rows[0].keys()) if rows else ["message"]
@@ -929,7 +965,13 @@ def export_orders(
     for order in orders:
         actor_ids.extend(_order_actor_ids(order))
     staff_names = _staff_names(db, actor_ids)
-    return _csv_response("orders-history.csv", [_order_row(order, staff_names) for order in orders])
+    rows = [_order_row(order, staff_names) for order in orders]
+    columns = [
+        ("order_number", "Order Number"), ("created_at", "Date and Time"),
+        ("table_number", "Table"), ("item_count", "Items"), ("status", "Status"),
+        ("total", "Order Total"), ("accepted_by", "Accepted By"), ("served_by", "Served By"),
+    ]
+    return _csv_response("orders-history.csv", _export_rows(rows, columns))
 
 
 @router.get("/orders/{order_id}")
@@ -1016,7 +1058,14 @@ def export_bills(
         rows.extend(_quick_sale_bill_row(sale) for sale in quick_query.order_by(QuickSale.completed_at.desc()).limit(5000).all())
         rows.sort(key=lambda row: row["date"] or "", reverse=True)
         rows = rows[:5000]
-    return _csv_response("bills-history.csv", rows)
+    columns = [
+        ("bill_number", "Bill Number"), ("invoice_number", "GST Invoice Number"),
+        ("date", "Date and Time"), ("table_number", "Table"), ("subtotal", "Subtotal"),
+        ("tax_amount", "Tax"), ("discount_amount", "Discount"), ("grand_total", "Grand Total"),
+        ("payment_status", "Payment Status"), ("payment_method", "Payment Method"),
+        ("paid_at", "Paid At"), ("source", "Sale Type"),
+    ]
+    return _csv_response("bills-history.csv", _export_rows(rows, columns))
 
 
 @router.get("/sessions/export")
@@ -1031,7 +1080,13 @@ def export_sessions(
 ):
     start_utc, end_utc = _utc_bounds(staff=current_user, preset=preset, start_date=start_date, end_date=end_date)
     rows = [_session_row(session) for session in _sessions_query(db, current_user, start_utc, end_utc, status_filter, table_id).options(joinedload(DiningSession.table), joinedload(DiningSession.orders), joinedload(DiningSession.bill)).order_by(DiningSession.opened_at.desc()).limit(5000).all()]
-    return _csv_response("sessions-history.csv", rows)
+    columns = [
+        ("table_number", "Table"), ("started_at", "Started At"), ("closed_at", "Closed At"),
+        ("duration_minutes", "Table Session (Minutes)"), ("order_count", "Orders"),
+        ("combined_subtotal", "Order Subtotal"), ("final_bill_total", "Final Bill Total"),
+        ("payment_status", "Payment Status"), ("closed_by", "Closed By"),
+    ]
+    return _csv_response("sessions-history.csv", _export_rows(rows, columns))
 
 
 @router.get("/performance/export")
@@ -1043,7 +1098,23 @@ def export_performance(
     db: Session = Depends(get_db),
 ):
     response = performance_summary(preset, start_date, end_date, current_user, db)
-    rows = [{"metric": key, "value": value} for key, value in response["metrics"].items()]
+    metric_labels = {
+        "total_revenue": "Total Revenue",
+        "collected_revenue": "Collected Revenue",
+        "pending_collection": "Pending Collection",
+        "completed_quick_sale_revenue": "Quick Sale Revenue",
+        "total_orders": "Total Orders",
+        "average_order_value": "Average Order Value",
+        "total_bills": "Total Bills",
+        "paid_bills": "Paid Bills",
+        "unpaid_bills": "Unpaid Bills",
+        "cancelled_orders": "Cancelled Orders",
+        "rejected_orders": "Rejected Orders",
+        "payment_failures": "Payment Failures",
+        "active_table_time_minutes": "Active Table Time (Minutes)",
+        "average_session_duration_minutes": "Average Table Session (Minutes)",
+    }
+    rows = [{"Metric": metric_labels[key], "Value": value} for key, value in response["metrics"].items()]
     return _csv_response("performance-summary.csv", rows)
 
 

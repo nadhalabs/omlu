@@ -10,6 +10,7 @@ import { useRealtime } from "@/lib/realtime";
 import { queryKeys, useCachedQuery } from "@/lib/queryCache";
 import { buildHourlyChart } from "@/lib/dashboardHourly";
 import { registerAuthenticatedCleanup } from "@/lib/authRuntime.mjs";
+import { displayStatus } from "@/lib/presentation";
 
 function StatCard({
   label,
@@ -269,7 +270,7 @@ export default function AdminDashboardClient() {
                   <div className="text-xs text-[var(--omlu-text-secondary)]">
                     Last activity: {table.last_activity_at ? new Date(table.last_activity_at).toLocaleTimeString() : "None"}
                     {table.pending_request && <span className="block text-orange-400 mt-1">Request: {table.pending_request}</span>}
-                    {table.payment_status && <span className="block mt-1">Payment: {table.payment_status}</span>}
+                    {table.payment_status && <span className="block mt-1">Payment: {displayStatus(table.payment_status)}</span>}
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <a href="/staff/sessions" className="text-[11px] px-2 py-1 rounded bg-[var(--omlu-muted-surface)] text-[var(--omlu-text-primary)] font-bold">Open Session</a>

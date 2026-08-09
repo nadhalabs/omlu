@@ -47,8 +47,8 @@ STATUS_MAP = {
     "completed": "Completed",
     "cancelled": "Cancelled",
     "active": "Active",
-    "b2b": "B2B",
-    "b2c": "B2C",
+    "b2b": "GST Invoice",
+    "b2c": "Regular Sale",
     "bill": "Bill",
     "quick_sale": "Quick Sale",
     "takeaway": "Takeaway",
@@ -60,7 +60,7 @@ STATUS_MAP = {
 
 def sanitize_filename(name: str) -> str:
     cleaned = re.sub(r"[^\w\s-]", "", name).strip()
-    return re.sub(r"[-\s]+", "_", cleaned).lower() or "restaurant"
+    return re.sub(r"[-\s_]+", "-", cleaned).lower() or "restaurant"
 
 
 def _map_val(val: Any) -> Any:
@@ -201,7 +201,7 @@ def build_gst_summary_xlsx(data: Dict[str, Any], restaurant: Any) -> bytes:
     ws.title = "GST Rate Summary"
 
     headers = [
-        "GST Rate (%)", "Customer Tax Type", "Taxable Sales",
+        "GST Rate (%)", "Sale Type", "Taxable Sales",
         "CGST Amount", "SGST Amount", "IGST Amount", "Total GST", "Document Count"
     ]
     ws.append(headers)

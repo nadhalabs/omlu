@@ -252,7 +252,7 @@ def export_sales_register(
             ("document_number", "Doc #"),
             ("invoice_number", "Invoice #"),
             ("document_type", "Doc Type"),
-            ("customer_tax_type", "Tax Type"),
+            ("customer_tax_type", "Sale Type"),
             ("customer_legal_name", "Customer Name"),
             ("customer_gstin", "Customer GSTIN"),
             ("subtotal", "Subtotal"),
@@ -270,14 +270,14 @@ def export_sales_register(
         return FastAPIResponse(
             content=csv_str,
             media_type="text/csv",
-            headers={"Content-Disposition": f'attachment; filename="sales_register_{slug}.csv"'},
+            headers={"Content-Disposition": f'attachment; filename="omlu-sales-register-{slug}.csv"'},
         )
 
     xlsx_bytes = build_sales_register_xlsx(data, restaurant)
     return FastAPIResponse(
         content=xlsx_bytes,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="sales_register_{slug}.xlsx"'},
+        headers={"Content-Disposition": f'attachment; filename="omlu-sales-register-{slug}.xlsx"'},
     )
 
 
@@ -299,7 +299,7 @@ def export_rate_summary(
         return FastAPIResponse(
             content=pdf_bytes,
             media_type="application/pdf",
-            headers={"Content-Disposition": f'attachment; filename="gst_summary_{slug}.pdf"'},
+            headers={"Content-Disposition": f'attachment; filename="omlu-gst-summary-{slug}.pdf"'},
         )
 
     data = get_gst_rate_summary(db, staff=current_user, preset=preset, start_date=start_date, end_date=end_date)
@@ -307,7 +307,7 @@ def export_rate_summary(
     if format.lower() == "csv":
         field_keys = [
             ("gst_rate", "GST Rate (%)"),
-            ("customer_tax_type", "Customer Tax Type"),
+            ("customer_tax_type", "Sale Type"),
             ("taxable_amount", "Taxable Sales"),
             ("cgst_amount", "CGST Amount"),
             ("sgst_amount", "SGST Amount"),
@@ -319,14 +319,14 @@ def export_rate_summary(
         return FastAPIResponse(
             content=csv_str,
             media_type="text/csv",
-            headers={"Content-Disposition": f'attachment; filename="gst_rate_summary_{slug}.csv"'},
+            headers={"Content-Disposition": f'attachment; filename="omlu-gst-rate-summary-{slug}.csv"'},
         )
 
     xlsx_bytes = build_gst_summary_xlsx(data, restaurant)
     return FastAPIResponse(
         content=xlsx_bytes,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="gst_rate_summary_{slug}.xlsx"'},
+        headers={"Content-Disposition": f'attachment; filename="omlu-gst-rate-summary-{slug}.xlsx"'},
     )
 
 
@@ -355,14 +355,14 @@ def export_hsn_summary(
         return FastAPIResponse(
             content=csv_str,
             media_type="text/csv",
-            headers={"Content-Disposition": f'attachment; filename="hsn_summary_{slug}.csv"'},
+            headers={"Content-Disposition": f'attachment; filename="omlu-hsn-summary-{slug}.csv"'},
         )
 
     xlsx_bytes = build_hsn_summary_xlsx(data, restaurant)
     return FastAPIResponse(
         content=xlsx_bytes,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="hsn_summary_{slug}.xlsx"'},
+        headers={"Content-Disposition": f'attachment; filename="omlu-hsn-summary-{slug}.xlsx"'},
     )
 
 
@@ -396,14 +396,14 @@ def export_b2b_register(
         return FastAPIResponse(
             content=csv_str,
             media_type="text/csv",
-            headers={"Content-Disposition": f'attachment; filename="b2b_register_{slug}.csv"'},
+            headers={"Content-Disposition": f'attachment; filename="omlu-gst-invoice-register-{slug}.csv"'},
         )
 
     xlsx_bytes = build_b2b_register_xlsx(data, restaurant)
     return FastAPIResponse(
         content=xlsx_bytes,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="b2b_register_{slug}.xlsx"'},
+        headers={"Content-Disposition": f'attachment; filename="omlu-gst-invoice-register-{slug}.xlsx"'},
     )
 
 
@@ -436,14 +436,14 @@ def export_b2c_register(
         return FastAPIResponse(
             content=csv_str,
             media_type="text/csv",
-            headers={"Content-Disposition": f'attachment; filename="b2c_register_{slug}.csv"'},
+            headers={"Content-Disposition": f'attachment; filename="omlu-regular-sales-{slug}.csv"'},
         )
 
     xlsx_bytes = build_b2c_register_xlsx(data, restaurant)
     return FastAPIResponse(
         content=xlsx_bytes,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="b2c_register_{slug}.xlsx"'},
+        headers={"Content-Disposition": f'attachment; filename="omlu-regular-sales-{slug}.xlsx"'},
     )
 
 
@@ -472,14 +472,14 @@ def export_documents_issued(
         return FastAPIResponse(
             content=csv_str,
             media_type="text/csv",
-            headers={"Content-Disposition": f'attachment; filename="documents_issued_{slug}.csv"'},
+            headers={"Content-Disposition": f'attachment; filename="omlu-documents-issued-{slug}.csv"'},
         )
 
     xlsx_bytes = build_documents_issued_xlsx(data, restaurant)
     return FastAPIResponse(
         content=xlsx_bytes,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="documents_issued_{slug}.xlsx"'},
+        headers={"Content-Disposition": f'attachment; filename="omlu-documents-issued-{slug}.xlsx"'},
     )
 
 
@@ -514,12 +514,12 @@ def export_cancelled_documents(
         return FastAPIResponse(
             content=csv_str,
             media_type="text/csv",
-            headers={"Content-Disposition": f'attachment; filename="cancelled_documents_{slug}.csv"'},
+            headers={"Content-Disposition": f'attachment; filename="omlu-cancelled-documents-{slug}.csv"'},
         )
 
     xlsx_bytes = build_cancelled_documents_xlsx(data, restaurant)
     return FastAPIResponse(
         content=xlsx_bytes,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="cancelled_documents_{slug}.xlsx"'},
+        headers={"Content-Disposition": f'attachment; filename="omlu-cancelled-documents-{slug}.xlsx"'},
     )
