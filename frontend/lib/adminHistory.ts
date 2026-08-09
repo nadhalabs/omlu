@@ -102,6 +102,8 @@ export type PerformanceSummary = {
   category_performance: { category_name: string; quantity: number; revenue: string }[];
   table_usage: { table_number: string; sessions: number; orders: number; revenue: string }[];
   staff_activity: { staff_name: string; status_changes: number; accepted: number; served: number }[];
+  sales_mix: { label: "Dine-in" | "Takeaway" | "Quick Sale"; revenue: string; contribution_percentage: string }[];
+  owner_insights: string[];
 };
 
 function paramsFrom(filters: HistoryFilters) {
@@ -133,6 +135,11 @@ export async function fetchHistory<T>(
 export function exportHistory(path: string, filters: HistoryFilters = {}) {
   const query = paramsFrom(filters);
   window.location.href = `/api/admin/history/${path}/export${query ? `?${query}` : ""}`;
+}
+
+export function exportHistoryXlsx(path: string, filters: HistoryFilters = {}) {
+  const query = paramsFrom(filters);
+  window.location.href = `/api/admin/history/${path}/export.xlsx${query ? `?${query}` : ""}`;
 }
 
 function filenameFromDisposition(disposition: string | null, fallback: string) {
