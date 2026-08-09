@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PublicThemeControl } from "@/components/PublicThemeControl";
-import { ApiError, getPublicBill, getPublicDiningSession, isDefiniteAuthFailure } from "@/lib/api";
+import { ApiError, getPublicBill, getPublicDiningSession, getQuickSalePrintDocument, isDefiniteAuthFailure } from "@/lib/api";
 import { BillResponse, PublicDiningSessionResponse } from "@/lib/types";
 import { buildWhatsAppBillShareUrl } from "@/lib/billShare";
 import { clearCustomerCartState, completionPath, markCompletedSession, readCompletedSession } from "@/lib/customerCompletion";
@@ -24,6 +24,7 @@ import { clearDetachedSession, markDetachedSession } from "@/lib/customerDetachm
 interface BillClientProps {
   sessionToken: string;
   receiptToken?: string;
+  quickSale?: boolean;
 }
 
 function CompletedSessionRedirect({ sessionToken }: { sessionToken: string }) {
@@ -57,7 +58,7 @@ export default function BillClient(props: BillClientProps) {
 
   useEffect(() => {
     const timeout = setTimeout(() => {
-      const completed = readCompletedSession(props.sessionToken);
+      const completed = props.quickSale ? null : readCompletedSession(props.sessionToken);
       if (completed && !receiptTokenFromQuery) {
         setCompletionState("completed");
       } else {
@@ -65,7 +66,7 @@ export default function BillClient(props: BillClientProps) {
       }
     }, 0);
     return () => clearTimeout(timeout);
-  }, [props.sessionToken, receiptTokenFromQuery]);
+  }, [props.quickSale, props.sessionToken, receiptTokenFromQuery]);
 
   if (completionState === "checking") {
     return <FinishingVisitLoader />;
@@ -78,7 +79,7 @@ export default function BillClient(props: BillClientProps) {
   return <ActiveBillClient {...props} receiptToken={receiptTokenFromQuery} />;
 }
 
-function ActiveBillClient({ sessionToken, receiptToken = "" }: BillClientProps) {
+function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false }: BillClientProps) {
   const router = useRouter();
   const [bill, setBill] = useState<BillResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -329,7 +330,7 @@ function ActiveBillClient({ sessionToken, receiptToken = "" }: BillClientProps) 
       paidStatusRef.current = data.status;
       if (data.status !== "draft" && data.receipt_token) {
         setReceiptAccessToken(data.receipt_token);
-        const receiptUrl = `/bill/${encodeURIComponent(data.session_token)}?receipt=${encodeURIComponent(data.receipt_token)}`;
+        const receiptUrl = `/bill/${encodeURIComponent(data.session_token)}?receipt=${encodeURIComponent(data.receipt_token)}${quickSale ? "&quickSale=1" : ""}`;
         window.history.replaceState(window.history.state, "", receiptUrl);
       }
 
@@ -394,7 +395,7 @@ function ActiveBillClient({ sessionToken, receiptToken = "" }: BillClientProps) 
 
       hasLoadedBillRef.current = true;
     },
-    [celebratePayment, receiptAccessToken, receiptToken, router, sessionToken]
+    [celebratePayment, quickSale, receiptAccessToken, receiptToken, router, sessionToken]
   );
 
   const fetchInFlightRef = useRef(false);
@@ -427,7 +428,9 @@ function ActiveBillClient({ sessionToken, receiptToken = "" }: BillClientProps) 
             if (!authority && !receiptAccessToken) {
               throw new ApiError(401, "Your access to this table has ended.");
             }
-            const data = await getPublicBill(sessionToken, authority, receiptAccessToken);
+            const data = quickSale
+              ? await getQuickSalePrintDocument(sessionToken)
+              : await getPublicBill(sessionToken, authority, receiptAccessToken);
             applyFetchedBill(data, source);
           } catch (err) {
             let authority = readSessionParticipantToken(sessionToken) || participantToken || "";
@@ -465,7 +468,7 @@ function ActiveBillClient({ sessionToken, receiptToken = "" }: BillClientProps) 
         fetchInFlightRef.current = false;
       }
     },
-    [applyFetchedBill, bill, participantToken, receiptAccessToken, sessionToken, waitingSession, t.unavailable]
+    [applyFetchedBill, bill, participantToken, quickSale, receiptAccessToken, sessionToken, waitingSession, t.unavailable]
   );
 
   useEffect(() => {
@@ -737,9 +740,9 @@ function ActiveBillClient({ sessionToken, receiptToken = "" }: BillClientProps) 
                 <p className="text-sm font-black text-[var(--omlu-text-primary)] print:text-black">
                   {bill.restaurant_name}
                 </p>
-                <h1 className="mt-1 text-2xl font-black">{t.title}</h1>
+                <h1 className="mt-1 text-2xl font-black">{quickSale ? "Takeaway Receipt" : t.title}</h1>
                 <p className="mt-1 text-sm font-bold text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)] print:text-black">
-                  {t.table} {bill.table_number}
+                  {quickSale ? "Takeaway" : `${t.table} ${bill.table_number}`}
                 </p>
                 {bill.gst_enabled && (
                   <div className="mt-3 text-xs text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)] print:text-black">

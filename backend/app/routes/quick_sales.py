@@ -10,12 +10,14 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
 from app.models.menu import MenuItem, MenuItemOptionGroup, MenuOptionGroup
+from app.models.restaurant import Restaurant
 from app.models.quick_sale import QuickSale, QuickSaleItem, QuickSaleItemSelectedOption
 from app.models.order import RestaurantDailySequence
 from app.models.staff_user import AuditLog, StaffUser
 from app.models.payment import Payment, RevenueEntry
 from app.schemas.order import PublicOrderCreateRequest
 from app.schemas.quick_sale import QuickSaleCreate, QuickSalePayment
+from app.schemas.bill import BillResponse, ReceiptPayloadResponse
 from app.services.menu_options import serialize_item_option_groups
 from app.services.order_pricing import validate_and_price_order_items
 from app.services.idempotency import ensure_same_request, request_hash, require_key
@@ -82,6 +84,131 @@ def _serialize(sale: QuickSale, *, financial: bool = True) -> dict:
     if financial:
         result.update({"payment_method": sale.payment_method, "paid_by_name": sale.paid_by_name, "paid_by_role": sale.paid_by_role})
     return result
+
+
+def _completed_takeaway(db: Session, current_user: StaffUser, public_token: str) -> tuple[QuickSale, Restaurant]:
+    sale = db.query(QuickSale).options(
+        selectinload(QuickSale.items).selectinload(QuickSaleItem.selected_options)
+    ).filter(
+        QuickSale.restaurant_id == current_user.restaurant_id,
+        QuickSale.public_token == public_token,
+    ).first()
+    if not sale:
+        raise HTTPException(status_code=404, detail="Quick Sale not found")
+    if sale.sale_type != "takeaway" or sale.status != "completed":
+        raise HTTPException(status_code=409, detail="Only completed Takeaway receipts can be printed")
+    restaurant = db.query(Restaurant).filter(Restaurant.id == sale.restaurant_id).one()
+    return sale, restaurant
+
+
+def _quick_sale_print_document(sale: QuickSale, restaurant: Restaurant) -> dict:
+    items = [{
+        "item_name": item.item_name,
+        "quantity": item.quantity,
+        "unit_price": item.unit_price,
+        "line_total": item.total_price,
+        "selected_options": [{
+            "menu_option_id": option.menu_option_id,
+            "menu_option_group_id": option.menu_option_group_id,
+            "option_name": option.option_name,
+            "kitchen_display_name": option.kitchen_display_name,
+            "group_name": option.group_name,
+            "option_type": option.option_type,
+            "price_delta": option.price_delta,
+            "quantity": option.quantity,
+        } for option in item.selected_options],
+    } for item in sale.items]
+    completed_at = sale.completed_at or sale.created_at
+    return {
+        "bill_number": sale.order_number,
+        "receipt_token": sale.public_token,
+        "restaurant_name": restaurant.name,
+        "restaurant_slug": restaurant.slug,
+        "table_number": "Takeaway",
+        "table_code": "takeaway",
+        "session_token": sale.public_token,
+        "status": "paid",
+        "orders": [{"order_number": sale.order_number, "status": "served", "subtotal": sale.subtotal, "items": items}],
+        "subtotal": sale.subtotal,
+        "tax_amount": sale.tax_amount,
+        "discount_amount": sale.discount_amount,
+        "total_amount": sale.total_amount,
+        "currency": restaurant.currency,
+        "generated_at": completed_at,
+        "paid_at": completed_at,
+        "payment_method": f"counter_{sale.payment_method}" if sale.payment_method else None,
+        "payment_reference": None,
+        "paid_by_staff_id": sale.paid_by_staff_id,
+        "generated_by_role": sale.entered_by_role,
+        "sent_to_counter_by_role": None,
+        "gst_enabled": sale.gst_enabled_snapshot,
+        "invoice_number": sale.invoice_number,
+        "invoice_date": sale.invoice_date,
+        "taxable_amount": sale.taxable_amount,
+        "gst_rate": sale.gst_rate,
+        "cgst_amount": sale.cgst_amount,
+        "sgst_amount": sale.sgst_amount,
+        "igst_amount": sale.igst_amount,
+        "tax_mode": sale.tax_mode_snapshot,
+        "gstin": sale.gstin_snapshot,
+        "legal_business_name": sale.legal_business_name_snapshot,
+        "registered_billing_address": sale.billing_address_snapshot,
+        "state_name": sale.state_name_snapshot,
+        "state_code": sale.state_code_snapshot,
+        "customer_tax_type": sale.customer_tax_type,
+        "customer_gstin_snapshot": sale.customer_gstin_snapshot,
+        "customer_legal_name_snapshot": sale.customer_legal_name_snapshot,
+        "customer_billing_address_snapshot": sale.customer_billing_address_snapshot,
+        "customer_state_code_snapshot": sale.customer_state_code_snapshot,
+        "customer_state_name_snapshot": sale.customer_state_name_snapshot,
+        "place_of_supply_code_snapshot": sale.place_of_supply_code_snapshot,
+        "session_status": "closed",
+        "amount_due": sale.total_amount,
+        "original_table": "Takeaway",
+        "issued_at": completed_at,
+        "detached_session_status": "closed",
+        "receipt_access": sale.public_token,
+    }
+
+
+def _quick_sale_receipt_payload(sale: QuickSale, restaurant: Restaurant) -> dict:
+    document = _quick_sale_print_document(sale, restaurant)
+    return {
+        "bill_number": sale.order_number,
+        "invoice_number": sale.invoice_number,
+        "receipt_title": "PAYMENT RECEIPT",
+        "status": "paid",
+        "restaurant_name": restaurant.name,
+        "legal_business_name": sale.legal_business_name_snapshot or restaurant.legal_business_name or restaurant.name,
+        "address": sale.billing_address_snapshot or restaurant.registered_billing_address or "",
+        "gstin": sale.gstin_snapshot,
+        "state_name": sale.state_name_snapshot,
+        "state_code": sale.state_code_snapshot,
+        "customer_gstin": sale.customer_gstin_snapshot if sale.customer_tax_type == "b2b" else None,
+        "customer_legal_name": sale.customer_legal_name_snapshot if sale.customer_tax_type == "b2b" else None,
+        "customer_billing_address": sale.customer_billing_address_snapshot if sale.customer_tax_type == "b2b" else None,
+        "customer_state_name": sale.customer_state_name_snapshot if sale.customer_tax_type == "b2b" else None,
+        "customer_state_code": sale.customer_state_code_snapshot if sale.customer_tax_type == "b2b" else None,
+        "table_number": "Takeaway",
+        "staff_name": sale.entered_by_name,
+        "created_at": sale.invoice_date or sale.completed_at or sale.created_at,
+        "paid_at": sale.completed_at,
+        "items": [{"name": item["item_name"], "quantity": item["quantity"], "unit_price": item["unit_price"], "line_total": item["line_total"], "options": [f'{option["group_name"]}: {option["option_name"]}' for option in item["selected_options"]]} for item in document["orders"][0]["items"]],
+        "subtotal": sale.subtotal,
+        "discount_amount": sale.discount_amount,
+        "taxable_amount": sale.taxable_amount or Decimal("0.00"),
+        "cgst_amount": sale.cgst_amount or Decimal("0.00"),
+        "sgst_amount": sale.sgst_amount or Decimal("0.00"),
+        "igst_amount": sale.igst_amount or Decimal("0.00"),
+        "tax_amount": sale.tax_amount,
+        "grand_total": sale.total_amount,
+        "currency": restaurant.currency,
+        "gst_enabled": sale.gst_enabled_snapshot,
+        "tax_mode": sale.tax_mode_snapshot,
+        "payment_method": sale.payment_method,
+        "payment_status": "PAID",
+        "is_official_invoice": True,
+    }
 
 
 def _audit(db: Session, actor: StaffUser, sale: QuickSale, action: str, details: dict) -> None:
@@ -170,6 +297,18 @@ def quick_sale_home(current_user: StaffUser = Depends(_owner_admin), db: Session
         "active_takeaways": [_serialize(s) for s in sales if s.sale_type == "takeaway" and s.status != "completed"],
         "completed_today": [_serialize(s) for s in sales if s.status == "completed" and s.completed_at and start <= s.completed_at < end],
     }
+
+
+@router.get("/{public_token}/print-document", response_model=BillResponse)
+def get_quick_sale_print_document(public_token: str, current_user: StaffUser = Depends(_owner_admin), db: Session = Depends(get_db)):
+    sale, restaurant = _completed_takeaway(db, current_user, public_token)
+    return _quick_sale_print_document(sale, restaurant)
+
+
+@router.get("/{public_token}/receipt-payload", response_model=ReceiptPayloadResponse)
+def get_quick_sale_receipt_payload(public_token: str, current_user: StaffUser = Depends(_owner_admin), db: Session = Depends(get_db)):
+    sale, restaurant = _completed_takeaway(db, current_user, public_token)
+    return _quick_sale_receipt_payload(sale, restaurant)
 
 
 @router.post("/preview")
