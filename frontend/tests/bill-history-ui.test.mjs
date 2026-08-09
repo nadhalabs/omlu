@@ -45,8 +45,8 @@ test("BillHistoryClient preserves filter values while displaying formatted label
   assert.match(billHistoryClient, /key=\{method\}\s+value=\{method\}/);
 
   // Formatted labels used in select options
-  assert.match(billHistoryClient, /formatPaymentStatus\(status\)/);
-  assert.match(billHistoryClient, /formatPaymentMethod\(method\)/);
+  assert.match(billHistoryClient, /displayStatus\(status\)/);
+  assert.match(billHistoryClient, /displayPaymentMethod\(method\)/);
 });
 
 test("BillHistoryClient separates GSTIN badge, formats tax breakdown and handles Quick Sale context", () => {

@@ -4,11 +4,12 @@ import test from "node:test";
 
 const read = (path) => fs.readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("completed Takeaways reuse the shared Print Bridge and browser fallback", () => {
+test("completed Takeaways and Late Entry reuse the shared Print Bridge and browser fallback", () => {
   const quickSale = read("app/admin/quick-sale/QuickSaleClient.tsx");
   const printService = read("lib/print_service.ts");
   assert.match(quickSale, /printCompletedQuickSale/);
-  assert.match(quickSale, /sale\.sale_type === "takeaway" && sale\.status === "completed"/);
+  assert.match(quickSale, /sale\.sale_type === "takeaway" \|\| sale\.sale_type === "late_entry"/);
+  assert.match(quickSale, /sale\.status === "completed"/);
   assert.match(quickSale, /"Print Bill"/);
   assert.match(printService, /async function printDocument/);
   assert.match(printService, /receiptType: "receipt"/);
@@ -16,12 +17,18 @@ test("completed Takeaways reuse the shared Print Bridge and browser fallback", (
   assert.match(printService, /sendPrintJobToBridge/);
 });
 
-test("draft Takeaways and Late Entry records do not receive print actions", () => {
+test("only completed Takeaway and Late Entry records receive print actions", () => {
   const quickSale = read("app/admin/quick-sale/QuickSaleClient.tsx");
-  const printGuard = quickSale.match(/printSale && sale\.sale_type[^}]+/s)?.[0] || "";
-  assert.match(printGuard, /sale_type === "takeaway"/);
-  assert.match(printGuard, /status === "completed"/);
-  assert.doesNotMatch(printGuard, /late_entry/);
+  const handlerGuard = quickSale.match(/if \(\(sale\.sale_type[^;]+return;/s)?.[0] || "";
+  const actionGuard = quickSale.match(/printSale && \(sale\.sale_type[^}]+/s)?.[0] || "";
+
+  // The handler blocks incomplete records and unrelated sale types.
+  assert.match(handlerGuard, /sale\.sale_type !== "takeaway" && sale\.sale_type !== "late_entry"/);
+  assert.match(handlerGuard, /sale\.status !== "completed"/);
+
+  // The UI explicitly allows both completed Takeaway and completed Late Entry records.
+  assert.match(actionGuard, /sale\.sale_type === "takeaway" \|\| sale\.sale_type === "late_entry"/);
+  assert.match(actionGuard, /sale\.status === "completed"/);
 });
 
 test("Takeaway print view uses the existing dine-in bill renderer with B2B details", () => {
@@ -38,4 +45,10 @@ test("staff Late Entry remains part of the dining-session bill workflow", () => 
   assert.match(staffTable, /mode=served/);
   assert.match(staffTable, /requestStaffTableBill/);
   assert.doesNotMatch(staffTable, /printCompletedQuickSale/);
+});
+
+test("Quick Sale printing has no separate Takeaway or Late Entry implementation", () => {
+  const quickSale = read("app/admin/quick-sale/QuickSaleClient.tsx");
+  assert.equal(quickSale.match(/printCompletedQuickSale\(/g)?.length, 1);
+  assert.doesNotMatch(quickSale, /sendPrintJobToBridge|window\.print\(/);
 });
