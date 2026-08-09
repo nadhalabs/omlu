@@ -109,8 +109,8 @@ export default function StaffTableDetailClient({ tableId }: { tableId: number })
   const billUrl = detail?.session?.session_token ? `/bill/${encodeURIComponent(detail.session.session_token)}` : null;
   const activeParticipants = participants?.participants.filter((participant) => !participant.revoked_at) || [];
   const canManageCustomerGst = staffInfo?.role === "owner" || staffInfo?.role === "admin";
-  const customerGstValue = bill?.customer_gstin_snapshot && bill.customer_legal_name_snapshot
-    ? { gstin: bill.customer_gstin_snapshot, businessName: bill.customer_legal_name_snapshot }
+  const customerGstValue = bill?.customer_gstin_snapshot && bill.customer_legal_name_snapshot && bill.customer_billing_address_snapshot && bill.customer_state_name_snapshot && bill.customer_state_code_snapshot
+    ? { gstin: bill.customer_gstin_snapshot, businessName: bill.customer_legal_name_snapshot, billingAddress: bill.customer_billing_address_snapshot, state: bill.customer_state_name_snapshot, stateCode: bill.customer_state_code_snapshot }
     : null;
   const saveCustomerGst = async (details: CustomerGstValue | null) => {
     if (!bill || bill.status !== "draft" || !canManageCustomerGst) return;

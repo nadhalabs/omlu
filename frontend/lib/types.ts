@@ -200,6 +200,11 @@ export interface ReceiptPayload {
   gstin: string | null;
   state_name: string | null;
   state_code: string | null;
+  customer_gstin: string | null;
+  customer_legal_name: string | null;
+  customer_billing_address: string | null;
+  customer_state_name: string | null;
+  customer_state_code: string | null;
   table_number: string;
   staff_name: string;
   created_at: string;
@@ -275,6 +280,7 @@ export interface BillResponse {
   customer_tax_type: "b2c" | "b2b";
   customer_gstin_snapshot: string | null;
   customer_legal_name_snapshot: string | null;
+  customer_billing_address_snapshot: string | null;
   customer_state_code_snapshot: string | null;
   customer_state_name_snapshot: string | null;
   place_of_supply_code_snapshot: string | null;
@@ -769,6 +775,9 @@ export interface BillingCounterItem {
   has_customer_gst_details: boolean;
   customer_gstin: string | null;
   customer_legal_name: string | null;
+  customer_billing_address: string | null;
+  customer_state_name: string | null;
+  customer_state_code: string | null;
 }
 
 export interface BillingCounterQueues {

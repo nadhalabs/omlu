@@ -23,6 +23,7 @@ from app.services.bills import calculate_gst_totals, generate_invoice_number
 from app.services.realtime import EVENT_ORDER_CREATED, EVENT_QUICK_SALE_COMPLETED, publish_event, restaurant_channel
 from app.utils.auth import RoleChecker
 from app.utils.business_date import current_business_day_bounds_utc, restaurant_business_date
+from app.utils.gst import GST_STATE_NAMES
 
 router = APIRouter(prefix="/admin/quick-sales")
 _owner_admin = RoleChecker(["owner", "admin"])
@@ -49,6 +50,7 @@ def _serialize(sale: QuickSale, *, financial: bool = True) -> dict:
         "customer_tax_type": sale.customer_tax_type,
         "customer_gstin": sale.customer_gstin_snapshot,
         "customer_legal_name": sale.customer_legal_name_snapshot,
+        "customer_billing_address": sale.customer_billing_address_snapshot,
         "customer_state_code": sale.customer_state_code_snapshot,
         "customer_state_name": sale.customer_state_name_snapshot,
         "place_of_supply_code": sale.place_of_supply_code_snapshot,
@@ -200,6 +202,7 @@ def create_quick_sale(
     customer_tax_type = body.customer_tax_type or "b2c"
     customer_gstin = body.customer_gstin
     customer_legal_name = body.customer_legal_name
+    customer_billing_address = body.customer_billing_address
     customer_state_code = body.customer_state_code
     customer_state_name = body.customer_state_name
     place_of_supply_code = body.place_of_supply_code
@@ -209,10 +212,19 @@ def create_quick_sale(
             raise HTTPException(status_code=422, detail="Customer GSTIN is required for B2B GST quick sales")
         if not customer_legal_name or not customer_legal_name.strip():
             raise HTTPException(status_code=422, detail="Customer Legal Name is required for B2B GST quick sales")
+        if not customer_billing_address or not customer_billing_address.strip():
+            raise HTTPException(status_code=422, detail="Customer Billing Address is required for B2B GST quick sales")
         if not customer_state_code:
             customer_state_code = customer_gstin[:2]
-        if not place_of_supply_code:
-            place_of_supply_code = customer_state_code
+        if customer_state_code != customer_gstin[:2]:
+            raise HTTPException(status_code=422, detail="Customer State Code must match the GSTIN")
+        canonical_state_name = GST_STATE_NAMES.get(customer_state_code)
+        if not canonical_state_name:
+            raise HTTPException(status_code=422, detail="Customer State Code must be a valid Indian GST state code")
+        if customer_state_name and customer_state_name.casefold() != canonical_state_name.casefold():
+            raise HTTPException(status_code=422, detail="Customer State must match the GSTIN State Code")
+        customer_state_name = canonical_state_name
+        place_of_supply_code = customer_state_code
 
     body.customer_state_code = customer_state_code
     body.place_of_supply_code = place_of_supply_code
@@ -245,8 +257,9 @@ def create_quick_sale(
         customer_tax_type=customer_tax_type,
         customer_gstin_snapshot=customer_gstin if (restaurant.gst_enabled and customer_tax_type == "b2b") else None,
         customer_legal_name_snapshot=customer_legal_name if (restaurant.gst_enabled and customer_tax_type == "b2b") else None,
-        customer_state_code_snapshot=customer_state_code if restaurant.gst_enabled else None,
-        customer_state_name_snapshot=customer_state_name if restaurant.gst_enabled else None,
+        customer_billing_address_snapshot=customer_billing_address if (restaurant.gst_enabled and customer_tax_type == "b2b") else None,
+        customer_state_code_snapshot=customer_state_code if (restaurant.gst_enabled and customer_tax_type == "b2b") else None,
+        customer_state_name_snapshot=customer_state_name if (restaurant.gst_enabled and customer_tax_type == "b2b") else None,
         place_of_supply_code_snapshot=place_of_supply_code if restaurant.gst_enabled else None,
         invoice_number=invoice_number,
         invoice_date=invoice_date,

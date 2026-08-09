@@ -783,6 +783,17 @@ function ActiveBillClient({ sessionToken, receiptToken = "" }: BillClientProps) 
                 )}
               </div>
             )}
+            {bill.gst_enabled && bill.customer_tax_type === "b2b" && bill.customer_gstin_snapshot && (
+              <section className="mt-5 rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-muted-surface)] p-4 text-sm print:border-black print:bg-white" aria-labelledby="billed-to-heading">
+                <h2 id="billed-to-heading" className="text-xs font-black uppercase tracking-wide text-[var(--omlu-text-secondary)] print:text-black">Billed To</h2>
+                <p className="mt-2 font-black">{bill.customer_legal_name_snapshot}</p>
+                <p className="mt-1 whitespace-pre-line">{bill.customer_billing_address_snapshot}</p>
+                <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1">
+                  <p><span className="font-bold">GSTIN:</span> {bill.customer_gstin_snapshot}</p>
+                  <p><span className="font-bold">State:</span> {bill.customer_state_name_snapshot} ({bill.customer_state_code_snapshot})</p>
+                </div>
+              </section>
+            )}
           </header>
 
           <main className="py-5">

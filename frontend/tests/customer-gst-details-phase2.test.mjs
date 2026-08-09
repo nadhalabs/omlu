@@ -10,8 +10,8 @@ const quickSale = read("app/admin/quick-sale/QuickSaleClient.tsx");
 const api = read("lib/api.ts");
 const proxy = read("app/api/staff/bills/[billNumber]/customer-gst-details/route.ts");
 
-test("customer GST dialog is optional, focused, validated, and jargon-free", () => {
-  for (const copy of ["Add Customer GST Details", "Customer GST Details", "GSTIN", "Business Name", "Save GST Details", "Edit GST Details", "Remove GST Details"]) assert.ok(component.includes(copy), copy);
+test("customer GST dialog is optional, complete, validated, and jargon-free", () => {
+  for (const copy of ["Customer needs GST invoice", "Customer GST Details", "GSTIN", "Business Name", "Billing Address", "State", "State Code", "Save GST Details", "Edit GST Details", "Remove GST Details"]) assert.ok(component.includes(copy), copy);
   assert.match(component, /GSTIN_PATTERN/);
   assert.match(component, /valid 15-character GSTIN/);
   assert.match(component, /toUpperCase\(\)/);
@@ -36,6 +36,9 @@ test("Bill review reuses the same GST component without expanding staff authorit
 test("Bill GST helper sends the dedicated add-edit-remove contract through the authenticated proxy", () => {
   assert.match(api, /customer_gstin: details\?\.gstin \?\? null/);
   assert.match(api, /customer_legal_name: details\?\.businessName \?\? null/);
+  assert.match(api, /customer_billing_address: details\?\.billingAddress \?\? null/);
+  assert.match(api, /customer_state_name: details\?\.state \?\? null/);
+  assert.match(api, /customer_state_code: details\?\.stateCode \?\? null/);
   assert.match(proxy, /staff_token/);
   assert.match(proxy, /method: "PUT"/);
   assert.match(proxy, /customer-gst-details/);
@@ -45,8 +48,10 @@ test("Quick Sale remains default when details are absent and adds location-aware
   assert.match(quickSale, /const \[customerGst, setCustomerGst\] = useState<CustomerGstValue \| null>\(null\)/);
   assert.match(quickSale, /customerGst \? \{/);
   assert.match(quickSale, /customer_tax_type: "b2b"/);
-  assert.match(quickSale, /customer_state_code: customerGst\.gstin\.slice\(0, 2\)/);
-  assert.match(quickSale, /place_of_supply_code: customerGst\.gstin\.slice\(0, 2\)/);
+  assert.match(quickSale, /customer_billing_address: customerGst\.billingAddress/);
+  assert.match(quickSale, /customer_state_name: customerGst\.state/);
+  assert.match(quickSale, /customer_state_code: customerGst\.stateCode/);
+  assert.match(quickSale, /place_of_supply_code: customerGst\.stateCode/);
   assert.match(quickSale, /\.\.\.customerGstPayload/);
   assert.match(quickSale, /preview\?\.gst_enabled \|\| customerGst/);
   assert.match(quickSale, /setCustomerGst\(null\)/);

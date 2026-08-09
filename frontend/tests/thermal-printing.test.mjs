@@ -40,6 +40,16 @@ test("receipt print layout includes long options, GST totals, and hides navigati
   assert.match(billClient, /<div className="print-hidden grid grid-cols-1 gap-3/);
 });
 
+test("B2B GST invoice prints the complete recipient snapshot while B2C remains unchanged", () => {
+  assert.match(billClient, /bill\.customer_tax_type === "b2b"/);
+  assert.match(billClient, />Billed To</);
+  for (const field of [
+    "bill.customer_gstin_snapshot", "bill.customer_legal_name_snapshot",
+    "bill.customer_billing_address_snapshot", "bill.customer_state_name_snapshot",
+    "bill.customer_state_code_snapshot",
+  ]) assert.ok(billClient.includes(field), field);
+});
+
 test("browser print action cannot mutate bill or payment state", () => {
   const printButton = billClient.slice(billClient.indexOf('onClick={() => window.print()}'), billClient.indexOf('{isPaid ? "Print Receipt" : "Print Bill"}'));
   assert.match(printButton, /window\.print\(\)/);

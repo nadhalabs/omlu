@@ -1665,7 +1665,7 @@ export async function getBillingCounter(): Promise<BillingCounterQueues> {
 
 export async function updateBillCustomerGstDetails(
   billNumber: string,
-  details: { gstin: string; businessName: string } | null,
+  details: { gstin: string; businessName: string; billingAddress: string; state: string; stateCode: string } | null,
 ): Promise<BillResponse> {
   const res = await fetch(`/api/staff/bills/${encodeURIComponent(billNumber)}/customer-gst-details`, {
     method: "PUT",
@@ -1673,6 +1673,9 @@ export async function updateBillCustomerGstDetails(
     body: JSON.stringify({
       customer_gstin: details?.gstin ?? null,
       customer_legal_name: details?.businessName ?? null,
+      customer_billing_address: details?.billingAddress ?? null,
+      customer_state_name: details?.state ?? null,
+      customer_state_code: details?.stateCode ?? null,
     }),
   });
   const body = await res.json().catch(() => ({}));

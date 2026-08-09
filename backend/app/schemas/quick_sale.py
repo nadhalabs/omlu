@@ -20,6 +20,7 @@ class QuickSaleCreate(BaseModel):
     customer_tax_type: Optional[Literal["b2c", "b2b"]] = "b2c"
     customer_gstin: Optional[str] = None
     customer_legal_name: Optional[str] = None
+    customer_billing_address: Optional[str] = Field(default=None, max_length=1024)
     customer_state_code: Optional[str] = None
     customer_state_name: Optional[str] = None
     place_of_supply_code: Optional[str] = None
@@ -33,6 +34,14 @@ class QuickSaleCreate(BaseModel):
     @classmethod
     def validate_state_code(cls, v: Optional[str]) -> Optional[str]:
         return normalize_gst_state_code(v)
+
+    @field_validator("customer_legal_name", "customer_billing_address", "customer_state_name")
+    @classmethod
+    def normalize_customer_text(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        normalized = v.strip()
+        return normalized or None
 
 
 class QuickSalePayment(BaseModel):

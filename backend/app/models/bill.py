@@ -97,6 +97,7 @@ class Bill(Base):
     customer_tax_type: Mapped[str] = mapped_column(String(10), default="b2c", server_default="b2c", nullable=False)
     customer_gstin_snapshot: Mapped[Optional[str]] = mapped_column(String(15), nullable=True)
     customer_legal_name_snapshot: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    customer_billing_address_snapshot: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
     customer_state_code_snapshot: Mapped[Optional[str]] = mapped_column(String(2), nullable=True)
     customer_state_name_snapshot: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     place_of_supply_code_snapshot: Mapped[Optional[str]] = mapped_column(String(2), nullable=True)
