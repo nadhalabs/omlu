@@ -1,5 +1,6 @@
 import uuid
 import datetime
+import json
 import time
 from collections import defaultdict
 from decimal import Decimal
@@ -17,8 +18,9 @@ from app.models.bill import Bill
 from app.models.dining_session import DiningSession
 from app.models.order import Order, OrderItem, OrderItemSelectedOption, OrderStatusHistory, RestaurantDailySequence
 from app.models.service_request import ServiceRequest
+from app.models.staff_user import AuditLog
 from app.models.table_session_participant import TableSessionParticipant
-from app.schemas.order import PublicOrderCreateRequest, PublicOrderResponse
+from app.schemas.order import OrderItemCancellationRequest, PublicOrderCreateRequest, PublicOrderResponse
 from app.schemas.dining_session import PublicDiningSessionResponse
 from app.services.dining_sessions import (
     calculate_session_subtotal,
@@ -28,6 +30,7 @@ from app.services.dining_sessions import (
 )
 from app.services.bills import apply_draft_totals
 from app.services.order_pricing import validate_and_price_order_items
+from app.services.order_item_cancellation import cancel_order_item
 from app.services.idempotency import ensure_same_request, request_hash
 from app.utils.business_date import restaurant_business_date
 from app.services.table_participants import (
@@ -41,6 +44,7 @@ from app.services.table_participants import (
 )
 from app.services.realtime import (
     EVENT_ORDER_CREATED,
+    EVENT_ORDER_ITEM_CANCELLED,
     EVENT_SESSION_UPDATED,
     order_channel,
     publish_event,
@@ -237,6 +241,37 @@ def build_first_order_response(db: Session, dining_session: DiningSession, parti
         "participant_token": participant_token,
         "session": build_session_response(db, dining_session),
     }
+
+
+def publish_item_cancelled(order: Order, item: OrderItem, dining_session: DiningSession) -> None:
+    publish_event(
+        EVENT_ORDER_ITEM_CANCELLED,
+        restaurant_id=order.restaurant_id,
+        channels=[
+            restaurant_channel(order.restaurant_id, "operations"),
+            restaurant_channel(order.restaurant_id, "kitchen"),
+            restaurant_channel(order.restaurant_id, "staff"),
+            session_channel(dining_session.public_token),
+            table_channel(order.restaurant_id, order.table_id),
+            order_channel(order.public_token),
+        ],
+        resource_id=item.id,
+        state={
+            "table_id": order.table_id,
+            "session_token": dining_session.public_token,
+            "order_id": order.id,
+            "order_number": order.order_number,
+            "order_public_token": order.public_token,
+            "order_item_id": item.id,
+            "item_name": item.item_name,
+            "quantity": item.quantity,
+            "cancellation_actor_type": item.cancellation_actor_type,
+            "cancellation_reason": item.cancellation_reason,
+            "cancelled_at": item.cancelled_at.isoformat(),
+            "order_status": order.status,
+            "order_subtotal": f"{order.subtotal:.2f}",
+        },
+    )
 
 
 def get_orderable_session_for_table(
@@ -815,3 +850,49 @@ def get_public_order(
         )
 
     return build_order_response(db, order)
+
+
+@router.post("/public/sessions/{session_token}/orders/{order_public_token}/items/{order_item_id}/cancel")
+def cancel_public_order_item(
+    session_token: str,
+    order_public_token: str,
+    order_item_id: int,
+    body: OrderItemCancellationRequest,
+    participant_token: str = Depends(participant_token_header),
+    db: Session = Depends(get_db),
+):
+    dining_session = db.query(DiningSession).filter(DiningSession.public_token == session_token).first()
+    if not dining_session:
+        raise HTTPException(status_code=404, detail="Dining session not found")
+    participant = load_participant(db, participant_token, session_token=session_token, lock_for_action=True)
+    try:
+        order, item, locked_session, bill = cancel_order_item(
+            db,
+            restaurant_id=participant.restaurant_id,
+            session_id=participant.session_id,
+            order_public_token=order_public_token,
+            order_item_id=order_item_id,
+            actor_type="customer",
+            reason=(body.reason or "customer_cancelled").strip() or "customer_cancelled",
+            participant_id=participant.id,
+            require_order_participant=True,
+        )
+        db.add(AuditLog(
+            restaurant_id=order.restaurant_id,
+            actor_role="customer",
+            target_type="order_item",
+            target_id=str(item.id),
+            action="order_item_cancelled",
+            new_value=json.dumps({
+                "order_id": order.id,
+                "participant_public_id": participant.public_id,
+                "reason": item.cancellation_reason,
+                "resulting_order_status": order.status,
+            }),
+        ))
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    publish_item_cancelled(order, item, locked_session)
+    return build_session_response(db, locked_session)

@@ -132,11 +132,12 @@ def reopen_bill_ordering(
 
 def _short_order_summary(db: Session, bill: Bill) -> ShortOrderSummary:
     orders = get_billable_orders(db, bill.dining_session_id)
-    item_count = sum(item.quantity for order in orders for item in order.items)
+    item_count = sum(item.quantity for order in orders for item in order.items if item.cancellation_status == "active")
     labels = [
         f"{item.quantity} × {item.item_name}"
         for order in orders
         for item in order.items
+        if item.cancellation_status == "active"
     ][:5]
     return ShortOrderSummary(order_count=len(orders), item_count=item_count, items=labels)
 

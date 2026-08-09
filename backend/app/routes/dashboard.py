@@ -347,7 +347,8 @@ def get_dashboard_summary(
             OrderItem.item_name,
             func.sum(OrderItem.quantity).label("total_quantity")
         ).filter(
-            OrderItem.order_id.in_(served_order_ids)
+            OrderItem.order_id.in_(served_order_ids),
+            OrderItem.cancellation_status == "active",
         ).group_by(
             OrderItem.item_name
         ).order_by(

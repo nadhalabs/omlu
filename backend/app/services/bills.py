@@ -435,7 +435,7 @@ def issue_bill(db: Session, bill: Bill) -> Bill:
     apply_draft_totals(db, locked_bill)
     billable_orders = get_billable_orders(db, locked_session.id)
     displayed_line_total = round_money(sum(
-        (item.total_price for order in billable_orders for item in order.items),
+        (item.total_price for order in billable_orders for item in order.items if item.cancellation_status == "active"),
         Decimal("0.00"),
     ))
     authoritative_subtotal = round_money(sum(
@@ -468,6 +468,8 @@ def issue_bill(db: Session, bill: Bill) -> Bill:
         final_gst_rate = locked_bill.gst_rate
         for order in billable_orders:
             for item in order.items:
+                if item.cancellation_status != "active":
+                    continue
                 if item.gst_rate_snapshot is None:
                     item.gst_rate_snapshot = final_gst_rate
 
@@ -864,6 +866,7 @@ def build_bill_response(db: Session, bill: Bill):
                         "selected_options": item.selected_options,
                     }
                     for item in order.items
+                    if item.cancellation_status == "active"
                 ],
             }
             for order in orders
@@ -928,6 +931,8 @@ def build_receipt_payload(db: Session, bill: Bill) -> dict:
     items = []
     for order in orders:
         for item in order.items:
+            if item.cancellation_status != "active":
+                continue
             options = [
                 f"{option.group_name}: {option.option_name}"
                 for option in item.selected_options

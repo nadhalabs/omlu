@@ -99,7 +99,10 @@ def get_or_create_open_session(
 def calculate_session_subtotal(db: Session, dining_session_id: int) -> Decimal:
     subtotal = (
         db.query(func.coalesce(func.sum(Order.subtotal), 0))
-        .filter(Order.dining_session_id == dining_session_id)
+        .filter(
+            Order.dining_session_id == dining_session_id,
+            Order.status.notin_(["rejected", "cancelled", "voided"]),
+        )
         .scalar()
     )
     return Decimal(subtotal or 0)

@@ -19,12 +19,13 @@ from app.models.order import Order, OrderItem, OrderStatusHistory
 from app.models.restaurant_table import RestaurantTable
 from app.models.service_request import ServiceRequest
 from app.models.staff_user import AuditLog, StaffUser
-from app.routes.orders import build_order_response, create_order_in_session, load_order_for_response, validate_idempotency_key
-from app.schemas.order import PublicOrderCreateRequest
+from app.routes.orders import build_order_response, create_order_in_session, load_order_for_response, publish_item_cancelled, validate_idempotency_key
+from app.schemas.order import OrderItemCancellationRequest, PublicOrderCreateRequest
 from app.schemas.service_request import StaffServiceRequestResponse
 from app.services.bills import build_bill_response, create_or_refresh_bill_for_session
 from app.services.dining_sessions import create_session_safely, find_current_open_session_for_table, get_or_create_open_session
 from app.services.menu_options import serialize_item_option_groups
+from app.services.order_item_cancellation import cancel_order_item
 from app.services.realtime import (
     EVENT_DRAFT_BILL_VOIDED,
     EVENT_EMPTY_TABLE_DISMISSED,
@@ -64,6 +65,51 @@ class ServedItemCreateRequest(PublicOrderCreateRequest):
 
 class ResolutionReasonRequest(BaseModel):
     reason: str
+
+
+@router.post("/{table_id}/orders/{order_public_token}/items/{order_item_id}/cancel")
+def cancel_staff_order_item(
+    table_id: int,
+    order_public_token: str,
+    order_item_id: int,
+    body: OrderItemCancellationRequest,
+    current_user: StaffUser = Depends(_staff_write_roles),
+    db: Session = Depends(get_db),
+):
+    session = db.query(DiningSession).filter(
+        DiningSession.restaurant_id == current_user.restaurant_id,
+        DiningSession.table_id == table_id,
+        DiningSession.status.in_(ACTIVE_DINING_SESSION_STATUSES),
+    ).order_by(DiningSession.opened_at.desc()).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Active dining session not found")
+    reason = (body.reason or "staff_cancelled").strip()
+    if not reason:
+        raise HTTPException(status_code=422, detail="Cancellation reason is required")
+    try:
+        order, item, locked_session, bill = cancel_order_item(
+            db,
+            restaurant_id=current_user.restaurant_id,
+            session_id=session.id,
+            order_public_token=order_public_token,
+            order_item_id=order_item_id,
+            actor_type="staff",
+            reason=reason,
+            staff_id=current_user.id,
+        )
+        _audit(db, current_user, "order_item_cancelled", "order_item", str(item.id), {
+            "order_id": order.id,
+            "order_number": order.order_number,
+            "table_id": table_id,
+            "reason": reason,
+            "resulting_order_status": order.status,
+        })
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    publish_item_cancelled(order, item, locked_session)
+    return build_order_response(db, load_order_for_response(db, order.id))
 
 
 def _audit(db: Session, actor: StaffUser, action: str, target_type: str, target_id: str, new_value: dict | None = None) -> None:
@@ -311,11 +357,16 @@ def get_staff_table(
                     "created_at": order.created_at.isoformat(),
                     "items": [
                         {
+                            "id": item.id,
                             "item_name": item.item_name,
                             "quantity": item.quantity,
                             "unit_price": _money(item.unit_price),
                             "total_price": _money(item.total_price),
                             "item_note": item.item_note,
+                            "cancellation_status": item.cancellation_status,
+                            "cancellation_reason": item.cancellation_reason,
+                            "cancelled_at": item.cancelled_at.isoformat() if item.cancelled_at else None,
+                            "cancellation_actor_type": item.cancellation_actor_type,
                             "selected_options": [
                                 {
                                     "option_name": option.option_name,
