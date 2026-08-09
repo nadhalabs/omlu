@@ -258,6 +258,43 @@ def test_takeaway_payment_revenue_history_and_export_use_stored_gst_total(quick_
     assert "168.00" in exported.text
 
 
+def test_completed_takeaway_print_document_and_b2b_receipt(quick_sale_context):
+    enable_gst(quick_sale_context, rate="5.00", mode="exclusive")
+    body = payload(quick_sale_context)
+    body.update({
+        "customer_tax_type": "b2b",
+        "customer_gstin": "32ABCDE1234F1Z5",
+        "customer_legal_name": "Recipient Foods Private Limited",
+        "customer_billing_address": "Marine Drive, Kochi",
+        "customer_state_name": "Kerala",
+        "customer_state_code": "32",
+    })
+    sale = client.post("/admin/quick-sales", headers=auth(quick_sale_context, "owner"), json=body).json()
+
+    draft_print = client.get(f"/admin/quick-sales/{sale['public_token']}/print-document", headers=auth(quick_sale_context, "owner"))
+    assert draft_print.status_code == 409
+
+    for state in ("accepted", "preparing", "ready", "served"):
+        assert update_kitchen_status(quick_sale_context, sale["public_token"], state).status_code == 200
+    assert client.post(f"/admin/quick-sales/{sale['public_token']}/payment", headers=auth(quick_sale_context, "owner"), json={"method": "cash"}).status_code == 200
+
+    document = client.get(f"/admin/quick-sales/{sale['public_token']}/print-document", headers=auth(quick_sale_context, "owner"))
+    assert document.status_code == 200
+    assert document.json()["status"] == "paid"
+    assert document.json()["table_number"] == "Takeaway"
+    assert document.json()["customer_gstin_snapshot"] == "32ABCDE1234F1Z5"
+
+    receipt = client.get(f"/admin/quick-sales/{sale['public_token']}/receipt-payload", headers=auth(quick_sale_context, "owner"))
+    assert receipt.status_code == 200
+    assert receipt.json()["customer_legal_name"] == "Recipient Foods Private Limited"
+    assert receipt.json()["customer_billing_address"] == "Marine Drive, Kochi"
+    assert receipt.json()["customer_state_name"] == "Kerala"
+    assert receipt.json()["customer_state_code"] == "32"
+
+    late_entry = client.post("/admin/quick-sales", headers=auth(quick_sale_context, "owner"), json=payload(quick_sale_context, "late_entry")).json()
+    assert client.get(f"/admin/quick-sales/{late_entry['public_token']}/print-document", headers=auth(quick_sale_context, "owner")).status_code == 409
+
+
 def test_gst_disabled_and_inclusive_rounding_preserve_financial_conventions(quick_sale_context):
     disabled = client.post("/admin/quick-sales", headers=auth(quick_sale_context, "owner"), json=payload(quick_sale_context, "late_entry")).json()
     assert disabled["gst_enabled"] is False

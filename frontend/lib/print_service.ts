@@ -1,5 +1,5 @@
 import { checkBridgeHealth, sendPrintJobToBridge } from "@/lib/print_bridge";
-import { getStaffBillReceiptPayload, requestPrintBridgeToken } from "@/lib/api";
+import { getQuickSaleReceiptPayload, getStaffBillReceiptPayload, requestPrintBridgeToken } from "@/lib/api";
 
 export type PrintResult =
   | { success: true; method: "bridge"; confirmed: true }
@@ -15,6 +15,30 @@ export interface PrintIssuedBillOptions {
 export async function printIssuedBill(
   options: PrintIssuedBillOptions
 ): Promise<PrintResult> {
+  return printDocument({
+    ...options,
+    receiptType: "bill",
+    printUrl: `/bill/${encodeURIComponent(options.sessionToken)}?receipt=${encodeURIComponent(options.receiptToken)}`,
+    fetchPayload: () => getStaffBillReceiptPayload(options.billNumber),
+  });
+}
+
+export async function printCompletedQuickSale(options: { orderNumber: string; publicToken: string }): Promise<PrintResult> {
+  return printDocument({
+    billNumber: options.orderNumber,
+    sessionToken: options.publicToken,
+    receiptToken: options.publicToken,
+    receiptType: "receipt",
+    printUrl: `/bill/${encodeURIComponent(options.publicToken)}?receipt=${encodeURIComponent(options.publicToken)}&quickSale=1`,
+    fetchPayload: () => getQuickSaleReceiptPayload(options.publicToken),
+  });
+}
+
+async function printDocument(options: PrintIssuedBillOptions & {
+  receiptType: "bill" | "receipt";
+  printUrl: string;
+  fetchPayload: () => Promise<Record<string, unknown>>;
+}): Promise<PrintResult> {
   const { billNumber, sessionToken, receiptToken } = options;
 
   if (typeof window === "undefined") {
@@ -25,7 +49,7 @@ export async function printIssuedBill(
   try {
     const bridge = await checkBridgeHealth();
     if (bridge && bridge.printer_online && bridge.installation_id) {
-      const payload = await getStaffBillReceiptPayload(billNumber);
+      const payload = await options.fetchPayload();
       const authRes = await requestPrintBridgeToken(
         "bill:print",
         bridge.installation_id,
@@ -41,7 +65,7 @@ export async function printIssuedBill(
         tenant_id: bridge.tenant_id || "default",
         bill_id: billNumber,
         bill_number: billNumber,
-        receipt_type: "bill" as const,
+        receipt_type: options.receiptType,
         receipt_data: payload,
         copy_count: 1,
         created_at: new Date().toISOString(),
@@ -62,8 +86,6 @@ export async function printIssuedBill(
   // 2. Browser print fallback using hidden same-origin iframe with OMLU_PRINT_READY signal
   return new Promise<PrintResult>((resolve) => {
     try {
-      const printUrl = `/bill/${encodeURIComponent(sessionToken)}?receipt=${encodeURIComponent(receiptToken)}`;
-
       const iframe = document.createElement("iframe");
       iframe.style.position = "fixed";
       iframe.style.top = "-9999px";
@@ -164,7 +186,7 @@ export async function printIssuedBill(
         resolve({ success: false, method: "none", error: "Failed to load printable receipt frame." });
       };
 
-      iframe.src = printUrl;
+      iframe.src = options.printUrl;
       document.body.appendChild(iframe);
     } catch (err) {
       resolve({

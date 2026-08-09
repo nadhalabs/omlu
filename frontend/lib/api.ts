@@ -1760,6 +1760,24 @@ export async function getStaffBillReceiptPayload(billNumber: string): Promise<Re
   return res.json();
 }
 
+export async function getQuickSalePrintDocument(publicToken: string): Promise<BillResponse> {
+  const res = await fetch(`/api/admin/quick-sales/${encodeURIComponent(publicToken)}/print-document`, { cache: "no-store" });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, body.detail || "Could not prepare the Takeaway receipt.");
+  }
+  return res.json();
+}
+
+export async function getQuickSaleReceiptPayload(publicToken: string): Promise<Record<string, unknown>> {
+  const res = await fetch(`/api/admin/quick-sales/${encodeURIComponent(publicToken)}/receipt-payload`);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, body.detail || "Could not fetch the Takeaway receipt.");
+  }
+  return res.json();
+}
+
 export async function requestPrintBridgeToken(
   action: "bridge:pair" | "printer:configure" | "printer:test" | "bill:print" | "receipt:reprint",
   installationId: string,

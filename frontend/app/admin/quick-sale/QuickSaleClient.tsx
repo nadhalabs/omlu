@@ -6,6 +6,7 @@ import { useOmluUi } from "@/components/OmluUiProvider";
 import { MenuOptionGroup, SelectedOptionRequest } from "@/lib/types";
 import { CustomerGstDetails, CustomerGstValue } from "@/components/billing/CustomerGstDetails";
 import { displayPaymentMethod, displayRole, displayStatus } from "@/lib/presentation";
+import { printCompletedQuickSale } from "@/lib/print_service";
 
 type SaleType = "takeaway" | "late_entry";
 type PaymentMethod = "cash" | "upi";
@@ -30,6 +31,7 @@ export default function QuickSaleClient() {
   const [note, setNote] = useState("");
   const [payment, setPayment] = useState<PaymentMethod>("cash");
   const [saving, setSaving] = useState(false);
+  const [printingToken, setPrintingToken] = useState<string | null>(null);
   const [preview, setPreview] = useState<QuickSalePreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
@@ -211,6 +213,19 @@ export default function QuickSaleClient() {
     await confirmDialog({ title: "Complete takeaway order", message: "Confirm that payment has been received.", details: [`Takeaway ${sale.order_number}`, `Total: ₹${sale.total}`, `Payment method: ${method === "cash" ? "Cash" : "UPI"}`], confirmLabel: "Complete order", onConfirm: async () => { setSaving(true); try { await parseResponse(await fetch(`/api/admin/quick-sales/${encodeURIComponent(sale.public_token)}/payment`, { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": paymentKey }, body: JSON.stringify({ method }) })); localStorage.removeItem(storageKey); await load(); window.dispatchEvent(new Event("admin-operational-counts-changed")); toast("Takeaway payment confirmed.", "success"); } finally { setSaving(false); } } });
   };
 
+  const printTakeaway = async (sale: QuickSale) => {
+    if (sale.sale_type !== "takeaway" || sale.status !== "completed" || printingToken) return;
+    setPrintingToken(sale.public_token);
+    try {
+      const result = await printCompletedQuickSale({ orderNumber: sale.order_number, publicToken: sale.public_token });
+      if (!result.success) toast(result.error || "The receipt could not be printed.", "error");
+    } catch {
+      toast("The sale is complete, but the receipt could not be printed.", "error");
+    } finally {
+      setPrintingToken(null);
+    }
+  };
+
   return <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
     <header>
       <h1 className="text-3xl font-black tracking-tight text-[var(--omlu-text-primary)]">Quick Sale</h1>
@@ -301,10 +316,10 @@ export default function QuickSaleClient() {
       </div>
     </div>}
 
-    <section className="grid gap-5 lg:grid-cols-2"><SaleList title="Active Takeaway Orders" sales={data?.active_takeaways || []} payment={confirmPayment} saving={saving} /><SaleList title="Completed Quick Sales Today" sales={data?.completed_today || []} saving={saving} /></section>
+    <section className="grid gap-5 lg:grid-cols-2"><SaleList title="Active Takeaway Orders" sales={data?.active_takeaways || []} payment={confirmPayment} saving={saving} /><SaleList title="Completed Quick Sales Today" sales={data?.completed_today || []} printSale={printTakeaway} printingToken={printingToken} saving={saving} /></section>
   </div>;
 }
 
-function SaleList({ title, sales, payment, saving }: { title: string; sales: QuickSale[]; payment?: (sale: QuickSale, method: PaymentMethod) => void; saving: boolean }) {
-  return <section className="rounded-2xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-5"><h2 className="font-black text-[var(--omlu-text-primary)]">{title}</h2>{sales.length === 0 ? <p className="mt-4 text-sm text-[var(--omlu-text-secondary)]">Nothing to show.</p> : <div className="mt-4 space-y-3">{sales.map((sale) => <article key={sale.public_token} className="rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-4"><div className="flex justify-between gap-3"><div><div className="font-black text-[var(--omlu-text-primary)]">{sale.sale_type === "takeaway" ? "Takeaway" : "Late Entry"} {sale.order_number}</div><div className="mt-1 space-y-1 text-xs text-[var(--omlu-text-secondary)]">{sale.items.map((item, index) => <div key={`${item.menu_item_id}-${index}`}>{item.quantity}× {item.item_name}{item.selected_options.length > 0 && <span className="block pl-3 text-[var(--omlu-text-secondary)]">{item.selected_options.map((option) => option.option_name).join(" · ")}</span>}</div>)}</div></div><div className="text-right"><div className="font-black text-[var(--omlu-text-primary)]">₹{sale.total}</div>{sale.gst_enabled && <div className="text-[10px] font-semibold text-[var(--omlu-text-secondary)]">Includes GST ₹{sale.tax_amount}</div>}<div className="text-xs font-bold text-orange-500">{displayStatus(sale.status)}</div></div></div>{sale.customer_gstin && <div className="mt-3 rounded-lg bg-[var(--omlu-muted-surface)] p-3 text-xs text-[var(--omlu-text-secondary)]"><p className="font-black uppercase tracking-wide">Billed To</p><p className="mt-1 font-bold text-[var(--omlu-text-primary)]">{sale.customer_legal_name}</p><p className="whitespace-pre-line">{sale.customer_billing_address}</p><p className="mt-1">GSTIN: {sale.customer_gstin} · {sale.customer_state_name} ({sale.customer_state_code})</p></div>}<div className="mt-3 text-xs text-[var(--omlu-text-secondary)]">Entered by {sale.entered_by_name} · {displayRole(sale.entered_by_role)} · {new Date(sale.completed_at || sale.created_at).toLocaleTimeString()}{sale.payment_method ? ` · ${displayPaymentMethod(sale.payment_method)}` : ""}</div>{payment && sale.status === "served" && <div className="mt-3 flex gap-2"><button disabled={saving} onClick={() => payment(sale, "cash")} className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-black text-[var(--omlu-strong-action-text)]">Confirm Cash Payment</button><button disabled={saving} onClick={() => payment(sale, "upi")} className="rounded-lg bg-indigo-700 px-3 py-2 text-xs font-black text-[var(--omlu-text-primary)]">Confirm UPI Payment</button></div>}</article>)}</div>}</section>;
+function SaleList({ title, sales, payment, printSale, printingToken, saving }: { title: string; sales: QuickSale[]; payment?: (sale: QuickSale, method: PaymentMethod) => void; printSale?: (sale: QuickSale) => void; printingToken?: string | null; saving: boolean }) {
+  return <section className="rounded-2xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-5"><h2 className="font-black text-[var(--omlu-text-primary)]">{title}</h2>{sales.length === 0 ? <p className="mt-4 text-sm text-[var(--omlu-text-secondary)]">Nothing to show.</p> : <div className="mt-4 space-y-3">{sales.map((sale) => <article key={sale.public_token} className="rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-4"><div className="flex justify-between gap-3"><div><div className="font-black text-[var(--omlu-text-primary)]">{sale.sale_type === "takeaway" ? "Takeaway" : "Late Entry"} {sale.order_number}</div><div className="mt-1 space-y-1 text-xs text-[var(--omlu-text-secondary)]">{sale.items.map((item, index) => <div key={`${item.menu_item_id}-${index}`}>{item.quantity}× {item.item_name}{item.selected_options.length > 0 && <span className="block pl-3 text-[var(--omlu-text-secondary)]">{item.selected_options.map((option) => option.option_name).join(" · ")}</span>}</div>)}</div></div><div className="text-right"><div className="font-black text-[var(--omlu-text-primary)]">₹{sale.total}</div>{sale.gst_enabled && <div className="text-[10px] font-semibold text-[var(--omlu-text-secondary)]">Includes GST ₹{sale.tax_amount}</div>}<div className="text-xs font-bold text-orange-500">{displayStatus(sale.status)}</div></div></div>{sale.customer_gstin && <div className="mt-3 rounded-lg bg-[var(--omlu-muted-surface)] p-3 text-xs text-[var(--omlu-text-secondary)]"><p className="font-black uppercase tracking-wide">Billed To</p><p className="mt-1 font-bold text-[var(--omlu-text-primary)]">{sale.customer_legal_name}</p><p className="whitespace-pre-line">{sale.customer_billing_address}</p><p className="mt-1">GSTIN: {sale.customer_gstin} · {sale.customer_state_name} ({sale.customer_state_code})</p></div>}<div className="mt-3 text-xs text-[var(--omlu-text-secondary)]">Entered by {sale.entered_by_name} · {displayRole(sale.entered_by_role)} · {new Date(sale.completed_at || sale.created_at).toLocaleTimeString()}{sale.payment_method ? ` · ${displayPaymentMethod(sale.payment_method)}` : ""}</div>{payment && sale.status === "served" && <div className="mt-3 flex gap-2"><button disabled={saving} onClick={() => payment(sale, "cash")} className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-black text-[var(--omlu-strong-action-text)]">Confirm Cash Payment</button><button disabled={saving} onClick={() => payment(sale, "upi")} className="rounded-lg bg-indigo-700 px-3 py-2 text-xs font-black text-[var(--omlu-text-primary)]">Confirm UPI Payment</button></div>}{printSale && sale.sale_type === "takeaway" && sale.status === "completed" && <button disabled={printingToken === sale.public_token} onClick={() => printSale(sale)} className="mt-3 rounded-lg border border-[var(--omlu-border-strong)] px-3 py-2 text-xs font-black disabled:opacity-50">{printingToken === sale.public_token ? "Preparing print…" : "Print Bill"}</button>}</article>)}</div>}</section>;
 }
