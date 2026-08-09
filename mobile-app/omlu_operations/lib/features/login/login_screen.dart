@@ -321,7 +321,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
                   TextButton(
                     onPressed: () => launchUrl(
-                      Uri.parse('https://omlu.vercel.app/register'),
+                      Uri.parse('https://omlu.in/register'),
                     ),
                     child: const Text('New to OMLU? Create Restaurant'),
                   ),

@@ -6,7 +6,7 @@ class AppConfig {
     required this.allowHttp,
   });
 
-  static const String fallbackFrontendUrl = 'https://omlu.vercel.app';
+  static const String fallbackFrontendUrl = 'https://omlu.in';
   static const String fallbackBackendUrl = 'https://omlu-api.onrender.com';
 
   final Uri frontendUrl;
