@@ -6,12 +6,17 @@ from app.schemas.order import OrderStatusHistoryResponse
 from app.schemas.order import OrderItemSelectedOptionResponse
 
 class KitchenOrderItemResponse(BaseModel):
+    id: Optional[int] = None
     item_name: str
     quantity: int
     unit_price: Decimal
     total_price: Decimal
     item_note: Optional[str] = None
     selected_options: List[OrderItemSelectedOptionResponse] = Field(default_factory=list)
+    cancellation_status: str = "active"
+    cancellation_reason: Optional[str] = None
+    cancelled_at: Optional[datetime] = None
+    cancellation_actor_type: Optional[str] = None
 
     @field_serializer("unit_price")
     def serialize_unit_price(self, price: Decimal) -> str:

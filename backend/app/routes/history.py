@@ -153,7 +153,7 @@ def _order_actor_ids(order: Order) -> tuple[int | None, int | None]:
 
 def _order_row(order: Order, staff_names: dict[int, str]) -> dict:
     accepted_by_id, served_by_id = _order_actor_ids(order)
-    item_count = sum(item.quantity for item in order.items)
+    item_count = sum(item.quantity for item in order.items if item.cancellation_status == "active")
     return {
         "id": order.id,
         "order_number": order.order_number,
@@ -562,6 +562,7 @@ def performance_summary(
         .join(Bill, Bill.dining_session_id == Order.dining_session_id)
         .filter(
             Order.restaurant_id == current_user.restaurant_id,
+            OrderItem.cancellation_status == "active",
             Order.status.notin_(["rejected", "cancelled", "voided"]),
             Bill.status == "paid",
             Bill.paid_at.isnot(None),
@@ -591,6 +592,7 @@ def performance_summary(
         .join(Bill, Bill.dining_session_id == Order.dining_session_id)
         .filter(
             Order.restaurant_id == current_user.restaurant_id,
+            OrderItem.cancellation_status == "active",
             Order.status.notin_(["rejected", "cancelled", "voided"]),
             Bill.status == "paid",
             Bill.paid_at.isnot(None),
@@ -1016,11 +1018,16 @@ def order_history_detail(
             "customer_note": order.customer_note,
             "items": [
                 {
+                    "id": item.id,
                     "item_name": item.item_name,
                     "quantity": item.quantity,
                     "unit_price": _money(item.unit_price),
                     "total_price": _money(item.total_price),
                     "item_note": item.item_note,
+                    "cancellation_status": item.cancellation_status,
+                    "cancellation_reason": item.cancellation_reason,
+                    "cancelled_at": _iso(item.cancelled_at),
+                    "cancellation_actor_type": item.cancellation_actor_type,
                     "selected_options": [
                         {
                             "option_name": option.option_name,

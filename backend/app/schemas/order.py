@@ -34,6 +34,7 @@ class OrderItemSelectedOptionResponse(BaseModel):
 
 
 class PublicOrderResponseItem(BaseModel):
+    id: int
     menu_item_id: Optional[int] = None
     item_name: str
     quantity: int
@@ -41,6 +42,10 @@ class PublicOrderResponseItem(BaseModel):
     total_price: Decimal
     item_note: Optional[str] = None
     selected_options: List[OrderItemSelectedOptionResponse] = Field(default_factory=list)
+    cancellation_status: str = "active"
+    cancellation_reason: Optional[str] = None
+    cancelled_at: Optional[datetime] = None
+    cancellation_actor_type: Optional[str] = None
 
     @field_serializer("unit_price")
     def serialize_unit_price(self, price: Decimal) -> str:
@@ -51,6 +56,10 @@ class PublicOrderResponseItem(BaseModel):
         return f"{price:.2f}"
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class OrderItemCancellationRequest(BaseModel):
+    reason: Optional[str] = Field(None, max_length=300)
 
 class OrderStatusHistoryResponse(BaseModel):
     old_status: Optional[str] = None

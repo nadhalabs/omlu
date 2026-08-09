@@ -152,6 +152,21 @@ class OrderItem(Base):
     cgst_amount_snapshot: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
     sgst_amount_snapshot: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
     igst_amount_snapshot: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
+    cancellation_status: Mapped[str] = mapped_column(
+        String(20),
+        CheckConstraint("cancellation_status IN ('active', 'cancelled')", name="chk_order_item_cancellation_status"),
+        default="active",
+        server_default="active",
+        nullable=False,
+        index=True,
+    )
+    cancellation_reason: Mapped[Optional[str]] = mapped_column(String(300), nullable=True)
+    cancelled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    cancellation_actor_type: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+    cancelled_by_staff_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
+    cancelled_by_participant_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("table_session_participants.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     # Relationships
     order: Mapped["Order"] = relationship(

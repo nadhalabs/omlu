@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 EVENT_ORDER_CREATED = "order.created"
 EVENT_ORDER_STATUS_CHANGED = "order.status_changed"
+EVENT_ORDER_ITEM_CANCELLED = "order.item_cancelled"
 EVENT_SERVICE_REQUEST_CREATED = "service_request.created"
 EVENT_SERVICE_REQUEST_RESOLVED = "service_request.resolved"
 EVENT_SESSION_OPENED = "session.opened"
