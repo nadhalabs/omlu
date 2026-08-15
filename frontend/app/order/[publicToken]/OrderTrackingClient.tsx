@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PublicThemeControl } from "@/components/PublicThemeControl";
 import {
@@ -114,26 +114,43 @@ export default function OrderTrackingClient({
     { type: "water", label: `💧 ${t.water}` },
   ] as const;
 
+  const fetchInFlightRef = useRef(false);
+  const pendingFetchRef = useRef(false);
+
   // Fetch Order function
   const fetchOrder = useCallback(async (showLoading = true) => {
-    if (showLoading) setLoading(true);
+    if (fetchInFlightRef.current) {
+      pendingFetchRef.current = true;
+      return;
+    }
+    fetchInFlightRef.current = true;
+    let shouldShowLoading = showLoading;
     try {
-      const data = await getPublicOrder(publicToken, readOrderParticipantToken(publicToken));
-      setOrderData(data);
-      setError(null);
-      setLastUpdated(new Date());
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setError(err.message);
-      } else {
-        setError("Connection issue. Showing last loaded details.");
-      }
+      do {
+        pendingFetchRef.current = false;
+        if (shouldShowLoading) setLoading(true);
+        try {
+          const data = await getPublicOrder(publicToken, readOrderParticipantToken(publicToken));
+          setOrderData(data);
+          setError(null);
+          setLastUpdated(new Date());
+        } catch (err) {
+          if (err instanceof ApiError) {
+            setError(err.message);
+          } else {
+            setError("Connection issue. Showing last loaded details.");
+          }
+        } finally {
+          if (shouldShowLoading) setLoading(false);
+          shouldShowLoading = false;
+        }
+      } while (pendingFetchRef.current);
     } finally {
-      if (showLoading) setLoading(false);
+      fetchInFlightRef.current = false;
     }
   }, [publicToken]);
 
-  useRealtime({
+  const realtimeStatus = useRealtime({
     enabled: !orderData?.dining_session_token || Boolean(readSessionParticipantToken(orderData.dining_session_token)),
     target: {
       kind: "order",
@@ -155,11 +172,14 @@ export default function OrderTrackingClient({
         fetchOrder(false);
       }
     };
+    const handleOnline = () => fetchOrder(false);
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("online", handleOnline);
     return () => {
       window.clearTimeout(timeout);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("online", handleOnline);
     };
   }, [fetchOrder]);
 
@@ -172,14 +192,14 @@ export default function OrderTrackingClient({
       return;
     }
 
-    const interval = setInterval(() => {
-      if (document.visibilityState === "visible") {
-        fetchOrder(false);
-      }
-    }, 5000);
+    const intervalMs = realtimeStatus === "live" ? 75_000 : 7_500;
+    const interval = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      fetchOrder(false);
+    }, intervalMs);
 
-    return () => clearInterval(interval);
-  }, [fetchOrder, orderData]);
+    return () => window.clearInterval(interval);
+  }, [fetchOrder, orderData, realtimeStatus]);
 
   const stages = ["pending", "accepted", "preparing", "ready", "served"];
 

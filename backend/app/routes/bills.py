@@ -829,16 +829,16 @@ def update_customer_gst_details(
     removing = all(value is None for value in (gstin, legal_name, billing_address, state_name, state_code))
     if not removing and any(value is None for value in (gstin, legal_name, billing_address, state_name, state_code)):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Customer GSTIN, Legal Business Name, Billing Address, State, and State Code are all required.",
         )
     if not removing:
         gstin_state_code = gstin[:2]
         canonical_state_name = GST_STATE_NAMES.get(state_code)
         if state_code != gstin_state_code:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Customer State Code must match the GSTIN.")
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Customer State Code must match the GSTIN.")
         if canonical_state_name is None or state_name.casefold() != canonical_state_name.casefold():
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Customer State must match the GSTIN State Code.")
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Customer State must match the GSTIN State Code.")
         state_name = canonical_state_name
 
     previous = {

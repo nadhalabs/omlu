@@ -451,11 +451,11 @@ def issue_bill(db: Session, bill: Bill) -> Bill:
     if locked_bill.gst_enabled_snapshot:
         if locked_bill.customer_tax_type == "b2b":
             if not locked_bill.customer_gstin_snapshot:
-                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Customer GSTIN is required for B2B GST bills")
+                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Customer GSTIN is required for B2B GST bills")
             if not locked_bill.customer_legal_name_snapshot or not locked_bill.customer_legal_name_snapshot.strip():
-                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Customer Legal Name is required for B2B GST bills")
+                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Customer Legal Name is required for B2B GST bills")
             if not locked_bill.customer_billing_address_snapshot or not locked_bill.customer_billing_address_snapshot.strip():
-                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Customer Billing Address is required for B2B GST bills")
+                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Customer Billing Address is required for B2B GST bills")
             if not locked_bill.customer_state_code_snapshot:
                 locked_bill.customer_state_code_snapshot = locked_bill.customer_gstin_snapshot[:2]
             if not locked_bill.place_of_supply_code_snapshot:
@@ -658,7 +658,7 @@ def request_pay_at_counter(
 ) -> Bill:
     if method not in COUNTER_PAYMENT_METHODS:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Invalid counter payment method.",
         )
 
@@ -724,7 +724,7 @@ def confirm_counter_payment(
 ) -> tuple[Bill, bool]:
     if method not in COUNTER_PAYMENT_METHODS:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Invalid counter payment method.",
         )
 

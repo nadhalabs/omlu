@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import and_, case, distinct, func, or_
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.database import get_db
 from app.models.bill import Bill
@@ -221,8 +221,8 @@ def order_history(
         query.options(
             joinedload(Order.table),
             joinedload(Order.dining_session),
-            joinedload(Order.items).joinedload(OrderItem.selected_options),
-            joinedload(Order.status_history),
+            selectinload(Order.items),
+            selectinload(Order.status_history),
         )
         .order_by(Order.created_at.desc(), Order.id.desc())
         .offset((safe_page - 1) * safe_size)
@@ -441,7 +441,7 @@ def session_history(
     query = _sessions_query(db, current_user, start_utc, end_utc, status_filter, table_id)
     total = query.count()
     sessions = (
-        query.options(joinedload(DiningSession.table), joinedload(DiningSession.orders), joinedload(DiningSession.bill))
+        query.options(joinedload(DiningSession.table), selectinload(DiningSession.orders), joinedload(DiningSession.bill))
         .order_by(DiningSession.opened_at.desc(), DiningSession.id.desc())
         .offset((safe_page - 1) * safe_size)
         .limit(safe_size)
@@ -982,7 +982,7 @@ def export_orders(
     db: Session = Depends(get_db),
 ):
     start_utc, end_utc = _utc_bounds(staff=current_user, preset=preset, start_date=start_date, end_date=end_date)
-    orders = _orders_query(db, current_user, start_utc, end_utc, status_filter, table_id, staff_id, order_number).options(joinedload(Order.table), joinedload(Order.dining_session), joinedload(Order.items).joinedload(OrderItem.selected_options), joinedload(Order.status_history)).order_by(Order.created_at.desc()).limit(5000).all()
+    orders = _orders_query(db, current_user, start_utc, end_utc, status_filter, table_id, staff_id, order_number).options(joinedload(Order.table), joinedload(Order.dining_session), selectinload(Order.items), selectinload(Order.status_history)).order_by(Order.created_at.desc()).limit(5000).all()
     actor_ids = []
     for order in orders:
         actor_ids.extend(_order_actor_ids(order))
@@ -1106,7 +1106,7 @@ def export_sessions(
     db: Session = Depends(get_db),
 ):
     start_utc, end_utc = _utc_bounds(staff=current_user, preset=preset, start_date=start_date, end_date=end_date)
-    rows = [_session_row(session) for session in _sessions_query(db, current_user, start_utc, end_utc, status_filter, table_id).options(joinedload(DiningSession.table), joinedload(DiningSession.orders), joinedload(DiningSession.bill)).order_by(DiningSession.opened_at.desc()).limit(5000).all()]
+    rows = [_session_row(session) for session in _sessions_query(db, current_user, start_utc, end_utc, status_filter, table_id).options(joinedload(DiningSession.table), selectinload(DiningSession.orders), joinedload(DiningSession.bill)).order_by(DiningSession.opened_at.desc()).limit(5000).all()]
     columns = [
         ("table_number", "Table"), ("started_at", "Started At"), ("closed_at", "Closed At"),
         ("duration_minutes", "Table Session (Minutes)"), ("order_count", "Orders"),

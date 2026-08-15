@@ -71,7 +71,7 @@ def _staff_context_from_token(
     if not token:
         return None
     try:
-        return resolve_bearer_token_context(token, db)
+        return resolve_bearer_token_context(token, db, touch_activity=False)
     except (HTTPException, TypeError, ValueError):
         return None
 

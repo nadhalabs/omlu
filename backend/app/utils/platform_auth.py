@@ -13,13 +13,14 @@ from sqlalchemy.orm import Session, joinedload
 from app.database import SessionLocal, get_db
 from app.config import settings
 from app.models.platform_user import PlatformUser, PlatformSession, PlatformAuditLog
-from app.utils.auth import hash_password, verify_password, normalize_email, normalize_identifier
+from app.utils.auth import as_utc, hash_password, verify_password, normalize_email, normalize_identifier
 
 logger = logging.getLogger(__name__)
 
 security_scheme = HTTPBearer(auto_error=False)
 
 VALID_PLATFORM_ROLES = frozenset({"platform_owner", "platform_admin", "platform_support", "platform_readonly"})
+ACTIVITY_TOUCH_INTERVAL = datetime.timedelta(minutes=5)
 
 ROLE_HIERARCHY = {
     "platform_owner": {"platform_owner", "platform_admin", "platform_support", "platform_readonly"},
@@ -158,17 +159,19 @@ def get_platform_context(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Update session touch timestamp
     now = datetime.datetime.now(datetime.timezone.utc)
-    platform_session.last_active_at = now
-    try:
-        with SessionLocal() as auth_db:
-            auth_db.query(PlatformSession).filter(
-                PlatformSession.id == platform_session.id
-            ).update({PlatformSession.last_active_at: now}, synchronize_session=False)
-            auth_db.commit()
-    except Exception as e:
-        logger.warning("Failed to persist platform session last_active_at: %s", e)
+    activity_cutoff = now - ACTIVITY_TOUCH_INTERVAL
+    if as_utc(platform_session.last_active_at) <= activity_cutoff:
+        try:
+            with SessionLocal() as auth_db:
+                updated = auth_db.query(PlatformSession).filter(
+                    PlatformSession.id == platform_session.id,
+                    PlatformSession.last_active_at <= activity_cutoff,
+                ).update({PlatformSession.last_active_at: now}, synchronize_session=False)
+                if updated:
+                    auth_db.commit()
+        except Exception as e:
+            logger.warning("Failed to persist platform session last_active_at: %s", e)
 
     return PlatformContext(actor=platform_user, session=platform_session, role=platform_user.role)
 

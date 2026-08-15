@@ -250,7 +250,7 @@ def delete_category_with_items(
     if not category:
         raise HTTPException(status_code=fastapi_status.HTTP_404_NOT_FOUND, detail="Category not found")
     if payload.confirmation_name.strip() != category.name_en:
-        raise HTTPException(status_code=fastapi_status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Type the category name exactly to confirm deletion")
+        raise HTTPException(status_code=fastapi_status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Type the category name exactly to confirm deletion")
 
     items = db.query(MenuItem).filter(MenuItem.category_id == category.id).with_for_update().all()
     item_ids = [item.id for item in items]
@@ -285,7 +285,7 @@ def move_category_items_and_delete(
     db: Session = Depends(get_db),
 ):
     if payload.destination_category_id == category_id:
-        raise HTTPException(status_code=fastapi_status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Destination category must be different")
+        raise HTTPException(status_code=fastapi_status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Destination category must be different")
     categories = (
         db.query(MenuCategory)
         .filter(
