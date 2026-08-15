@@ -1,0 +1,12 @@
+# OMLU
+
+> OMLU is restaurant software for QR ordering, kitchen display, staff operations and billing, built by Nadha Labs for restaurants in India.
+
+## Public pages
+
+* [OMLU](https://omlu.in/): Official OMLU website.
+* [FAQ](https://omlu.in/faq): Answers to common questions about OMLU.
+
+## About
+
+OMLU is built by Nadha Labs, founded by Kailasanadh G in 2025.

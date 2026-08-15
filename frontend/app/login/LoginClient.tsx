@@ -191,6 +191,7 @@ export default function LoginClient() {
         </p>
         <footer className="mt-6 border-t border-[var(--omlu-border)] pt-4 text-center text-xs text-[var(--omlu-text-secondary)]">
           <div className="flex flex-wrap items-center justify-center gap-3 font-semibold">
+            <Link href="/faq" className="hover:text-orange-600 underline">FAQ</Link>
             <Link href="/terms" className="hover:text-orange-600 underline">Terms</Link>
             <Link href="/privacy" className="hover:text-orange-600 underline">Privacy</Link>
             <Link href="/refunds" className="hover:text-orange-600 underline">Refunds</Link>

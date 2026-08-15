@@ -59,6 +59,7 @@ export default function Home() {
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 sm:flex-row">
           <span>OMLU · Restaurant ordering and operations</span>
           <div className="flex flex-wrap items-center justify-center gap-4">
+            <Link href="/faq" className="hover:text-orange-600 underline">FAQ</Link>
             <Link href="/terms" className="hover:text-orange-600 underline">Terms of Service</Link>
             <Link href="/privacy" className="hover:text-orange-600 underline">Privacy Policy</Link>
             <Link href="/refunds" className="hover:text-orange-600 underline">Refund Policy</Link>
