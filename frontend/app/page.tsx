@@ -188,6 +188,12 @@ export default function Home() {
         <div className="mx-auto flex max-w-5xl flex-col items-center justify-between gap-4 sm:flex-row">
           <span>OMLU · Restaurant operations, connected.</span>
           <div className="flex flex-wrap items-center justify-center gap-4">
+            <Link
+              href="/faq"
+              className="hover:text-orange-600 underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 rounded"
+            >
+              FAQ
+            </Link>
             <Link href="/terms" className="hover:text-orange-600 underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 rounded">Terms of Service</Link>
             <Link href="/privacy" className="hover:text-orange-600 underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 rounded">Privacy Policy</Link>
             <Link href="/refunds" className="hover:text-orange-600 underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 rounded">Refund Policy</Link>
