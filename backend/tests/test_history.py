@@ -365,6 +365,19 @@ def test_custom_range_empty_and_csv_export(history_data):
     assert "order_number" not in csv_response.text
 
 
+def test_history_and_gst_custom_ranges_reject_more_than_370_days(history_data):
+    headers = _auth(history_data["owner_token"])
+    params = "preset=custom&start_date=2024-01-01&end_date=2025-01-06"
+
+    history_response = client.get(f"/admin/history/orders?{params}", headers=headers)
+    gst_response = client.get(f"/admin/gst/summary?{params}", headers=headers)
+
+    assert history_response.status_code == 422
+    assert history_response.json()["detail"] == "Date range cannot exceed 370 days"
+    assert gst_response.status_code == 422
+    assert gst_response.json()["detail"] == "Date range cannot exceed 370 days"
+
+
 def test_performance_pdf_owner_admin_access_and_rejections(history_data):
     owner = client.get("/admin/history/performance/export.pdf?preset=today", headers=_auth(history_data["owner_token"]))
     admin = client.get("/admin/history/performance/export.pdf?preset=today", headers=_auth(history_data["admin_token"]))

@@ -65,25 +65,25 @@ def resolve_gst_period_bounds(
     elif normalized_preset == "custom":
         if not start_date or not end_date:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Custom date range requires start_date and end_date",
             )
         start_local = start_date
         end_local = end_date
     else:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Invalid date preset",
         )
 
     if start_local > end_local:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="start_date must be before or equal to end_date",
         )
     if (end_local - start_local).days > 370:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Date range cannot exceed 370 days",
         )
 
@@ -252,8 +252,10 @@ def get_gst_sales_register(
 
     limit = max(1, min(limit, 100))
     page = max(1, page)
+    fetch_limit = page * limit
 
     items = []
+    total_records = 0
 
     # Fetch Bills
     if not document_type or document_type == "bill":
@@ -266,7 +268,8 @@ def get_gst_sales_register(
         if customer_tax_type:
             b_query = b_query.filter(Bill.customer_tax_type == customer_tax_type)
 
-        for b in b_query.all():
+        total_records += b_query.count()
+        for b in b_query.order_by(Bill.created_at.desc()).limit(fetch_limit).all():
             items.append({
                 "id": f"bill_{b.id}",
                 "document_type": "bill",
@@ -301,7 +304,8 @@ def get_gst_sales_register(
         if customer_tax_type:
             q_query = q_query.filter(QuickSale.customer_tax_type == customer_tax_type)
 
-        for q in q_query.all():
+        total_records += q_query.count()
+        for q in q_query.order_by(QuickSale.created_at.desc()).limit(fetch_limit).all():
             items.append({
                 "id": f"qs_{q.id}",
                 "document_type": "quick_sale",
@@ -328,7 +332,6 @@ def get_gst_sales_register(
     # Sort descending by document_date
     items.sort(key=lambda x: x["document_date"], reverse=True)
 
-    total_records = len(items)
     start_idx = (page - 1) * limit
     end_idx = start_idx + limit
     paginated_items = items[start_idx:end_idx]

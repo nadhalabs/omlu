@@ -64,6 +64,7 @@ def auth_isolation_setup():
         token_jti="test-auth-iso-jti",
         status="active",
         expires_at=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=1),
+        last_active_at=datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=10),
     )
     db.add(session)
     db.commit()
@@ -133,16 +134,35 @@ def test_auth_does_not_commit_unrelated_pending_changes(auth_isolation_setup):
 
 
 def test_auth_last_active_at_persists_on_get_request(auth_isolation_setup):
-    """Prove that last_active_at persists in DB even on GET endpoints that do not call db.commit()."""
+    """A normal HTTP authentication persists a meaningfully stale activity time."""
+    db = SessionLocal()
+    before = db.get(StaffSession, auth_isolation_setup["session_id"]).last_active_at
+    db.close()
+
     token = auth_isolation_setup["token"]
     response = client.get("/auth/staff/me", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 200
 
-    # Query DB in a new session to verify last_active_at was persisted
     db = SessionLocal()
     sess = db.query(StaffSession).filter(StaffSession.id == auth_isolation_setup["session_id"]).one()
-    assert sess.last_active_at is not None
+    assert sess.last_active_at > before
     db.close()
+
+
+def test_auth_last_active_at_is_not_rewritten_inside_threshold(auth_isolation_setup):
+    token = auth_isolation_setup["token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    assert client.get("/auth/staff/me", headers=headers).status_code == 200
+
+    db = SessionLocal()
+    first_touch = db.get(StaffSession, auth_isolation_setup["session_id"]).last_active_at
+    db.close()
+
+    assert client.get("/auth/staff/me", headers=headers).status_code == 200
+    db = SessionLocal()
+    second_touch = db.get(StaffSession, auth_isolation_setup["session_id"]).last_active_at
+    db.close()
+    assert second_touch == first_touch
 
 
 def test_failed_endpoint_mutations_roll_back_cleanly(auth_isolation_setup):

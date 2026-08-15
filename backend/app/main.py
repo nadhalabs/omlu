@@ -205,8 +205,12 @@ app.include_router(gst_router)
 @app.on_event("shutdown")
 async def shutdown_realtime_broker():
     from app.services.realtime import broker
+    from app.routes.orders import close_order_rate_limit_redis_client
 
-    await broker.shutdown()
+    try:
+        await broker.shutdown()
+    finally:
+        close_order_rate_limit_redis_client()
 
 
 @app.get("/")

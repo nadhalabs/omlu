@@ -2,6 +2,7 @@ import uuid
 import datetime
 import json
 import time
+import threading
 from collections import defaultdict
 from decimal import Decimal
 from typing import Optional
@@ -60,6 +61,62 @@ logger = logging.getLogger(__name__)
 
 # In-memory fallback rate limiter: maximum 15 orders per 60 seconds per IP
 order_rate_limit_records = defaultdict(list)
+_order_rate_limit_redis_client = None
+_order_rate_limit_redis_url: str | None = None
+_order_rate_limit_redis_lock = threading.Lock()
+
+
+def _create_order_rate_limit_redis_client(redis_url: str):
+    import redis
+
+    return redis.Redis.from_url(
+        redis_url,
+        socket_timeout=1.0,
+        socket_connect_timeout=1.0,
+    )
+
+
+def _get_order_rate_limit_redis_client():
+    global _order_rate_limit_redis_client, _order_rate_limit_redis_url
+
+    redis_url = settings.redis_url
+    if not redis_url:
+        return None
+    if _order_rate_limit_redis_client is not None and _order_rate_limit_redis_url == redis_url:
+        return _order_rate_limit_redis_client
+
+    with _order_rate_limit_redis_lock:
+        if _order_rate_limit_redis_client is not None and _order_rate_limit_redis_url == redis_url:
+            return _order_rate_limit_redis_client
+        previous_client = _order_rate_limit_redis_client
+        _order_rate_limit_redis_client = _create_order_rate_limit_redis_client(redis_url)
+        _order_rate_limit_redis_url = redis_url
+        if previous_client is not None:
+            try:
+                previous_client.close()
+            except Exception as exc:
+                logger.debug(
+                    "order_rate_limit.redis_previous_client_close_failed error=%s",
+                    exc.__class__.__name__,
+                )
+        return _order_rate_limit_redis_client
+
+
+def close_order_rate_limit_redis_client() -> None:
+    global _order_rate_limit_redis_client, _order_rate_limit_redis_url
+
+    with _order_rate_limit_redis_lock:
+        client = _order_rate_limit_redis_client
+        _order_rate_limit_redis_client = None
+        _order_rate_limit_redis_url = None
+    if client is not None:
+        try:
+            client.close()
+        except Exception as exc:
+            logger.debug(
+                "order_rate_limit.redis_client_close_failed error=%s",
+                exc.__class__.__name__,
+            )
 
 
 def check_rate_limit(client_ip: str) -> bool:
@@ -67,8 +124,7 @@ def check_rate_limit(client_ip: str) -> bool:
     # 1. Try Redis sliding-window counter if configured
     if settings.redis_url:
         try:
-            import redis
-            r = redis.Redis.from_url(settings.redis_url, socket_timeout=1.0, socket_connect_timeout=1.0)
+            r = _get_order_rate_limit_redis_client()
             key = f"rate_limit:order:{client_ip}"
             pipe = r.pipeline()
             pipe.incr(key)
@@ -77,8 +133,11 @@ def check_rate_limit(client_ip: str) -> bool:
             if count > 15:
                 return False
             return True
-        except Exception as e:
-            logger.debug("Redis rate limit check fallback to in-memory: %s", e)
+        except Exception as exc:
+            logger.debug(
+                "order_rate_limit.redis_fallback error=%s",
+                exc.__class__.__name__,
+            )
 
     # 2. In-memory rate limiting with stale key pruning
     timestamps = [t for t in order_rate_limit_records[client_ip] if now - t < 60]

@@ -4,9 +4,10 @@ import uuid
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import event
 
 from app.main import app
-from app.database import SessionLocal
+from app.database import SessionLocal, engine
 from app.models.bill import Bill
 from app.models.dining_session import DiningSession
 from app.models.menu import MenuCategory, MenuItem
@@ -158,6 +159,33 @@ def test_sales_register_and_b2b_b2c(p3_gst_context):
     assert res_b2c.status_code == 200
     b_b2c = res_b2c.json()
     assert b_b2c["pagination"]["total_records"] == 2
+
+
+def test_sales_register_page_queries_are_bounded(p3_gst_context):
+    statements = []
+
+    def capture_statement(_connection, _cursor, statement, _parameters, _context, _executemany):
+        statements.append(statement)
+
+    event.listen(engine, "before_cursor_execute", capture_statement)
+    try:
+        response = client.get(
+            "/admin/gst/sales-register?preset=today&page=2&limit=2",
+            headers={"Authorization": f"Bearer {p3_gst_context['token_owner_gst']}"},
+        )
+    finally:
+        event.remove(engine, "before_cursor_execute", capture_statement)
+
+    assert response.status_code == 200
+    assert len(response.json()["records"]) <= 2
+    record_queries = [
+        statement.upper()
+        for statement in statements
+        if ("FROM BILLS" in statement.upper() or "FROM QUICK_SALES" in statement.upper())
+        and "COUNT(" not in statement.upper()
+    ]
+    assert record_queries
+    assert all(" LIMIT " in statement for statement in record_queries)
 
 
 def test_hsn_summary_limitation(p3_gst_context):

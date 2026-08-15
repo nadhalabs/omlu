@@ -1,14 +1,15 @@
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+from app.database import SessionLocal
 from app.main import app
 from app.models.restaurant import Restaurant
 from app.models.platform_user import PlatformUser, PlatformSession
 from app.utils.auth import hash_password
-from app.utils.platform_auth import create_platform_token
+from app.utils.platform_auth import create_platform_token, decode_platform_token
 
 client = TestClient(app)
 
@@ -83,3 +84,27 @@ def test_platform_system_health(platform_token):
     data = res.json()
     assert data["status"] in {"Healthy", "Degraded"}
     assert "components" in data
+
+
+def test_platform_activity_touch_is_throttled(platform_token):
+    payload = decode_platform_token(platform_token)
+    db = SessionLocal()
+    session = db.query(PlatformSession).filter(PlatformSession.token_jti == payload["jti"]).one()
+    session.last_active_at = datetime.now(timezone.utc) - timedelta(minutes=10)
+    db.commit()
+    session_id = session.id
+    stale = session.last_active_at
+    db.close()
+
+    headers = {"Authorization": f"Bearer {platform_token}"}
+    assert client.get("/api/v1/platform/overview", headers=headers).status_code == 200
+    db = SessionLocal()
+    first_touch = db.get(PlatformSession, session_id).last_active_at
+    db.close()
+    assert first_touch > stale
+
+    assert client.get("/api/v1/platform/overview", headers=headers).status_code == 200
+    db = SessionLocal()
+    second_touch = db.get(PlatformSession, session_id).last_active_at
+    db.close()
+    assert second_touch == first_touch

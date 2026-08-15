@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 security_scheme = HTTPBearer(auto_error=False)
 ph = PasswordHasher()
 VALID_STAFF_ROLES = frozenset({"owner", "admin", "staff", "kitchen"})
+ACTIVITY_TOUCH_INTERVAL = datetime.timedelta(minutes=5)
 
 
 def as_utc(value: datetime.datetime) -> datetime.datetime:
@@ -111,6 +112,7 @@ def _resolve_authenticated_context(
     db: Session,
     *,
     allow_password_change: bool = False,
+    touch_activity: bool = True,
 ) -> AuthenticatedContext:
     if not credentials:
         raise HTTPException(
@@ -240,15 +242,18 @@ def _resolve_authenticated_context(
             detail="Password change required before accessing this resource",
         )
 
-    session.last_active_at = now
-    try:
-        with SessionLocal() as auth_db:
-            auth_db.query(StaffSession).filter(
-                StaffSession.id == session.id
-            ).update({StaffSession.last_active_at: now}, synchronize_session=False)
-            auth_db.commit()
-    except Exception as e:
-        logger.warning("Failed to persist staff session last_active_at: %s", e)
+    activity_cutoff = now - ACTIVITY_TOUCH_INTERVAL
+    if touch_activity and as_utc(session.last_active_at) <= activity_cutoff:
+        try:
+            with SessionLocal() as auth_db:
+                updated = auth_db.query(StaffSession).filter(
+                    StaffSession.id == session.id,
+                    StaffSession.last_active_at <= activity_cutoff,
+                ).update({StaffSession.last_active_at: now}, synchronize_session=False)
+                if updated:
+                    auth_db.commit()
+        except Exception as e:
+            logger.warning("Failed to persist staff session last_active_at: %s", e)
 
     scope = TenantScope(
         restaurant_id=staff.restaurant_id,
@@ -271,6 +276,7 @@ def resolve_bearer_token_context(
     db: Session,
     *,
     allow_password_change: bool = False,
+    touch_activity: bool = True,
 ) -> AuthenticatedContext:
     """Resolve non-HTTP bearer transports through the canonical authority path."""
     credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
@@ -278,6 +284,7 @@ def resolve_bearer_token_context(
         credentials,
         db,
         allow_password_change=allow_password_change,
+        touch_activity=touch_activity,
     )
 
 

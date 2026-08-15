@@ -363,6 +363,38 @@ def test_staff_websocket_rejects_kitchen_user_from_staff_channel(realtime_contex
             pass
 
 
+def test_staff_websocket_authority_checks_do_not_touch_activity(realtime_context):
+    payload = decode_access_token(realtime_context["staff_token"])
+    stale = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=10)
+    db = SessionLocal()
+    session = db.query(StaffSession).filter(StaffSession.token_jti == payload["jti"]).one()
+    session.last_active_at = stale
+    db.commit()
+    session_id = session.id
+    db.close()
+
+    with client.websocket_connect(
+        f"/ws/staff?channel=staff&token={realtime_context['staff_token']}"
+    ) as ws:
+        assert ws.receive_json()["type"] == "connection.ready"
+        # An allowed event forces the same canonical authority revalidation used by heartbeats.
+        realtime.broker.publish(
+            realtime.RealtimeEvent(
+                type="test.authority_check",
+                restaurant_id=realtime_context["restaurant_id"],
+                channels=(realtime.restaurant_channel(realtime_context["restaurant_id"], "staff"),),
+                resource_id="activity-touch",
+                state={"restaurant_id": realtime_context["restaurant_id"]},
+            )
+        )
+        assert ws.receive_json()["type"] == "test.authority_check"
+
+    db = SessionLocal()
+    persisted = db.get(StaffSession, session_id).last_active_at
+    db.close()
+    assert persisted == stale
+
+
 def test_kitchen_websocket_rejects_general_operations_channel(realtime_context):
     with pytest.raises(WebSocketDisconnect):
         with client.websocket_connect(

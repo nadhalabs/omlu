@@ -1,3 +1,4 @@
+import re
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
@@ -77,7 +78,8 @@ def test_first_device_secure_authority_and_raw_secrets_not_persisted(participant
     session = db.query(DiningSession).filter(DiningSession.public_token == body["session"]["public_id"]).one()
     participant = db.query(TableSessionParticipant).filter(TableSessionParticipant.session_id == session.id).one()
     assert session.join_code_hash == join_code_digest(session, body["join_code"])
-    assert body["join_code"] not in session.join_code_hash
+    assert re.fullmatch(r"[0-9a-f]{64}", session.join_code_hash)
+    assert session.join_code_hash != body["join_code"]
     assert participant.token_hash == token_hash(body["participant_token"])
     assert body["participant_token"] != participant.token_hash
     assert db.query(AuditLog).filter(AuditLog.action == "table_session_created", AuditLog.target_id == str(session.id)).count() == 1
