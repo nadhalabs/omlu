@@ -4,3 +4,6 @@ OMLU is a production-ready web application for restaurant QR-code menus, custome
 
 ## Development Note
 Keep production changes small, tested, and independently reviewable.
+
+## Production
+OMLU production runs from the main branch.
