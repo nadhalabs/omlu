@@ -10,3 +10,6 @@ OMLU production runs from the main branch.
 
 ## Frontend
 Production frontend: https://omlu.in
+
+## Android
+The Android operations app connects to the production OMLU API.
