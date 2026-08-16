@@ -87,7 +87,8 @@ test("server-backed edits use a sticky persisted-state save bar", () => {
   assert.match(settings, /kitchenMode !== settings\.kitchen_mode/);
   assert.match(settings, /\{hasUnsavedChanges && \(/);
   assert.match(settings, /aria-label="Unsaved settings"/);
-  assert.match(settings, /sticky top-4/);
+  assert.match(settings, /fixed inset-x-4 bottom-4/);
+  assert.match(settings, /hasUnsavedChanges \? "pb-28 sm:pb-24"/);
   assert.match(settings, />Unsaved changes</);
   assert.match(settings, />Discard</);
   assert.match(settings, /Save changes/);
