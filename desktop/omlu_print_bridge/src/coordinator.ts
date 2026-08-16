@@ -75,6 +75,8 @@ export class PrintJobCoordinator {
 
       if (job.receipt_type === 'test') {
         payloadBuffer = encoder.encodeTestPage();
+      } else if (job.receipt_type === 'kitchen' && job.kitchen_data) {
+        payloadBuffer = encoder.encodeKitchenTicket(job.kitchen_data);
       } else if (job.receipt_data) {
         payloadBuffer = encoder.encodeReceipt(job.receipt_data);
       } else {

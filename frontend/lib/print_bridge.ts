@@ -11,6 +11,29 @@ export interface BridgeHealth {
   printer_online: boolean;
   installation_id: string | null;
   tenant_id: string | null;
+  kitchen_printer_configured: boolean;
+  kitchen_printer_name: string;
+  kitchen_printer_host: string;
+  kitchen_printer_port: number;
+}
+
+export async function configureKitchenPrinter(token: string, settings: {
+  backendUrl: string; credentialSecret: string; tenantId: string;
+  kitchenPrinterName: string; kitchenPrinterHost: string; kitchenPrinterPort: number;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const res = await fetch(`${BRIDGE_BASE}/kitchen-printer/setup`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(settings), signal: AbortSignal.timeout(8000) });
+    const body = await res.json();
+    return res.ok ? { success: true } : { success: false, error: body.message || "Could not configure kitchen printer." };
+  } catch { return { success: false, error: "Local OMLU Print Bridge is unavailable." }; }
+}
+
+export async function testKitchenPrinter(token: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const res = await fetch(`${BRIDGE_BASE}/kitchen-printer/test`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(12000) });
+    const body = await res.json();
+    return res.ok && body.success ? { success: true } : { success: false, error: body.message || "Kitchen printer unavailable." };
+  } catch { return { success: false, error: "Local OMLU Print Bridge is unavailable." }; }
 }
 
 export interface BridgeSettings {

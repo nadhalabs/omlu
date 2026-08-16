@@ -39,13 +39,29 @@ export interface PrintJobPayload {
   tenant_id: string;
   bill_id?: string;
   bill_number?: string;
-  receipt_type: 'bill' | 'receipt' | 'test';
+  receipt_type: 'bill' | 'receipt' | 'test' | 'kitchen';
   receipt_data?: AuthoritativeReceiptPayload;
+  kitchen_data?: KitchenTicketPayload;
   copy_count: number;
   created_at: string;
   expires_at: string;
   retry_count: number;
   signed_token: string;
+}
+
+export interface KitchenTicketPayload {
+  document_type: 'initial_kot' | 'addition_kot' | 'cancellation_kot';
+  service_type?: 'dine_in' | 'takeaway';
+  heading?: string;
+  table_number?: string;
+  order_number: string;
+  created_at?: string;
+  customer_note?: string;
+  note?: string;
+  item_name?: string;
+  quantity?: number;
+  reason?: string;
+  items?: Array<{ name: string; quantity: number; note?: string; options?: string[] }>;
 }
 
 export function validatePrintJob(job: any): { valid: boolean; reason?: string } {
@@ -54,7 +70,12 @@ export function validatePrintJob(job: any): { valid: boolean; reason?: string } 
   if (!job.job_id) return { valid: false, reason: 'MISSING_JOB_ID' };
   if (!job.installation_id) return { valid: false, reason: 'MISSING_INSTALLATION_ID' };
   if (!job.tenant_id) return { valid: false, reason: 'MISSING_TENANT_ID' };
-  if (!job.signed_token) return { valid: false, reason: 'MISSING_SIGNED_TOKEN' };
+  if (!job.signed_token && job.receipt_type !== 'kitchen') return { valid: false, reason: 'MISSING_SIGNED_TOKEN' };
+
+  if (job.receipt_type === 'kitchen') {
+    if (!job.kitchen_data) return { valid: false, reason: 'MISSING_KITCHEN_CONTENT' };
+    return { valid: true };
+  }
 
   if (job.receipt_type !== 'test') {
     if (!job.bill_id && !job.bill_number) return { valid: false, reason: 'MISSING_BILL_IDENTIFIER' };
@@ -105,6 +126,33 @@ export class DesktopEscPosEncoder {
       bytes.push(0x1D, 0x56, 0x41, 0x00);
     }
 
+    return Buffer.from(bytes);
+  }
+
+  public encodeKitchenTicket(data: KitchenTicketPayload): Buffer {
+    const bytes: number[] = [0x1B, 0x40, 0x1B, 0x61, 0x01];
+    const width = this.width;
+    const heading = data.document_type === 'cancellation_kot' ? '*** CANCELLED ITEM ***'
+      : data.document_type === 'addition_kot' ? '*** NEW ITEM ***' : '*** KITCHEN ORDER ***';
+    this.addString(bytes, `${heading}\n${this.divider('=', width)}\n`);
+    bytes.push(0x1B, 0x61, 0x00);
+    this.addString(bytes, `${(data.service_type || 'dine_in').toUpperCase().replace('_', '-')}` + '\n');
+    if (data.table_number) this.addString(bytes, `Table: ${data.table_number}\n`);
+    this.addString(bytes, `Order: ${data.order_number}\n`);
+    if (data.created_at) this.addString(bytes, `Time: ${new Date(data.created_at).toLocaleString()}\n`);
+    this.addString(bytes, `${this.divider('-', width)}\n`);
+    const items = data.items || (data.item_name ? [{ name: data.item_name, quantity: data.quantity || 1 }] : []);
+    for (const item of items) {
+      this.addString(bytes, `${item.quantity} x ${item.name}\n`);
+      for (const option of item.options || []) this.addString(bytes, `  + ${option}\n`);
+      if (item.note) this.addString(bytes, `  NOTE: ${item.note}\n`);
+    }
+    const note = data.customer_note || data.note;
+    if (note) this.addString(bytes, `${this.divider('-', width)}\nNOTE: ${note}\n`);
+    if (data.reason) this.addString(bytes, `REASON: ${data.reason}\n`);
+    this.addString(bytes, `${this.divider('=', width)}\n`);
+    bytes.push(0x1B, 0x64, this.feedLines);
+    if (this.autoCut) bytes.push(0x1D, 0x56, 0x41, 0x00);
     return Buffer.from(bytes);
   }
 

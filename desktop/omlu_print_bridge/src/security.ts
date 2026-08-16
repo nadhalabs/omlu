@@ -11,10 +11,11 @@ const ALLOWED_ORIGINS = [
 
 const usedNonces = new Set<string>();
 
-setInterval(() => {
+const nonceCleanupTimer = setInterval(() => {
   // Clear nonce cache periodically
   usedNonces.clear();
 }, 10 * 60 * 1000);
+nonceCleanupTimer.unref();
 
 let registeredPublicKeyPem: string | null = null;
 let registeredPublicKey: crypto.KeyObject | null = null;

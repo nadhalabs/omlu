@@ -32,6 +32,12 @@ export interface PrinterConfig {
   installationId: string;
   tenantId: string;
   pairedAt?: string;
+  backendUrl: string;
+  credentialSecret: string;
+  kitchenPrinterEnabled: boolean;
+  kitchenPrinterName: string;
+  kitchenPrinterHost: string;
+  kitchenPrinterPort: number;
 }
 
 export const defaultConfig: PrinterConfig = {
@@ -58,6 +64,12 @@ export const defaultConfig: PrinterConfig = {
   parity: 'none',
   installationId: '',
   tenantId: '',
+  backendUrl: '',
+  credentialSecret: '',
+  kitchenPrinterEnabled: false,
+  kitchenPrinterName: 'Kitchen Printer',
+  kitchenPrinterHost: '',
+  kitchenPrinterPort: 9100,
 };
 
 export class ConfigManager {
@@ -76,6 +88,9 @@ export class ConfigManager {
       this.configPath = path.join(dir, 'config.json');
     }
     this.currentConfig = this.load();
+    if (!this.currentConfig.installationId) {
+      this.saveConfig({ installationId: `inst_${require('crypto').randomBytes(12).toString('hex')}` });
+    }
   }
 
   public getConfig(): PrinterConfig {
