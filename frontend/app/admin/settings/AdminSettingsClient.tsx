@@ -37,8 +37,8 @@ export default function AdminSettingsClient() {
 
   const [timezone, setTimezone] = useState("");
   const [orderPrefix, setOrderPrefix] = useState("");
-  const [serviceRequestsEnabled, setServiceRequestsEnabled] = useState(true);
-  const [kitchenMode, setKitchenMode] = useState<"kds" | "direct_print">("kds");
+  const [serviceRequestsEnabled, setServiceRequestsEnabled] = useState<boolean | null>(null);
+  const [kitchenMode, setKitchenMode] = useState<"kds" | "direct_print" | null>(null);
   const [gstEnabled, setGstEnabled] = useState(false);
   const [gstin, setGstin] = useState("");
   const [legalBusinessName, setLegalBusinessName] = useState("");
@@ -131,8 +131,8 @@ export default function AdminSettingsClient() {
       const updateData: RestaurantSettingsUpdate = saveGstOnly ? gstUpdateData : {
         timezone: timezone || undefined,
         order_prefix: orderPrefix.toUpperCase() || undefined,
-        service_requests_enabled: serviceRequestsEnabled,
-        kitchen_mode: kitchenMode,
+        service_requests_enabled: serviceRequestsEnabled ?? settings?.service_requests_enabled,
+        kitchen_mode: kitchenMode ?? settings?.kitchen_mode,
         ...gstUpdateData,
       };
       const updated = await updateRestaurantSettings(updateData);
@@ -267,10 +267,10 @@ export default function AdminSettingsClient() {
 
         <SettingsSection title="Operations" description="Control customer-facing restaurant operations.">
           <div className="space-y-5">
-            <SwitchRow label="Customer service requests" description="Allow customers to request a waiter, water, or assistance from their table." checked={serviceRequestsEnabled} onChange={setServiceRequestsEnabled} />
+            <SwitchRow label="Customer service requests" description="Allow customers to request a waiter, water, or assistance from their table." checked={serviceRequestsEnabled === true} onChange={setServiceRequestsEnabled} />
             <fieldset>
               <legend className="text-sm font-black text-[var(--omlu-text-primary)]">Kitchen System</legend>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <div className="mt-3 grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Kitchen System">
                 <KitchenModeCard value="kds" selected={kitchenMode === "kds"} onChange={setKitchenMode} title="Kitchen Display" description="Live kitchen screen with realtime order progress." />
                 <KitchenModeCard value="direct_print" selected={kitchenMode === "direct_print"} onChange={setKitchenMode} title="Direct Kitchen Print" description="Orders are sent directly to the kitchen printer." />
               </div>
@@ -339,7 +339,7 @@ function SummaryItem({ label, value, mono, status, className = "" }: { label: st
 }
 
 function SwitchRow({ label, description, checked, onChange }: { label: string; description: string; checked: boolean; onChange: (checked: boolean) => void }) {
-  return <div className="flex min-w-0 items-start justify-between gap-4 rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] p-4"><div className="min-w-0"><p className="text-sm font-bold text-[var(--omlu-text-primary)]">{label}</p><p className="mt-1 text-xs leading-5 text-[var(--omlu-text-secondary)]">{description}</p></div><button type="button" role="switch" aria-checked={checked} aria-label={label} onClick={() => onChange(!checked)} className={`relative mt-0.5 inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 ${checked ? "bg-orange-600" : "bg-[var(--omlu-border-strong)]"}`}><span className={`h-5 w-5 rounded-full bg-white shadow transition-transform ${checked ? "translate-x-6" : "translate-x-1"}`} /></button></div>;
+  return <div className="flex min-w-0 items-start justify-between gap-4 rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] p-4"><div className="min-w-0"><p className="text-sm font-bold text-[var(--omlu-text-primary)]">{label}</p><p className="mt-1 text-xs leading-5 text-[var(--omlu-text-secondary)]">{description}</p></div><button type="button" role="switch" aria-checked={checked} aria-label={label} onClick={() => onChange(!checked)} className={`relative mt-1 inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--omlu-primary-surface)] ${checked ? "border-orange-600 bg-orange-600" : "border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)]"}`}><span aria-hidden="true" className={`h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${checked ? "translate-x-6" : "translate-x-1"}`} /></button></div>;
 }
 
 function TaxModeCard({ value, selected, onChange, title, description }: { value: "inclusive" | "exclusive"; selected: boolean; onChange: (value: "inclusive" | "exclusive") => void; title: string; description: string }) {
@@ -347,7 +347,7 @@ function TaxModeCard({ value, selected, onChange, title, description }: { value:
 }
 
 function KitchenModeCard({ value, selected, onChange, title, description }: { value: "kds" | "direct_print"; selected: boolean; onChange: (value: "kds" | "direct_print") => void; title: string; description: string }) {
-  return <label data-selected={selected} className={`flex cursor-pointer gap-3 rounded-xl border p-4 transition-colors ${selected ? "border-orange-500 bg-orange-500/10 ring-2 ring-orange-500/20" : "border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] hover:border-[var(--omlu-border-strong)]"}`}><input type="radio" name="kitchen-mode" value={value} checked={selected} onChange={() => onChange(value)} className="mt-0.5 h-5 w-5 shrink-0 accent-orange-600" /><span className="min-w-0 flex-1"><span className="flex items-center justify-between gap-3"><span className="block text-sm font-bold text-[var(--omlu-text-primary)]">{title}</span>{selected && <span aria-hidden="true" className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-orange-600 text-xs font-black text-white">✓</span>}</span><span className="mt-1 block text-xs leading-5 text-[var(--omlu-text-secondary)]">{description}</span></span><span className="sr-only">{selected ? "Selected" : "Not selected"}</span></label>;
+  return <button type="button" role="radio" aria-checked={selected} data-selected={selected} onClick={() => onChange(value)} className={`flex w-full cursor-pointer gap-3 rounded-xl border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--omlu-primary-surface)] ${selected ? "border-orange-600 bg-orange-500/10 ring-1 ring-orange-500/30" : "border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] hover:border-[var(--omlu-border-strong)]"}`}><span aria-hidden="true" className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 text-[10px] font-black transition-colors ${selected ? "border-orange-600 bg-orange-600 text-white" : "border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] text-transparent"}`}>✓</span><span className="min-w-0 flex-1"><span className="block text-sm font-bold text-[var(--omlu-text-primary)]">{title}</span><span className="mt-1 block text-xs leading-5 text-[var(--omlu-text-secondary)]">{description}</span></span><span className="sr-only">{selected ? "Selected" : "Not selected"}</span></button>;
 }
 
 function InfoCard({ title, description, children }: { title: string; description: string; children?: ReactNode }) {
