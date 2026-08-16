@@ -33,6 +33,7 @@ export interface PrinterConfig {
   tenantId: string;
   pairedAt?: string;
   backendUrl: string;
+  backendPublicKeyPem: string;
   credentialSecret: string;
   kitchenPrinterEnabled: boolean;
   kitchenPrinterName: string;
@@ -65,6 +66,7 @@ export const defaultConfig: PrinterConfig = {
   installationId: '',
   tenantId: '',
   backendUrl: '',
+  backendPublicKeyPem: '',
   credentialSecret: '',
   kitchenPrinterEnabled: false,
   kitchenPrinterName: 'Kitchen Printer',

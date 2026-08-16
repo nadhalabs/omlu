@@ -141,15 +141,29 @@ test('HTTP API Server health and capabilities endpoints', async () => {
     const codeData = await codeRes.json();
     assert.ok(codeData.pairing_code);
 
+    const wrongConfirmRes = await fetch('http://127.0.0.1:24299/v1/pairing/confirm', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pairing_code: '000000' }),
+    });
+    assert.equal(wrongConfirmRes.status, 400);
+    assert.equal((await wrongConfirmRes.json()).message, 'Invalid or expired pairing code.');
+
     // POST /v1/pairing/confirm
     const confirmRes = await fetch('http://127.0.0.1:24299/v1/pairing/confirm', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pairing_code: codeData.pairing_code, installation_id: 'inst_test_1' })
+      body: JSON.stringify({ pairing_code: codeData.pairing_code, installation_id: 'inst_test_1', tenant_id: 'tenant-1',
+        backend_url: 'https://omlu.in', backend_public_key_pem: publicKeyPem, credential_secret: 'device-only-secret' })
     });
     assert.equal(confirmRes.status, 200);
     const confirmData = await confirmRes.json();
     assert.equal(confirmData.status, 'paired');
+    const pairedHealthRes = await fetch('http://127.0.0.1:24299/v1/health');
+    const pairedHealth = await pairedHealthRes.json();
+    assert.equal(pairedHealth.paired, true);
+    assert.equal(pairedHealth.tenant_id, 'tenant-1');
+    const persistedPairing = fs.readFileSync(tmpConfig, 'utf8');
+    assert.doesNotMatch(persistedPairing, /PRIVATE KEY|exchange_token/i);
   } finally {
     await server.close();
     if (fs.existsSync(tmpConfig)) fs.unlinkSync(tmpConfig);

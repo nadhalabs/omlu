@@ -19,8 +19,9 @@ test("Admin Settings renders Desktop Print Bridge section with dynamic status an
   assert.match(settings, /Windows Printer Bridge/);
   assert.match(settings, /checkBridgeHealth/);
   assert.match(settings, /127\.0\.0\.1:24242/);
-  assert.match(settings, /Not connected/);
-  assert.match(settings, /Connected/);
+  assert.match(settings, /Not running/);
+  assert.match(settings, /Bridge detected/);
+  assert.match(settings, /Paired/);
   assert.doesNotMatch(settings, /● Bridge Support Active/);
   assert.match(settings, /Download Windows Bridge \(Developer \/ Hardware Test Package\)/);
   assert.match(settings, /href="\/downloads\/omlu-print-bridge-developer-package\.zip"/);

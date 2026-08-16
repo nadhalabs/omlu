@@ -1846,3 +1846,10 @@ export async function exchangeBridgeCredential(exchangeToken: string): Promise<{
   if (!res.ok) throw new ApiError(res.status, body.detail || "Could not complete printer pairing.");
   return body;
 }
+
+export async function getPrintBridgePublicKey(): Promise<{ public_key_pem: string }> {
+  const res = await fetch("/api/admin/print-bridge/public-key", { cache: "no-store" });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok || typeof body.public_key_pem !== "string") throw new ApiError(res.status, "Could not load Printer Bridge security key.");
+  return { public_key_pem: body.public_key_pem };
+}

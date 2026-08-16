@@ -1,7 +1,7 @@
 import * as http from 'http';
 import * as crypto from 'crypto';
 import { ConfigManager, PrinterConfig } from './config';
-import { validateOriginAndHost, verifySignedToken, sanitizeErrorMessage } from './security';
+import { validateOriginAndHost, verifySignedToken, sanitizeErrorMessage, setPublicKeyPem } from './security';
 import { getBleCapability } from './capabilities/ble_capability';
 import { PrintJobCoordinator } from './coordinator';
 import { WindowsRawSpoolerTransport } from './transports/raw_spooler_transport';
@@ -23,6 +23,8 @@ export class PrintBridgeServer {
 
   constructor(customConfigPath?: string) {
     this.configManager = new ConfigManager(customConfigPath);
+    const config = this.configManager.getConfig();
+    if (config.backendPublicKeyPem) setPublicKeyPem(config.backendPublicKeyPem);
     this.coordinator = new PrintJobCoordinator();
     this.kitchenConsumer = new KitchenPrintConsumer(this.configManager, this.coordinator);
     this.server = http.createServer((req, res) => this.handleRequest(req, res));
@@ -79,6 +81,7 @@ export class PrintBridgeServer {
           printer_online: isOnline,
           installation_id: config.installationId || null,
           tenant_id: config.tenantId || null,
+          paired: Boolean(config.tenantId && config.credentialSecret && config.backendPublicKeyPem && config.pairedAt),
           kitchen_printer_configured: Boolean(config.kitchenPrinterEnabled && config.kitchenPrinterHost),
           kitchen_printer_name: config.kitchenPrinterName,
           kitchen_printer_host: config.kitchenPrinterHost,
@@ -122,9 +125,20 @@ export class PrintBridgeServer {
           return this.json(res, 400, { error: 'INVALID_PAIRING_CODE', message: 'Invalid or expired pairing code.' });
         }
         this.activePairingCode = null;
+        if (!body.backend_public_key_pem || !body.backend_url || !body.credential_secret || !body.tenant_id) {
+          return this.json(res, 422, { error: 'INCOMPLETE_PAIRING', message: 'Pairing details are incomplete.' });
+        }
+        try {
+          setPublicKeyPem(String(body.backend_public_key_pem));
+        } catch {
+          return this.json(res, 422, { error: 'INVALID_PUBLIC_KEY', message: 'Pairing security key is invalid.' });
+        }
         this.configManager.saveConfig({
           installationId: body.installation_id || `inst_${crypto.randomBytes(8).toString('hex')}`,
-          tenantId: body.tenant_id || 'unknown',
+          tenantId: String(body.tenant_id),
+          backendUrl: String(body.backend_url).replace(/\/$/, ''),
+          backendPublicKeyPem: String(body.backend_public_key_pem),
+          credentialSecret: String(body.credential_secret),
           pairedAt: new Date().toISOString(),
         });
         return this.json(res, 200, { status: 'paired', installation_id: this.configManager.getConfig().installationId });
@@ -157,8 +171,7 @@ export class PrintBridgeServer {
           return this.json(res, 422, { error: 'INVALID_KITCHEN_PRINTER', message: 'Enter a valid kitchen printer host and port.' });
         }
         this.configManager.saveConfig({
-          backendUrl: String(body.backendUrl || '').replace(/\/$/, ''), credentialSecret: body.credentialSecret,
-          tenantId: String(body.tenantId || ''), kitchenPrinterEnabled: true,
+          kitchenPrinterEnabled: true,
           kitchenPrinterName: String(body.kitchenPrinterName || 'Kitchen Printer').slice(0, 100),
           kitchenPrinterHost: String(body.kitchenPrinterHost).trim(), kitchenPrinterPort: port,
         });
