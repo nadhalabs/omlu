@@ -26,6 +26,7 @@ from app.services.bills import build_bill_response, create_or_refresh_bill_for_s
 from app.services.dining_sessions import create_session_safely, find_current_open_session_for_table, get_or_create_open_session
 from app.services.menu_options import serialize_item_option_groups
 from app.services.order_item_cancellation import cancel_order_item
+from app.services.kitchen_print_jobs import enqueue_cancellation_kot
 from app.services.realtime import (
     EVENT_DRAFT_BILL_VOIDED,
     EVENT_EMPTY_TABLE_DISMISSED,
@@ -104,6 +105,7 @@ def cancel_staff_order_item(
             "reason": reason,
             "resulting_order_status": order.status,
         })
+        enqueue_cancellation_kot(db, order, item)
         db.commit()
     except Exception:
         db.rollback()

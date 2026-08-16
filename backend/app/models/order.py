@@ -55,6 +55,7 @@ class Order(Base):
     )
     customer_note: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
     source: Mapped[str] = mapped_column(String(50), default="customer_qr", server_default="customer_qr")
+    kitchen_mode_snapshot: Mapped[str] = mapped_column(String(20), default="kds", server_default="kds", nullable=False)
     created_by_staff_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
     created_by_participant_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("table_session_participants.id", ondelete="SET NULL"),

@@ -12,6 +12,7 @@ from app.database import get_db
 from app.models.menu import MenuItem, MenuItemOptionGroup, MenuOptionGroup
 from app.models.restaurant import Restaurant
 from app.models.quick_sale import QuickSale, QuickSaleItem, QuickSaleItemSelectedOption
+from app.models.print_bridge import KitchenPrintJob
 from app.models.order import RestaurantDailySequence
 from app.models.staff_user import AuditLog, StaffUser
 from app.models.payment import Payment, RevenueEntry
@@ -454,6 +455,21 @@ def create_quick_sale(
                 display_order=option.display_order,
             ))
         sale.items.append(sale_item)
+    db.flush()
+    if sale.sale_type == "takeaway" and getattr(current_user.restaurant, "kitchen_mode", "kds") == "direct_print":
+        db.add(KitchenPrintJob(
+            restaurant_id=current_user.restaurant_id,
+            quick_sale_id=sale.id,
+            document_type="initial_kot",
+            idempotency_key=f"quick_sale:{sale.id}:initial_kot",
+            payload=json.dumps({
+                "document_type": "initial_kot", "service_type": "takeaway",
+                "quick_sale_id": sale.id, "order_number": sale.order_number, "note": sale.note,
+                "items": [{"id": item.id, "name": item.item_name, "quantity": item.quantity, "note": item.item_note,
+                           "options": [option.kitchen_display_name or option.option_name for option in item.selected_options]}
+                          for item in sale.items],
+            }),
+        ))
     _audit(db, current_user, sale, "quick_sale_created", {"type": sale.sale_type, "total": str(totals.total_amount), "payment_method": body.payment_method})
     if sale.status == "completed":
         payment = Payment(

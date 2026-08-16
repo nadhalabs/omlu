@@ -26,6 +26,7 @@ class DiningSessionSummary(BaseModel):
 
 
 class DiningSessionOrderSummary(BaseModel):
+    kitchen_mode_snapshot: str
     order_number: str
     public_token: str
     status: str
@@ -82,6 +83,7 @@ class PublicDiningSessionServiceRequest(BaseModel):
 
 
 class PublicDiningSessionResponse(BaseModel):
+    kitchen_mode: str
     public_token: str
     status: str
     restaurant_name: str

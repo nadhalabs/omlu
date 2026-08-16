@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class RestaurantSettingsResponse(BaseModel):
+    kitchen_mode: str
     timezone: str
     currency: str
     order_prefix: str
@@ -23,6 +24,7 @@ class RestaurantSettingsResponse(BaseModel):
 
 
 class RestaurantSettingsUpdate(BaseModel):
+    kitchen_mode: Optional[str] = None
     timezone: Optional[str] = None
     currency: Optional[str] = None
     order_prefix: Optional[str] = None
@@ -48,6 +50,16 @@ class RestaurantSettingsUpdate(BaseModel):
         except (zoneinfo.ZoneInfoNotFoundError, KeyError):
             raise ValueError(f"Unknown timezone: {v!r}. Use a valid IANA timezone name like 'Asia/Kolkata'.")
         return v
+
+    @field_validator("kitchen_mode")
+    @classmethod
+    def validate_kitchen_mode(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        normalized = v.strip().lower()
+        if normalized not in {"kds", "direct_print"}:
+            raise ValueError("Kitchen system must be Kitchen Display or Direct Kitchen Print.")
+        return normalized
 
     @field_validator("currency")
     @classmethod

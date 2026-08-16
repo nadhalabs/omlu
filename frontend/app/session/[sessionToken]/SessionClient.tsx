@@ -12,6 +12,7 @@ import {
   getTableParticipantAuthority,
   isDefiniteAuthFailure,
 } from "@/lib/api";
+import { kitchenCapabilities } from "@/lib/kitchenCapabilities";
 import { PublicDiningSessionResponse } from "@/lib/types";
 import {
   clearLegacyPublicReceiptToken,
@@ -918,7 +919,10 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
                 }));
               };
 
-              const stages = order.status === "rejected"
+              const capabilities = kitchenCapabilities(order.kitchen_mode_snapshot || session.kitchen_mode);
+              const stages = !capabilities.showLiveKitchenProgress
+                ? [{ key: order.status === "rejected" ? "rejected" : "pending" }]
+                : order.status === "rejected"
                 ? [
                     { key: "pending" },
                     { key: "rejected" }
@@ -977,7 +981,7 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
                     </div>
                     <div className="flex items-center gap-2">
                       <p className="rounded-xl bg-[var(--omlu-muted-surface)] px-3 py-1 text-xs font-black text-[var(--omlu-text-primary)] dark:bg-[var(--omlu-muted-surface)] dark:text-[var(--omlu-text-secondary)]">
-                        {t.statusLabels[order.status] || order.status}
+                        {capabilities.showLiveKitchenProgress ? (t.statusLabels[order.status] || order.status) : (order.status === "rejected" ? t.statusLabels.rejected : "Order sent to kitchen")}
                       </p>
                       <svg
                         className={`h-5 w-5 text-[var(--omlu-text-secondary)] transition-transform duration-200 ${
@@ -1087,7 +1091,7 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
                   <div className="mt-4 flex flex-col gap-3">
                     {order.items.map((item) => {
                       const cancelled = item.cancellation_status === "cancelled";
-                      const canCancel = !cancelled && (order.status === "pending" || order.status === "accepted") && session.status === "open" && Boolean(participantToken);
+                      const canCancel = capabilities.customerSelfCancellationAllowed && !cancelled && (order.status === "pending" || order.status === "accepted") && session.status === "open" && Boolean(participantToken);
                       return (
                       <div
                         key={item.id}
@@ -1114,6 +1118,7 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
                       </div>
                     );})}
                   </div>
+                  {!capabilities.customerSelfCancellationAllowed && <p className="mt-3 rounded-xl bg-[var(--omlu-muted-surface)] p-3 text-xs font-semibold text-[var(--omlu-text-secondary)]">Need to change or cancel an item? Please contact restaurant staff.</p>}
 
                   {order.customer_note && (
                     <div className="mt-4 rounded-2xl bg-[var(--omlu-muted-surface)] p-3 text-xs text-[var(--omlu-text-secondary)] dark:bg-[var(--omlu-muted-surface)] dark:text-[var(--omlu-text-secondary)]">

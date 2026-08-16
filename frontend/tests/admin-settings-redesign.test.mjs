@@ -63,3 +63,11 @@ test("owner-facing GST copy avoids backend implementation language", () => {
   assert.doesNotMatch(billingSection, /backend/i);
   assert.match(billingSection, /used on customer bills and tax invoices/);
 });
+
+test("Operations exposes restaurant-facing kitchen workflow choices", () => {
+  assert.match(settings, /kitchen_mode: kitchenMode/);
+  assert.match(settings, /Kitchen System/);
+  assert.match(settings, /Kitchen Display/);
+  assert.match(settings, /Direct Kitchen Print/);
+  assert.doesNotMatch(settings, />direct_print</);
+});
