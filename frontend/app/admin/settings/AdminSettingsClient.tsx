@@ -190,9 +190,9 @@ export default function AdminSettingsClient() {
       {error && <div role="alert" className="rounded-xl border border-red-700/40 bg-red-950/20 px-4 py-3 text-sm font-semibold text-red-600 dark:text-red-400">{error}</div>}
       {success && <div role="status" className="rounded-xl border border-emerald-700/40 bg-emerald-950/20 px-4 py-3 text-sm font-semibold text-emerald-700 dark:text-emerald-400">{success}</div>}
 
-      <form onSubmit={handleSave} className="flex min-w-0 flex-col gap-6">
+      <form onSubmit={handleSave} className={`flex min-w-0 flex-col gap-6 ${hasUnsavedChanges ? "pb-28 sm:pb-24" : ""}`}>
         {hasUnsavedChanges && (
-          <div role="region" aria-label="Unsaved settings" className="sticky top-4 z-30 flex flex-col gap-3 rounded-2xl border border-orange-500/50 bg-[var(--omlu-primary-surface)] p-4 shadow-lg sm:flex-row sm:items-center">
+          <div role="region" aria-label="Unsaved settings" className="fixed inset-x-4 bottom-4 z-50 mx-auto flex max-w-5xl flex-col gap-3 rounded-2xl border border-orange-500/50 bg-[var(--omlu-primary-surface)] p-4 shadow-2xl sm:flex-row sm:items-center">
             <p className="flex-1 text-sm font-black text-[var(--omlu-text-primary)]">Unsaved changes</p>
             <div className="grid grid-cols-2 gap-2 sm:flex">
               <button type="button" onClick={discardChanges} disabled={saving} className="min-h-11 rounded-xl border border-[var(--omlu-border-strong)] px-5 text-sm font-bold text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-muted-surface)] disabled:cursor-not-allowed disabled:opacity-50">Discard</button>
