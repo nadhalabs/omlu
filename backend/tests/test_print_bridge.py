@@ -30,7 +30,7 @@ client = ParticipantTestClient(app)
 @pytest.fixture(scope="module")
 def setup_bridge_test_data():
     db = SessionLocal()
-    db.query(Restaurant).filter(Restaurant.slug == "bridge-test-rest").delete()
+    db.query(Restaurant).filter(Restaurant.slug.in_(["bridge-test-rest", "bridge-other-rest"])).delete(synchronize_session=False)
     db.commit()
 
     restaurant = Restaurant(name="Bridge Test Rest", slug="bridge-test-rest", is_active=True)
@@ -45,8 +45,19 @@ def setup_bridge_test_data():
         role="owner",
         is_active=True,
     )
-    db.add(owner)
+    admin = StaffUser(
+        restaurant_id=restaurant.id, name="Bridge Admin", username="bridge_admin",
+        password_hash=hash_password("adminpass"), role="admin", is_active=True,
+    )
+    other_restaurant = Restaurant(name="Bridge Other Rest", slug="bridge-other-rest", is_active=True)
+    db.add_all([owner, admin, other_restaurant])
     db.commit()
+
+    other_owner = StaffUser(
+        restaurant_id=other_restaurant.id, name="Other Bridge Owner", username="bridge_other_owner",
+        password_hash=hash_password("otherpass"), role="owner", is_active=True,
+    )
+    db.add(other_owner); db.commit()
 
     token = create_access_token({"sub": str(owner.id), "restaurant_id": restaurant.id, "role": "owner"})
     headers = {"Authorization": f"Bearer {token}"}
@@ -55,11 +66,13 @@ def setup_bridge_test_data():
         "restaurant": restaurant,
         "owner": owner,
         "headers": headers,
+        "admin_headers": {"Authorization": f"Bearer {create_access_token({'sub': str(admin.id), 'restaurant_id': restaurant.id, 'role': 'admin'})}"},
+        "other_headers": {"Authorization": f"Bearer {create_access_token({'sub': str(other_owner.id), 'restaurant_id': other_restaurant.id, 'role': 'owner'})}"},
     }
     yield data
 
-    db.query(StaffUser).filter(StaffUser.username == "bridge_owner").delete()
-    db.query(Restaurant).filter(Restaurant.slug == "bridge-test-rest").delete()
+    db.query(StaffUser).filter(StaffUser.username.in_(["bridge_owner", "bridge_admin", "bridge_other_owner"])).delete(synchronize_session=False)
+    db.query(Restaurant).filter(Restaurant.slug.in_(["bridge-test-rest", "bridge-other-rest"])).delete(synchronize_session=False)
     db.commit()
     db.close()
 
@@ -141,6 +154,31 @@ def test_pairing_challenge_attempt_limit(setup_bridge_test_data):
     )
     assert fourth_res.status_code == 400
     assert "INVALID_PAIRING_CHALLENGE" in fourth_res.json()["detail"]
+
+
+def test_admin_pairing_and_tenant_isolation(setup_bridge_test_data):
+    inst_id = f"inst_admin_{uuid.uuid4().hex[:6]}"
+    challenge = client.post(
+        "/api/admin/print-bridge/pairing-challenge",
+        headers=setup_bridge_test_data["admin_headers"], json={"installation_id": inst_id},
+    )
+    assert challenge.status_code == 200
+    code = challenge.json()["pairing_code"]
+
+    cross_tenant = client.post(
+        "/api/admin/print-bridge/confirm-pairing",
+        headers=setup_bridge_test_data["other_headers"],
+        json={"installation_id": inst_id, "pairing_code": code},
+    )
+    assert cross_tenant.status_code == 400
+    assert "INVALID_PAIRING_CHALLENGE" in cross_tenant.json()["detail"]
+
+    same_tenant = client.post(
+        "/api/admin/print-bridge/confirm-pairing",
+        headers=setup_bridge_test_data["admin_headers"],
+        json={"installation_id": inst_id, "pairing_code": code},
+    )
+    assert same_tenant.status_code == 200
 
 
 def test_exchange_token_redemption():
