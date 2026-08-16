@@ -10,6 +10,7 @@ from app.models.restaurant import Restaurant
 from app.models.restaurant_table import RestaurantTable
 from app.models.menu import MenuCategory, MenuItem
 from app.models.order import Order, OrderItem, OrderStatusHistory, RestaurantDailySequence
+from app.models.print_bridge import KitchenPrintJob
 from app.models.service_request import ServiceRequest
 from app.models.table_session_participant import TableSessionParticipant
 from app.services.table_participants import authority_hash, token_hash
@@ -156,6 +157,47 @@ def post_first_order(data, table_code, *, key=None, item_id=None):
         json=create_order_payload(item_id or data["item_id"]),
         headers={"Idempotency-Key": key or f"idemp-{uuid.uuid4().hex}"},
     )
+
+
+def test_direct_print_order_creates_one_kot_and_blocks_customer_cancellation(setup_test_data):
+    data = setup_test_data
+    table_code = create_test_table(data, "DP")
+    key = f"direct-print-{uuid.uuid4().hex}"
+    db = SessionLocal()
+    restaurant = db.query(Restaurant).filter(Restaurant.id == data["restaurant_id"]).one()
+    restaurant.kitchen_mode = "direct_print"
+    db.commit()
+    db.close()
+    try:
+        response = post_first_order(data, table_code, key=key)
+        assert response.status_code == 201
+        body = response.json()
+        order = body["session"]["orders"][0]
+        assert order["kitchen_mode_snapshot"] == "direct_print"
+
+        replay = post_first_order(data, table_code, key=key)
+        assert replay.status_code == 201
+        db = SessionLocal()
+        persisted = db.query(Order).filter(Order.public_token == order["public_token"]).one()
+        jobs = db.query(KitchenPrintJob).filter(KitchenPrintJob.order_id == persisted.id).all()
+        assert len(jobs) == 1
+        assert jobs[0].idempotency_key == f"order:{persisted.id}:initial_kot"
+        item_id = persisted.items[0].id
+        db.close()
+
+        cancelled = client.post(
+            f"/public/sessions/{body['session']['public_token']}/orders/{order['public_token']}/items/{item_id}/cancel",
+            json={"reason": "customer_cancelled"},
+            headers={"X-Participant-Token": body["participant_token"]},
+        )
+        assert cancelled.status_code == 409
+        assert "contact restaurant staff" in cancelled.json()["detail"]
+    finally:
+        db = SessionLocal()
+        restaurant = db.query(Restaurant).filter(Restaurant.id == data["restaurant_id"]).one()
+        restaurant.kitchen_mode = "kds"
+        db.commit()
+        db.close()
 
 
 def test_first_checkout_atomically_creates_session_participant_and_order(setup_test_data):

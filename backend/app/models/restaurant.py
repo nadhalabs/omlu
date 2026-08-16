@@ -21,6 +21,7 @@ class Restaurant(Base):
     currency: Mapped[str] = mapped_column(String(10), default="INR", server_default="INR")
     order_prefix: Mapped[str] = mapped_column(String(10), default="NS", server_default="NS")
     service_requests_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    kitchen_mode: Mapped[str] = mapped_column(String(20), default="kds", server_default="kds", nullable=False)
     gst_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
     gstin: Mapped[Optional[str]] = mapped_column(String(15), nullable=True)
     legal_business_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
@@ -89,4 +90,5 @@ class Restaurant(Base):
         CheckConstraint("operating_status IN ('open', 'closing', 'closed')", name="chk_restaurant_operating_status"),
         CheckConstraint("tax_mode IN ('inclusive', 'exclusive')", name="chk_restaurants_tax_mode"),
         CheckConstraint("default_gst_rate >= 0 AND default_gst_rate <= 100", name="chk_restaurants_gst_rate"),
+        CheckConstraint("kitchen_mode IN ('kds', 'direct_print')", name="chk_restaurants_kitchen_mode"),
     )

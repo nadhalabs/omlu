@@ -1,4 +1,5 @@
 import hashlib
+import json
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -10,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.utils.auth import get_current_staff_user, RoleChecker
-from app.models.print_bridge import PrintBridgeInstallation, PrintBridgePairingChallenge
+from app.models.print_bridge import PrintBridgeInstallation, PrintBridgePairingChallenge, KitchenPrintJob
 from app.services.print_bridge_service import (
     get_public_key_pem,
     get_public_key_raw_base64,
@@ -54,6 +55,11 @@ class TokenVerifyRequest(BaseModel):
 
 class RevokeInstallationRequest(BaseModel):
     installation_id: str = Field(..., min_length=1, max_length=64)
+
+
+class PrintJobStatusRequest(BaseModel):
+    status: str
+    failure_message: Optional[str] = Field(None, max_length=500)
 
 
 @router.get("/public-key")
@@ -320,3 +326,99 @@ def revoke_installation(
     db.commit()
 
     return {"status": "revoked", "installation_id": req.installation_id}
+
+
+def _job_payload(job: KitchenPrintJob) -> dict:
+    return {
+        "id": job.id,
+        "document_type": job.document_type,
+        "order_id": job.order_id,
+        "quick_sale_id": job.quick_sale_id,
+        "order_item_id": job.order_item_id,
+        "destination": job.destination,
+        "payload": json.loads(job.payload),
+        "status": job.status,
+        "retry_count": job.retry_count,
+        "failure_message": "Kitchen printer offline" if job.status == "failed" else None,
+        "created_at": job.created_at,
+        "printed_at": job.printed_at,
+    }
+
+
+@router.get("/kitchen-jobs")
+def list_kitchen_jobs(
+    job_status: Optional[str] = None,
+    current_staff=Depends(get_current_staff_user),
+    _=Depends(RoleChecker(["owner", "admin", "kitchen"])),
+    db: Session = Depends(get_db),
+):
+    query = db.query(KitchenPrintJob).filter(KitchenPrintJob.restaurant_id == current_staff.restaurant_id)
+    if job_status:
+        if job_status not in {"pending", "printing", "printed", "failed"}:
+            raise HTTPException(status_code=422, detail="Invalid print job status")
+        query = query.filter(KitchenPrintJob.status == job_status)
+    jobs = query.order_by(KitchenPrintJob.created_at.asc(), KitchenPrintJob.id.asc()).limit(100).all()
+    return {"jobs": [_job_payload(job) for job in jobs]}
+
+
+@router.post("/kitchen-jobs/{job_id}/status")
+def update_kitchen_job_status(
+    job_id: int,
+    req: PrintJobStatusRequest,
+    current_staff=Depends(get_current_staff_user),
+    _=Depends(RoleChecker(["owner", "admin", "kitchen"])),
+    db: Session = Depends(get_db),
+):
+    if req.status not in {"printing", "printed", "failed"}:
+        raise HTTPException(status_code=422, detail="Invalid print job status")
+    job = db.query(KitchenPrintJob).filter(
+        KitchenPrintJob.id == job_id,
+        KitchenPrintJob.restaurant_id == current_staff.restaurant_id,
+    ).with_for_update().first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Kitchen print job not found")
+    if job.status == "printed":
+        if req.status == "printed":
+            return _job_payload(job)
+        raise HTTPException(status_code=409, detail="This kitchen ticket is already printed")
+    allowed_transition = {
+        "pending": "printing",
+        "printing": req.status if req.status in {"printed", "failed"} else None,
+        "failed": None,
+    }.get(job.status)
+    if allowed_transition != req.status:
+        raise HTTPException(status_code=409, detail="Kitchen ticket state changed; refresh before trying again")
+    job.status = req.status
+    if req.status == "printed":
+        job.printed_at = datetime.now(timezone.utc)
+        job.failure_message = None
+    elif req.status == "failed":
+        job.failure_message = req.failure_message or "Printer unavailable"
+    db.commit()
+    db.refresh(job)
+    return _job_payload(job)
+
+
+@router.post("/kitchen-jobs/{job_id}/retry")
+def retry_kitchen_job(
+    job_id: int,
+    current_staff=Depends(get_current_staff_user),
+    _=Depends(RoleChecker(["owner", "admin"])),
+    db: Session = Depends(get_db),
+):
+    job = db.query(KitchenPrintJob).filter(
+        KitchenPrintJob.id == job_id,
+        KitchenPrintJob.restaurant_id == current_staff.restaurant_id,
+    ).with_for_update().first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Kitchen print job not found")
+    if job.status == "printed":
+        raise HTTPException(status_code=409, detail="This kitchen ticket is already printed")
+    if job.status == "printing":
+        raise HTTPException(status_code=409, detail="This kitchen ticket is currently printing")
+    job.status = "pending"
+    job.retry_count += 1
+    job.failure_message = None
+    db.commit()
+    db.refresh(job)
+    return _job_payload(job)

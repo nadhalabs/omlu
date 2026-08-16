@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Column, DateTime, Integer, String, Text
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from app.database import Base
 
 class PrintBridgeInstallation(Base):
@@ -54,3 +54,23 @@ class PrintBridgePairingChallenge(Base):
         else:
             exp = self.expires_at
         return now < exp
+
+
+class KitchenPrintJob(Base):
+    __tablename__ = "kitchen_print_jobs"
+    __table_args__ = (UniqueConstraint("restaurant_id", "idempotency_key", name="uq_kitchen_print_job_key"),)
+
+    id = Column(Integer, primary_key=True)
+    restaurant_id = Column(Integer, ForeignKey("restaurants.id", ondelete="CASCADE"), nullable=False, index=True)
+    order_id = Column(Integer, ForeignKey("orders.id", ondelete="CASCADE"), nullable=True, index=True)
+    quick_sale_id = Column(Integer, ForeignKey("quick_sales.id", ondelete="CASCADE"), nullable=True, index=True)
+    order_item_id = Column(Integer, ForeignKey("order_items.id", ondelete="CASCADE"), nullable=True, index=True)
+    document_type = Column(String(30), nullable=False)
+    idempotency_key = Column(String(255), nullable=False)
+    destination = Column(String(30), nullable=False, default="kitchen")
+    payload = Column(Text, nullable=False)
+    status = Column(String(20), nullable=False, default="pending", server_default="pending", index=True)
+    retry_count = Column(Integer, nullable=False, default=0, server_default="0")
+    failure_message = Column(String(500), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    printed_at = Column(DateTime(timezone=True), nullable=True)

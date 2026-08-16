@@ -169,6 +169,62 @@ def setup_admin_test_data():
     db.close()
 
 
+def test_kitchen_mode_defaults_and_authorized_updates(setup_admin_test_data):
+    data = setup_admin_test_data
+    owner_headers = {"Authorization": f"Bearer {data['owner_token']}"}
+    admin_headers = {"Authorization": f"Bearer {data['admin_token']}"}
+
+    response = client.get("/admin/settings", headers=owner_headers)
+    assert response.status_code == 200
+    assert response.json()["kitchen_mode"] == "kds"
+
+    response = client.patch("/admin/settings", headers=admin_headers, json={"kitchen_mode": "direct_print"})
+    assert response.status_code == 200
+    assert response.json()["kitchen_mode"] == "direct_print"
+
+    response = client.patch("/admin/settings", headers=owner_headers, json={"kitchen_mode": "kds"})
+    assert response.status_code == 200
+    assert response.json()["kitchen_mode"] == "kds"
+
+
+def test_kitchen_mode_validation_and_role_enforcement(setup_admin_test_data):
+    data = setup_admin_test_data
+    for token in (data["staff_token"], data["kitchen_token"]):
+        response = client.patch(
+            "/admin/settings",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"kitchen_mode": "direct_print"},
+        )
+        assert response.status_code == 403
+
+    response = client.patch(
+        "/admin/settings",
+        headers={"Authorization": f"Bearer {data['owner_token']}"},
+        json={"kitchen_mode": "printer_magic"},
+    )
+    assert response.status_code == 422
+
+
+def test_kitchen_mode_update_is_tenant_scoped(setup_admin_test_data):
+    data = setup_admin_test_data
+    response = client.patch(
+        "/admin/settings",
+        headers={"Authorization": f"Bearer {data['other_token']}"},
+        json={"kitchen_mode": "direct_print"},
+    )
+    assert response.status_code == 200
+    db = SessionLocal()
+    try:
+        primary = db.query(Restaurant).filter(Restaurant.id == data["restaurant_id"]).one()
+        other = db.query(Restaurant).filter(Restaurant.slug == data["other_restaurant_slug"]).one()
+        assert primary.kitchen_mode == "kds"
+        assert other.kitchen_mode == "direct_print"
+        other.kitchen_mode = "kds"
+        db.commit()
+    finally:
+        db.close()
+
+
 # --- Role and Authentication Checks ---
 
 def test_missing_authentication():

@@ -38,6 +38,7 @@ export default function AdminSettingsClient() {
   const [timezone, setTimezone] = useState("");
   const [orderPrefix, setOrderPrefix] = useState("");
   const [serviceRequestsEnabled, setServiceRequestsEnabled] = useState(true);
+  const [kitchenMode, setKitchenMode] = useState<"kds" | "direct_print">("kds");
   const [gstEnabled, setGstEnabled] = useState(false);
   const [gstin, setGstin] = useState("");
   const [legalBusinessName, setLegalBusinessName] = useState("");
@@ -53,6 +54,7 @@ export default function AdminSettingsClient() {
     setTimezone(data.timezone);
     setOrderPrefix(data.order_prefix);
     setServiceRequestsEnabled(data.service_requests_enabled);
+    setKitchenMode(data.kitchen_mode);
     setGstEnabled(data.gst_enabled);
     setGstin(data.gstin || "");
     setLegalBusinessName(data.legal_business_name || "");
@@ -114,6 +116,7 @@ export default function AdminSettingsClient() {
         timezone: timezone || undefined,
         order_prefix: orderPrefix.toUpperCase() || undefined,
         service_requests_enabled: serviceRequestsEnabled,
+        kitchen_mode: kitchenMode,
         ...gstUpdateData,
       };
       const updated = await updateRestaurantSettings(updateData);
@@ -230,7 +233,16 @@ export default function AdminSettingsClient() {
         </SettingsSection>
 
         <SettingsSection title="Operations" description="Control customer-facing restaurant operations.">
-          <SwitchRow label="Customer service requests" description="Allow customers to request a waiter, water, or assistance from their table." checked={serviceRequestsEnabled} onChange={setServiceRequestsEnabled} />
+          <div className="space-y-5">
+            <SwitchRow label="Customer service requests" description="Allow customers to request a waiter, water, or assistance from their table." checked={serviceRequestsEnabled} onChange={setServiceRequestsEnabled} />
+            <fieldset>
+              <legend className="text-sm font-black text-[var(--omlu-text-primary)]">Kitchen System</legend>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <KitchenModeCard value="kds" selected={kitchenMode === "kds"} onChange={setKitchenMode} title="Kitchen Display" description="Live kitchen screen with realtime order progress." />
+                <KitchenModeCard value="direct_print" selected={kitchenMode === "direct_print"} onChange={setKitchenMode} title="Direct Kitchen Print" description="Orders are sent directly to the kitchen printer." />
+              </div>
+            </fieldset>
+          </div>
         </SettingsSection>
 
         <SettingsSection id="printing" title="Printing" description="Choose the printing option that fits each billing device.">
@@ -303,6 +315,10 @@ function SwitchRow({ label, description, checked, onChange }: { label: string; d
 
 function TaxModeCard({ value, selected, onChange, title, description }: { value: "inclusive" | "exclusive"; selected: boolean; onChange: (value: "inclusive" | "exclusive") => void; title: string; description: string }) {
   return <label className={`flex cursor-pointer gap-3 rounded-xl border p-4 ${selected ? "border-orange-500 bg-orange-500/10" : "border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)]"}`}><input type="radio" name="tax-mode" value={value} checked={selected} onChange={() => onChange(value)} className="mt-0.5 h-4 w-4 accent-orange-600" /><span><span className="block text-sm font-bold text-[var(--omlu-text-primary)]">{title}</span><span className="mt-1 block text-xs text-[var(--omlu-text-secondary)]">{description}</span></span></label>;
+}
+
+function KitchenModeCard({ value, selected, onChange, title, description }: { value: "kds" | "direct_print"; selected: boolean; onChange: (value: "kds" | "direct_print") => void; title: string; description: string }) {
+  return <label className={`flex cursor-pointer gap-3 rounded-xl border p-4 ${selected ? "border-orange-500 bg-orange-500/10" : "border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)]"}`}><input type="radio" name="kitchen-mode" value={value} checked={selected} onChange={() => onChange(value)} className="mt-0.5 h-4 w-4 accent-orange-600" /><span><span className="block text-sm font-bold text-[var(--omlu-text-primary)]">{title}</span><span className="mt-1 block text-xs leading-5 text-[var(--omlu-text-secondary)]">{description}</span></span></label>;
 }
 
 function InfoCard({ title, description, children }: { title: string; description: string; children?: ReactNode }) {

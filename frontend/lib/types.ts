@@ -154,6 +154,7 @@ export interface DiningSessionOrderItem {
 }
 
 export interface DiningSessionOrder {
+  kitchen_mode_snapshot: "kds" | "direct_print";
   order_number: string;
   public_token: string;
   status: string;
@@ -165,6 +166,7 @@ export interface DiningSessionOrder {
 }
 
 export interface PublicDiningSessionResponse {
+  kitchen_mode: "kds" | "direct_print";
   public_token: string;
   status: DiningSessionStatus;
   restaurant_name: string;
@@ -692,6 +694,7 @@ export interface StaffAccountCreateRequest {
 // ---- Phase 9: Restaurant Settings ----
 
 export interface RestaurantSettingsResponse {
+  kitchen_mode: "kds" | "direct_print";
   timezone: string;
   currency: string;
   order_prefix: string;
@@ -708,6 +711,7 @@ export interface RestaurantSettingsResponse {
 }
 
 export interface RestaurantSettingsUpdate {
+  kitchen_mode?: "kds" | "direct_print";
   timezone?: string;
   currency?: string;
   order_prefix?: string;

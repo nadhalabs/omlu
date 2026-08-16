@@ -18,6 +18,7 @@ from app.models.restaurant_table import RestaurantTable
 from app.models.bill import Bill
 from app.models.dining_session import DiningSession
 from app.models.order import Order, OrderItem, OrderItemSelectedOption, OrderStatusHistory, RestaurantDailySequence
+from app.models.print_bridge import KitchenPrintJob
 from app.models.service_request import ServiceRequest
 from app.models.staff_user import AuditLog
 from app.models.table_session_participant import TableSessionParticipant
@@ -32,6 +33,7 @@ from app.services.dining_sessions import (
 from app.services.bills import apply_draft_totals
 from app.services.order_pricing import validate_and_price_order_items
 from app.services.order_item_cancellation import cancel_order_item
+from app.services.kitchen_print_jobs import enqueue_cancellation_kot
 from app.services.idempotency import ensure_same_request, request_hash
 from app.utils.business_date import restaurant_business_date
 from app.services.table_participants import (
@@ -289,6 +291,7 @@ def build_session_response(db: Session, dining_session: DiningSession):
         "combined_subtotal": sum((order.subtotal for order in orders if order.status not in {"rejected", "cancelled", "voided"}), Decimal("0.00")),
         "order_count": len(orders),
         "service_requests_enabled": getattr(dining_session.restaurant, "service_requests_enabled", True),
+        "kitchen_mode": getattr(dining_session.restaurant, "kitchen_mode", "kds"),
         "can_order_more": dining_session.status == "open",
         "bill": bill_payload,
         "service_requests": service_requests,
@@ -441,6 +444,7 @@ def create_order_in_session(
             subtotal=subtotal,
             customer_note=order_req.customer_note,
             source=source,
+            kitchen_mode_snapshot=getattr(restaurant, "kitchen_mode", "kds"),
             created_by_staff_id=created_by_staff_id,
             created_by_participant_id=created_by_participant_id,
             idempotency_key=key_clean,
@@ -486,6 +490,20 @@ def create_order_in_session(
             changed_by_staff_id=created_by_staff_id
         ))
         db.flush()
+
+        if new_order.kitchen_mode_snapshot == "direct_print" and initial_status != "served":
+            kitchen_items = db.query(OrderItem).options(selectinload(OrderItem.selected_options)).filter(OrderItem.order_id == new_order.id).all()
+            payload = {
+                "document_type": "initial_kot", "order_id": new_order.id,
+                "order_number": new_order.order_number, "table_number": table.table_number,
+                "service_type": "dine_in", "created_at": new_order.created_at.isoformat() if new_order.created_at else None,
+                "customer_note": new_order.customer_note,
+                "items": [{"id": item.id, "name": item.item_name, "quantity": item.quantity, "note": item.item_note,
+                           "options": [option.kitchen_display_name or option.option_name for option in item.selected_options]}
+                          for item in kitchen_items],
+            }
+            db.add(KitchenPrintJob(restaurant_id=restaurant.id, order_id=new_order.id, document_type="initial_kot",
+                                   idempotency_key=f"order:{new_order.id}:initial_kot", payload=json.dumps(payload)))
 
         bill = db.query(Bill).filter(
             Bill.dining_session_id == locked_session.id,
@@ -924,6 +942,16 @@ def cancel_public_order_item(
     if not dining_session:
         raise HTTPException(status_code=404, detail="Dining session not found")
     participant = load_participant(db, participant_token, session_token=session_token, lock_for_action=True)
+    target_order = db.query(Order).filter(
+        Order.restaurant_id == participant.restaurant_id,
+        Order.dining_session_id == participant.session_id,
+        Order.public_token == order_public_token,
+    ).first()
+    if target_order and target_order.kitchen_mode_snapshot == "direct_print":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This order was sent directly to the kitchen. Please contact restaurant staff to change or cancel an item.",
+        )
     try:
         order, item, locked_session, bill = cancel_order_item(
             db,
@@ -949,6 +977,7 @@ def cancel_public_order_item(
                 "resulting_order_status": order.status,
             }),
         ))
+        enqueue_cancellation_kot(db, order, item)
         db.commit()
     except Exception:
         db.rollback()

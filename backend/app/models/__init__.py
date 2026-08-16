@@ -13,7 +13,7 @@ from app.models.table_session_participant import TableSessionCreationAttempt, Ta
 from app.models.empty_table_report import EmptyTableReport
 from app.models.payment import Payment, RevenueEntry
 from app.models.platform_user import PlatformUser, PlatformSession, PlatformAuditLog
-from app.models.print_bridge import PrintBridgeInstallation, PrintBridgePairingChallenge
+from app.models.print_bridge import PrintBridgeInstallation, PrintBridgePairingChallenge, KitchenPrintJob
 from app.models.sales_lead import SalesLead
 
 __all__ = [
@@ -54,5 +54,6 @@ __all__ = [
     "PlatformSession",
     "PlatformAuditLog",
     "PrintBridgeInstallation",
+    "KitchenPrintJob",
     "SalesLead",
 ]

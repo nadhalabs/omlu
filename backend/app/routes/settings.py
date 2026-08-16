@@ -9,7 +9,6 @@ from app.models.restaurant import Restaurant
 
 router = APIRouter(prefix="/admin/settings")
 
-_owner_only = RoleChecker(["owner"])
 _owner_or_manager = RoleChecker(["owner", "admin"])
 
 
@@ -30,10 +29,15 @@ def get_restaurant_settings(
 @router.patch("", response_model=RestaurantSettingsResponse)
 def update_restaurant_settings(
     update_data: RestaurantSettingsUpdate,
-    current_user: StaffUser = Depends(_owner_only),
+    current_user: StaffUser = Depends(get_current_staff_user),
     db: Session = Depends(get_db)
 ):
-    """Owner only: update restaurant settings. Manager may only view."""
+    """Owner updates all settings; admin may update only the kitchen workflow."""
+    update_dict = update_data.model_dump(exclude_unset=True)
+    if current_user.role != "owner" and not (
+        current_user.role == "admin" and set(update_dict) == {"kitchen_mode"}
+    ):
+        raise HTTPException(status_code=403, detail="You do not have permission to update these settings")
     restaurant = db.query(Restaurant).filter(
         Restaurant.id == current_user.restaurant_id
     ).first()
@@ -41,7 +45,6 @@ def update_restaurant_settings(
         raise HTTPException(status_code=404, detail="Restaurant not found")
 
     # Apply partial updates (only fields provided by the caller)
-    update_dict = update_data.model_dump(exclude_unset=True)
     for field, value in update_dict.items():
         setattr(restaurant, field, value)
 
