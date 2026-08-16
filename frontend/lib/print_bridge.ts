@@ -18,6 +18,19 @@ export interface BridgeHealth {
   kitchen_printer_port: number;
 }
 
+type BridgeHealthPayload = Omit<BridgeHealth, "paired"> & { paired?: boolean };
+
+export function normalizeBridgeHealth(payload: BridgeHealthPayload): BridgeHealth {
+  return {
+    ...payload,
+    // Current builds provide the persisted pairing verdict. The ID fallback is
+    // only for older installed bridges that predate the explicit field.
+    paired: typeof payload.paired === "boolean"
+      ? payload.paired
+      : Boolean(payload.installation_id && payload.tenant_id),
+  };
+}
+
 export async function configureKitchenPrinter(token: string, settings: {
   kitchenPrinterName: string; kitchenPrinterHost: string; kitchenPrinterPort: number;
 }): Promise<{ success: boolean; error?: string }> {
@@ -99,7 +112,7 @@ export async function checkBridgeHealth(): Promise<BridgeHealth | null> {
       signal: AbortSignal.timeout(2000),
     });
     if (res.ok) {
-      return await res.json();
+      return normalizeBridgeHealth(await res.json());
     }
   } catch {
     // Bridge offline or uninstalled

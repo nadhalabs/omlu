@@ -13,6 +13,9 @@ test("Desktop Print Bridge client connects to 127.0.0.1:24242/v1 and implements 
   assert.match(printBridge, /sendPrintJobToBridge/);
   assert.match(printBridge, /testBridgePrinter/);
   assert.match(printBridge, /saveBridgeSettings/);
+  assert.match(printBridge, /typeof payload\.paired === "boolean"/);
+  assert.match(printBridge, /Boolean\(payload\.installation_id && payload\.tenant_id\)/);
+  assert.match(printBridge, /return normalizeBridgeHealth\(await res\.json\(\)\)/);
 });
 
 test("Admin Settings renders Desktop Print Bridge section with dynamic status and developer package link", () => {

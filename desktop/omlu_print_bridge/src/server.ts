@@ -1,6 +1,6 @@
 import * as http from 'http';
 import * as crypto from 'crypto';
-import { ConfigManager, PrinterConfig } from './config';
+import { ConfigManager, PrinterConfig, isPersistedPairingComplete } from './config';
 import { validateOriginAndHost, verifySignedToken, sanitizeErrorMessage, setPublicKeyPem } from './security';
 import { getBleCapability } from './capabilities/ble_capability';
 import { PrintJobCoordinator } from './coordinator';
@@ -81,7 +81,7 @@ export class PrintBridgeServer {
           printer_online: isOnline,
           installation_id: config.installationId || null,
           tenant_id: config.tenantId || null,
-          paired: Boolean(config.tenantId && config.credentialSecret && config.backendPublicKeyPem && config.pairedAt),
+          paired: isPersistedPairingComplete(config),
           kitchen_printer_configured: Boolean(config.kitchenPrinterEnabled && config.kitchenPrinterHost),
           kitchen_printer_name: config.kitchenPrinterName,
           kitchen_printer_host: config.kitchenPrinterHost,

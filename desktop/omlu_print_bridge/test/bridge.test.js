@@ -7,6 +7,7 @@ const os = require('os');
 const { PrintBridgeServer } = require('../dist/server');
 const { verifySignedToken, sanitizeErrorMessage, setPublicKeyPem } = require('../dist/security');
 const { getBleCapability } = require('../dist/capabilities/ble_capability');
+const { defaultConfig, isPersistedPairingComplete } = require('../dist/config');
 
 // Generate test Ed25519 key pair for unit tests
 const { privateKey, publicKey } = crypto.generateKeyPairSync('ed25519');
@@ -81,6 +82,17 @@ test('Sanitizes error messages cleanly without exposing stack traces', () => {
   assert.equal(sanitizeErrorMessage(new Error('ENOENT COM1')), 'Printer device or COM port not found.');
 });
 
+test('Persisted pairing health requires the complete security configuration', () => {
+  assert.equal(isPersistedPairingComplete(defaultConfig), false);
+  assert.equal(isPersistedPairingComplete({ ...defaultConfig,
+    installationId: 'inst-1', tenantId: 'tenant-1', pairedAt: new Date().toISOString(), backendUrl: 'https://omlu.in',
+    backendPublicKeyPem: publicKeyPem, credentialSecret: 'secret', kitchenPrinterEnabled: false,
+  }), true);
+  assert.equal(isPersistedPairingComplete({ ...defaultConfig,
+    installationId: 'inst-1', kitchenPrinterEnabled: true, kitchenPrinterHost: '192.168.1.20',
+  }), false);
+});
+
 test('HTTP API Server health and capabilities endpoints', async () => {
   const tmpConfig = path.join(os.tmpdir(), `test_config_${Date.now()}.json`);
   const server = new PrintBridgeServer(tmpConfig);
@@ -93,6 +105,8 @@ test('HTTP API Server health and capabilities endpoints', async () => {
     const health = await healthRes.json();
     assert.equal(health.bridge_version, '1.0.0');
     assert.equal(health.readiness, 'ready');
+    assert.equal(health.paired, false);
+    assert.equal(health.tenant_id, null);
     assert.ok(Array.isArray(health.supported_transports));
 
     // Hosted OMLU origin receives explicit CORS/PNA authorization.
