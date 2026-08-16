@@ -48,8 +48,15 @@ test("Settings no longer contains outdated 'Billing uses Pending Payments' text"
   assert.ok(settings.includes("Allow customers to request a waiter, water, or assistance from their table."));
 });
 
-test("Direct TCP printer fields (IP, port, paper width, copies) are absent from web settings", () => {
-  assert.doesNotMatch(settings, /tcpIpAddress|tcpPort|paperWidth|tcp_port/i);
-  assert.doesNotMatch(settings, /192\.168\./);
-  assert.doesNotMatch(settings, /9100/);
+test("Kitchen printing has dedicated LAN setup without changing customer bill printer settings", () => {
+  assert.match(settings, /id="kitchen-printer"/);
+  assert.ok(settings.includes("Dedicated LAN thermal printer for kitchen tickets. Customer bill printing remains separate."));
+  assert.ok(settings.includes("Printer IP / Host"));
+  assert.ok(settings.includes("Test Print"));
+  assert.ok(settings.includes("Save kitchen printer"));
+});
+
+test("Direct Print warns when its kitchen printer is not configured", () => {
+  assert.ok(settings.includes("Direct Kitchen Print is enabled, but no kitchen printer is configured."));
+  assert.ok(settings.includes("Configure kitchen printer"));
 });

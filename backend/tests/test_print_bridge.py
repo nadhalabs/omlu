@@ -1,4 +1,6 @@
 from decimal import Decimal
+import hashlib
+import json
 import uuid
 from datetime import datetime, timedelta, timezone
 import pytest
@@ -8,7 +10,8 @@ from app.database import SessionLocal
 from app.models.bill import Bill
 from app.models.dining_session import DiningSession
 from app.models.restaurant_table import RestaurantTable
-from app.models.print_bridge import PrintBridgeInstallation, PrintBridgePairingChallenge
+from app.models.print_bridge import PrintBridgeInstallation, PrintBridgePairingChallenge, KitchenPrintJob
+from app.models.order import Order
 from app.models.restaurant import Restaurant
 from app.models.staff_user import StaffUser
 from app.services.print_bridge_service import (
@@ -315,3 +318,45 @@ def test_revoked_installation_token_rejected(db_session, setup_bridge_test_data)
             expected_tenant_id=tenant_id,
             expected_installation_id=inst_id,
         )
+
+
+def test_kitchen_consumer_claim_success_failure_and_tenant_scope(db_session, setup_bridge_test_data):
+    restaurant = setup_bridge_test_data["restaurant"]
+    secret = uuid.uuid4().hex
+    installation_id = f"consumer_{uuid.uuid4().hex[:8]}"
+    installation = PrintBridgeInstallation(
+        installation_id=installation_id, tenant_id=str(restaurant.id),
+        hashed_credential=hashlib.sha256(secret.encode()).hexdigest(), status="paired",
+        paired_by_user_id=str(setup_bridge_test_data["owner"].id),
+    )
+    table = RestaurantTable(restaurant_id=restaurant.id, table_number="KP", table_code=f"KP-{uuid.uuid4().hex[:6]}")
+    db_session.add_all([installation, table]); db_session.flush()
+    order = Order(restaurant_id=restaurant.id, table_id=table.id, order_number=f"KP-{uuid.uuid4().hex[:6]}", public_token=uuid.uuid4().hex, status="pending", subtotal=Decimal("10.00"), kitchen_mode_snapshot="direct_print")
+    db_session.add(order); db_session.flush()
+    job = KitchenPrintJob(restaurant_id=restaurant.id, order_id=order.id, document_type="initial_kot", idempotency_key=f"order:{order.id}:initial_kot", payload=json.dumps({"document_type": "initial_kot", "order_number": order.order_number, "items": []}))
+    db_session.add(job); db_session.commit()
+    headers = {"X-Bridge-Installation": installation_id, "X-Bridge-Credential": secret}
+
+    heartbeat = client.post("/api/admin/print-bridge/consumer/heartbeat", headers=headers, json={"kitchen_printer_configured": True, "kitchen_printer_label": "Kitchen LAN"})
+    assert heartbeat.status_code == 200
+    claimed = client.post("/api/admin/print-bridge/consumer/claim", headers=headers, json={})
+    assert claimed.status_code == 200
+    assert claimed.json()["job"]["id"] == job.id
+    assert client.post("/api/admin/print-bridge/consumer/claim", headers=headers, json={}).json()["job"] is None
+
+    failed = client.post(f"/api/admin/print-bridge/consumer/jobs/{job.id}/result", headers=headers, json={"status": "failed", "failure_message": "socket timeout details"})
+    assert failed.status_code == 200
+    assert failed.json()["status"] == "failed"
+    assert failed.json()["failure_message"] == "Kitchen printer offline"
+
+    db_session.query(KitchenPrintJob).filter(KitchenPrintJob.id == job.id).update({"status": "pending"})
+    db_session.commit()
+    claimed_again = client.post("/api/admin/print-bridge/consumer/claim", headers=headers, json={}).json()["job"]
+    printed = client.post(f"/api/admin/print-bridge/consumer/jobs/{job.id}/result", headers=headers, json={"status": "printed"})
+    assert claimed_again["id"] == job.id
+    assert printed.status_code == 200
+    assert printed.json()["status"] == "printed"
+    assert client.post("/api/admin/print-bridge/consumer/claim", headers=headers, json={}).json()["job"] is None
+
+    wrong = client.post("/api/admin/print-bridge/consumer/claim", headers={**headers, "X-Bridge-Credential": "wrong"}, json={})
+    assert wrong.status_code == 401

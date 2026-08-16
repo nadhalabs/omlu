@@ -1,12 +1,14 @@
 import hashlib
 import json
+import secrets
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from pydantic import BaseModel, Field
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -58,6 +60,16 @@ class RevokeInstallationRequest(BaseModel):
 
 
 class PrintJobStatusRequest(BaseModel):
+    status: str
+    failure_message: Optional[str] = Field(None, max_length=500)
+
+
+class ConsumerHeartbeatRequest(BaseModel):
+    kitchen_printer_configured: bool
+    kitchen_printer_label: Optional[str] = Field(None, max_length=100)
+
+
+class ConsumerJobResultRequest(BaseModel):
     status: str
     failure_message: Optional[str] = Field(None, max_length=500)
 
@@ -121,6 +133,7 @@ def create_pairing_challenge(
 @router.post("/confirm-pairing")
 def confirm_pairing(
     req: PairingConfirmRequest,
+    request: Request,
     current_staff=Depends(get_current_staff_user),
     _=Depends(RoleChecker(["owner", "admin"])),
     db: Session = Depends(get_db),
@@ -196,6 +209,7 @@ def confirm_pairing(
         "status": "success",
         "installation_id": req.installation_id,
         "exchange_token": exchange_token,
+        "backend_url": str(request.base_url).rstrip("/"),
     }
 
 
@@ -419,6 +433,107 @@ def retry_kitchen_job(
     job.status = "pending"
     job.retry_count += 1
     job.failure_message = None
+    db.commit()
+    db.refresh(job)
+    return _job_payload(job)
+
+
+def _authenticate_consumer(
+    db: Session,
+    installation_id: str,
+    credential: str,
+) -> PrintBridgeInstallation:
+    if not installation_id or not credential:
+        raise HTTPException(status_code=401, detail="Kitchen print consumer authentication required")
+    installation = db.query(PrintBridgeInstallation).filter(
+        PrintBridgeInstallation.installation_id == installation_id,
+        PrintBridgeInstallation.status == "paired",
+        PrintBridgeInstallation.revoked_at.is_(None),
+    ).first()
+    supplied_hash = hashlib.sha256(credential.encode("utf-8")).hexdigest()
+    if not installation or not secrets.compare_digest(installation.hashed_credential, supplied_hash):
+        raise HTTPException(status_code=401, detail="Kitchen print consumer authentication failed")
+    installation.last_used_at = datetime.now(timezone.utc)
+    return installation
+
+
+@router.post("/consumer/heartbeat")
+def consumer_heartbeat(
+    req: ConsumerHeartbeatRequest,
+    x_bridge_installation: str = Header(..., alias="X-Bridge-Installation"),
+    x_bridge_credential: str = Header(..., alias="X-Bridge-Credential"),
+    db: Session = Depends(get_db),
+):
+    installation = _authenticate_consumer(db, x_bridge_installation, x_bridge_credential)
+    installation.last_seen_at = datetime.now(timezone.utc)
+    installation.kitchen_printer_configured = req.kitchen_printer_configured
+    installation.kitchen_printer_label = req.kitchen_printer_label
+    db.commit()
+    return {"status": "online", "server_time": datetime.now(timezone.utc)}
+
+
+@router.post("/consumer/claim")
+def claim_kitchen_job(
+    x_bridge_installation: str = Header(..., alias="X-Bridge-Installation"),
+    x_bridge_credential: str = Header(..., alias="X-Bridge-Credential"),
+    db: Session = Depends(get_db),
+):
+    installation = _authenticate_consumer(db, x_bridge_installation, x_bridge_credential)
+    now = datetime.now(timezone.utc)
+    retry_before = now - timedelta(seconds=30)
+    stale_claim = now - timedelta(minutes=2)
+    job = db.query(KitchenPrintJob).filter(
+        KitchenPrintJob.restaurant_id == int(installation.tenant_id),
+        or_(
+            KitchenPrintJob.status == "pending",
+            and_(KitchenPrintJob.status == "failed", KitchenPrintJob.retry_count < 3, KitchenPrintJob.claimed_at < retry_before),
+            and_(KitchenPrintJob.status == "printing", KitchenPrintJob.claimed_at < stale_claim),
+        ),
+    ).order_by(KitchenPrintJob.created_at.asc(), KitchenPrintJob.id.asc()).with_for_update(skip_locked=True).first()
+    installation.last_seen_at = now
+    if not job:
+        db.commit()
+        return {"job": None}
+    job.status = "printing"
+    job.claimed_by_installation_id = installation.installation_id
+    job.claimed_at = now
+    job.failure_message = None
+    db.commit()
+    db.refresh(job)
+    return {"job": _job_payload(job)}
+
+
+@router.post("/consumer/jobs/{job_id}/result")
+def report_kitchen_job_result(
+    job_id: int,
+    req: ConsumerJobResultRequest,
+    x_bridge_installation: str = Header(..., alias="X-Bridge-Installation"),
+    x_bridge_credential: str = Header(..., alias="X-Bridge-Credential"),
+    db: Session = Depends(get_db),
+):
+    if req.status not in {"printed", "failed"}:
+        raise HTTPException(status_code=422, detail="Invalid kitchen print result")
+    installation = _authenticate_consumer(db, x_bridge_installation, x_bridge_credential)
+    job = db.query(KitchenPrintJob).filter(
+        KitchenPrintJob.id == job_id,
+        KitchenPrintJob.restaurant_id == int(installation.tenant_id),
+    ).with_for_update().first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Kitchen print job not found")
+    if job.status == "printed":
+        return _job_payload(job)
+    if job.status != "printing" or job.claimed_by_installation_id != installation.installation_id:
+        raise HTTPException(status_code=409, detail="Kitchen print job is not claimed by this consumer")
+    now = datetime.now(timezone.utc)
+    job.status = req.status
+    if req.status == "printed":
+        job.printed_at = now
+        job.failure_message = None
+        installation.kitchen_printer_last_success_at = now
+    else:
+        job.retry_count += 1
+        job.failure_message = req.failure_message or "Printer unavailable"
+    installation.last_seen_at = now
     db.commit()
     db.refresh(job)
     return _job_payload(job)

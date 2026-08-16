@@ -1827,7 +1827,7 @@ export async function createPairingChallenge(installationId: string): Promise<{ 
   return res.json();
 }
 
-export async function confirmBridgePairing(installationId: string, pairingCode: string): Promise<{ bridge_token: string }> {
+export async function confirmBridgePairing(installationId: string, pairingCode: string): Promise<{ exchange_token: string; backend_url: string }> {
   const res = await fetch("/api/admin/print-bridge/confirm-pairing", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1838,4 +1838,11 @@ export async function confirmBridgePairing(installationId: string, pairingCode: 
     throw new ApiError(res.status, body.detail || "Pairing confirmation failed.");
   }
   return res.json();
+}
+
+export async function exchangeBridgeCredential(exchangeToken: string): Promise<{ installation_id: string; tenant_id: string; credential_secret: string }> {
+  const res = await fetch("/api/admin/print-bridge/exchange", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ exchange_token: exchangeToken }) });
+  const body = await res.json();
+  if (!res.ok) throw new ApiError(res.status, body.detail || "Could not complete printer pairing.");
+  return body;
 }

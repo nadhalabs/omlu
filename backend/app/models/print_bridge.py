@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from app.database import Base
 
 class PrintBridgeInstallation(Base):
@@ -15,6 +15,10 @@ class PrintBridgeInstallation(Base):
     credential_version = Column(Integer, nullable=False, default=1)
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     last_used_at = Column(DateTime(timezone=True), nullable=True)
+    last_seen_at = Column(DateTime(timezone=True), nullable=True)
+    kitchen_printer_configured = Column(Boolean, nullable=False, default=False, server_default="false")
+    kitchen_printer_label = Column(String(100), nullable=True)
+    kitchen_printer_last_success_at = Column(DateTime(timezone=True), nullable=True)
     revoked_at = Column(DateTime(timezone=True), nullable=True)
 
     def to_dict(self):
@@ -27,6 +31,10 @@ class PrintBridgeInstallation(Base):
             "credential_version": self.credential_version,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "last_used_at": self.last_used_at.isoformat() if self.last_used_at else None,
+            "last_seen_at": self.last_seen_at.isoformat() if self.last_seen_at else None,
+            "kitchen_printer_configured": self.kitchen_printer_configured,
+            "kitchen_printer_label": self.kitchen_printer_label,
+            "kitchen_printer_last_success_at": self.kitchen_printer_last_success_at.isoformat() if self.kitchen_printer_last_success_at else None,
             "revoked_at": self.revoked_at.isoformat() if self.revoked_at else None,
         }
 
@@ -72,5 +80,7 @@ class KitchenPrintJob(Base):
     status = Column(String(20), nullable=False, default="pending", server_default="pending", index=True)
     retry_count = Column(Integer, nullable=False, default=0, server_default="0")
     failure_message = Column(String(500), nullable=True)
+    claimed_by_installation_id = Column(String(64), nullable=True, index=True)
+    claimed_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     printed_at = Column(DateTime(timezone=True), nullable=True)

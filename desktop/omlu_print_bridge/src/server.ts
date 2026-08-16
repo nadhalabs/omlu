@@ -9,6 +9,7 @@ import { WindowsDriverSpoolerTransport } from './transports/driver_spooler_trans
 import { TcpPrinterTransport } from './transports/tcp_transport';
 import { SerialComPrinterTransport } from './transports/serial_com_transport';
 import { PrinterTransport } from './transports/transport';
+import { KitchenPrintConsumer } from './kitchen_consumer';
 
 const PORT = 24242;
 const HOST = '127.0.0.1';
@@ -18,10 +19,12 @@ export class PrintBridgeServer {
   private configManager: ConfigManager;
   private coordinator: PrintJobCoordinator;
   private activePairingCode: string | null = null;
+  private kitchenConsumer: KitchenPrintConsumer;
 
   constructor(customConfigPath?: string) {
     this.configManager = new ConfigManager(customConfigPath);
     this.coordinator = new PrintJobCoordinator();
+    this.kitchenConsumer = new KitchenPrintConsumer(this.configManager, this.coordinator);
     this.server = http.createServer((req, res) => this.handleRequest(req, res));
   }
 
@@ -76,6 +79,10 @@ export class PrintBridgeServer {
           printer_online: isOnline,
           installation_id: config.installationId || null,
           tenant_id: config.tenantId || null,
+          kitchen_printer_configured: Boolean(config.kitchenPrinterEnabled && config.kitchenPrinterHost),
+          kitchen_printer_name: config.kitchenPrinterName,
+          kitchen_printer_host: config.kitchenPrinterHost,
+          kitchen_printer_port: config.kitchenPrinterPort,
         });
       }
 
@@ -138,6 +145,42 @@ export class PrintBridgeServer {
         const body = await this.readJson(req);
         const updated = this.configManager.saveConfig(body);
         return this.json(res, 200, { status: 'success', settings: updated });
+      }
+
+      if (method === 'POST' && path === '/v1/kitchen-printer/setup') {
+        const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+        const sec = verifySignedToken(token, 'printer:configure');
+        if (!sec.valid) return this.json(res, 401, { error: 'UNAUTHORIZED', message: sec.reason });
+        const body = await this.readJson(req);
+        const port = Number(body.kitchenPrinterPort || 9100);
+        if (!body.kitchenPrinterHost || !Number.isInteger(port) || port < 1 || port > 65535) {
+          return this.json(res, 422, { error: 'INVALID_KITCHEN_PRINTER', message: 'Enter a valid kitchen printer host and port.' });
+        }
+        this.configManager.saveConfig({
+          backendUrl: String(body.backendUrl || '').replace(/\/$/, ''), credentialSecret: body.credentialSecret,
+          tenantId: String(body.tenantId || ''), kitchenPrinterEnabled: true,
+          kitchenPrinterName: String(body.kitchenPrinterName || 'Kitchen Printer').slice(0, 100),
+          kitchenPrinterHost: String(body.kitchenPrinterHost).trim(), kitchenPrinterPort: port,
+        });
+        this.kitchenConsumer.start();
+        return this.json(res, 200, { status: 'configured' });
+      }
+
+      if (method === 'POST' && path === '/v1/kitchen-printer/test') {
+        const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+        const sec = verifySignedToken(token, 'printer:test');
+        if (!sec.valid) return this.json(res, 401, { error: 'UNAUTHORIZED', message: sec.reason });
+        const config = this.configManager.getConfig();
+        if (!config.kitchenPrinterEnabled || !config.kitchenPrinterHost) return this.json(res, 409, { error: 'NOT_CONFIGURED', message: 'Kitchen printer is not configured.' });
+        const transport = new TcpPrinterTransport(config.kitchenPrinterHost, config.kitchenPrinterPort, 5000, 5000, config.chunkSize, config.interChunkDelayMs);
+        const result = await this.coordinator.executePrintJob({
+          schema_version: '1.0', job_id: `kitchen_test_${Date.now()}`, idempotency_key: `kitchen_test_${Date.now()}`,
+          installation_id: config.installationId, tenant_id: config.tenantId, receipt_type: 'kitchen', copy_count: 1,
+          created_at: new Date().toISOString(), expires_at: new Date(Date.now() + 60000).toISOString(), retry_count: 0, signed_token: '',
+          kitchen_data: { document_type: 'initial_kot', service_type: 'dine_in', order_number: 'TEST',
+            customer_note: `OMLU KITCHEN PRINTER TEST | ${new Date().toLocaleString()} | Printer role: Kitchen | Setup confirmed`, items: [] },
+        }, config, transport);
+        return this.json(res, result.state === 'completed' ? 200 : 503, { success: result.state === 'completed', message: result.state === 'completed' ? 'Kitchen printer test completed.' : 'Kitchen printer unavailable.' });
       }
 
       if (method === 'POST' && path === '/v1/printers/test') {
@@ -226,12 +269,14 @@ export class PrintBridgeServer {
   public listen(port: number = PORT, host: string = HOST): Promise<void> {
     return new Promise((resolve) => {
       this.server.listen(port, host, () => {
+        this.kitchenConsumer.start();
         resolve();
       });
     });
   }
 
   public close(): Promise<void> {
+    this.kitchenConsumer.stop();
     return new Promise((resolve) => {
       this.server.close(() => resolve());
     });

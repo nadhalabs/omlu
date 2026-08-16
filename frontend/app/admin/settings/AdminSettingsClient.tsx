@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { FormEvent, ReactNode, useCallback, useEffect, useState } from "react";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { ApiError, getRestaurantSettings, updateRestaurantSettings } from "@/lib/api";
-import { checkBridgeHealth } from "@/lib/print_bridge";
+import { ApiError, confirmBridgePairing, createPairingChallenge, exchangeBridgeCredential, getRestaurantSettings, requestPrintBridgeToken, updateRestaurantSettings } from "@/lib/api";
+import { BridgeHealth, checkBridgeHealth, configureKitchenPrinter, testKitchenPrinter } from "@/lib/print_bridge";
 import { RestaurantSettingsResponse, RestaurantSettingsUpdate } from "@/lib/types";
 
 const TIMEZONES = [
@@ -33,6 +33,12 @@ export default function AdminSettingsClient() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [bridgeStatus, setBridgeStatus] = useState<"checking" | "connected" | "disconnected">("checking");
+  const [bridgeHealth, setBridgeHealth] = useState<BridgeHealth | null>(null);
+  const [printerHost, setPrinterHost] = useState("");
+  const [printerPort, setPrinterPort] = useState("9100");
+  const [printerName, setPrinterName] = useState("Kitchen Printer");
+  const [printerBusy, setPrinterBusy] = useState(false);
+  const [printerMessage, setPrinterMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [gstEditing, setGstEditing] = useState(false);
 
   const [timezone, setTimezone] = useState("");
@@ -102,12 +108,66 @@ export default function AdminSettingsClient() {
   useEffect(() => {
     let active = true;
     void checkBridgeHealth().then((health) => {
-      if (active) setBridgeStatus(health ? "connected" : "disconnected");
+      if (active) {
+        setBridgeHealth(health);
+        setBridgeStatus(health ? "connected" : "disconnected");
+        if (health?.kitchen_printer_configured) {
+          setPrinterName(health.kitchen_printer_name || "Kitchen Printer");
+          setPrinterHost(health.kitchen_printer_host || "");
+          setPrinterPort(String(health.kitchen_printer_port || 9100));
+        }
+      }
     });
     return () => {
       active = false;
     };
   }, []);
+
+  const refreshBridgeHealth = async () => {
+    const health = await checkBridgeHealth();
+    setBridgeHealth(health);
+    setBridgeStatus(health ? "connected" : "disconnected");
+    return health;
+  };
+
+  const saveKitchenPrinter = async () => {
+    if (printerBusy) return;
+    const port = Number(printerPort);
+    if (!printerHost.trim() || !Number.isInteger(port) || port < 1 || port > 65535) {
+      setPrinterMessage({ tone: "error", text: "Enter a valid printer IP or host and port." }); return;
+    }
+    setPrinterBusy(true); setPrinterMessage(null);
+    try {
+      const health = await refreshBridgeHealth();
+      if (!health?.installation_id) throw new Error("Install or start the OMLU Windows Printer Bridge first.");
+      const challenge = await createPairingChallenge(health.installation_id);
+      const paired = await confirmBridgePairing(health.installation_id, challenge.pairing_code);
+      const credential = await exchangeBridgeCredential(paired.exchange_token);
+      const auth = await requestPrintBridgeToken("printer:configure", health.installation_id);
+      const result = await configureKitchenPrinter(auth.token, {
+        backendUrl: paired.backend_url, credentialSecret: credential.credential_secret, tenantId: credential.tenant_id,
+        kitchenPrinterName: printerName.trim() || "Kitchen Printer", kitchenPrinterHost: printerHost.trim(), kitchenPrinterPort: port,
+      });
+      if (!result.success) throw new Error(result.error);
+      await refreshBridgeHealth();
+      setPrinterMessage({ tone: "success", text: "Kitchen printer configured. Send a test print to confirm the connection." });
+    } catch (reason) {
+      setPrinterMessage({ tone: "error", text: reason instanceof Error ? reason.message : "Could not configure the kitchen printer." });
+    } finally { setPrinterBusy(false); }
+  };
+
+  const runKitchenPrinterTest = async () => {
+    if (printerBusy || !bridgeHealth?.installation_id) return;
+    setPrinterBusy(true); setPrinterMessage(null);
+    try {
+      const auth = await requestPrintBridgeToken("printer:test", bridgeHealth.installation_id);
+      const result = await testKitchenPrinter(auth.token);
+      if (!result.success) throw new Error(result.error);
+      setPrinterMessage({ tone: "success", text: "Kitchen printer test completed successfully." });
+    } catch (reason) {
+      setPrinterMessage({ tone: "error", text: reason instanceof Error ? reason.message : "Kitchen printer unavailable." });
+    } finally { setPrinterBusy(false); }
+  };
 
   const handleSave = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -275,10 +335,21 @@ export default function AdminSettingsClient() {
                 <KitchenModeCard value="direct_print" selected={kitchenMode === "direct_print"} onChange={setKitchenMode} title="Direct Kitchen Print" description="Orders are sent directly to the kitchen printer." />
               </div>
             </fieldset>
+            {kitchenMode === "direct_print" && !bridgeHealth?.kitchen_printer_configured && <div role="alert" className="flex flex-col gap-3 rounded-xl border border-amber-500/50 bg-amber-500/10 p-4 sm:flex-row sm:items-center"><p className="flex-1 text-sm font-bold text-[var(--omlu-text-primary)]">Direct Kitchen Print is enabled, but no kitchen printer is configured.</p><a href="#kitchen-printer" className="text-sm font-black text-orange-700 underline dark:text-orange-400">Configure kitchen printer</a></div>}
           </div>
         </SettingsSection>
 
         <SettingsSection id="printing" title="Printing" description="Choose the printing option that fits each billing device.">
+          <div id="kitchen-printer" className="scroll-mt-24 rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] p-4">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"><div><h3 className="text-sm font-black text-[var(--omlu-text-primary)]">Kitchen Printer</h3><p className="mt-1 text-xs leading-5 text-[var(--omlu-text-secondary)]">Dedicated LAN thermal printer for kitchen tickets. Customer bill printing remains separate.</p></div><span className={`w-fit rounded-full border px-3 py-1 text-xs font-bold ${bridgeHealth?.kitchen_printer_configured ? "border-emerald-600/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "border-[var(--omlu-border-strong)] text-[var(--omlu-text-secondary)]"}`}>{!bridgeHealth ? "Bridge offline" : bridgeHealth.kitchen_printer_configured ? "Configured" : "Not configured"}</span></div>
+            <div className="mt-4 grid gap-4 md:grid-cols-[1fr_1fr_140px]">
+              <SettingsInput id="kitchen-printer-name" label="Printer name" value={printerName} onChange={setPrinterName} />
+              <SettingsInput id="kitchen-printer-host" label="Printer IP / Host" value={printerHost} onChange={setPrinterHost} />
+              <SettingsInput id="kitchen-printer-port" label="Port" value={printerPort} onChange={setPrinterPort} />
+            </div>
+            {printerMessage && <p role={printerMessage.tone === "error" ? "alert" : "status"} className={`mt-3 text-sm font-bold ${printerMessage.tone === "error" ? "text-red-600 dark:text-red-400" : "text-emerald-700 dark:text-emerald-400"}`}>{printerMessage.text}</p>}
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end"><button type="button" disabled={printerBusy || !bridgeHealth?.kitchen_printer_configured} onClick={() => void runKitchenPrinterTest()} className="min-h-11 rounded-xl border border-[var(--omlu-border-strong)] px-5 text-sm font-black disabled:opacity-50">Test Print</button><button type="button" disabled={printerBusy} onClick={() => void saveKitchenPrinter()} className="min-h-11 rounded-xl bg-orange-600 px-5 text-sm font-black text-white disabled:opacity-50">{printerBusy ? "Working…" : bridgeHealth?.kitchen_printer_configured ? "Reconfigure" : "Save kitchen printer"}</button></div>
+          </div>
           <div className="grid gap-4 lg:grid-cols-3">
             <InfoCard title="Browser Printing" description="Print bills and receipts using your system print dialog." />
             <InfoCard title="Windows Printer Bridge" description="Connect supported receipt printers directly from a Windows billing PC.">

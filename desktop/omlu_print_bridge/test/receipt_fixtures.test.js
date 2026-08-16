@@ -87,3 +87,28 @@ test('Golden test page encoding', () => {
   assert.match(text, /OMLU PRINT BRIDGE TEST PAGE/);
   assert.match(text, /SUCCESSFUL TEST PRINT/);
 });
+
+test('Kitchen KOT encoding contains operational data and excludes billing data', () => {
+  const encoder = new DesktopEscPosEncoder('58', true, 3);
+  const buffer = encoder.encodeKitchenTicket({
+    document_type: 'initial_kot', service_type: 'dine_in', table_number: '7',
+    order_number: 'NS-42', created_at: '2026-08-17T10:00:00Z', customer_note: 'Less spicy',
+    items: [{ name: 'Masala Dosa', quantity: 2, options: ['No onion'], note: 'Crispy' }],
+  });
+  const text = buffer.toString('ascii');
+  assert.match(text, /KITCHEN ORDER/);
+  assert.match(text, /DINE-IN/);
+  assert.match(text, /Table: 7/);
+  assert.match(text, /2 x Masala Dosa/);
+  assert.match(text, /No onion/);
+  assert.match(text, /Less spicy/);
+  assert.doesNotMatch(text, /GST|TOTAL|PAYMENT|INVOICE/);
+});
+
+test('Kitchen cancellation slip is unmistakable', () => {
+  const encoder = new DesktopEscPosEncoder('58', true, 3);
+  const text = encoder.encodeKitchenTicket({ document_type: 'cancellation_kot', order_number: 'NS-43', item_name: 'Tea', quantity: 1, reason: 'Guest request' }).toString('ascii');
+  assert.match(text, /CANCELLED ITEM/);
+  assert.match(text, /1 x Tea/);
+  assert.match(text, /Guest request/);
+});
