@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/role_session.dart';
+import '../../core/errors/user_facing_error.dart';
 import '../../design_system/colors.dart';
 import '../../design_system/spacing.dart';
 import '../../design_system/typography.dart';
@@ -61,7 +62,7 @@ class _BillingCounterScreenState extends ConsumerState<BillingCounterScreen> {
       ),
       body: queues.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Center(child: Text('Could not load billing counter: $error')),
+        error: (error, _) => Center(child: Text(userFacingError(error))),
         data: (data) {
           final counts = [for (final key in keys) _items(data, key).length];
           final items = _items(data, keys[_index]);

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/api/api_exceptions.dart';
+import '../../core/errors/user_facing_error.dart';
 import '../../core/models/operations_models.dart';
 import '../../core/models/role_session.dart';
 import '../../core/printing/printer_adapter.dart';
@@ -80,7 +80,7 @@ class _PendingBillReviewScreenState
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(error is ApiException ? error.message : '$error'),
+              content: Text(userFacingError(error)),
               backgroundColor: Colors.red,
             ),
           );
@@ -162,7 +162,7 @@ class _PendingBillReviewScreenState
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(error is ApiException ? error.message : '$error'),
+            content: Text(userFacingError(error)),
             backgroundColor: Colors.red,
           ),
         );
@@ -388,7 +388,7 @@ class _PendingBillReviewScreenState
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('$error Latest bill status was loaded.'),
+          content: Text(userFacingError(error)),
           backgroundColor: Colors.red.shade700,
         ),
       );
@@ -455,7 +455,7 @@ class _PendingBillReviewScreenState
               ),
               const SizedBox(height: OmluSpacing.xs),
               Text(
-                '$error',
+                userFacingError(error),
                 textAlign: TextAlign.center,
                 style: OmluTypography.bodyMedium,
               ),

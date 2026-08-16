@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/operations_api.dart';
+import '../../core/errors/user_facing_error.dart';
 import '../../core/realtime/realtime_client.dart';
 import '../../design_system/colors.dart';
 import '../../design_system/spacing.dart';
@@ -173,7 +174,7 @@ class _PendingPaymentsTabState extends ConsumerState<PendingPaymentsTab> {
       await ref.read(pendingPaymentsProvider.notifier).fetch(silent: true);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$error Latest payment state was loaded.')),
+        SnackBar(content: Text(userFacingError(error))),
       );
     } finally {
       if (mounted) setState(() => _confirmingBill = null);

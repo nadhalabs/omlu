@@ -16,6 +16,7 @@ import 'cart_screen.dart';
 import '../../core/models/operations_models.dart';
 import '../../core/models/role_session.dart';
 import '../../core/api/api_exceptions.dart';
+import '../../core/errors/user_facing_error.dart';
 import 'staff_bill_screen.dart';
 import '../auth_provider.dart';
 import 'staff_access_provider.dart';
@@ -150,7 +151,7 @@ class _TablePickerView extends ConsumerWidget {
             child: OmluSkeletonLoader(width: double.infinity, height: 72),
           ),
         ),
-        error: (err, st) => Center(child: Text('Error loading tables: $err')),
+        error: (err, st) => Center(child: Text(userFacingError(err))),
       ),
     );
   }

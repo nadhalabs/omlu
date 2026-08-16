@@ -407,8 +407,14 @@ class _KitchenOrderCard extends StatelessWidget {
 
           // Items
           ...order.items.map((item) {
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 6.0),
+            final cancelled = item.isCancelled;
+            return Container(
+              margin: const EdgeInsets.only(bottom: 6),
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: cancelled ? OmluColors.disabledSurface : null,
+                borderRadius: OmluRadius.borderSm,
+              ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -416,7 +422,10 @@ class _KitchenOrderCard extends StatelessWidget {
                     '${item.quantity}x ',
                     style: OmluTypography.bodyLarge.copyWith(
                       fontWeight: FontWeight.bold,
-                      color: OmluColors.accent,
+                      color: cancelled
+                          ? OmluColors.textMuted
+                          : OmluColors.accent,
+                      decoration: cancelled ? TextDecoration.lineThrough : null,
                     ),
                   ),
                   Expanded(
@@ -427,9 +436,34 @@ class _KitchenOrderCard extends StatelessWidget {
                           item.name,
                           style: OmluTypography.bodyLarge.copyWith(
                             fontWeight: FontWeight.w600,
+                            color: cancelled ? OmluColors.textMuted : null,
+                            decoration: cancelled
+                                ? TextDecoration.lineThrough
+                                : null,
                           ),
                         ),
-                        if (item.selectedOptions.isNotEmpty)
+                        if (cancelled) ...[
+                          const SizedBox(height: 3),
+                          Wrap(
+                            spacing: 8,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              const Chip(
+                                visualDensity: VisualDensity.compact,
+                                label: Text('Cancelled'),
+                              ),
+                              if (item.cancellationReason != null &&
+                                  item.cancellationReason!.trim().isNotEmpty)
+                                Text(
+                                  item.cancellationReason!,
+                                  style: OmluTypography.bodySmall.copyWith(
+                                    color: OmluColors.textMuted,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ],
+                        if (!cancelled && item.selectedOptions.isNotEmpty)
                           Text(
                             item.selectedOptions.join(' · '),
                             style: OmluTypography.bodySmall.copyWith(
@@ -437,7 +471,9 @@ class _KitchenOrderCard extends StatelessWidget {
                               fontWeight: FontWeight.w600,
                             ),
                           ),
-                        if (item.note != null && item.note!.trim().isNotEmpty)
+                        if (!cancelled &&
+                            item.note != null &&
+                            item.note!.trim().isNotEmpty)
                           Padding(
                             padding: const EdgeInsets.only(top: 2.0),
                             child: Text(
@@ -484,7 +520,7 @@ class _KitchenOrderCard extends StatelessWidget {
           const SizedBox(height: OmluSpacing.md),
 
           // Action button
-          if (order.status != 'ready')
+          if (order.status != 'ready' && order.hasActionableItems)
             OmluButton(
               text: _getActionButtonLabel(order.status),
               isLoading: isProcessing,

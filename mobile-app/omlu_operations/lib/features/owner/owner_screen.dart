@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/models/role_session.dart';
+import '../../core/errors/user_facing_error.dart';
 import '../../design_system/colors.dart';
 import '../../design_system/spacing.dart';
 import '../../design_system/typography.dart';
@@ -275,7 +276,7 @@ class _OwnerDashboardTab extends ConsumerWidget {
             ],
           ),
           error: (err, st) =>
-              Center(child: Text('Error loading dashboard: $err')),
+              Center(child: Text(userFacingError(err))),
         ),
       ),
     );

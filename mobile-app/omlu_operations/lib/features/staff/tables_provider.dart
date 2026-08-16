@@ -29,6 +29,7 @@ class TablesNotifier
           'session.closed',
           'order.status_changed',
           'order.created',
+          'order.item_cancelled',
           'service_request.created',
           'service_request.resolved',
           'bill.generated',

@@ -5,6 +5,7 @@ import '../design_system/colors.dart';
 import '../design_system/typography.dart';
 import '../features/auth_provider.dart';
 import '../features/login/login_screen.dart';
+import '../core/update/app_update.dart';
 import 'role_router.dart';
 
 final webViewFallbackProvider = StateProvider<bool>((ref) => false);
@@ -80,7 +81,7 @@ class OmluNativeApp extends ConsumerWidget {
         ),
         useMaterial3: true,
       ),
-      home: authState.when(
+      home: AppUpdateGate(child: authState.when(
         data: (session) {
           if (session == null) {
             return const LoginScreen();
@@ -96,7 +97,7 @@ class OmluNativeApp extends ConsumerWidget {
             errorMessage: 'Session expired. Please sign in again.',
           );
         },
-      ),
+      )),
     );
   }
 }

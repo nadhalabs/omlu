@@ -1,0 +1,11 @@
+{
+  "version": "1.0.2",
+  "build": 3,
+  "minimum_supported_build": 2,
+  "apk_url": "https://omlu.in/downloads/omlu.apk",
+  "release_notes": [
+    "Improved cancelled-item handling in Kitchen",
+    "Added staff item cancellation",
+    "Improved operational error messages"
+  ]
+}

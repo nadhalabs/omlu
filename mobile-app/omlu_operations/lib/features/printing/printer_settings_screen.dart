@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/role_session.dart';
+import '../../core/errors/user_facing_error.dart';
 import '../../core/printing/bluetooth_permission_helper.dart';
 import '../../core/printing/bluetooth_platform.dart';
 import '../../core/printing/esc_pos_encoder.dart';
@@ -157,7 +158,7 @@ class _PrinterSettingsScreenState extends ConsumerState<PrinterSettingsScreen> {
         onError: (Object error) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('$error'), backgroundColor: Colors.red),
+              SnackBar(content: Text(userFacingError(error, context: ErrorContext.printing)), backgroundColor: Colors.red),
             );
           }
         },
@@ -168,7 +169,7 @@ class _PrinterSettingsScreenState extends ConsumerState<PrinterSettingsScreen> {
     } on PrinterException catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(error.message), backgroundColor: Colors.red),
+          SnackBar(content: Text(userFacingError(error, context: ErrorContext.printing)), backgroundColor: Colors.red),
         );
       }
     } catch (_) {
@@ -231,7 +232,7 @@ class _PrinterSettingsScreenState extends ConsumerState<PrinterSettingsScreen> {
     } on PrinterException catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(error.message), backgroundColor: Colors.red),
+          SnackBar(content: Text(userFacingError(error, context: ErrorContext.printing)), backgroundColor: Colors.red),
         );
       }
     } finally {

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../design_system/colors.dart';
+import '../../core/errors/user_facing_error.dart';
 import '../../design_system/spacing.dart';
 import '../../design_system/typography.dart';
 import '../../design_system/widgets/omlu_button.dart';
@@ -99,10 +100,7 @@ class _PaymentCodeLookupSheetState
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _errorMessage = error.toString().replaceFirst(
-              RegExp(r'^Exception:\s*|^ApiException\(\d*\):\s*'),
-              '',
-            );
+        _errorMessage = userFacingError(error);
       });
     }
   }

@@ -368,19 +368,27 @@ class OrderSummary {
 
 class KitchenOrderItem {
   const KitchenOrderItem({
+    this.id,
     required this.name,
     required this.quantity,
     this.note,
     this.selectedOptions = const [],
+    this.cancellationStatus = 'active',
+    this.cancellationReason,
+    this.cancelledAt,
+    this.cancellationActorType,
   });
 
   factory KitchenOrderItem.fromJson(Map<String, Object?> json) {
     return KitchenOrderItem(
+      id: json['id'] == null ? null : readInt(json['id']),
       name: readString(
         json['name'] ?? json['menu_item_name'] ?? json['item_name'],
       ),
       quantity: readInt(json['quantity'], fallback: 1),
-      note: json['note'] == null ? null : readString(json['note']),
+      note: json['item_note'] == null
+          ? (json['note'] == null ? null : readString(json['note']))
+          : readString(json['item_note']),
       selectedOptions: [
         for (final raw in json['selected_options'] as List? ?? const [])
           if (raw is Map)
@@ -392,13 +400,49 @@ class KitchenOrderItem {
               ),
             ),
       ],
+      cancellationStatus: readString(
+        json['cancellation_status'],
+        fallback: 'active',
+      ),
+      cancellationReason: json['cancellation_reason'] == null
+          ? null
+          : readString(json['cancellation_reason']),
+      cancelledAt: json['cancelled_at'] == null
+          ? null
+          : DateTime.tryParse(readString(json['cancelled_at']))?.toUtc(),
+      cancellationActorType: json['cancellation_actor_type'] == null
+          ? null
+          : readString(json['cancellation_actor_type']),
     );
   }
 
+  final int? id;
   final String name;
   final int quantity;
   final String? note;
   final List<String> selectedOptions;
+  final String cancellationStatus;
+  final String? cancellationReason;
+  final DateTime? cancelledAt;
+  final String? cancellationActorType;
+
+  bool get isCancelled => cancellationStatus == 'cancelled';
+  int get actionableQuantity => isCancelled ? 0 : quantity;
+
+  KitchenOrderItem cancelled({String? reason, DateTime? at, String? actor}) {
+    if (isCancelled) return this;
+    return KitchenOrderItem(
+      id: id,
+      name: name,
+      quantity: quantity,
+      note: note,
+      selectedOptions: selectedOptions,
+      cancellationStatus: 'cancelled',
+      cancellationReason: reason,
+      cancelledAt: at,
+      cancellationActorType: actor,
+    );
+  }
 }
 
 class KitchenOrder {
@@ -444,17 +488,49 @@ class KitchenOrder {
   final String? customerNote;
   final String? source;
 
-  KitchenOrder copyWith({String? status}) {
+  int get actionableQuantity =>
+      items.fold(0, (total, item) => total + item.actionableQuantity);
+
+  bool get hasActionableItems => actionableQuantity > 0;
+
+  KitchenOrder copyWith({
+    String? status,
+    double? subtotal,
+    List<KitchenOrderItem>? items,
+  }) {
     return KitchenOrder(
       orderNumber: orderNumber,
       publicToken: publicToken,
       tableNumber: tableNumber,
       status: status ?? this.status,
-      subtotal: subtotal,
+      subtotal: subtotal ?? this.subtotal,
       createdAt: createdAt,
-      items: items,
+      items: items ?? this.items,
       customerNote: customerNote,
       source: source,
+    );
+  }
+
+  KitchenOrder applyItemCancellation(Map<String, Object?> eventState) {
+    if (eventState['order_public_token']?.toString() != publicToken) return this;
+    final itemId = int.tryParse(eventState['order_item_id']?.toString() ?? '');
+    if (itemId == null) return this;
+    final updated = [
+      for (final item in items)
+        if (item.id == itemId)
+          item.cancelled(
+            reason: eventState['cancellation_reason']?.toString(),
+            at: DateTime.tryParse(eventState['cancelled_at']?.toString() ?? '')
+                ?.toUtc(),
+            actor: eventState['cancellation_actor_type']?.toString(),
+          )
+        else
+          item,
+    ];
+    return copyWith(
+      status: eventState['order_status']?.toString(),
+      subtotal: double.tryParse(eventState['order_subtotal']?.toString() ?? ''),
+      items: updated,
     );
   }
 }
@@ -500,7 +576,9 @@ class PaymentCodeLookupResult {
           : DateTime.tryParse(readString(json['detached_at']))?.toUtc(),
       paymentCodeExpiresAt: json['payment_code_expires_at'] == null
           ? null
-          : DateTime.tryParse(readString(json['payment_code_expires_at']))?.toUtc(),
+          : DateTime.tryParse(
+              readString(json['payment_code_expires_at']),
+            )?.toUtc(),
       waitingSeconds: readInt(json['waiting_seconds']),
       orderCount: readInt(summary['order_count']),
       itemCount: readInt(summary['item_count']),
@@ -546,9 +624,7 @@ class BillDetailItemOption {
   factory BillDetailItemOption.fromJson(Map<String, Object?> json) {
     return BillDetailItemOption(
       optionName: readString(
-        json['kitchen_display_name'] ??
-            json['option_name'] ??
-            json['name'],
+        json['kitchen_display_name'] ?? json['option_name'] ?? json['name'],
       ),
       kitchenDisplayName: json['kitchen_display_name'] == null
           ? null
@@ -586,7 +662,8 @@ class BillDetailItem {
           if (opt is Map)
             BillDetailItemOption.fromJson(Map<String, Object?>.from(opt)),
       ],
-      itemNote: json['item_note'] == null || readString(json['item_note']).isEmpty
+      itemNote:
+          json['item_note'] == null || readString(json['item_note']).isEmpty
           ? (json['note'] == null ? null : readString(json['note']))
           : readString(json['item_note']),
     );
@@ -678,13 +755,24 @@ class BillDetail {
     final rawOrders = json['orders'] as List? ?? const [];
     return BillDetail(
       billNumber: readString(json['bill_number']),
-      receiptToken: json['receipt_token'] == null ? null : readString(json['receipt_token']),
+      receiptToken: json['receipt_token'] == null
+          ? null
+          : readString(json['receipt_token']),
       restaurantName: readString(json['restaurant_name']),
-      restaurantSlug: json['restaurant_slug'] == null ? null : readString(json['restaurant_slug']),
+      restaurantSlug: json['restaurant_slug'] == null
+          ? null
+          : readString(json['restaurant_slug']),
       tableNumber: readString(json['table_number'] ?? json['original_table']),
-      tableCode: json['table_code'] == null ? null : readString(json['table_code']),
-      sessionToken: json['session_token'] == null ? null : readString(json['session_token']),
-      status: readString(json['status'] ?? json['bill_status'], fallback: 'draft'),
+      tableCode: json['table_code'] == null
+          ? null
+          : readString(json['table_code']),
+      sessionToken: json['session_token'] == null
+          ? null
+          : readString(json['session_token']),
+      status: readString(
+        json['status'] ?? json['bill_status'],
+        fallback: 'draft',
+      ),
       orders: [
         for (final ord in rawOrders)
           if (ord is Map)
@@ -696,34 +784,72 @@ class BillDetail {
       totalAmount: readDouble(json['total_amount'] ?? json['amount_due']),
       currency: readString(json['currency'], fallback: 'INR'),
       generatedAt: json['generated_at'] == null
-          ? (json['issued_at'] == null ? null : DateTime.tryParse(readString(json['issued_at']))?.toUtc())
+          ? (json['issued_at'] == null
+                ? null
+                : DateTime.tryParse(readString(json['issued_at']))?.toUtc())
           : DateTime.tryParse(readString(json['generated_at']))?.toUtc(),
       paidAt: json['paid_at'] == null
           ? null
           : DateTime.tryParse(readString(json['paid_at']))?.toUtc(),
-      paymentMethod: json['payment_method'] == null ? null : readString(json['payment_method']),
-      paymentReference: json['payment_reference'] == null ? null : readString(json['payment_reference']),
-      paidByStaffId: json['paid_by_staff_id'] == null ? null : readInt(json['paid_by_staff_id']),
-      generatedByRole: json['generated_by_role'] == null ? null : readString(json['generated_by_role']),
-      sentToCounterByRole: json['sent_to_counter_by_role'] == null ? null : readString(json['sent_to_counter_by_role']),
+      paymentMethod: json['payment_method'] == null
+          ? null
+          : readString(json['payment_method']),
+      paymentReference: json['payment_reference'] == null
+          ? null
+          : readString(json['payment_reference']),
+      paidByStaffId: json['paid_by_staff_id'] == null
+          ? null
+          : readInt(json['paid_by_staff_id']),
+      generatedByRole: json['generated_by_role'] == null
+          ? null
+          : readString(json['generated_by_role']),
+      sentToCounterByRole: json['sent_to_counter_by_role'] == null
+          ? null
+          : readString(json['sent_to_counter_by_role']),
       gstEnabled: json['gst_enabled'] as bool? ?? false,
-      invoiceNumber: json['invoice_number'] == null ? null : readString(json['invoice_number']),
-      invoiceDate: json['invoice_date'] == null ? null : DateTime.tryParse(readString(json['invoice_date']))?.toUtc(),
-      taxableAmount: json['taxable_amount'] == null ? null : readDouble(json['taxable_amount']),
+      invoiceNumber: json['invoice_number'] == null
+          ? null
+          : readString(json['invoice_number']),
+      invoiceDate: json['invoice_date'] == null
+          ? null
+          : DateTime.tryParse(readString(json['invoice_date']))?.toUtc(),
+      taxableAmount: json['taxable_amount'] == null
+          ? null
+          : readDouble(json['taxable_amount']),
       gstRate: json['gst_rate'] == null ? null : readDouble(json['gst_rate']),
-      cgstAmount: json['cgst_amount'] == null ? null : readDouble(json['cgst_amount']),
-      sgstAmount: json['sgst_amount'] == null ? null : readDouble(json['sgst_amount']),
-      igstAmount: json['igst_amount'] == null ? null : readDouble(json['igst_amount']),
+      cgstAmount: json['cgst_amount'] == null
+          ? null
+          : readDouble(json['cgst_amount']),
+      sgstAmount: json['sgst_amount'] == null
+          ? null
+          : readDouble(json['sgst_amount']),
+      igstAmount: json['igst_amount'] == null
+          ? null
+          : readDouble(json['igst_amount']),
       gstin: json['gstin'] == null ? null : readString(json['gstin']),
-      legalBusinessName: json['legal_business_name'] == null ? null : readString(json['legal_business_name']),
-      registeredBillingAddress: json['registered_billing_address'] == null ? null : readString(json['registered_billing_address']),
+      legalBusinessName: json['legal_business_name'] == null
+          ? null
+          : readString(json['legal_business_name']),
+      registeredBillingAddress: json['registered_billing_address'] == null
+          ? null
+          : readString(json['registered_billing_address']),
       sessionStatus: readString(json['session_status'], fallback: 'open'),
-      paymentRequestedAt: json['payment_requested_at'] == null ? null : DateTime.tryParse(readString(json['payment_requested_at']))?.toUtc(),
-      detachedAt: json['detached_at'] == null ? null : DateTime.tryParse(readString(json['detached_at']))?.toUtc(),
-      paymentCode: json['payment_code'] == null ? null : readString(json['payment_code']),
+      paymentRequestedAt: json['payment_requested_at'] == null
+          ? null
+          : DateTime.tryParse(
+              readString(json['payment_requested_at']),
+            )?.toUtc(),
+      detachedAt: json['detached_at'] == null
+          ? null
+          : DateTime.tryParse(readString(json['detached_at']))?.toUtc(),
+      paymentCode: json['payment_code'] == null
+          ? null
+          : readString(json['payment_code']),
       paymentCodeExpiresAt: json['payment_code_expires_at'] == null
           ? null
-          : DateTime.tryParse(readString(json['payment_code_expires_at']))?.toUtc(),
+          : DateTime.tryParse(
+              readString(json['payment_code_expires_at']),
+            )?.toUtc(),
     );
   }
 

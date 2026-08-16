@@ -1,6 +1,6 @@
 # OMLU Android App
 
-This Flutter app is a secure Android WebView wrapper for the existing deployed OMLU website. It does not duplicate the website UI. Staff, kitchen, admin, owner, authentication, cookies, local storage, sessions, and role-based redirects remain owned by the web application.
+This Flutter app provides native restaurant operations screens with a restricted WebView fallback.
 
 ## Requirements
 
@@ -30,16 +30,18 @@ flutter pub get
 
 ## Configuration
 
-The app reads its target website from Dart defines:
+Production defaults are `https://omlu.in` for the frontend and
+`https://omlu-api.onrender.com` for the API. Override them with Dart defines:
 
 ```bash
---dart-define=OMLU_APP_URL=https://omlu.vercel.app
+--dart-define=OMLU_FRONTEND_URL=https://omlu.in \
+--dart-define=OMLU_BACKEND_URL=https://omlu-api.onrender.com
 ```
 
 Optional:
 
 ```bash
---dart-define=OMLU_ALLOWED_DOMAINS=omlu.vercel.app,admin.omlu.example
+--dart-define=OMLU_ALLOWED_DOMAINS=omlu.in
 --dart-define=OMLU_ALLOW_HTTP=true
 ```
 
@@ -59,8 +61,7 @@ flutter devices
 Run:
 
 ```bash
-flutter run \
-  --dart-define=OMLU_APP_URL=https://omlu.vercel.app
+flutter run
 ```
 
 ## Run on an Android Emulator
@@ -76,8 +77,7 @@ flutter devices
 Run:
 
 ```bash
-flutter run \
-  --dart-define=OMLU_APP_URL=https://omlu.vercel.app
+flutter run
 ```
 
 ## Local Development Examples
@@ -92,7 +92,8 @@ Use a local HTTPS tunnel:
 
 ```bash
 flutter run \
-  --dart-define=OMLU_APP_URL=https://your-ngrok-domain.ngrok-free.app \
+  --dart-define=OMLU_FRONTEND_URL=https://your-ngrok-domain.ngrok-free.app \
+  --dart-define=OMLU_BACKEND_URL=https://your-api-tunnel.ngrok-free.app \
   --dart-define=OMLU_ALLOWED_DOMAINS=your-ngrok-domain.ngrok-free.app
 ```
 
@@ -100,7 +101,8 @@ Use HTTP only for local development when Android networking is configured for it
 
 ```bash
 flutter run \
-  --dart-define=OMLU_APP_URL=http://10.0.2.2:3000 \
+  --dart-define=OMLU_FRONTEND_URL=http://10.0.2.2:3000 \
+  --dart-define=OMLU_BACKEND_URL=http://10.0.2.2:8000 \
   --dart-define=OMLU_ALLOW_HTTP=true \
   --dart-define=OMLU_ALLOWED_DOMAINS=10.0.2.2
 ```
@@ -108,8 +110,7 @@ flutter run \
 ## Build Release APK
 
 ```bash
-flutter build apk --release \
-  --dart-define=OMLU_APP_URL=https://omlu.vercel.app
+flutter build apk --release
 ```
 
 The APK is written under `build/app/outputs/flutter-apk/`.
@@ -117,8 +118,7 @@ The APK is written under `build/app/outputs/flutter-apk/`.
 ## Build Release AAB
 
 ```bash
-flutter build appbundle --release \
-  --dart-define=OMLU_APP_URL=https://omlu.vercel.app
+flutter build appbundle --release
 ```
 
 The app bundle is written under `build/app/outputs/bundle/release/`.

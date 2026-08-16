@@ -87,6 +87,20 @@ class OperationsApi {
     return OrderSummary.fromJson(json);
   }
 
+  Future<Map<String, Object?>> cancelStaffOrderItem({
+    required int tableId,
+    required String orderPublicToken,
+    required int orderItemId,
+    required String reason,
+  }) async {
+    final json = await _client.postJson(
+      '/staff/tables/$tableId/orders/$orderPublicToken/items/$orderItemId/cancel',
+      body: <String, Object?>{'reason': reason.trim()},
+    );
+    await _cache?.invalidate('tables', identifier: 'all');
+    return json;
+  }
+
   Future<Map<String, Object?>> reopenBillOrdering({
     required String billNumber,
     required String reason,

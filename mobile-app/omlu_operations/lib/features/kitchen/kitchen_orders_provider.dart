@@ -15,8 +15,18 @@ class KitchenOrdersNotifier
     // Listen to realtime events to refresh the kitchen board
     ref.listen(realtimeEventStreamProvider, (prev, next) {
       next.whenData((event) {
+        if (event.type == 'order.item_cancelled') {
+          final current = state.valueOrNull;
+          if (current != null) {
+            state = AsyncValue.data([
+              for (final order in current)
+                order.applyItemCancellation(event.state),
+            ]);
+          }
+        }
         if (event.type == 'order.created' ||
-            event.type == 'order.status_changed') {
+            event.type == 'order.status_changed' ||
+            event.type == 'order.item_cancelled') {
           fetchOrders(silent: true);
         }
       });
@@ -67,6 +77,10 @@ class KitchenOrdersNotifier
     if (nextStatus == null) return;
     final previous = state.valueOrNull;
     if (previous == null) return;
+    final target = previous
+        .where((order) => order.publicToken == publicToken)
+        .firstOrNull;
+    if (target == null || !target.hasActionableItems) return;
     _updatingTokens.add(publicToken);
     state = AsyncValue.data(
       nextStatus == 'served'

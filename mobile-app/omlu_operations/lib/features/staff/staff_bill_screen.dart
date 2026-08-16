@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/printing/printer_adapter.dart';
+import '../../core/errors/user_facing_error.dart';
 import '../../core/models/role_session.dart';
 import '../../design_system/colors.dart';
 import '../../design_system/spacing.dart';
@@ -35,6 +36,7 @@ class _StaffBillScreenState extends ConsumerState<StaffBillScreen> {
   String? _operationLabel;
   Map<String, Object?>? _confirmedBill;
   bool _paymentCompleted = false;
+  int? _cancellingItemId;
   String? _currentBillNumber;
   Timer? _refreshTimer;
 
@@ -366,11 +368,59 @@ class _StaffBillScreenState extends ConsumerState<StaffBillScreen> {
     }
   }
 
+  Future<void> _cancelItem(
+    Map<String, Object?> order,
+    Map<String, Object?> item,
+  ) async {
+    final itemId = _int(item['id']);
+    if (itemId <= 0 || _cancellingItemId != null) return;
+    final reason = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => _CancellationReasonSheet(
+        itemName: _text(item['item_name'], fallback: 'this item'),
+      ),
+    );
+    if (reason == null || reason.trim().isEmpty || !mounted) return;
+    setState(() => _cancellingItemId = itemId);
+    try {
+      await ref
+          .read(operationsApiProvider)
+          .cancelStaffOrderItem(
+            tableId: widget.tableId,
+            orderPublicToken: _text(order['public_token']),
+            orderItemId: itemId,
+            reason: reason,
+          );
+      await _refresh();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Item cancelled. Kitchen updated.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            userFacingError(error, context: ErrorContext.itemCancellation),
+          ),
+          backgroundColor: Colors.red.shade700,
+        ),
+      );
+      try {
+        await _refresh();
+      } catch (_) {}
+    } finally {
+      if (mounted) setState(() => _cancellingItemId = null);
+    }
+  }
+
   Future<void> _handleFailure(Object error) async {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('$error Latest table state has been loaded.'),
+        content: Text(userFacingError(error)),
         backgroundColor: Colors.red.shade700,
       ),
     );
@@ -423,8 +473,10 @@ class _StaffBillScreenState extends ConsumerState<StaffBillScreen> {
                       OmluSkeletonLoader(width: double.infinity, height: 260),
                     ],
                   ),
-                  error: (error, stack) =>
-                      _ErrorState(message: '$error', onRetry: _refresh),
+                  error: (error, stack) => _ErrorState(
+                    message: userFacingError(error),
+                    onRetry: _refresh,
+                  ),
                   data: (detail) => _buildDetail(detail),
                 ),
     );
@@ -432,7 +484,8 @@ class _StaffBillScreenState extends ConsumerState<StaffBillScreen> {
 
   Widget _buildDetail(Map<String, Object?> detail) {
     final role = widget.actorRole ?? ref.watch(authProvider).valueOrNull?.role;
-    final canOfficiallyBill = role == StaffRole.owner || role == StaffRole.admin;
+    final canOfficiallyBill =
+        role == StaffRole.owner || role == StaffRole.admin;
     final printerConfig = ref.watch(printerConfigProvider).valueOrNull;
     final hasConfiguredPrinter = printerConfig?.isConfigured == true;
     final table = _map(detail['table']);
@@ -476,7 +529,12 @@ class _StaffBillScreenState extends ConsumerState<StaffBillScreen> {
             ...orders.map(
               (order) => Padding(
                 padding: const EdgeInsets.only(bottom: OmluSpacing.sm),
-                child: _OrderBillCard(order: order),
+                child: _OrderBillCard(
+                  order: order,
+                  sessionStatus: _text(session['status'], fallback: 'open'),
+                  cancellingItemId: _cancellingItemId,
+                  onCancelItem: (item) => _cancelItem(order, item),
+                ),
               ),
             ),
           const SizedBox(height: OmluSpacing.sm),
@@ -505,8 +563,7 @@ class _StaffBillScreenState extends ConsumerState<StaffBillScreen> {
           else
             _BillBreakdown(
               bill: bill,
-              canRecordPayment:
-                  canOfficiallyBill,
+              canRecordPayment: canOfficiallyBill,
               canOfficiallyBill: canOfficiallyBill,
               isSubmitting: _submitting,
               operationLabel: _operationLabel,
@@ -582,8 +639,16 @@ class _SessionHeader extends StatelessWidget {
 }
 
 class _OrderBillCard extends StatelessWidget {
-  const _OrderBillCard({required this.order});
+  const _OrderBillCard({
+    required this.order,
+    required this.sessionStatus,
+    required this.cancellingItemId,
+    required this.onCancelItem,
+  });
   final Map<String, Object?> order;
+  final String sessionStatus;
+  final int? cancellingItemId;
+  final ValueChanged<Map<String, Object?>> onCancelItem;
 
   @override
   Widget build(BuildContext context) {
@@ -613,8 +678,16 @@ class _OrderBillCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: OmluSpacing.sm),
-          ...items.map(
-            (item) => Padding(
+          ...items.map((item) {
+            final itemCancelled =
+                _text(item['cancellation_status'], fallback: 'active') ==
+                'cancelled';
+            final itemId = _int(item['id']);
+            final canCancel =
+                !itemCancelled &&
+                sessionStatus == 'open' &&
+                {'pending', 'accepted'}.contains(_text(order['status']));
+            return Padding(
               padding: const EdgeInsets.symmetric(vertical: OmluSpacing.xxs),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -623,7 +696,12 @@ class _OrderBillCard extends StatelessWidget {
                     width: 36,
                     child: Text(
                       '${_int(item['quantity'])} ×',
-                      style: OmluTypography.bodyMedium,
+                      style: OmluTypography.bodyMedium.copyWith(
+                        color: itemCancelled ? OmluColors.textMuted : null,
+                        decoration: itemCancelled
+                            ? TextDecoration.lineThrough
+                            : null,
+                      ),
                     ),
                   ),
                   Expanded(
@@ -632,8 +710,21 @@ class _OrderBillCard extends StatelessWidget {
                       children: [
                         Text(
                           _text(item['item_name']),
-                          style: OmluTypography.bodyMedium,
+                          style: OmluTypography.bodyMedium.copyWith(
+                            color: itemCancelled ? OmluColors.textMuted : null,
+                            decoration: itemCancelled
+                                ? TextDecoration.lineThrough
+                                : null,
+                          ),
                         ),
+                        if (itemCancelled)
+                          const Align(
+                            alignment: Alignment.centerLeft,
+                            child: Chip(
+                              visualDensity: VisualDensity.compact,
+                              label: Text('Cancelled'),
+                            ),
+                          ),
                         if (_listOfMaps(item['selected_options']).isNotEmpty)
                           Text(
                             _listOfMaps(item['selected_options'])
@@ -655,12 +746,27 @@ class _OrderBillCard extends StatelessWidget {
                     _money(_amount(item['total_price'])),
                     style: OmluTypography.bodyMedium.copyWith(
                       fontWeight: FontWeight.w700,
+                      color: itemCancelled ? OmluColors.textMuted : null,
+                      decoration: itemCancelled
+                          ? TextDecoration.lineThrough
+                          : null,
                     ),
                   ),
+                  if (canCancel)
+                    TextButton(
+                      onPressed: cancellingItemId == null
+                          ? () => onCancelItem(item)
+                          : null,
+                      child: Text(
+                        cancellingItemId == itemId
+                            ? 'Cancelling…'
+                            : 'Cancel item',
+                      ),
+                    ),
                 ],
               ),
-            ),
-          ),
+            );
+          }),
           if (cancelled) ...[
             const SizedBox(height: OmluSpacing.xs),
             const Text(
@@ -928,6 +1034,111 @@ class _PaymentConfirmationSheet extends StatefulWidget {
   @override
   State<_PaymentConfirmationSheet> createState() =>
       _PaymentConfirmationSheetState();
+}
+
+class _CancellationReasonSheet extends StatefulWidget {
+  const _CancellationReasonSheet({required this.itemName});
+
+  final String itemName;
+
+  @override
+  State<_CancellationReasonSheet> createState() =>
+      _CancellationReasonSheetState();
+}
+
+class _CancellationReasonSheetState extends State<_CancellationReasonSheet> {
+  static const _reasons = [
+    'Customer changed mind',
+    'Ordered by mistake',
+    'Item unavailable',
+    'Duplicate order',
+    'Other',
+  ];
+
+  String _selected = _reasons.first;
+  final _otherController = TextEditingController();
+
+  @override
+  void dispose() {
+    _otherController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reason = _selected == 'Other'
+        ? _otherController.text.trim()
+        : _selected;
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          OmluSpacing.md,
+          0,
+          OmluSpacing.md,
+          OmluSpacing.md + MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Cancel ${widget.itemName}?', style: OmluTypography.h2),
+            const SizedBox(height: OmluSpacing.xs),
+            const Text(
+              'This item will be removed from the current bill. Only cancel it before preparation starts.',
+              style: OmluTypography.bodyMedium,
+            ),
+            const SizedBox(height: OmluSpacing.md),
+            Wrap(
+              spacing: OmluSpacing.xs,
+              runSpacing: OmluSpacing.xs,
+              children: [
+                for (final choice in _reasons)
+                  ChoiceChip(
+                    label: Text(choice),
+                    selected: _selected == choice,
+                    onSelected: (_) => setState(() => _selected = choice),
+                  ),
+              ],
+            ),
+            if (_selected == 'Other') ...[
+              const SizedBox(height: OmluSpacing.sm),
+              TextField(
+                controller: _otherController,
+                autofocus: true,
+                maxLength: 300,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: const InputDecoration(
+                  labelText: 'Reason',
+                  hintText: 'Enter a short reason',
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+            ],
+            const SizedBox(height: OmluSpacing.md),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Keep item'),
+                  ),
+                ),
+                const SizedBox(width: OmluSpacing.sm),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: reason.isEmpty
+                        ? null
+                        : () => Navigator.pop(context, reason),
+                    child: const Text('Cancel item'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _PaymentConfirmationSheetState extends State<_PaymentConfirmationSheet> {
