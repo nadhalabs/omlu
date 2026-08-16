@@ -27,7 +27,8 @@ test("public headers expose Book a Demo and the landing page captures enquiries"
   assert.match(page, /<LandingDemoForm/);
   assert.match(demoForm, /id="demo"/);
   assert.match(demoForm, /fetch\("\/api\/sales-leads"/);
-  for (const label of ["Name", "Phone number", "Restaurant name", "City", "Email", "Number of outlets", "Interested plan"]) assert.match(demoForm, new RegExp(`label="${label}"`));
+  for (const label of ["Name", "Phone number", "Restaurant name", "City", "Email", "Interested plan"]) assert.match(demoForm, new RegExp(`label="${label}"`));
+  assert.doesNotMatch(demoForm, /Number of outlets|number_of_outlets/);
   assert.match(demoForm, /Request received\./);
 });
 

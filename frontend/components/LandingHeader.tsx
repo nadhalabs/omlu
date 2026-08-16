@@ -35,18 +35,21 @@ export function LandingHeader({ themeToggle, productHref = "/#product" }: { them
           <div className="ml-2">{themeToggle}</div>
         </div>
 
-        <button
-          type="button"
-          aria-label={menuOpen ? "Close navigation menu" : "Open navigation menu"}
-          aria-expanded={menuOpen}
-          aria-controls="mobile-navigation"
-          onClick={() => setMenuOpen((open) => !open)}
-          className="inline-flex size-11 items-center justify-center rounded-lg text-[var(--omlu-text-secondary)] transition-colors hover:bg-[var(--omlu-hover-background)] hover:text-orange-500 md:hidden"
-        >
-          <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-            {menuOpen ? <path d="M6 6l12 12M18 6 6 18" /> : <path d="M4 7h16M4 12h16M4 17h16" />}
-          </svg>
-        </button>
+        <div className="flex items-center gap-1 md:hidden">
+          {themeToggle}
+          <button
+            type="button"
+            aria-label={menuOpen ? "Close navigation menu" : "Open navigation menu"}
+            aria-expanded={menuOpen}
+            aria-controls="mobile-navigation"
+            onClick={() => setMenuOpen((open) => !open)}
+            className="inline-flex size-11 items-center justify-center rounded-lg text-[var(--omlu-text-secondary)] transition-colors hover:bg-[var(--omlu-hover-background)] hover:text-orange-500"
+          >
+            <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              {menuOpen ? <path d="M6 6l12 12M18 6 6 18" /> : <path d="M4 7h16M4 12h16M4 17h16" />}
+            </svg>
+          </button>
+        </div>
       </div>
 
       {menuOpen && (
@@ -57,10 +60,6 @@ export function LandingHeader({ themeToggle, productHref = "/#product" }: { them
             <Link href="/login" onClick={closeMenu} className="flex min-h-12 items-center rounded-lg px-3 text-sm font-semibold text-[var(--omlu-text-secondary)] hover:bg-[var(--omlu-hover-background)] hover:text-orange-500">Login</Link>
             <Link href="/#demo" onClick={closeMenu} className="flex min-h-12 items-center rounded-lg px-3 text-sm font-bold text-orange-500 hover:bg-[var(--omlu-hover-background)]">Book a Demo</Link>
             <Link href="/register" onClick={closeMenu} className="mt-2 inline-flex min-h-12 items-center justify-center rounded-lg bg-[var(--omlu-primary-action)] px-4 text-sm font-bold text-[var(--omlu-primary-action-text)]">Get Started</Link>
-            <div className="mt-2 flex items-center justify-between border-t border-[var(--omlu-border)] px-3 pt-3 text-xs font-semibold text-[var(--omlu-text-muted)]">
-              <span>Appearance</span>
-              {themeToggle}
-            </div>
           </nav>
         </div>
       )}

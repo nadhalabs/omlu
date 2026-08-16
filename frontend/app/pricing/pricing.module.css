@@ -54,7 +54,7 @@
 .billingSegment label:active { transform: scale(.99); }
 .offerBadge { position: absolute; top: 50%; left: calc(100% + 12px); display: inline-flex; min-height: 25px; align-items: center; padding: 0 9px; border: 1px solid #fed7aa; border-radius: 999px; background: #fff0e6; color: #c2410c; font-size: 9px; font-weight: 850; line-height: 1; white-space: nowrap; box-shadow: 0 3px 8px rgba(234, 88, 12, .08); visibility: hidden; opacity: 0; pointer-events: none; transform: translateY(-50%); transition: opacity 160ms ease, visibility 160ms ease; }
 .billingRegion:has(:global(#billing-yearly):checked) .offerBadge { visibility: visible; opacity: 1; }
-.grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: stretch; gap: 14px; }
+.grid { display: grid; width: 100%; margin-inline: auto; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: stretch; gap: 14px; }
 .card { position: relative; min-width: 0; border: 1px solid #eee9e2; border-radius: 22px; background: #f9f7f2; box-shadow: 0 8px 22px rgba(42, 28, 18, .035); transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease; }
 .card:not(.recommended):hover, .card:not(.recommended):focus-within { transform: translateY(-2px); border-color: #fdba74; box-shadow: 0 14px 28px rgba(234, 88, 12, .12); }
 .cardBody { display: flex; height: 100%; flex-direction: column; padding: 25px 20px 20px; }

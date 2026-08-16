@@ -20,10 +20,6 @@ function isThemePreference(value: string | null): value is ThemePreference {
   return value === "light" || value === "dark" || value === "system";
 }
 
-function systemTheme(): ResolvedTheme {
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-}
-
 function getPreferenceSnapshot(): ThemePreference {
   try {
     const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
@@ -52,10 +48,10 @@ function subscribePreference(onChange: () => void) {
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const preference = useSyncExternalStore(subscribePreference, getPreferenceSnapshot, getServerPreferenceSnapshot);
-  const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>(() => {
-    if (typeof window === "undefined") return "light";
-    return preference === "system" ? systemTheme() : preference;
-  });
+  // Keep the server and first client render identical. The inline initializer in
+  // the root layout applies the saved theme before paint, and the effect below
+  // synchronizes React state immediately after hydration.
+  const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>("light");
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");

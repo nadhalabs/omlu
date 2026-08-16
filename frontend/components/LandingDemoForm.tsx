@@ -1,9 +1,10 @@
 "use client";
 
+import Image from "next/image";
 import { FormEvent, useState } from "react";
 import { PRICING_PLANS, type PricingPlan } from "@/lib/pricing";
 
-const initialForm = { name: "", phone: "", restaurant_name: "", city: "", email: "", number_of_outlets: "" };
+const initialForm = { name: "", phone: "", restaurant_name: "", city: "", email: "" };
 
 export function LandingDemoForm() {
   const [form, setForm] = useState(initialForm);
@@ -26,7 +27,6 @@ export function LandingDemoForm() {
           ...form,
           phone: `+91${form.phone.replace(/\D/g, "")}`,
           email: form.email.trim() || null,
-          number_of_outlets: form.number_of_outlets ? Number(form.number_of_outlets) : null,
           selected_plan: selectedPlan.name,
           request_type: "demo",
         }),
@@ -46,35 +46,41 @@ export function LandingDemoForm() {
   }
 
   return (
-    <section id="demo" className="scroll-mt-24 py-2" aria-labelledby="landing-demo-title">
-      <div className="grid gap-8 rounded-2xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-6 sm:p-9 lg:grid-cols-[0.8fr_1.2fr] lg:gap-12 lg:p-12">
-        <div>
+    <section id="demo" className="scroll-mt-24 py-6 sm:py-10" aria-labelledby="landing-demo-title">
+      <div className="grid items-center gap-10 lg:grid-cols-[minmax(0,0.9fr)_minmax(520px,1.1fr)] lg:gap-12 xl:gap-20">
+        <div className="flex min-w-0 flex-col lg:py-6">
           <p className="text-xs font-black uppercase tracking-[0.2em] text-orange-600">Book a demo</p>
-          <h2 id="landing-demo-title" className="mt-3 text-3xl font-black tracking-tight sm:text-4xl">See how OMLU fits your restaurant.</h2>
-          <p className="mt-4 leading-7 text-[var(--omlu-text-secondary)]">Tell us about your restaurant. Our onboarding team will contact you, understand your operations and help you get started with OMLU.</p>
-          <p className="mt-5 text-sm font-semibold text-[var(--omlu-text-muted)]">A demo request does not create or activate a subscription.</p>
+          <h2 id="landing-demo-title" className="mt-3 max-w-xl text-3xl font-black tracking-[-0.035em] sm:text-4xl lg:text-[2.65rem] lg:leading-[1.08]">See how OMLU fits your restaurant.</h2>
+          <p className="mt-5 max-w-xl text-base leading-7 text-[var(--omlu-text-secondary)]">Tell us about your restaurant. Our onboarding team will contact you, understand your operations and help you get started with OMLU.</p>
+          <Image
+            src="/omlu-cc.png"
+            alt="OMLU chef helping a restaurant with onboarding"
+            width={1536}
+            height={1024}
+            className="mx-auto mt-8 h-auto w-[min(82vw,360px)] object-contain sm:mt-10 sm:w-full sm:max-w-[460px] lg:mx-0 lg:max-w-[500px]"
+            sizes="(max-width: 639px) 82vw, (max-width: 1023px) 460px, 500px"
+          />
         </div>
 
         {success ? (
-          <div role="status" className="flex min-h-96 flex-col items-center justify-center rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-page-background)] p-6 text-center">
-            <span aria-hidden="true" className="flex size-12 items-center justify-center rounded-full bg-orange-600/15 text-2xl font-black text-orange-500">✓</span>
+          <div role="status" className="flex min-h-96 w-full max-w-[600px] flex-col items-center justify-center justify-self-end rounded-2xl border border-[var(--omlu-success-border)] bg-[var(--omlu-primary-surface)] p-6 text-center shadow-[0_20px_55px_-36px_rgba(24,24,27,0.35)] sm:p-10">
+            <span aria-hidden="true" className="flex size-12 items-center justify-center rounded-full bg-[var(--omlu-success-background)] text-2xl font-black text-[var(--omlu-success-text)]">✓</span>
             <h3 className="mt-5 text-2xl font-black">Request received.</h3>
             <p className="mt-3 max-w-md leading-7 text-[var(--omlu-text-secondary)]">Our onboarding team will contact you shortly to help you get started with OMLU.</p>
             <button type="button" onClick={() => setSuccess(false)} className="mt-7 min-h-12 rounded-lg border border-[var(--omlu-border-strong)] px-5 text-sm font-bold hover:border-orange-500 hover:text-orange-500">Send another request</button>
           </div>
         ) : (
-          <form onSubmit={submit} className="rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-page-background)] p-5 sm:p-7">
-            {error && <div role="alert" className="mb-5 rounded-lg border border-red-500/40 bg-red-500/10 p-4 text-sm font-semibold text-red-500">{error}</div>}
-            <div className="grid gap-5 sm:grid-cols-2">
-              <Field label="Name" required><input required autoComplete="name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="omlu-lead-input" /></Field>
-              <Field label="Phone number" required><div className="flex"><span className="inline-flex min-h-12 items-center rounded-l-lg border border-r-0 border-[var(--omlu-border-strong)] bg-[var(--omlu-muted-surface)] px-3 text-sm font-bold">+91</span><input required aria-label="Indian phone number" inputMode="numeric" autoComplete="tel-national" pattern="[6-9][0-9]{9}" maxLength={10} value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value.replace(/\D/g, "").slice(0, 10) })} className="omlu-lead-input rounded-l-none" /></div></Field>
-              <Field label="Restaurant name" required><input required autoComplete="organization" value={form.restaurant_name} onChange={(e) => setForm({ ...form, restaurant_name: e.target.value })} className="omlu-lead-input" /></Field>
-              <Field label="City" required><input required autoComplete="address-level2" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} className="omlu-lead-input" /></Field>
-              <Field label="Email" hint="Optional"><input type="email" autoComplete="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="omlu-lead-input" /></Field>
-              <Field label="Number of outlets" hint="Optional"><input type="number" min={1} max={1000} value={form.number_of_outlets} onChange={(e) => setForm({ ...form, number_of_outlets: e.target.value })} className="omlu-lead-input" /></Field>
-              <Field label="Interested plan"><select value={selectedPlanId} onChange={(e) => setSelectedPlanId(e.target.value as PricingPlan["id"])} className="omlu-lead-input">{PRICING_PLANS.map((plan) => <option key={plan.id} value={plan.id}>{plan.name}</option>)}</select></Field>
+          <form onSubmit={submit} className="w-full max-w-[600px] justify-self-end rounded-2xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-5 shadow-[0_20px_55px_-36px_rgba(24,24,27,0.35)] sm:p-8 lg:p-9">
+            {error && <div role="alert" className="mb-6 rounded-lg border border-[var(--omlu-destructive-border)] bg-[var(--omlu-destructive-background)] p-4 text-sm font-semibold text-[var(--omlu-destructive-text)]">{error}</div>}
+            <div className="grid gap-x-5 gap-y-6 sm:grid-cols-2">
+              <Field label="Name" required><input required autoComplete="name" placeholder="Your name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="omlu-lead-input" /></Field>
+              <Field label="Phone number" required><div className="omlu-phone-input"><span aria-hidden="true" className="omlu-phone-prefix">+91</span><input required aria-label="Indian phone number" inputMode="numeric" autoComplete="tel-national" pattern="[6-9][0-9]{9}" title="Enter a valid 10-digit Indian mobile number" maxLength={10} placeholder="98765 43210" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value.replace(/\D/g, "").slice(0, 10) })} /></div></Field>
+              <Field label="Restaurant name" required><input required autoComplete="organization" placeholder="Restaurant name" value={form.restaurant_name} onChange={(e) => setForm({ ...form, restaurant_name: e.target.value })} className="omlu-lead-input" /></Field>
+              <Field label="City" required><input required autoComplete="address-level2" placeholder="City" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} className="omlu-lead-input" /></Field>
+              <Field label="Email" hint="Optional" className="sm:col-span-2"><input type="email" autoComplete="email" placeholder="you@restaurant.com" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="omlu-lead-input" /></Field>
+              <Field label="Interested plan" className="sm:col-span-2"><select value={selectedPlanId} onChange={(e) => setSelectedPlanId(e.target.value as PricingPlan["id"])} className="omlu-lead-input">{PRICING_PLANS.map((plan) => <option key={plan.id} value={plan.id}>{plan.name}</option>)}</select></Field>
             </div>
-            <button type="submit" disabled={submitting} className="mt-7 inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-[var(--omlu-primary-action)] px-6 text-sm font-bold text-[var(--omlu-primary-action-text)] hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60">{submitting ? "Sending request…" : "Request Demo"}</button>
+            <button type="submit" disabled={submitting} aria-busy={submitting} className="mt-8 inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-[var(--omlu-primary-action)] px-6 text-sm font-black text-white shadow-sm hover:bg-[var(--omlu-accent-dark)] disabled:cursor-not-allowed disabled:opacity-60">{submitting ? "Sending request…" : "Request Demo"}</button>
           </form>
         )}
       </div>
@@ -82,6 +88,6 @@ export function LandingDemoForm() {
   );
 }
 
-function Field({ label, hint, required = false, children }: { label: string; hint?: string; required?: boolean; children: React.ReactNode }) {
-  return <label className="block text-sm font-bold"><span className="mb-2 flex min-h-5 items-center justify-between gap-2"><span>{label}{required && <span className="text-orange-500"> *</span>}</span>{hint && <span className="text-xs font-medium text-[var(--omlu-text-muted)]">{hint}</span>}</span>{children}</label>;
+function Field({ label, hint, required = false, className = "", children }: { label: string; hint?: string; required?: boolean; className?: string; children: React.ReactNode }) {
+  return <label className={`block min-w-0 text-sm font-bold ${className}`}><span className="mb-2 flex min-h-5 items-center gap-2"><span>{label}{required && <span className="text-orange-500"> *</span>}</span>{hint && <span className="text-xs font-medium text-[var(--omlu-text-muted)]">{hint}</span>}</span>{children}</label>;
 }
