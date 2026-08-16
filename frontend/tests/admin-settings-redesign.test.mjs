@@ -76,10 +76,33 @@ test("persisted kitchen mode is reconciled into an obvious selected card", () =>
   assert.match(settings, /setKitchenMode\(data\.kitchen_mode\)/);
   assert.match(settings, /selected=\{kitchenMode === "kds"\}/);
   assert.match(settings, /selected=\{kitchenMode === "direct_print"\}/);
-  assert.match(settings, /checked=\{selected\}/);
+  assert.match(settings, /role="radiogroup" aria-label="Kitchen System"/);
+  assert.match(settings, /role="radio" aria-checked=\{selected\}/);
   assert.match(settings, /data-selected=\{selected\}/);
-  assert.match(settings, /ring-2 ring-orange-500\/20/);
-  assert.match(settings, /selected && <span aria-hidden="true"/);
+  assert.match(settings, /border-orange-600 bg-orange-500\/10 ring-1 ring-orange-500\/30/);
+  assert.match(settings, /selected \? "border-orange-600 bg-orange-600 text-white"/);
+});
+
+test("fresh loads and saves initialize both editable controls from persisted server state", () => {
+  assert.match(settings, /useState<"kds" \| "direct_print" \| null>\(null\)/);
+  assert.match(settings, /useState<boolean \| null>\(null\)/);
+  const applySettings = settings.match(/const applySettings = useCallback\(\(data:[\s\S]*?\n  }, \[\]\);/)?.[0] || "";
+  assert.match(applySettings, /setSettings\(data\)/);
+  assert.match(applySettings, /setKitchenMode\(data\.kitchen_mode\)/);
+  assert.match(applySettings, /setServiceRequestsEnabled\(data\.service_requests_enabled\)/);
+  assert.match(settings, /applySettings\(await getRestaurantSettings\(\)\)/);
+  assert.match(settings, /applySettings\(updated\)/);
+  assert.match(settings, /applySettings\(settings\)/);
+  assert.equal((settings.match(/applySettings\(/g) || []).length, 3, "draft reconciliation should only happen on load, save, and discard");
+});
+
+test("service request control is a compact accessible persisted switch and participates in dirty state", () => {
+  assert.match(settings, /checked=\{serviceRequestsEnabled === true\} onChange=\{setServiceRequestsEnabled\}/);
+  assert.match(settings, /role="switch" aria-checked=\{checked\}/);
+  assert.match(settings, /h-6 w-11/);
+  assert.match(settings, /focus-visible:ring-2/);
+  assert.match(settings, /serviceRequestsEnabled !== settings\.service_requests_enabled/);
+  assert.match(settings, /service_requests_enabled: serviceRequestsEnabled \?\? settings\?\.service_requests_enabled/);
 });
 
 test("server-backed edits use a sticky persisted-state save bar", () => {
