@@ -98,6 +98,22 @@ body {
   overflow-wrap: anywhere;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
+.omlu-lead-input {
+  min-height: 48px;
+  width: 100%;
+  border: 1px solid var(--omlu-border-strong);
+  border-radius: 0.5rem;
+  background: var(--omlu-input-background);
+  padding: 0.75rem;
+  color: var(--omlu-text-primary);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
 button,
 a,
 input,
