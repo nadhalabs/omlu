@@ -74,6 +74,17 @@ export const defaultConfig: PrinterConfig = {
   kitchenPrinterPort: 9100,
 };
 
+export function isPersistedPairingComplete(config: PrinterConfig): boolean {
+  return Boolean(
+    config.installationId &&
+    config.tenantId &&
+    config.pairedAt &&
+    config.backendUrl &&
+    config.backendPublicKeyPem &&
+    config.credentialSecret
+  );
+}
+
 export class ConfigManager {
   private configPath: string;
   private currentConfig: PrinterConfig;
