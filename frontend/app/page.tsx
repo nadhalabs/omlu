@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { AndroidDownloadCard } from "@/components/AndroidDownloadCard";
 import { LandingThemeToggle } from "@/components/LandingThemeToggle";
@@ -7,37 +8,51 @@ export default function Home() {
     <div className="min-h-screen overflow-x-hidden bg-[var(--omlu-page-background)] text-[var(--omlu-text-primary)]">
       <header className="mx-auto flex w-full max-w-6xl justify-end px-5 pt-5 sm:px-8"><LandingThemeToggle /></header>
       <main className="mx-auto flex w-full max-w-6xl flex-col gap-16 px-5 py-12 sm:px-8 sm:py-16">
-        <section className="max-w-2xl py-8 sm:py-14">
-          <p className="mb-3 text-sm font-black uppercase tracking-widest text-orange-700">
-            OMLU
-          </p>
-          <h1 className="text-4xl font-black tracking-tight text-[var(--omlu-text-primary)] sm:text-5xl">
-            OMLU
-          </h1>
-          <p className="mt-5 text-lg leading-8 text-[var(--omlu-text-secondary)]">
-            Restaurant ordering, table service, kitchen, billing, and staff
-            management in one system.
-          </p>
+        <section className="grid items-center gap-10 py-8 sm:py-14 lg:grid-cols-[minmax(0,9fr)_minmax(0,11fr)] lg:gap-12">
+          <div className="min-w-0 max-w-2xl">
+            <p className="mb-3 text-sm font-black uppercase tracking-widest text-orange-700">
+              OMLU
+            </p>
+            <h1 className="text-4xl font-black tracking-tight text-[var(--omlu-text-primary)] sm:text-5xl">
+              OMLU
+            </h1>
+            <p className="mt-5 text-lg leading-8 text-[var(--omlu-text-secondary)]">
+              Restaurant ordering, table service, kitchen, billing, and staff
+              management in one system.
+            </p>
 
-          <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-            <Link
-              href="/login"
-              className="inline-flex h-12 items-center justify-center rounded-lg bg-[var(--omlu-primary-action)] px-6 text-sm font-bold text-[var(--omlu-primary-action-text)] transition hover:brightness-95"
-            >
-              Restaurant Login
-            </Link>
-            <Link
-              href="/register"
-              className="inline-flex h-12 items-center justify-center rounded-lg border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-6 text-sm font-bold text-[var(--omlu-text-primary)] transition hover:bg-[var(--omlu-hover-background)]"
-            >
-              Create Restaurant
-            </Link>
+            <div className="mt-9 flex flex-col gap-3 sm:flex-row">
+              <Link
+                href="/login"
+                className="inline-flex h-12 items-center justify-center rounded-lg bg-[var(--omlu-primary-action)] px-6 text-sm font-bold text-[var(--omlu-primary-action-text)] transition hover:brightness-95"
+              >
+                Restaurant Login
+              </Link>
+              <Link
+                href="/register"
+                className="inline-flex h-12 items-center justify-center rounded-lg border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-6 text-sm font-bold text-[var(--omlu-text-primary)] transition hover:bg-[var(--omlu-hover-background)]"
+              >
+                Create Restaurant
+              </Link>
+            </div>
+
+            <p className="mt-8 max-w-lg text-sm leading-6 text-[var(--omlu-text-secondary)]">
+              Customers should scan the QR code placed on their table to view the
+              menu and order.
+            </p>
           </div>
 
-          <p className="mt-8 max-w-lg text-sm leading-6 text-[var(--omlu-text-secondary)]">
-            Customers should scan the QR code placed on their table to view the
-            menu and order.
-          </p>
+          <div className="flex min-w-0 justify-center lg:justify-end">
+            <Image
+              src="/images/omlu-landing.png"
+              alt="OMLU restaurant ordering and operations"
+              width={1536}
+              height={1024}
+              priority
+              sizes="(min-width: 1024px) 55vw, 100vw"
+              className="h-auto w-full max-w-[720px] object-contain"
+            />
+          </div>
         </section>
 
         <section aria-labelledby="features-title">
