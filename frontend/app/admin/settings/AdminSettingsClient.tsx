@@ -49,6 +49,22 @@ export default function AdminSettingsClient() {
   const [taxMode, setTaxMode] = useState<"inclusive" | "exclusive">("exclusive");
   const [invoicePrefix, setInvoicePrefix] = useState("INV");
 
+  const hasUnsavedChanges = settings !== null && (
+    timezone !== settings.timezone ||
+    orderPrefix.toUpperCase() !== settings.order_prefix ||
+    serviceRequestsEnabled !== settings.service_requests_enabled ||
+    kitchenMode !== settings.kitchen_mode ||
+    gstEnabled !== settings.gst_enabled ||
+    (gstin || null) !== settings.gstin ||
+    (legalBusinessName || null) !== settings.legal_business_name ||
+    (billingAddress || null) !== settings.registered_billing_address ||
+    (gstStateName || null) !== settings.gst_state_name ||
+    (gstStateCode || null) !== settings.gst_state_code ||
+    gstRate !== settings.default_gst_rate ||
+    taxMode !== settings.tax_mode ||
+    invoicePrefix.toUpperCase() !== settings.invoice_prefix
+  );
+
   const applySettings = useCallback((data: RestaurantSettingsResponse) => {
     setSettings(data);
     setTimezone(data.timezone);
@@ -145,6 +161,14 @@ export default function AdminSettingsClient() {
     }
   };
 
+  const discardChanges = () => {
+    if (!settings || saving) return;
+    applySettings(settings);
+    setGstEditing(false);
+    setError(null);
+    setSuccess(null);
+  };
+
   if (loading) {
     return (
       <div className="flex flex-1 items-center justify-center py-20">
@@ -167,6 +191,15 @@ export default function AdminSettingsClient() {
       {success && <div role="status" className="rounded-xl border border-emerald-700/40 bg-emerald-950/20 px-4 py-3 text-sm font-semibold text-emerald-700 dark:text-emerald-400">{success}</div>}
 
       <form onSubmit={handleSave} className="flex min-w-0 flex-col gap-6">
+        {hasUnsavedChanges && (
+          <div role="region" aria-label="Unsaved settings" className="sticky top-4 z-30 flex flex-col gap-3 rounded-2xl border border-orange-500/50 bg-[var(--omlu-primary-surface)] p-4 shadow-lg sm:flex-row sm:items-center">
+            <p className="flex-1 text-sm font-black text-[var(--omlu-text-primary)]">Unsaved changes</p>
+            <div className="grid grid-cols-2 gap-2 sm:flex">
+              <button type="button" onClick={discardChanges} disabled={saving} className="min-h-11 rounded-xl border border-[var(--omlu-border-strong)] px-5 text-sm font-bold text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-muted-surface)] disabled:cursor-not-allowed disabled:opacity-50">Discard</button>
+              <button id="save-settings-btn" type="submit" disabled={saving} className="min-h-11 rounded-xl bg-orange-600 px-6 text-sm font-black text-white hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-50">{saving ? "Saving…" : "Save changes"}</button>
+            </div>
+          </div>
+        )}
         <SettingsSection title="General" description="Your restaurant’s core display and numbering preferences.">
           <div className="grid gap-5 md:grid-cols-2">
             <Field label="Timezone" htmlFor="timezone" help="Used for dashboard metrics, order timestamps, and daily revenue calculations.">
@@ -279,10 +312,6 @@ export default function AdminSettingsClient() {
           </div>
         </SettingsSection>
 
-        <div className="flex flex-col-reverse gap-3 rounded-2xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-4 sm:flex-row sm:items-center sm:justify-end">
-          <button type="button" onClick={() => { if (settings) applySettings(settings); setGstEditing(false); setError(null); setSuccess(null); }} disabled={saving} className="min-h-11 rounded-xl border border-[var(--omlu-border-strong)] px-5 text-sm font-bold text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-muted-surface)] disabled:opacity-50">Reset</button>
-          <button id="save-settings-btn" type="submit" disabled={saving} className="min-h-11 rounded-xl bg-orange-600 px-6 text-sm font-black text-white hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-50">{saving ? "Saving…" : "Save Settings"}</button>
-        </div>
       </form>
     </div>
   );
@@ -318,7 +347,7 @@ function TaxModeCard({ value, selected, onChange, title, description }: { value:
 }
 
 function KitchenModeCard({ value, selected, onChange, title, description }: { value: "kds" | "direct_print"; selected: boolean; onChange: (value: "kds" | "direct_print") => void; title: string; description: string }) {
-  return <label className={`flex cursor-pointer gap-3 rounded-xl border p-4 ${selected ? "border-orange-500 bg-orange-500/10" : "border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)]"}`}><input type="radio" name="kitchen-mode" value={value} checked={selected} onChange={() => onChange(value)} className="mt-0.5 h-4 w-4 accent-orange-600" /><span><span className="block text-sm font-bold text-[var(--omlu-text-primary)]">{title}</span><span className="mt-1 block text-xs leading-5 text-[var(--omlu-text-secondary)]">{description}</span></span></label>;
+  return <label data-selected={selected} className={`flex cursor-pointer gap-3 rounded-xl border p-4 transition-colors ${selected ? "border-orange-500 bg-orange-500/10 ring-2 ring-orange-500/20" : "border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] hover:border-[var(--omlu-border-strong)]"}`}><input type="radio" name="kitchen-mode" value={value} checked={selected} onChange={() => onChange(value)} className="mt-0.5 h-5 w-5 shrink-0 accent-orange-600" /><span className="min-w-0 flex-1"><span className="flex items-center justify-between gap-3"><span className="block text-sm font-bold text-[var(--omlu-text-primary)]">{title}</span>{selected && <span aria-hidden="true" className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-orange-600 text-xs font-black text-white">✓</span>}</span><span className="mt-1 block text-xs leading-5 text-[var(--omlu-text-secondary)]">{description}</span></span><span className="sr-only">{selected ? "Selected" : "Not selected"}</span></label>;
 }
 
 function InfoCard({ title, description, children }: { title: string; description: string; children?: ReactNode }) {

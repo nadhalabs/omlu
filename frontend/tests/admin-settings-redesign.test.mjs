@@ -14,7 +14,7 @@ test("Admin Settings uses the owner-focused section order", () => {
   }
 });
 
-test("restaurant settings preserve loading, reset, save, and backend payload contracts", () => {
+test("restaurant settings preserve loading, discard, save, and backend payload contracts", () => {
   assert.match(settings, /getRestaurantSettings\(\)/);
   assert.match(settings, /updateRestaurantSettings\(updateData\)/);
   for (const field of [
@@ -70,4 +70,43 @@ test("Operations exposes restaurant-facing kitchen workflow choices", () => {
   assert.match(settings, /Kitchen Display/);
   assert.match(settings, /Direct Kitchen Print/);
   assert.doesNotMatch(settings, />direct_print</);
+});
+
+test("persisted kitchen mode is reconciled into an obvious selected card", () => {
+  assert.match(settings, /setKitchenMode\(data\.kitchen_mode\)/);
+  assert.match(settings, /selected=\{kitchenMode === "kds"\}/);
+  assert.match(settings, /selected=\{kitchenMode === "direct_print"\}/);
+  assert.match(settings, /checked=\{selected\}/);
+  assert.match(settings, /data-selected=\{selected\}/);
+  assert.match(settings, /ring-2 ring-orange-500\/20/);
+  assert.match(settings, /selected && <span aria-hidden="true"/);
+});
+
+test("server-backed edits use a sticky persisted-state save bar", () => {
+  assert.match(settings, /const hasUnsavedChanges = settings !== null/);
+  assert.match(settings, /kitchenMode !== settings\.kitchen_mode/);
+  assert.match(settings, /\{hasUnsavedChanges && \(/);
+  assert.match(settings, /aria-label="Unsaved settings"/);
+  assert.match(settings, /sticky top-4/);
+  assert.match(settings, />Unsaved changes</);
+  assert.match(settings, />Discard</);
+  assert.match(settings, /Save changes/);
+  assert.doesNotMatch(settings, />Reset<\/button>/);
+  assert.doesNotMatch(settings, />Save Settings<\/button>/);
+});
+
+test("save and discard reconcile against the last persisted response", () => {
+  assert.match(settings, /const updated = await updateRestaurantSettings\(updateData\)/);
+  assert.match(settings, /applySettings\(updated\)/);
+  assert.match(settings, /const discardChanges = \(\) =>/);
+  assert.match(settings, /applySettings\(settings\)/);
+  assert.match(settings, /catch \(err\)[\s\S]*setError\(/);
+  assert.doesNotMatch(settings.match(/catch \(err\)[\s\S]*?finally/)?.[0] || "", /applySettings/);
+});
+
+test("Appearance remains outside server dirty-state tracking", () => {
+  const dirtyState = settings.match(/const hasUnsavedChanges[\s\S]*?\n  \);/)?.[0] || "";
+  assert.ok(dirtyState);
+  assert.doesNotMatch(dirtyState, /theme|appearance/i);
+  assert.match(settings, /Appearance is saved on this device immediately and is separate from restaurant settings/);
 });
