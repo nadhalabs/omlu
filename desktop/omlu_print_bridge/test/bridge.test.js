@@ -95,6 +95,38 @@ test('HTTP API Server health and capabilities endpoints', async () => {
     assert.equal(health.readiness, 'ready');
     assert.ok(Array.isArray(health.supported_transports));
 
+    // Hosted OMLU origin receives explicit CORS/PNA authorization.
+    for (const origin of ['https://omlu.in', 'https://www.omlu.in', 'https://omlu-staging.vercel.app']) {
+      const corsHealthRes = await fetch('http://127.0.0.1:24299/v1/health', {
+        headers: { Origin: origin },
+      });
+      assert.equal(corsHealthRes.status, 200);
+      assert.equal(corsHealthRes.headers.get('access-control-allow-origin'), origin);
+      assert.equal(corsHealthRes.headers.get('access-control-allow-private-network'), 'true');
+      assert.match(corsHealthRes.headers.get('vary') || '', /Origin/);
+    }
+
+    const preflightRes = await fetch('http://127.0.0.1:24299/v1/health', {
+      method: 'OPTIONS',
+      headers: {
+        Origin: 'https://omlu-staging.vercel.app',
+        'Access-Control-Request-Method': 'GET',
+        'Access-Control-Request-Private-Network': 'true',
+      },
+    });
+    assert.equal(preflightRes.status, 204);
+    assert.equal(preflightRes.headers.get('access-control-allow-origin'), 'https://omlu-staging.vercel.app');
+    assert.equal(preflightRes.headers.get('access-control-allow-private-network'), 'true');
+    assert.match(preflightRes.headers.get('access-control-allow-methods') || '', /GET/);
+    assert.match(preflightRes.headers.get('access-control-allow-headers') || '', /Authorization/);
+    assert.match(preflightRes.headers.get('vary') || '', /Origin/);
+
+    const unknownOriginRes = await fetch('http://127.0.0.1:24299/v1/health', {
+      headers: { Origin: 'https://example.invalid' },
+    });
+    assert.equal(unknownOriginRes.status, 200);
+    assert.equal(unknownOriginRes.headers.get('access-control-allow-origin'), null);
+
     // GET /v1/capabilities
     const capRes = await fetch('http://127.0.0.1:24299/v1/capabilities');
     assert.equal(capRes.status, 200);

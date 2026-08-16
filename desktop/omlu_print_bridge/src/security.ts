@@ -4,6 +4,9 @@ import * as crypto from 'crypto';
 const ALLOWED_ORIGINS = [
   'http://localhost:3000',
   'http://127.0.0.1:3000',
+  'https://omlu.in',
+  'https://www.omlu.in',
+  'https://omlu-staging.vercel.app',
   'https://app.omlu.in',
   'https://dashboard.omlu.app',
   'https://nadha-serve.onrender.com',
@@ -41,16 +44,11 @@ export function validateOriginAndHost(req: http.IncomingMessage, res: http.Serve
   const origin = req.headers.origin;
   const host = req.headers.host;
 
-  // Always set CORS & Private Network Access headers
+  // Echo only explicitly trusted web origins. Bridge requests can carry signed
+  // credentials, so a wildcard origin is intentionally never authorized.
+  res.setHeader('Vary', 'Origin');
   if (origin && ALLOWED_ORIGINS.includes(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
-  } else if (!origin && process.env.NODE_ENV === 'development') {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-  } else if (origin) {
-    const isAllowedDomain = origin.endsWith('.omlu.in') || origin.endsWith('.omlu.app') || origin.startsWith('http://localhost:');
-    if (isAllowedDomain) {
-      res.setHeader('Access-Control-Allow-Origin', origin);
-    }
   }
 
   res.setHeader('Access-Control-Allow-Private-Network', 'true');
