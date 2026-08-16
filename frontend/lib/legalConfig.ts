@@ -21,7 +21,8 @@ export const REQUIRED_LEGAL_KEYS: (keyof LegalConfig)[] = [
 ];
 
 export const legalConfig: LegalConfig = {
-  legalEntityName: process.env.NEXT_PUBLIC_LEGAL_ENTITY_NAME || "Nadha Labs",
+  // OMLU is the product brand; Nadha Labs is its operator and rights holder.
+  legalEntityName: "Nadha Labs",
   registeredAddress: process.env.NEXT_PUBLIC_LEGAL_REGISTERED_ADDRESS || "Kerala, India",
   supportEmail: process.env.NEXT_PUBLIC_LEGAL_SUPPORT_EMAIL || "support@omlu.app",
   privacyEmail: process.env.NEXT_PUBLIC_LEGAL_PRIVACY_EMAIL || "privacy@omlu.app",
@@ -30,7 +31,7 @@ export const legalConfig: LegalConfig = {
   gstin: process.env.NEXT_PUBLIC_LEGAL_GSTIN || undefined,
   jurisdictionCityState: process.env.NEXT_PUBLIC_LEGAL_JURISDICTION || "Ernakulam, Kerala, India",
   effectiveDate: "7 August 2026",
-  lastUpdatedDate: "7 August 2026",
+  lastUpdatedDate: "16 August 2026",
 };
 
 export function getUnresolvedPlaceholders(config: LegalConfig = legalConfig): string[] {

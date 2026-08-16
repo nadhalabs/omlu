@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
 
 export function LandingHeader({ themeToggle, productHref = "/#product" }: { themeToggle: ReactNode; productHref?: string }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -16,6 +16,14 @@ export function LandingHeader({ themeToggle, productHref = "/#product" }: { them
   }, [menuOpen]);
 
   const closeMenu = () => setMenuOpen(false);
+  const openDemoForm = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (window.location.pathname !== "/") return;
+    const demoForm = document.getElementById("demo");
+    if (!demoForm) return;
+    event.preventDefault();
+    window.history.replaceState(null, "", "/#demo");
+    demoForm.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   return (
     <header className="sticky top-0 z-50 border-b border-[color-mix(in_srgb,var(--omlu-border)_55%,transparent)] bg-[color-mix(in_srgb,var(--omlu-page-background)_88%,transparent)] backdrop-blur-md">
@@ -30,12 +38,13 @@ export function LandingHeader({ themeToggle, productHref = "/#product" }: { them
             <Link href="/pricing" className="inline-flex min-h-11 items-center px-3 text-sm font-semibold text-[var(--omlu-text-muted)] transition-colors hover:text-orange-500">Pricing</Link>
             <Link href="/login" className="inline-flex min-h-11 items-center px-3 text-sm font-semibold text-[var(--omlu-text-muted)] transition-colors hover:text-orange-500">Login</Link>
           </nav>
-          <Link href="/#demo" className="ml-2 inline-flex min-h-11 items-center px-3 text-sm font-bold text-[var(--omlu-text-muted)] transition-colors hover:text-orange-500">Book a Demo</Link>
+          <Link href="/#demo" onClick={openDemoForm} className="ml-2 inline-flex min-h-11 items-center justify-center rounded-lg bg-orange-600 px-4 text-sm font-bold text-white transition-colors hover:bg-orange-700">Book a Free Trial</Link>
           <Link href="/register" className="ml-3 inline-flex min-h-11 items-center justify-center rounded-lg bg-[var(--omlu-primary-action)] px-4 text-sm font-bold text-[var(--omlu-primary-action-text)] transition hover:brightness-95">Get Started</Link>
           <div className="ml-2">{themeToggle}</div>
         </div>
 
         <div className="flex items-center gap-1 md:hidden">
+          <Link href="/#demo" onClick={openDemoForm} className="inline-flex min-h-10 items-center justify-center rounded-lg bg-orange-600 px-2.5 text-xs font-bold text-white hover:bg-orange-700">Book a Free Trial</Link>
           {themeToggle}
           <button
             type="button"
@@ -58,7 +67,6 @@ export function LandingHeader({ themeToggle, productHref = "/#product" }: { them
             <a href={productHref} onClick={closeMenu} className="flex min-h-12 items-center rounded-lg px-3 text-sm font-semibold text-[var(--omlu-text-secondary)] hover:bg-[var(--omlu-hover-background)] hover:text-orange-500">Product</a>
             <Link href="/pricing" onClick={closeMenu} className="flex min-h-12 items-center rounded-lg px-3 text-sm font-semibold text-[var(--omlu-text-secondary)] hover:bg-[var(--omlu-hover-background)] hover:text-orange-500">Pricing</Link>
             <Link href="/login" onClick={closeMenu} className="flex min-h-12 items-center rounded-lg px-3 text-sm font-semibold text-[var(--omlu-text-secondary)] hover:bg-[var(--omlu-hover-background)] hover:text-orange-500">Login</Link>
-            <Link href="/#demo" onClick={closeMenu} className="flex min-h-12 items-center rounded-lg px-3 text-sm font-bold text-orange-500 hover:bg-[var(--omlu-hover-background)]">Book a Demo</Link>
             <Link href="/register" onClick={closeMenu} className="mt-2 inline-flex min-h-12 items-center justify-center rounded-lg bg-[var(--omlu-primary-action)] px-4 text-sm font-bold text-[var(--omlu-primary-action-text)]">Get Started</Link>
           </nav>
         </div>

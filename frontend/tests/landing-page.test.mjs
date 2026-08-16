@@ -22,8 +22,8 @@ test("landing header is minimal, sticky, and routes correctly", () => {
   assert.match(header, /min-h-12/);
 });
 
-test("public headers expose Book a Demo and the landing page captures enquiries", () => {
-  assert.match(header, /href="\/#demo"[^>]*>Book a Demo</);
+test("public headers expose Book a Free Trial and the landing page captures enquiries", () => {
+  assert.match(header, /href="\/#demo"[^>]*>Book a Free Trial</);
   assert.match(page, /<LandingDemoForm/);
   assert.match(demoForm, /id="demo"/);
   assert.match(demoForm, /fetch\("\/api\/sales-leads"/);

@@ -46,8 +46,8 @@ export function LandingDemoForm() {
   }
 
   return (
-    <section id="demo" className="scroll-mt-24 py-6 sm:py-10" aria-labelledby="landing-demo-title">
-      <div className="grid items-center gap-10 lg:grid-cols-[minmax(0,0.9fr)_minmax(520px,1.1fr)] lg:gap-12 xl:gap-20">
+    <section className="py-6 sm:py-10" aria-labelledby="landing-demo-title">
+      <div className="grid items-center gap-10 lg:grid-cols-[minmax(0,0.9fr)_minmax(520px,1.1fr)] lg:items-end lg:gap-12 xl:gap-20">
         <div className="flex min-w-0 flex-col lg:py-6">
           <p className="text-xs font-black uppercase tracking-[0.2em] text-orange-600">Book a demo</p>
           <h2 id="landing-demo-title" className="mt-3 max-w-xl text-3xl font-black tracking-[-0.035em] sm:text-4xl lg:text-[2.65rem] lg:leading-[1.08]">See how OMLU fits your restaurant.</h2>
@@ -63,14 +63,14 @@ export function LandingDemoForm() {
         </div>
 
         {success ? (
-          <div role="status" className="flex min-h-96 w-full max-w-[600px] flex-col items-center justify-center justify-self-end rounded-2xl border border-[var(--omlu-success-border)] bg-[var(--omlu-primary-surface)] p-6 text-center shadow-[0_20px_55px_-36px_rgba(24,24,27,0.35)] sm:p-10">
+          <div id="demo" role="status" className="scroll-mt-24 flex min-h-96 w-full max-w-[600px] flex-col items-center justify-center justify-self-center rounded-2xl border border-[var(--omlu-success-border)] bg-[var(--omlu-primary-surface)] p-6 text-center shadow-[0_20px_55px_-36px_rgba(24,24,27,0.35)] sm:p-10 lg:justify-self-end">
             <span aria-hidden="true" className="flex size-12 items-center justify-center rounded-full bg-[var(--omlu-success-background)] text-2xl font-black text-[var(--omlu-success-text)]">✓</span>
             <h3 className="mt-5 text-2xl font-black">Request received.</h3>
             <p className="mt-3 max-w-md leading-7 text-[var(--omlu-text-secondary)]">Our onboarding team will contact you shortly to help you get started with OMLU.</p>
             <button type="button" onClick={() => setSuccess(false)} className="mt-7 min-h-12 rounded-lg border border-[var(--omlu-border-strong)] px-5 text-sm font-bold hover:border-orange-500 hover:text-orange-500">Send another request</button>
           </div>
         ) : (
-          <form onSubmit={submit} className="w-full max-w-[600px] justify-self-end rounded-2xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-5 shadow-[0_20px_55px_-36px_rgba(24,24,27,0.35)] sm:p-8 lg:p-9">
+          <form id="demo" onSubmit={submit} className="scroll-mt-24 w-full max-w-[600px] justify-self-center rounded-2xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-5 shadow-[0_20px_55px_-36px_rgba(24,24,27,0.35)] sm:p-8 lg:justify-self-end lg:p-9">
             {error && <div role="alert" className="mb-6 rounded-lg border border-[var(--omlu-destructive-border)] bg-[var(--omlu-destructive-background)] p-4 text-sm font-semibold text-[var(--omlu-destructive-text)]">{error}</div>}
             <div className="grid gap-x-5 gap-y-6 sm:grid-cols-2">
               <Field label="Name" required><input required autoComplete="name" placeholder="Your name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="omlu-lead-input" /></Field>

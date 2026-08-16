@@ -1,240 +1,81 @@
-import { Metadata } from "next";
+import type { Metadata } from "next";
+import type { ReactNode } from "react";
 import LegalLayout from "@/components/LegalLayout";
 import { legalConfig } from "@/lib/legalConfig";
 
 export const metadata: Metadata = {
   title: "Privacy Policy | OMLU",
-  description: "Privacy Policy explaining data collection, processing, DPDP Act 2023 role allocations, and security practices for OMLU.",
+  description: "Learn how Nadha Labs collects, uses, protects, and manages information when restaurants, staff, and guests use OMLU.",
 };
 
 const TOC = [
-  { id: "p1", label: "1. Who Operates OMLU" },
-  { id: "p2", label: "2. Scope & Regulatory Framework" },
-  { id: "p3", label: "3. Context-Dependent Data Roles" },
-  { id: "p4", label: "4. Categories of Data Collected" },
-  { id: "p5", label: "5. Data Provided Directly" },
-  { id: "p6", label: "6. Data Collected Automatically" },
-  { id: "p7", label: "7. Customer Dining Data Processing" },
-  { id: "p8", label: "8. Purpose of Processing" },
-  { id: "p9", label: "9. Lawful Basis & Notice" },
-  { id: "p10", label: "10. Security & Abuse Prevention" },
-  { id: "p11", label: "11. Service Communications" },
-  { id: "p12", label: "12. Data Sharing & Infrastructure" },
-  { id: "p13", label: "13. Cross-Border Processing" },
-  { id: "p14", label: "14. Data Retention" },
-  { id: "p15", label: "15. Account Deletion & Rights" },
-  { id: "p16", label: "16. Legal Exceptions" },
-  { id: "p17", label: "17. Security Safeguards" },
-  { id: "p18", label: "18. Breach Notification" },
-  { id: "p19", label: "19. Grievance Officer Details" },
-  { id: "p20", label: "20. Children's Privacy" },
-  { id: "p21", label: "21. Cookies & Storage" },
-  { id: "p22", label: "22. Policy Changes" },
-];
+  "Who Operates OMLU", "Scope of This Policy", "Our Role and the Restaurant's Role", "Information We Process", "Information You Provide", "Information Collected Automatically", "Dining and QR Ordering Information", "How We Use Information", "Legal Grounds for Processing", "Service and Security Communications", "Service Providers and Data Sharing", "International Processing", "Data Retention", "Your Privacy Rights", "Account Closure and Deletion", "Legal Disclosures", "Security", "Personal Data Breaches", "Children's Privacy", "Cookies and Local Storage", "Grievance and Privacy Contact", "Changes to This Policy",
+].map((label, index) => ({ id: `section-${index + 1}`, label: `${index + 1}. ${label}` }));
+
+const sectionClass = "scroll-mt-28 border-b border-[var(--omlu-border)] pb-10 last:border-0";
+const headingClass = "text-2xl font-black tracking-[-0.025em] sm:text-[1.7rem]";
+const bodyClass = "mt-4 space-y-4 text-[15px] leading-[1.75] text-[var(--omlu-text-secondary)] sm:text-base";
+
+function PrivacySummary() {
+  const items = [
+    ["We don't sell personal data", "OMLU does not sell or rent personal information."],
+    ["Restaurant-controlled dining data", "Restaurants control dining and order information processed through their OMLU workspace."],
+    ["Limited service providers", "Information is shared only with providers required to operate OMLU."],
+    ["Security by design", "Access controls and reasonable safeguards help protect information."],
+  ];
+  return <section aria-labelledby="privacy-at-a-glance" className="rounded-2xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-5 sm:p-6"><h2 id="privacy-at-a-glance" className="sr-only">Privacy at a glance</h2><div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">{items.map(([title, text]) => <div key={title}><h3 className="text-sm font-black">{title}</h3><p className="mt-1.5 text-xs leading-5 text-[var(--omlu-text-secondary)]">{text}</p></div>)}</div><p className="mt-5 border-t border-[var(--omlu-border)] pt-4 text-xs text-[var(--omlu-text-muted)]">This summary is provided for convenience. The complete policy below is authoritative.</p></section>;
+}
+
+function Section({ number, title, children }: { number: number; title: string; children: ReactNode }) {
+  return <section id={`section-${number}`} className={sectionClass}><p className="mb-2 text-xs font-black uppercase tracking-[0.16em] text-orange-600">Section {number}</p><h2 className={headingClass}>{title}</h2><div className={bodyClass}>{children}</div></section>;
+}
 
 export default function PrivacyPage() {
-  return (
-    <LegalLayout
-      title="Privacy Policy"
-      subtitle="How Nadha Labs collects, processes, protects, and respects business and personal data under Indian privacy laws."
-      activePath="/privacy"
-      toc={TOC}
-    >
-      <div className="space-y-8 text-sm leading-relaxed text-[var(--omlu-text-primary)]">
-        <section id="p1">
-          <h2 className="text-lg font-black text-[var(--omlu-text-primary)]">1. Who Operates OMLU</h2>
-          <p className="mt-2">
-            This Privacy Policy applies to the OMLU restaurant software platform operated by {legalConfig.legalEntityName} (&quot;Nadha Labs&quot;, &quot;we&quot;, &quot;us&quot;, or &quot;our&quot;), headquartered in India.
-          </p>
-        </section>
+  return <LegalLayout title="Privacy Policy" subtitle="How Nadha Labs collects, uses, protects, and manages information when restaurants, staff, and guests use OMLU." activePath="/privacy" effectiveDate="7 August 2026" lastUpdatedDate="16 August 2026" toc={TOC} summary={<PrivacySummary />}>
+    <div className="space-y-10">
+      <Section number={1} title="Who Operates OMLU"><p>This Privacy Policy applies to the OMLU restaurant operations platform, operated by {legalConfig.legalEntityName} (&quot;Nadha Labs&quot;, &quot;we&quot;, &quot;us&quot;, or &quot;our&quot;) in India.</p></Section>
 
-        <section id="p2">
-          <h2 className="text-lg font-black text-[var(--omlu-text-primary)]">2. Scope and Regulatory Framework</h2>
-          <p className="mt-2">
-            This policy governs personal data and business information processed through the OMLU platform, customer QR ordering interfaces, staff applications, and web services. It is drafted with reference to the <strong>Digital Personal Data Protection Act, 2023 (DPDP Act)</strong>, the notified <strong>Digital Personal Data Protection Rules, 2025 (DPDP Rules)</strong>, the Information Technology Act, 2000, and applicable rules published by the Ministry of Electronics and Information Technology (MeitY).
-          </p>
-          <p className="mt-2">
-            We distinguish between baseline statutory requirements effective upon notification and phased technical implementation timelines designated under MeitY rules.
-          </p>
-        </section>
+      <Section number={2} title="Scope of This Policy"><p>This Policy explains how information is handled through OMLU&apos;s restaurant workspace, staff applications, QR ordering experiences, websites, and related services. It applies to restaurant customers, their authorised users, staff, and guests who interact with OMLU.</p><p>It should be read together with the other documents in the OMLU Legal Center and any privacy notice provided by the restaurant you are visiting or working with.</p></Section>
 
-        <section id="p3">
-          <h2 className="text-lg font-black text-[var(--omlu-text-primary)]">3. Context-Dependent Data Roles (Fiduciary vs. Processor)</h2>
-          <p className="mt-2 font-semibold text-amber-950 dark:text-amber-200">
-            [LEGAL REVIEW REQUIRED] Under Indian privacy law, data roles depend strictly on the processing context:
-          </p>
-          <ul className="mt-2 list-disc pl-5 space-y-2">
-            <li>
-              <strong>Customer Dining & Order Data (Processor Context):</strong> For dining guest table orders, item instructions, service calls, and bill generation, the <strong>Restaurant acts as the primary Data Fiduciary</strong> under the DPDP Act. Nadha Labs processes such customer data solely on behalf of the Restaurant as a <strong>Data Processor</strong> pursuant to commercial terms. The Restaurant is responsible for providing appropriate notices to its dining guests.
-            </li>
-            <li>
-              <strong>Account, Staff & Security Data (Fiduciary Context):</strong> For restaurant registration, owner/staff account management, credential hashing, platform security monitoring, audit logging, rate limiting, and subscription administration, <strong>Nadha Labs acts as an independent Data Fiduciary</strong>.
-            </li>
-          </ul>
-        </section>
+      <Section number={3} title="Our Role and the Restaurant's Role"><div className="grid gap-4 sm:grid-cols-2"><div className="rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] p-5"><h3 className="text-base font-black text-[var(--omlu-text-primary)]">Restaurant-controlled processing</h3><p className="mt-2 text-sm leading-6">For guest QR ordering, dining sessions, item instructions, service interactions, and restaurant bills, the relevant restaurant generally determines why information is processed. OMLU processes that information to provide the restaurant software.</p></div><div className="rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] p-5"><h3 className="text-base font-black text-[var(--omlu-text-primary)]">Nadha Labs-controlled processing</h3><p className="mt-2 text-sm leading-6">Nadha Labs determines processing related to restaurant registration, authorised-user accounts, platform administration, authentication, security, fraud and abuse prevention, audit records, service communications, and account management.</p></div></div><p>These roles depend on the context. Restaurants are responsible for providing appropriate notices to their guests and staff where required.</p></Section>
 
-        <section id="p4">
-          <h2 className="text-lg font-black text-[var(--omlu-text-primary)]">4. Categories of Data Collected</h2>
-          <p className="mt-2">
-            We collect data in the following categories to provide and secure OMLU:
-          </p>
-          <ul className="mt-2 list-disc pl-5 space-y-1">
-            <li><strong>Restaurant Profile Data:</strong> Restaurant name, unique slug, contact email, phone number, city, GSTIN (if configured), order prefix, timezone.</li>
-            <li><strong>Account & Credentials:</strong> Owner and staff full names, usernames, email addresses, bcrypt-hashed passwords, role permissions (`owner`, `admin`, `staff`, `kitchen`), staff PIN hashes.</li>
-            <li><strong>Customer Dining Data:</strong> Session tokens, HMAC-SHA256 table participant tokens, 4-digit table join codes, customer item notes, order timestamps.</li>
-            <li><strong>Financial & Bill Snapshots:</strong> Itemized orders, subtotal, CGST/SGST/IGST tax breakdowns, discount values, total bill amounts, bill numbers, receipt tokens, recorded payment method labels (`cash`, `upi`, `card`).</li>
-            <li><strong>Technical & Security Metadata:</strong> IP addresses, User-Agent header data, audit logs (`AuditLog`: action, actor_user_id, target, timestamp, IP address, metadata JSON), WebPush subscription tokens.</li>
-            <li><strong>Uploaded Assets:</strong> Menu image files uploaded by owners for AI menu extraction.</li>
-          </ul>
-        </section>
+      <Section number={4} title="Information We Process"><div className="space-y-5"><div><h3>Restaurant and Account Information</h3><p>Restaurant name, contact information, account details, tax settings, and workspace configuration.</p></div><div><h3>Staff Information</h3><p>Names, usernames or contact information where configured, assigned roles, and authentication information.</p></div><div><h3>Dining and Order Information</h3><p>Dining sessions, ordered items, guest instructions, timestamps, and table-related activity.</p></div><div><h3>Billing and Transaction Information</h3><p>Bills, tax information, discounts, totals, receipt information, and the payment method recorded by the restaurant. OMLU records the payment method used by the restaurant but does not itself store customers&apos; full card credentials.</p></div><div><h3>Technical Information</h3><p>IP addresses, browser or device information, logs, timestamps, security events, and related diagnostic data.</p></div><div><h3>Uploaded Content</h3><p>Menu images and other content intentionally uploaded by authorised restaurant users.</p></div></div></Section>
 
-        <section id="p5">
-          <h2 className="text-lg font-black text-[var(--omlu-text-primary)]">5. Data Provided Directly</h2>
-          <p className="mt-2">
-            We collect data directly provided when an Account Owner registers a profile, creates staff user credentials, configures menu items/prices/taxes, uploads menu images, or submits customer order instructions.
-          </p>
-        </section>
+      <Section number={5} title="Information You Provide"><p>We receive information when a restaurant registers an account, creates authorised-user access, configures menus, prices or taxes, uploads content, contacts support, or uses OMLU&apos;s operational features. Guests may provide item choices, instructions, and other dining-session information through a restaurant&apos;s QR ordering experience.</p><div className="rounded-xl border-l-4 border-orange-500 bg-[var(--omlu-muted-surface)] p-5"><h3>AI-assisted menu extraction</h3><p className="mt-2">When a restaurant user chooses AI-assisted menu extraction, the uploaded menu image may be securely transmitted to Google Gemini to extract structured menu information. This processing is used only to provide the requested menu-extraction feature.</p></div></Section>
 
-        <section id="p6">
-          <h2 className="text-lg font-black text-[var(--omlu-text-primary)]">6. Data Collected Automatically</h2>
-          <p className="mt-2">
-            When users interact with OMLU, our servers automatically log technical metadata including IP address, browser type, request timestamps, WebSocket connection metrics, and rate-limiter state for security and operational diagnostics.
-          </p>
-        </section>
+      <Section number={6} title="Information Collected Automatically"><p>When OMLU is used, we may automatically receive technical information such as IP address, browser and device details, request and connection timestamps, operational logs, and security events. We use this information to deliver the service, diagnose problems, maintain reliability, and protect OMLU from unauthorised or abusive activity.</p></Section>
 
-        <section id="p7">
-          <h2 className="text-lg font-black text-[var(--omlu-text-primary)]">7. Customer Dining Data Processing</h2>
-          <p className="mt-2">
-            Customers browsing QR menus do not register account credentials. Dining sessions are managed via temporary session tokens and 4-digit join codes. Customer item notes and ordering activity are processed solely to communicate tickets to the kitchen display and generate the table bill.
-          </p>
-        </section>
+      <Section number={7} title="Dining and QR Ordering Information"><p>Guests can browse a restaurant&apos;s QR menu without creating an OMLU account. Temporary browser and session information helps connect a guest to the correct restaurant and dining session. Ordered items, instructions, service interactions, and related timestamps are processed so the restaurant can fulfil orders, coordinate service, and prepare bills.</p><p>The relevant restaurant controls this dining information. Questions about a specific dining record should normally be directed to that restaurant.</p></Section>
 
-        <section id="p8">
-          <h2 className="text-lg font-black text-[var(--omlu-text-primary)]">8. Purpose of Processing</h2>
-          <p className="mt-2">
-            We process data exclusively for:
-          </p>
-          <ul className="mt-2 list-disc pl-5 space-y-1">
-            <li>Authenticating users and isolating multi-tenant restaurant profiles.</li>
-            <li>Routing orders to kitchen display screens and staff POS interfaces.</li>
-            <li>Calculating bill subtotals, GST breakdowns, and issuing printable receipts.</li>
-            <li>Delivering real-time WebSocket updates and browser push notifications.</li>
-            <li>Processing menu image uploads via AI menu extraction.</li>
-            <li>Preventing abuse, rate-limit violations, unauthorized access, and credential theft.</li>
-          </ul>
-        </section>
+      <Section number={8} title="How We Use Information"><ul><li>Provide, operate, maintain, and improve OMLU.</li><li>Authenticate authorised users and maintain separation between restaurant workspaces.</li><li>Route orders, coordinate restaurant service, calculate bills and taxes, and produce receipts.</li><li>Provide requested AI-assisted menu extraction.</li><li>Deliver operational updates and important account communications.</li><li>Monitor reliability, investigate problems, and prevent fraud, abuse, or unauthorised access.</li><li>Meet applicable legal, tax, accounting, and regulatory obligations.</li></ul></Section>
 
-        <section id="p9">
-          <h2 className="text-lg font-black text-[var(--omlu-text-primary)]">9. Lawful Basis and Notice</h2>
-          <p className="mt-2">
-            Where Nadha Labs acts as Data Fiduciary, we process personal data based on your explicit consent granted during registration and account operation, or for legitimate uses necessary to enforce system security, prevent fraud, and fulfill statutory compliance under the DPDP Act 2023.
-          </p>
-        </section>
+      <Section number={9} title="Legal Grounds for Processing"><p>Where required, Nadha Labs processes personal data based on consent. We may also process personal data where processing is permitted under applicable law, including circumstances in which consent is not required.</p><p>Processing may be necessary to provide requested OMLU services, maintain platform security, prevent fraud or abuse, protect legal rights, and comply with applicable legal obligations.</p></Section>
 
-        <section id="p10">
-          <h2 className="text-lg font-black text-[var(--omlu-text-primary)]">10. Security & Abuse Prevention</h2>
-          <p className="mt-2">
-            We enforce HTTPS encryption for all external API endpoints, JWT token expiry, rate-limiting on sensitive endpoints (such as `/public/restaurants/register`), and tenant-isolated database constraints (`restaurant_id` foreign keys) to safeguard database integrity.
-          </p>
-        </section>
+      <Section number={10} title="Service and Security Communications"><p>We may send registered contacts communications needed to operate OMLU, such as authentication messages, password resets, security notices, operational alerts, support replies, and account or subscription updates. These are service communications, not third-party advertising.</p></Section>
 
-        <section id="p11">
-          <h2 className="text-lg font-black text-[var(--omlu-text-primary)]">11. Service Communications</h2>
-          <p className="mt-2">
-            We send transactional service communications (such as password resets, operational alerts, and subscription updates) to registered contact emails. We do not sell personal data or send unsolicited third-party marketing SMS or emails.
-          </p>
-        </section>
+      <Section number={11} title="Service Providers and Data Sharing"><p><strong className="text-[var(--omlu-text-primary)]">Nadha Labs does not sell or rent personal information.</strong> We share information only as needed with service providers that help us operate and secure OMLU, subject to appropriate obligations.</p><dl className="grid gap-4 sm:grid-cols-2"><div><dt>Hosting and delivery</dt><dd>Vercel</dd></div><div><dt>Application infrastructure</dt><dd>Render and associated cloud infrastructure</dd></div><div><dt>Databases and caching</dt><dd>Managed PostgreSQL and Redis-compatible infrastructure providers</dd></div><div><dt>AI-assisted menu extraction</dt><dd>Google Gemini API, when a restaurant user chooses that feature</dd></div></dl><p>We may update our providers as OMLU evolves while continuing to limit sharing to what is reasonably necessary for the service.</p></Section>
 
-        <section id="p12">
-          <h2 className="text-lg font-black text-[var(--omlu-text-primary)]">12. Data Sharing and Infrastructure Providers</h2>
-          <p className="mt-2">
-            We do not sell, rent, or trade personal data. We share data only with verified cloud infrastructure processors strictly necessary to deliver the Service:
-          </p>
-          <ul className="mt-2 list-disc pl-5 space-y-1">
-            <li><strong>Vercel Inc.:</strong> Web application hosting and CDN distribution.</li>
-            <li><strong>Render / Cloud Providers:</strong> Backend API infrastructure hosting.</li>
-            <li><strong>Managed PostgreSQL & Redis Providers:</strong> Encrypted data storage and realtime pub/sub caching.</li>
-            <li><strong>Google Gemini API (Google LLC):</strong> Image-to-JSON menu extraction processing for menu image uploads.</li>
-          </ul>
-        </section>
+      <Section number={12} title="International Processing"><p>Some infrastructure providers may process or store information outside India. Where international processing occurs, Nadha Labs handles those transfers in accordance with applicable Indian law and any restrictions notified by the Central Government.</p></Section>
 
-        <section id="p13">
-          <h2 className="text-lg font-black text-[var(--omlu-text-primary)]">13. Cross-Border Processing</h2>
-          <p className="mt-2">
-            Cloud infrastructure hosting servers (such as Vercel CDN nodes or cloud database instances) may process encrypted data internationally in accordance with cloud security standards and applicable DPDP Act cross-border transfer rules notified by the Central Government.
-          </p>
-        </section>
+      <Section number={13} title="Data Retention"><p>We retain information only for as long as reasonably necessary for the purposes described in this Policy, to operate and secure OMLU, and to comply with applicable legal, tax, accounting, and regulatory obligations.</p><p>Certain billing and transaction records may need to be retained for periods required by applicable tax and accounting laws. Where the restaurant is legally responsible for retaining such records, OMLU may retain them on the restaurant&apos;s behalf for the applicable period.</p><p>Security records, information associated with closed accounts, and backup copies may remain for a limited period where reasonably necessary for security, recovery, dispute handling, or legal compliance. Information is deleted or anonymised when it is no longer reasonably required.</p></Section>
 
-        <section id="p14">
-          <h2 className="text-lg font-black text-[var(--omlu-text-primary)]">14. Data Retention</h2>
-          <p className="mt-2">
-            We retain restaurant sales, bill, and transaction records for the duration of the active account relationship and as required by Indian fiscal and tax laws (minimum 6 years for accounting compliance). Audit logs and security records are retained for security analysis.
-          </p>
-        </section>
+      <Section number={14} title="Your Privacy Rights"><p>Depending on the context and applicable law, individuals may request:</p><ul><li>information about personal data processed by Nadha Labs;</li><li>correction of inaccurate information or completion of incomplete information;</li><li>erasure where legally applicable;</li><li>grievance redressal;</li><li>withdrawal of consent where processing relies on consent; and</li><li>nomination where available under applicable Indian privacy law.</li></ul><p>For guest dining or order data controlled by a restaurant, OMLU may direct the request to the relevant restaurant or assist that restaurant in handling it. Requests concerning Nadha Labs account or security data may be sent directly to our privacy contact.</p><p>Rights are subject to applicable law. We may verify a request and may retain information where a legal obligation or permitted security or legal purpose requires it.</p></Section>
 
-        <section id="p15">
-          <h2 className="text-lg font-black text-[var(--omlu-text-primary)]">15. Account Deletion and Rights</h2>
-          <p className="mt-2">
-            Account Owners may request profile closure and data purge by contacting our Grievance Officer. Upon verification, we will delete or anonymize personal credentials, subject to statutory tax retention exceptions.
-          </p>
-        </section>
+      <Section number={15} title="Account Closure and Deletion"><p>Restaurant account owners may request closure through the OMLU privacy or support contact. After verification, access may be disabled and personal account information may be deleted or anonymised. Certain information may continue to be retained where required by law or reasonably necessary for security, fraud prevention, dispute resolution, or other legitimate legal purposes.</p></Section>
 
-        <section id="p16">
-          <h2 className="text-lg font-black text-[var(--omlu-text-primary)]">16. Legal Exceptions</h2>
-          <p className="mt-2">
-            We may disclose information if required by law, court order, statutory law enforcement request, legal summons, or to protect the safety, rights, and security of Nadha Labs, OMLU users, or the public.
-          </p>
-        </section>
+      <Section number={16} title="Legal Disclosures"><p>We may preserve or disclose information where reasonably necessary to comply with applicable law, a valid court or government request, or legal process; enforce our agreements; investigate misuse; or protect the rights, safety, and security of Nadha Labs, restaurants, users, or the public.</p></Section>
 
-        <section id="p17">
-          <h2 className="text-lg font-black text-[var(--omlu-text-primary)]">17. Security Safeguards</h2>
-          <p className="mt-2">
-            We implement technical and organizational measures including AES-GCM encryption for sensitive keys, salted password hashing, and strict CORS policies. While we adhere to industry standards, no internet transmission is 100% secure, and we cannot guarantee absolute security.
-          </p>
-        </section>
+      <Section number={17} title="Security"><p>Nadha Labs uses reasonable technical and organisational safeguards designed to protect information processed through OMLU. These measures may include encryption in transit, secure credential storage, role-based access controls, tenant isolation, audit logging, rate limiting, security monitoring, and controlled infrastructure access.</p><p>No internet-based service can guarantee absolute security. Restaurants and authorised users should protect their credentials, use appropriate access permissions, and notify us promptly of suspected unauthorised access.</p></Section>
 
-        <section id="p18">
-          <h2 className="text-lg font-black text-[var(--omlu-text-primary)]">18. Breach Notification</h2>
-          <p className="mt-2">
-            In the event of a verified personal data breach affecting your information, Nadha Labs will notify affected Data Fiduciaries / users and the Data Protection Board of India in accordance with requirements under the DPDP Act 2023 and DPDP Rules 2025.
-          </p>
-        </section>
+      <Section number={18} title="Personal Data Breaches"><p>If a personal data breach occurs, Nadha Labs will take appropriate steps to investigate, contain, and remediate the incident and will provide notifications to affected persons, relevant restaurant customers, and competent authorities where required by applicable law.</p></Section>
 
-        <section id="p19">
-          <h2 className="text-lg font-black text-[var(--omlu-text-primary)]">19. Grievance Officer Details</h2>
-          <p className="mt-2">
-            In accordance with the DPDP Act 2023 and Information Technology rules, you may contact our designated Grievance Officer for privacy concerns or data rights requests:
-          </p>
-          <div className="mt-2 rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] p-4 font-mono text-xs space-y-1">
-            <p><strong>Grievance Officer:</strong> {legalConfig.grievanceOfficerName}</p>
-            <p><strong>Entity:</strong> {legalConfig.legalEntityName}</p>
-            <p><strong>Email:</strong> {legalConfig.privacyEmail}</p>
-            <p><strong>Address:</strong> {legalConfig.registeredAddress}</p>
-            <p><strong>Response Time:</strong> Within 15 days of receiving valid written notice.</p>
-          </div>
-        </section>
+      <Section number={19} title="Children's Privacy"><p>OMLU is a restaurant operations platform and is not directed to children as an online service. Nadha Labs does not knowingly create OMLU accounts for children or intentionally collect children&apos;s personal data for independent marketing or profiling purposes.</p><p>Dining information submitted in a restaurant context remains governed by the restaurant relationship and applicable law.</p></Section>
 
-        <section id="p20">
-          <h2 className="text-lg font-black text-[var(--omlu-text-primary)]">20. Children&apos;s Privacy</h2>
-          <p className="mt-2">
-            OMLU is designed strictly for commercial restaurant operational management and adult restaurant guests. We do not knowingly target or collect personal data from individuals under 18 years of age.
-          </p>
-        </section>
+      <Section number={20} title="Cookies and Local Storage"><p>OMLU uses necessary browser technologies, including cookies and local or session storage, for authentication, session continuity, QR ordering sessions, user preferences, draft recovery, and security. OMLU does not currently use third-party behavioural advertising cookies.</p></Section>
 
-        <section id="p21">
-          <h2 className="text-lg font-black text-[var(--omlu-text-primary)]">21. Cookies and Local Storage</h2>
-          <p className="mt-2">
-            OMLU uses functional browser local storage and session storage (such as theme preferences, session tokens, and order draft keys) strictly necessary for navigation, authentication, and offline draft recovery. We do not use third-party tracking cookies for targeted behavioral advertising.
-          </p>
-        </section>
+      <Section number={21} title="Grievance and Privacy Contact"><p>For privacy questions, rights requests, or grievances, contact:</p><address className="not-italic rounded-2xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-6"><h3 className="text-lg">Privacy &amp; Grievance Contact</h3><p className="mt-3 font-bold text-[var(--omlu-text-primary)]">{legalConfig.legalEntityName}</p><p>Privacy / Grievance Officer</p><p>Email: <a href={`mailto:${legalConfig.privacyEmail}`}>{legalConfig.privacyEmail}</a></p><p>Location: {legalConfig.registeredAddress}</p></address></Section>
 
-        <section id="p22">
-          <h2 className="text-lg font-black text-[var(--omlu-text-primary)]">22. Policy Changes</h2>
-          <p className="mt-2">
-            We may update this Privacy Policy periodically. Modifications will be posted on this route with an updated effective date. Continued access after updates constitutes acknowledgement of the updated Privacy Policy.
-          </p>
-        </section>
-      </div>
-    </LegalLayout>
-  );
+      <Section number={22} title="Changes to This Policy"><p>We may update this Privacy Policy as OMLU evolves or legal requirements change. The current version will always display its latest revision date. Where required, we will provide additional notice of material changes.</p></Section>
+    </div>
+  </LegalLayout>;
 }
