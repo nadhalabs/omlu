@@ -1,0 +1,148 @@
+.page {
+  position: relative;
+  min-height: 100vh;
+  overflow-x: hidden;
+  padding: clamp(32px, 3.3vw, 52px) clamp(40px, 4vw, 64px);
+  color: var(--omlu-text-primary);
+  background:
+    radial-gradient(circle at 49% -15%, #ff174f 0, #ff315b 23%, transparent 52%),
+    radial-gradient(circle at 2% 14%, #ff970f 0, #ff7421 24%, transparent 49%),
+    radial-gradient(circle at 91% 41%, #ef9a9f 0, #f4b7b5 24%, transparent 51%),
+    radial-gradient(circle at 35% 103%, #ffd26f 0, #ffc77b 24%, transparent 49%),
+    linear-gradient(135deg, #ff8c17 0%, #ff4073 43%, #efb3af 78%, #ffe7d1 100%);
+}
+
+.glowOne, .glowTwo { position: absolute; border-radius: 999px; filter: blur(55px); pointer-events: none; opacity: .55; }
+.glowOne { width: 30rem; height: 10rem; left: 4%; bottom: -4rem; background: #ff82a0; transform: rotate(-10deg); }
+.glowTwo { width: 24rem; height: 10rem; right: 3%; bottom: 1rem; background: #fff1c1; }
+
+.surface {
+  position: relative;
+  z-index: 1;
+  width: min(1320px, 100%);
+  margin: 0 auto;
+  padding: 18px 34px 30px;
+  border: 1px solid rgba(255,255,255,.65);
+  border-radius: 30px;
+  background: color-mix(in srgb, var(--omlu-primary-surface) 96%, transparent);
+  box-shadow: 0 24px 60px rgba(73, 31, 19, .24), 0 4px 14px rgba(56, 24, 14, .13);
+}
+
+.header { position: relative; display: flex; min-height: 48px; align-items: center; justify-content: center; padding-inline: 230px; }
+.wordmark { position: absolute; left: 0; top: 10px; color: #ea580c; font-size: 15px; font-weight: 900; letter-spacing: -.035em; }
+.wordmark:hover { color: #c2410c; }
+.nav { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 650; color: var(--omlu-text-secondary); }
+.nav a, .nav span { display: inline-flex; min-height: 34px; align-items: center; padding: 0 17px; border-radius: 999px; white-space: nowrap; }
+.nav a:hover { color: var(--omlu-text-primary); background: var(--omlu-hover-background); }
+.nav span { color: #c45118; background: #ffeadc; }
+.headerActions { position: absolute; right: 0; top: 0; display: flex; justify-content: flex-end; align-items: center; gap: 9px; }
+.register { display: inline-flex; min-height: 40px; align-items: center; gap: 9px; border-radius: 999px; padding: 0 20px; background: #f86831; color: #fff; font-size: 12px; font-weight: 800; box-shadow: 0 5px 13px rgba(234,88,12,.18); }
+.register:hover { background: #ea580c; }
+
+.hero { padding: 25px 16px 22px; text-align: center; }
+.hero h1 { max-width: 720px; margin: 0 auto; font-size: clamp(36px, 3.25vw, 52px); line-height: .98; font-weight: 580; letter-spacing: -.055em; }
+.hero h1 span { color: #f06432; }
+
+.billingRegion { max-width: 1190px; margin: 0 auto; }
+.billingControls { position: relative; width: 220px; min-height: 50px; margin: 0 auto 36px; }
+.billingToggle { display: flex; width: fit-content; min-width: 220px; height: 48px; align-items: stretch; gap: 2px; margin: 0; padding: 2px; border: 1px solid #eadfd5; border-radius: 999px; background: #f8f5f1; box-shadow: 0 5px 14px rgba(42, 28, 18, .06); }
+.billingSegment { position: relative; display: flex; flex: 1 1 0; }
+.billingSegment input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.billingSegment label { display: inline-flex; min-width: 104px; min-height: 42px; align-items: center; justify-content: center; border-radius: 999px; color: var(--omlu-text-secondary); font-size: 12px; font-weight: 800; cursor: pointer; transition: color 180ms ease, background-color 180ms ease, box-shadow 180ms ease, transform 180ms ease; }
+.billingSegment input:checked + label { background: #f86831; color: #fff; box-shadow: 0 4px 10px rgba(234, 88, 12, .2); }
+.billingSegment input:focus-visible + label { outline: 2px solid var(--omlu-focus-ring); outline-offset: 3px; }
+.billingSegment label:active { transform: scale(.99); }
+.offerBadge { position: absolute; top: 50%; left: calc(100% + 12px); display: inline-flex; min-height: 25px; align-items: center; padding: 0 9px; border: 1px solid #fed7aa; border-radius: 999px; background: #fff0e6; color: #c2410c; font-size: 9px; font-weight: 850; line-height: 1; white-space: nowrap; box-shadow: 0 3px 8px rgba(234, 88, 12, .08); visibility: hidden; opacity: 0; pointer-events: none; transform: translateY(-50%); transition: opacity 160ms ease, visibility 160ms ease; }
+.billingRegion:has(:global(#billing-yearly):checked) .offerBadge { visibility: visible; opacity: 1; }
+.grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: stretch; gap: 14px; }
+.card { position: relative; min-width: 0; border: 1px solid #eee9e2; border-radius: 22px; background: #f9f7f2; box-shadow: 0 8px 22px rgba(42, 28, 18, .035); transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease; }
+.card:not(.recommended):hover, .card:not(.recommended):focus-within { transform: translateY(-2px); border-color: #fdba74; box-shadow: 0 14px 28px rgba(234, 88, 12, .12); }
+.cardBody { display: flex; height: 100%; flex-direction: column; padding: 25px 20px 20px; }
+.planName { color: var(--omlu-text-secondary); font-size: 12px; font-weight: 720; text-transform: uppercase; letter-spacing: .1em; }
+.priceBlock { position: relative; min-height: 76px; margin-top: 9px; }
+.monthlyPrice, .yearlyPrice { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: flex-start; opacity: 1; transition: opacity 170ms ease; }
+.yearlyPrice { visibility: hidden; opacity: 0; }
+.billingRegion:has(:global(#billing-yearly):checked) .monthlyPrice { visibility: hidden; opacity: 0; }
+.billingRegion:has(:global(#billing-yearly):checked) .yearlyPrice { visibility: visible; opacity: 1; }
+.price { font-size: clamp(34px, 2.45vw, 42px); line-height: 1.05; font-weight: 640; letter-spacing: -.055em; white-space: nowrap; }
+.price span { margin-left: 5px; color: var(--omlu-text-secondary); font-size: 11px; font-weight: 500; letter-spacing: 0; }
+.annualPrice { display: block; margin-top: 6px; color: var(--omlu-text-secondary); font-size: 10px; font-weight: 650; line-height: 1.25; letter-spacing: 0; }
+.savings { margin-top: 3px; color: #c2410c; font-size: 10px; font-weight: 850; letter-spacing: 0; }
+.customPrice { justify-content: flex-start; padding-top: 2px; }
+.customPrice .price { font-size: clamp(31px, 2.15vw, 37px); }
+.description { min-height: 44px; margin-top: 6px; color: var(--omlu-text-secondary); font-size: 12px; line-height: 1.45; }
+.cta { display: inline-flex; width: 100%; min-height: 46px; align-items: center; justify-content: center; gap: 10px; margin-top: 17px; border: 1px solid #eadfd5; border-radius: 999px; background: #fff; color: #2f2925; font-size: 12px; font-weight: 800; cursor: pointer; }
+.card:not(.recommended) .cta:hover, .card:not(.recommended) .cta:focus-visible { border-color: #f97316; background: #fff7ed; color: #c2410c; box-shadow: 0 6px 14px rgba(234, 88, 12, .12); }
+.cta:active { transform: scale(.99); }
+.features { display: grid; gap: 8px; margin-top: 18px; font-size: 12px; line-height: 1.35; }
+.features li { display: grid; grid-template-columns: 17px 1fr; align-items: start; color: #504a46; }
+.featureIcon { color: #ef6a32; font-size: 14px; font-weight: 900; line-height: 1.05; }
+.features .unavailable { color: #aaa39d; text-decoration: line-through; text-decoration-thickness: 1px; }
+.unavailable .featureIcon { color: #aaa39d; text-decoration: none; }
+
+.recommended { z-index: 2; margin: -7px 0 -7px; border: 2px solid #f86831; border-radius: 24px; background: color-mix(in srgb, var(--omlu-primary-surface) 94%, #fff0e6); box-shadow: 0 20px 40px rgba(230,91,31,.22), 0 6px 16px rgba(230,91,31,.1); }
+.recommended .badge { display: flex; min-height: 42px; align-items: center; justify-content: center; gap: 7px; padding-block: 10px; border-radius: 20px 20px 0 0; background: linear-gradient(100deg, #f4511e 0%, #ff702c 48%, #f9ad2f 100%); color: #fff; font-size: 11px; font-weight: 850; letter-spacing: .01em; }
+.recommended .cardBody { padding: 23px 19px 24px; }
+.recommended .price { font-weight: 720; }
+.recommended .cta { border-color: #f86831; background: #f86831; color: #fff; box-shadow: 0 7px 16px rgba(234,88,12,.2); }
+.recommended .cta:hover { background: #e95822; }
+
+.srOnly { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+
+:global(.dark) .page { background: radial-gradient(circle at 49% -15%, #8f1237, transparent 52%), radial-gradient(circle at 0 20%, #953806, transparent 49%), radial-gradient(circle at 96% 52%, #633a3c, transparent 52%), #2a1410; }
+:global(.dark) .surface { background: color-mix(in srgb, var(--omlu-primary-surface) 96%, transparent); border-color: rgba(255,255,255,.12); }
+:global(.dark) .nav span { background: #431407; color: #fdba74; }
+:global(.dark) .billingToggle { border-color: var(--omlu-border); background: #201e1c; }
+:global(.dark) .offerBadge { border-color: #9a3412; background: #431407; color: #fdba74; }
+:global(.dark) .card { background: #201e1c; border-color: var(--omlu-border); }
+:global(.dark) .cta { background: #2b2927; border-color: var(--omlu-border); color: #fb923c; }
+:global(.dark) .features li { color: #d6d3d1; }
+:global(.dark) .features .unavailable { color: #78716c; }
+:global(.dark) .recommended { background: var(--omlu-primary-surface); border-color: #fb923c; }
+
+@media (max-width: 1100px) {
+  .page { padding: 34px; }
+  .surface { padding-inline: 28px; }
+  .header { padding-inline: 0; padding-top: 58px; }
+  .wordmark { top: 11px; }
+  .headerActions { right: 0; }
+  .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 760px; gap: 22px; }
+  .recommended { margin: 0; }
+  .hero { padding: 34px 16px 25px; }
+  .billingControls { margin-bottom: 32px; }
+}
+
+@media (max-width: 700px) {
+  .page { padding: 18px 12px; }
+  .surface { padding: 18px 14px 30px; border-radius: 24px; }
+  .header { min-height: 102px; padding-top: 58px; }
+  .register { min-height: 44px; padding-inline: 15px; }
+  .headerActions > button { display: none; }
+  .nav { width: 100%; justify-content: space-between; gap: 3px; overflow-x: auto; }
+  .nav a, .nav span { min-height: 40px; padding-inline: 12px; }
+  .hero { padding: 32px 4px 24px; }
+  .billingControls { margin-bottom: 30px; }
+  .offerBadge { top: calc(100% + 7px); left: 50%; transform: translateX(-50%); }
+  .billingRegion:has(:global(#billing-yearly):checked) .billingControls { margin-bottom: 60px; }
+  .hero h1 { font-size: clamp(34px, 10vw, 45px); line-height: 1.03; }
+  .desktopBreak { display: none; }
+  .grid { grid-template-columns: 1fr; max-width: 430px; gap: 18px; }
+  .cardBody { padding: 24px 22px 27px; }
+  .recommended { order: initial; }
+  .features { font-size: 13px; }
+  .description { min-height: 0; font-size: 13px; }
+}
+
+@media (max-width: 390px) {
+  .surface { padding-inline: 10px; }
+  .register { font-size: 0; padding-inline: 14px; }
+  .register span { font-size: 16px; }
+  .nav a, .nav span { padding-inline: 10px; font-size: 11px; }
+  .billingControls { width: 212px; }
+  .billingToggle { min-width: 212px; }
+  .billingSegment label { min-width: 100px; }
+}
+
+@media (min-width: 1101px) and (max-height: 900px) {
+  .page { padding-block: 32px; }
+}
