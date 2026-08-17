@@ -4,8 +4,9 @@ from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
 
 import pytest
+from sqlalchemy import event
 
-from app.database import SessionLocal
+from app.database import SessionLocal, engine
 from app.main import app
 from app.models.bill import Bill
 from app.models.dining_session import ACTIVE_DINING_SESSION_STATUSES, DiningSession
@@ -449,6 +450,74 @@ def test_staff_table_access_rejects_kitchen_role(staff_order_context):
     response = client.get("/staff/tables", headers=auth(staff_order_context, "kitchen_token"))
 
     assert response.status_code == 403
+
+
+def test_staff_table_list_query_count_does_not_grow_with_table_count(staff_order_context):
+    def request_query_count() -> int:
+        statements = []
+
+        def capture_statement(*args):
+            statements.append(args[2])
+
+        event.listen(engine, "before_cursor_execute", capture_statement)
+        try:
+            response = client.get(
+                "/staff/tables",
+                headers=auth(staff_order_context, "staff_token"),
+            )
+        finally:
+            event.remove(engine, "before_cursor_execute", capture_statement)
+        assert response.status_code == 200
+        return len(statements)
+
+    baseline_count = request_query_count()
+    db = SessionLocal()
+    suffix = uuid.uuid4().hex[:8]
+    db.add_all([
+        RestaurantTable(
+            restaurant_id=staff_order_context["restaurant_id"],
+            table_number=f"Bulk {index}",
+            table_code=f"BULK-{suffix}-{index}",
+            is_active=True,
+        )
+        for index in range(20)
+    ])
+    db.commit()
+    db.close()
+
+    expanded_count = request_query_count()
+    assert expanded_count == baseline_count
+
+
+def test_staff_table_list_preserves_operational_summary_semantics(staff_order_context):
+    created = create_manual_order(staff_order_context)
+    assert created.status_code == 201
+    public_token = created.json()["public_token"]
+    kitchen_headers = auth(staff_order_context, "kitchen_token")
+    for next_status in ("accepted", "preparing", "ready"):
+        updated = client.patch(
+            f"/kitchen/restaurants/{staff_order_context['restaurant_slug']}/orders/{public_token}/status",
+            headers=kitchen_headers,
+            json={"status": next_status},
+        )
+        assert updated.status_code == 200
+
+    response = client.get("/staff/tables", headers=auth(staff_order_context))
+    assert response.status_code == 200
+    row = next(item for item in response.json()["items"] if item["id"] == staff_order_context["table_id"])
+    assert row["state"] == "occupied"
+    assert row["has_open_session"] is True
+    assert row["active_order_count"] == 1
+    assert Decimal(row["current_bill_amount"]) == Decimal("240.00")
+    assert row["attention"] == ["ready_order"]
+    assert row["bill_requested"] is False
+
+    requested = request_staff_table_bill(staff_order_context)
+    assert requested.status_code == 201
+    response = client.get("/staff/tables", headers=auth(staff_order_context))
+    row = next(item for item in response.json()["items"] if item["id"] == staff_order_context["table_id"])
+    assert row["bill_requested"] is True
+    assert Decimal(row["current_bill_amount"]) == Decimal("240.00")
 
 
 def test_restaurant_isolation_for_table_detail(staff_order_context):

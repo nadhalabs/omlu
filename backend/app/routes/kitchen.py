@@ -194,7 +194,7 @@ def update_kitchen_order_status(
         if update_req.status not in transitions.get(sale.status, set()):
             raise HTTPException(status_code=fastapi_status.HTTP_409_CONFLICT, detail=f"Invalid transition from '{sale.status}' to '{update_req.status}'.")
         sale.status = update_req.status; db.commit(); db.refresh(sale)
-        publish_event(EVENT_ORDER_STATUS_CHANGED, restaurant_id=restaurant.id, channels=[restaurant_channel(restaurant.id, "operations"), restaurant_channel(restaurant.id, "kitchen")], resource_id=sale.id, state={"order_number": sale.order_number, "status": sale.status, "source": "takeaway"})
+        publish_event(EVENT_ORDER_STATUS_CHANGED, restaurant_id=restaurant.id, channels=[restaurant_channel(restaurant.id, "operations"), restaurant_channel(restaurant.id, "kitchen")], resource_id=sale.id, state={"order_number": sale.order_number, "public_token": sale.public_token, "status": sale.status, "source": "takeaway"})
         return {"order_number": sale.order_number, "public_token": sale.public_token, "table_number": "Takeaway", "status": sale.status, "subtotal": sale.subtotal, "customer_note": sale.note, "created_at": sale.created_at, "status_history": [], "items": _quick_sale_items(sale)}
 
     try:
@@ -276,7 +276,7 @@ def update_kitchen_order_status(
             restaurant_id=restaurant.id,
             channels=channels,
             resource_id=full_order.id,
-            state={"order_number": full_order.order_number, "status": full_order.status, "table_id": full_order.table_id},
+            state={"order_number": full_order.order_number, "public_token": full_order.public_token, "status": full_order.status, "table_id": full_order.table_id},
         )
 
         # Sort history for response

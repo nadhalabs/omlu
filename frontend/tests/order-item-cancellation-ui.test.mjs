@@ -69,7 +69,7 @@ test("kitchen retains and marks cancelled lines and refetches on realtime events
   assert.match(kitchen, /line-through/);
   assert.match(kitchen, />Cancelled</);
   assert.match(kitchenDashboard, /target: \{ kind: "staff", channel: "kitchen" \}/);
-  assert.match(kitchenDashboard, /onEvent: \(\) => void fetchOrders\(false\)/);
+  assert.match(kitchenDashboard, /scheduleEventReconciliation\(\)/);
 });
 
 test("kitchen preserves separate chronological ticket identity and rejected terminal behavior", () => {
