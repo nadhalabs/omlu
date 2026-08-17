@@ -13,6 +13,7 @@ import { KitchenHeader } from "./KitchenHeader";
 import { KitchenBoard } from "./KitchenBoard";
 import { KitchenAvailabilityDialog } from "./KitchenAvailabilityDialog";
 import { KitchenBoardRefreshCoordinator } from "@/lib/kitchenBoardRefresh.mjs";
+import { KitchenOrderAlert, NewKitchenTicketTracker } from "@/lib/kitchenOrderAlert.mjs";
 
 const HEALTHY_RECONCILIATION_MS = 90_000;
 const DEGRADED_RECONCILIATION_MS = 15_000;
@@ -49,9 +50,9 @@ export default function KitchenDashboardClient({
   // Action status mapping to disable buttons while pending (token -> boolean)
   const [updatingTokens, setUpdatingTokens] = useState<Record<string, boolean>>({});
 
-  // Track known order tokens locally to prevent double play or alerts for initial orders
-  const knownTokensRef = useRef<Set<string>>(new Set());
-  const isInitialLoadRef = useRef<boolean>(true);
+  // Establish an initial baseline, then alert once for genuinely new tickets.
+  const ticketTrackerRef = useRef(new NewKitchenTicketTracker());
+  const orderAlertRef = useRef<KitchenOrderAlert | null>(null);
   const refreshCoordinatorRef = useRef<KitchenBoardRefreshCoordinator | null>(null);
   const hasConnectedRef = useRef(false);
   const pendingMutationsRef = useRef(new Map<string, string>());
@@ -85,42 +86,40 @@ export default function KitchenDashboardClient({
     };
   }, []);
 
-  // Web Audio synth beep
-  const playNewOrderBeep = useCallback(() => {
+  // Play one preloaded, cooldown-protected alert. Audio failures never affect
+  // order rendering or reconciliation.
+  const playNewOrderAlert = useCallback(() => {
     if (!soundEnabled) return;
-    try {
-      const audioWindow = window as Window & typeof globalThis & {
-        webkitAudioContext?: typeof AudioContext;
-      };
-      const AudioCtx = window.AudioContext || audioWindow.webkitAudioContext;
-      if (!AudioCtx) return;
-      const ctx = new AudioCtx();
+    orderAlertRef.current?.play();
+  }, [soundEnabled]);
 
-      const osc1 = ctx.createOscillator();
-      const osc2 = ctx.createOscillator();
-      const gainNode = ctx.createGain();
+  useEffect(() => {
+    const alert = new KitchenOrderAlert({
+      onFailure: (error: unknown) => {
+        if (process.env.NODE_ENV === "development") console.warn("Kitchen alert playback failed", error);
+      },
+    });
+    orderAlertRef.current = alert;
+    alert.preload();
+    return () => {
+      alert.dispose();
+      if (orderAlertRef.current === alert) orderAlertRef.current = null;
+    };
+  }, []);
 
-      osc1.type = "sine";
-      osc1.frequency.setValueAtTime(587.33, ctx.currentTime);
-      osc1.frequency.setValueAtTime(880, ctx.currentTime + 0.15);
-
-      osc2.type = "triangle";
-      osc2.frequency.setValueAtTime(440, ctx.currentTime);
-
-      gainNode.gain.setValueAtTime(0.12, ctx.currentTime);
-      gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.45);
-
-      osc1.connect(gainNode);
-      osc2.connect(gainNode);
-      gainNode.connect(ctx.destination);
-
-      osc1.start();
-      osc2.start();
-      osc1.stop(ctx.currentTime + 0.45);
-      osc2.stop(ctx.currentTime + 0.45);
-    } catch (e) {
-      console.warn("AudioContext playback failed", e);
-    }
+  useEffect(() => {
+    if (!soundEnabled) return;
+    const unlock = () => {
+      void orderAlertRef.current?.unlock();
+      document.removeEventListener("pointerdown", unlock);
+      document.removeEventListener("keydown", unlock);
+    };
+    document.addEventListener("pointerdown", unlock, { once: true });
+    document.addEventListener("keydown", unlock, { once: true });
+    return () => {
+      document.removeEventListener("pointerdown", unlock);
+      document.removeEventListener("keydown", unlock);
+    };
   }, [soundEnabled]);
 
   // Toggle sound and activate context (Correction #9)
@@ -130,18 +129,7 @@ export default function KitchenDashboardClient({
     localStorage.setItem("kitchen_sound_enabled", String(nextVal));
 
     if (nextVal) {
-      try {
-        const audioWindow = window as Window & typeof globalThis & {
-          webkitAudioContext?: typeof AudioContext;
-        };
-        const AudioCtx = window.AudioContext || audioWindow.webkitAudioContext;
-        if (AudioCtx) {
-          const ctx = new AudioCtx();
-          if (ctx.state === "suspended") {
-            void ctx.resume();
-          }
-        }
-      } catch {}
+      void orderAlertRef.current?.unlock();
       toast("🔊 Sound notifications enabled", "success");
     } else {
       toast("🔇 Sound notifications muted", "information");
@@ -219,26 +207,7 @@ export default function KitchenDashboardClient({
         setError(null);
         setLastUpdated(new Date());
 
-        const pendingTokens = fetched
-          .filter((o) => o.status === "pending")
-          .map((o) => o.public_token);
-
-        if (isInitialLoadRef.current) {
-          pendingTokens.forEach((tok) => knownTokensRef.current.add(tok));
-          isInitialLoadRef.current = false;
-        } else {
-          let hasNew = false;
-          pendingTokens.forEach((tok) => {
-            if (!knownTokensRef.current.has(tok)) {
-              knownTokensRef.current.add(tok);
-              hasNew = true;
-            }
-          });
-
-          if (hasNew) {
-            playNewOrderBeep();
-          }
-        }
+        if (ticketTrackerRef.current.observe(fetched)) playNewOrderAlert();
       } catch (err) {
         if (err instanceof ApiError) {
           if (err.status === 401) {
@@ -253,7 +222,7 @@ export default function KitchenDashboardClient({
         if (showLoading) setLoading(false);
       }
     },
-    [playNewOrderBeep, restaurantSlug, router]
+    [playNewOrderAlert, restaurantSlug, router]
   );
 
   const fetchOrders = useCallback(
@@ -275,6 +244,7 @@ export default function KitchenDashboardClient({
   useEffect(() => {
     const coordinator = new KitchenBoardRefreshCoordinator();
     refreshCoordinatorRef.current = coordinator;
+    ticketTrackerRef.current = new NewKitchenTicketTracker();
     hasConnectedRef.current = false;
     pendingMutationsRef.current.clear();
     selfMutationEventsRef.current.clear();

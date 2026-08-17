@@ -80,7 +80,7 @@ test("Kitchen dashboard orchestrator preserves realtime updates, auth gate, audi
   assert.match(clientSrc, /useRealtime/);
   assert.match(clientSrc, /getKitchenOrders/);
   assert.match(clientSrc, /updateKitchenOrderStatus/);
-  assert.match(clientSrc, /playNewOrderBeep/);
+  assert.match(clientSrc, /playNewOrderAlert/);
   assert.match(clientSrc, /confirmDialog/);
   assert.match(clientSrc, /toast/);
 });
