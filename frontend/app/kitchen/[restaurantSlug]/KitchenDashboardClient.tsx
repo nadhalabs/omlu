@@ -54,7 +54,10 @@ export default function KitchenDashboardClient({
   const isInitialLoadRef = useRef<boolean>(true);
   const refreshCoordinatorRef = useRef<KitchenBoardRefreshCoordinator | null>(null);
   const hasConnectedRef = useRef(false);
-  const pendingMutationsRef = useRef(new Map<string, { status: string; expiresAt: number }>());
+  const pendingMutationsRef = useRef(new Map<string, string>());
+  const selfMutationEventsRef = useRef(new Map<string, { status: string; expiresAt: number }>());
+  const confirmedMutationRef = useRef(new Map<string, number>());
+  const operationVersionRef = useRef(0);
 
   // Keep a tick state to force elapsed durations to re-render every 10 seconds
   const [, setTick] = useState<number>(0);
@@ -189,11 +192,30 @@ export default function KitchenDashboardClient({
   // Fetch kitchen orders
   const performFetchOrders = useCallback(
     async (showLoading = true) => {
+      const requestVersion = ++operationVersionRef.current;
       if (showLoading) setLoading(true);
 
       try {
         const fetched = await getKitchenOrders(restaurantSlug);
-        setOrders(fetched);
+        setOrders((current) => {
+          const currentByToken = new Map(current.map((order) => [order.public_token, order]));
+          const reconciled = fetched.flatMap((serverOrder) => {
+            const pendingStatus = pendingMutationsRef.current.get(serverOrder.public_token);
+            const confirmedVersion = confirmedMutationRef.current.get(serverOrder.public_token);
+            if (!pendingStatus && (!confirmedVersion || confirmedVersion < requestVersion)) {
+              return [serverOrder];
+            }
+            const optimisticOrder = currentByToken.get(serverOrder.public_token);
+            // A terminal optimistic transition intentionally removes the card.
+            // Otherwise keep its newer local status when this GET predates the
+            // pending or newly confirmed PATCH.
+            return optimisticOrder ? [optimisticOrder] : [];
+          });
+          for (const [token, confirmedVersion] of confirmedMutationRef.current) {
+            if (confirmedVersion < requestVersion) confirmedMutationRef.current.delete(token);
+          }
+          return reconciled;
+        });
         setError(null);
         setLastUpdated(new Date());
 
@@ -255,6 +277,8 @@ export default function KitchenDashboardClient({
     refreshCoordinatorRef.current = coordinator;
     hasConnectedRef.current = false;
     pendingMutationsRef.current.clear();
+    selfMutationEventsRef.current.clear();
+    confirmedMutationRef.current.clear();
     return () => coordinator.dispose();
   }, [restaurantSlug]);
 
@@ -296,7 +320,7 @@ export default function KitchenDashboardClient({
     onEvent: (event) => {
       const publicToken = event.state?.public_token?.toString();
       const status = event.state?.status?.toString();
-      const pending = publicToken ? pendingMutationsRef.current.get(publicToken) : undefined;
+      const pending = publicToken ? selfMutationEventsRef.current.get(publicToken) : undefined;
       if (
         event.type === "order.status_changed" &&
         publicToken &&
@@ -304,7 +328,7 @@ export default function KitchenDashboardClient({
         pending?.status === status &&
         pending.expiresAt >= Date.now()
       ) {
-        pendingMutationsRef.current.delete(publicToken);
+        selfMutationEventsRef.current.delete(publicToken);
         return;
       }
       scheduleEventReconciliation();
@@ -346,13 +370,15 @@ export default function KitchenDashboardClient({
 
   // Handle status update endpoint
   const handleUpdateStatus = async (publicToken: string, nextStatus: string) => {
-    if (updatingTokens[publicToken]) return;
+    if (pendingMutationsRef.current.has(publicToken)) return;
+    const previousOrder = orders.find((order) => order.public_token === publicToken);
+    if (!previousOrder) return;
     setUpdatingTokens((prev) => ({ ...prev, [publicToken]: true }));
-    const previousOrders = orders;
-    for (const [token, mutation] of pendingMutationsRef.current) {
-      if (mutation.expiresAt < Date.now()) pendingMutationsRef.current.delete(token);
+    for (const [token, mutation] of selfMutationEventsRef.current) {
+      if (mutation.expiresAt < Date.now()) selfMutationEventsRef.current.delete(token);
     }
-    pendingMutationsRef.current.set(publicToken, {
+    pendingMutationsRef.current.set(publicToken, nextStatus);
+    selfMutationEventsRef.current.set(publicToken, {
       status: nextStatus,
       expiresAt: Date.now() + SELF_MUTATION_TTL_MS,
     });
@@ -375,6 +401,7 @@ export default function KitchenDashboardClient({
         nextStatus
       );
 
+      confirmedMutationRef.current.set(publicToken, ++operationVersionRef.current);
       setOrders((prev) => {
         if (nextStatus === "served" || nextStatus === "rejected") {
           return prev.filter((o) => o.public_token !== publicToken);
@@ -383,10 +410,20 @@ export default function KitchenDashboardClient({
           o.public_token === publicToken && o.status === nextStatus ? updated : o
         );
       });
+      pendingMutationsRef.current.delete(publicToken);
       setError(null);
     } catch (err) {
       pendingMutationsRef.current.delete(publicToken);
-      setOrders(previousOrders);
+      selfMutationEventsRef.current.delete(publicToken);
+      confirmedMutationRef.current.delete(publicToken);
+      setOrders((current) => {
+        const currentOrder = current.find((order) => order.public_token === publicToken);
+        if (currentOrder && currentOrder.status !== nextStatus) return current;
+        return [
+          ...current.filter((order) => order.public_token !== publicToken),
+          previousOrder,
+        ].sort((left, right) => Date.parse(left.created_at) - Date.parse(right.created_at));
+      });
       void fetchOrders(false, true);
       if (err instanceof ApiError) {
         if (err.status === 401) {
@@ -403,20 +440,17 @@ export default function KitchenDashboardClient({
   };
 
   // Confirmation dialog wrapper
-  const triggerConfirm = async (token: string, action: "reject" | "served") => {
-    const rejecting = action === "reject";
+  const confirmReject = async (token: string) => {
     const confirmed = await confirmDialog({
-      title: rejecting ? "Reject order?" : "Mark order as served?",
-      message: rejecting
-        ? "This will cancel the order and update the customer’s screen. It cannot be undone."
-        : "Confirm the order was served. It will be removed from the active Kitchen view.",
-      confirmLabel: rejecting ? "Reject order" : "Mark as served",
-      cancelLabel: rejecting ? "Keep order" : "Cancel",
-      tone: rejecting ? "destructive" : "default",
+      title: "Reject order?",
+      message: "This will cancel the order and update the customer’s screen. It cannot be undone.",
+      confirmLabel: "Reject order",
+      cancelLabel: "Keep order",
+      tone: "destructive",
     });
 
     if (!confirmed) return;
-    await handleUpdateStatus(token, rejecting ? "rejected" : "served");
+    await handleUpdateStatus(token, "rejected");
   };
 
   // Auth loading state
@@ -501,10 +535,10 @@ export default function KitchenDashboardClient({
         orders={orders}
         updatingTokens={updatingTokens}
         onAccept={(tok) => void handleUpdateStatus(tok, "accepted")}
-        onReject={(tok) => void triggerConfirm(tok, "reject")}
+        onReject={(tok) => void confirmReject(tok)}
         onStartPrep={(tok) => void handleUpdateStatus(tok, "preparing")}
         onMarkReady={(tok) => void handleUpdateStatus(tok, "ready")}
-        onMarkServed={(tok) => void triggerConfirm(tok, "served")}
+        onMarkServed={(tok) => void handleUpdateStatus(tok, "served")}
         loading={loading}
       />
 
