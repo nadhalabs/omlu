@@ -14,21 +14,20 @@ test("web receipt types use the canonical backend item contract", () => {
   assert.doesNotMatch(receiptItem, /total_price|selected_options/);
 });
 
-test("official bill printing is hidden for drafts", () => {
+test("official bill download is hidden for drafts", () => {
   assert.match(billClient, /canPrintOfficially/);
   assert.match(billClient, /\["issued", "payment_pending", "paid"\]\.includes\(bill\.status\)/);
   assert.match(billClient, /\{canPrintOfficially &&/);
-  assert.match(billClient, /\{isPaid \? "Print Receipt" : "Print Bill"\}/);
+  assert.match(billClient, /downloadBill: "Download bill"/);
+  assert.doesNotMatch(billClient, /Print Receipt|Print Bill/);
 });
 
-test("58 mm and 80 mm selection controls the printed receipt class", () => {
-  assert.match(billClient, /printPaperWidth/);
-  assert.match(billClient, /print-thermal-\$\{printPaperWidth\}/);
-  assert.match(billClient, /<option value="58">58 mm<\/option>/);
-  assert.match(billClient, /<option value="80">80 mm<\/option>/);
-  assert.match(css, /\.print-thermal-58/);
+test("customer bill uses a fixed receipt layout without printer settings", () => {
+  assert.doesNotMatch(billClient, /printPaperWidth|receipt-paper-width|Paper width/);
+  assert.match(billClient, /print-bill-sheet print-thermal-80/);
   assert.match(css, /\.print-thermal-80/);
   assert.match(billClient, /window\.print\(\)/);
+  assert.match(billClient, /Choose “Save as PDF” in the next screen\./);
   assert.match(css, /overflow-wrap: anywhere/);
 });
 
@@ -50,8 +49,8 @@ test("B2B GST invoice prints the complete recipient snapshot while B2C remains u
   ]) assert.ok(billClient.includes(field), field);
 });
 
-test("browser print action cannot mutate bill or payment state", () => {
-  const printButton = billClient.slice(billClient.indexOf('onClick={() => window.print()}'), billClient.indexOf('{isPaid ? "Print Receipt" : "Print Bill"}'));
-  assert.match(printButton, /window\.print\(\)/);
-  assert.doesNotMatch(printButton, /fetch\(|confirm|payment|issue|send/i);
+test("browser download action cannot mutate bill or payment state", () => {
+  const downloadAction = billClient.slice(billClient.indexOf("const downloadBill"), billClient.indexOf("return (", billClient.indexOf("const downloadBill")));
+  assert.match(downloadAction, /window\.print\(\)/);
+  assert.doesNotMatch(downloadAction, /fetch\(|confirm|payment|issue|send/i);
 });

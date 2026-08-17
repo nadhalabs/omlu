@@ -92,14 +92,6 @@ export default function CompletionClient({ sessionToken }: { sessionToken: strin
           {tabClosedFallback && (
             <div className="mt-4 rounded-2xl bg-emerald-50 p-4 text-sm font-bold text-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200">
               <p>You can safely close this tab.</p>
-              {marker?.restaurantSlug && marker?.tableCode && (
-                <a
-                  href={`/menu/${encodeURIComponent(marker.restaurantSlug)}/${encodeURIComponent(marker.tableCode)}`}
-                  className="mt-2 inline-block text-xs font-black text-orange-700 underline dark:text-orange-400"
-                >
-                  Scan table QR for a new visit
-                </a>
-              )}
             </div>
           )}
 

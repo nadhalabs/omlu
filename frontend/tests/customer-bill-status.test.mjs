@@ -46,12 +46,13 @@ test("bill workflow messages refresh from session realtime events", () => {
   );
 });
 
-test("paid bill refresh uses the scoped receipt authority and keeps receipt actions", () => {
+test("paid bill refresh uses the scoped receipt authority and keeps customer receipt actions", () => {
   assert.match(billClient, /receiptAccessToken/);
   assert.match(billClient, /window\.history\.replaceState/);
   assert.match(billClient, /\?receipt=/);
   assert.match(billClient, /getPublicBill\(sessionToken, authority, receiptAccessToken\)/);
-  assert.ok(billClient.includes("Download / Print Bill"));
+  assert.ok(billClient.includes('downloadBill: "Download bill"'));
+  assert.doesNotMatch(billClient, /Paper width|Print Receipt/);
   assert.ok(billClient.includes("Share on WhatsApp"));
   assert.ok(billClient.includes("Payment successful"));
   assert.ok(billClient.includes('status === "paid"'));

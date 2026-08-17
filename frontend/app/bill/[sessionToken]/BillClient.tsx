@@ -89,7 +89,6 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false }
   const [showPaymentSuccess, setShowPaymentSuccess] = useState<boolean>(false);
   const [doneFallback, setDoneFallback] = useState<boolean>(false);
   const [codeCopied, setCodeCopied] = useState(false);
-  const [printPaperWidth, setPrintPaperWidth] = useState<"58" | "80">("80");
   const [participantToken, setParticipantToken] = useState<string | null>(
     () => readSessionParticipantToken(sessionToken)
   );
@@ -162,8 +161,9 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false }
       tax: "Tax",
       discount: "Discount",
       total: "Final total",
-      print: "Download / Print Bill",
       whatsapp: "Share on WhatsApp",
+      downloadBill: "Download bill",
+      downloadHint: "Choose “Save as PDF” in the next screen.",
       payAtCounter: "Payment is handled at the counter",
       paymentPending: "Payment pending at counter",
       billBeingPrepared: "Your bill is being prepared. Please wait while staff sends it to the counter.",
@@ -227,8 +227,9 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false }
       tax: "നികുതി",
       discount: "ഡിസ്കൗണ്ട്",
       total: "അവസാന തുക",
-      print: "ബിൽ ഡൗൺലോഡ് / പ്രിന്റ് ചെയ്യുക",
       whatsapp: "WhatsApp-ൽ പങ്കിടുക",
+      downloadBill: "ബിൽ ഡൗൺലോഡ് ചെയ്യുക",
+      downloadHint: "അടുത്ത സ്ക്രീനിൽ “Save as PDF” തിരഞ്ഞെടുക്കുക.",
       payAtCounter: "പേയ്മെന്റ് കൗണ്ടറിൽ കൈകാര്യം ചെയ്യും",
       paymentPending: "കൗണ്ടറിൽ പേയ്മെന്റ് കാത്തിരിക്കുന്നു",
       billBeingPrepared: "നിങ്ങളുടെ ബിൽ തയ്യാറാക്കുകയാണ്. സ്റ്റാഫ് അത് കൗണ്ടറിലേക്ക് അയയ്ക്കുന്നതുവരെ കാത്തിരിക്കുക.",
@@ -595,6 +596,12 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false }
 
   const isPaid = bill.status === "paid";
   const canPrintOfficially = ["issued", "payment_pending", "paid"].includes(bill.status);
+  const downloadBill = () => {
+    const previousTitle = document.title;
+    document.title = `${bill.bill_number || "OMLU-bill"}`;
+    window.addEventListener("afterprint", () => { document.title = previousTitle; }, { once: true });
+    window.print();
+  };
 
   return (
     <div className="min-h-screen bg-[var(--omlu-page-background)] px-4 py-4 text-[var(--omlu-text-primary)] sm:px-6 sm:py-6 print:bg-white print:px-0 print:py-0 print:text-black">
@@ -672,14 +679,6 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false }
               {doneFallback && (
                 <div className="w-full rounded-2xl bg-emerald-100/80 p-3 text-xs font-bold text-emerald-950 dark:bg-emerald-900/40 dark:text-emerald-100">
                   <p>You can safely close this tab.</p>
-                  {bill?.restaurant_slug && bill?.table_code && (
-                    <a
-                      href={`/menu/${encodeURIComponent(bill.restaurant_slug)}/${encodeURIComponent(bill.table_code)}`}
-                      className="mt-1 inline-block font-black text-orange-700 underline dark:text-orange-400"
-                    >
-                      Scan table QR for a new visit
-                    </a>
-                  )}
                 </div>
               )}
               {/* Actions */}
@@ -733,7 +732,7 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false }
           </section>
         )}
 
-        <article className={`print-bill-sheet print-thermal-${printPaperWidth} rounded-3xl bg-[var(--omlu-primary-surface)] p-5 shadow-sm sm:p-7 print:rounded-none print:border-0 print:bg-white print:text-black print:shadow-none`}>
+        <article className="print-bill-sheet print-thermal-80 rounded-3xl bg-[var(--omlu-primary-surface)] p-5 shadow-sm sm:p-7 print:rounded-none print:border-0 print:bg-white print:text-black print:shadow-none">
           <header className="border-b border-[var(--omlu-border-strong)] pb-5 dark:border-[var(--omlu-border)] print:border-black">
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -909,23 +908,14 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false }
         </div>
 
         <div className="print-hidden grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {canPrintOfficially && <div className="flex flex-col gap-2">
-            <label htmlFor="receipt-paper-width" className="text-xs font-bold text-[var(--omlu-text-secondary)]">Paper width</label>
-            <select
-              id="receipt-paper-width"
-              value={printPaperWidth}
-              onChange={(event) => setPrintPaperWidth(event.target.value as "58" | "80")}
-              className="min-h-12 rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] px-4 font-bold"
-            >
-              <option value="58">58 mm</option>
-              <option value="80">80 mm</option>
-            </select>
+          {canPrintOfficially && <div className="flex flex-col gap-1">
             <button
-              onClick={() => window.print()}
+              onClick={downloadBill}
               className="min-h-12 rounded-xl bg-orange-600 px-5 py-3 text-sm font-black text-white shadow-sm hover:bg-orange-700"
             >
-              {isPaid ? "Print Receipt" : "Print Bill"}
+              {t.downloadBill}
             </button>
+            <p className="text-center text-xs text-[var(--omlu-text-secondary)]">{t.downloadHint}</p>
           </div>}
           <button
             onClick={() => window.open(shareUrl, "_blank", "noopener,noreferrer")}

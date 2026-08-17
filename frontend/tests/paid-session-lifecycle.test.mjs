@@ -124,7 +124,8 @@ test("16. Done clears customer credentials", () => {
 
 test("17. Done never routes to an active menu", () => {
   assert.doesNotMatch(completion, /router\.push\("\/menu/);
-  assert.match(completion, /Scan table QR for a new visit/);
+  assert.doesNotMatch(completion, /Scan table QR for a new visit/);
+  assert.doesNotMatch(bill, /Scan table QR for a new visit/);
 });
 
 // ---------------------------------------------------------------------------
