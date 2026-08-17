@@ -51,6 +51,8 @@ test("staff assisted ordering requires a selected table and replaces after succe
   assert.match(staffOrderPage, /if \(!initialTableId\) redirect\("\/staff\/tables"\)/);
   assert.match(staffOrderClient, /router\.replace\(`\/staff\/tables\/\$\{tableId\}`\)/);
   assert.match(staffOrderClient, /window\.localStorage\.removeItem\(cartKey\(tableId\)\)/);
+  assert.doesNotMatch(staffOrderClient, /setTimeout\([\s\S]{0,120}router\.replace/);
+  assert.doesNotMatch(staffOrderClient, /await loadDetail\(\);[\s\S]{0,120}router\.replace/);
 });
 
 test("staff order UI allows first order to create the table state and blocks duplicate sends", () => {

@@ -12,6 +12,12 @@ import { useConfirmedSignOut } from "@/components/useConfirmedSignOut";
 import { KitchenHeader } from "./KitchenHeader";
 import { KitchenBoard } from "./KitchenBoard";
 import { KitchenAvailabilityDialog } from "./KitchenAvailabilityDialog";
+import { KitchenBoardRefreshCoordinator } from "@/lib/kitchenBoardRefresh.mjs";
+
+const HEALTHY_RECONCILIATION_MS = 90_000;
+const DEGRADED_RECONCILIATION_MS = 15_000;
+const EVENT_BATCH_MS = 100;
+const SELF_MUTATION_TTL_MS = 5_000;
 
 interface KitchenDashboardClientProps {
   restaurantSlug: string;
@@ -46,7 +52,9 @@ export default function KitchenDashboardClient({
   // Track known order tokens locally to prevent double play or alerts for initial orders
   const knownTokensRef = useRef<Set<string>>(new Set());
   const isInitialLoadRef = useRef<boolean>(true);
-  const isFetchingRef = useRef<boolean>(false);
+  const refreshCoordinatorRef = useRef<KitchenBoardRefreshCoordinator | null>(null);
+  const hasConnectedRef = useRef(false);
+  const pendingMutationsRef = useRef(new Map<string, { status: string; expiresAt: number }>());
 
   // Keep a tick state to force elapsed durations to re-render every 10 seconds
   const [, setTick] = useState<number>(0);
@@ -179,11 +187,8 @@ export default function KitchenDashboardClient({
   }, [availabilityOpen, exitFocusMode, focusMode]);
 
   // Fetch kitchen orders
-  const fetchOrders = useCallback(
+  const performFetchOrders = useCallback(
     async (showLoading = true) => {
-      if (isFetchingRef.current) return;
-      isFetchingRef.current = true;
-
       if (showLoading) setLoading(true);
 
       try {
@@ -224,11 +229,34 @@ export default function KitchenDashboardClient({
         }
       } finally {
         if (showLoading) setLoading(false);
-        isFetchingRef.current = false;
       }
     },
     [playNewOrderBeep, restaurantSlug, router]
   );
+
+  const fetchOrders = useCallback(
+    (showLoading = true, queueIfActive = false) =>
+      (refreshCoordinatorRef.current ??= new KitchenBoardRefreshCoordinator()).refresh(
+        () => performFetchOrders(showLoading),
+        { queueIfActive },
+      ),
+    [performFetchOrders],
+  );
+
+  const scheduleEventReconciliation = useCallback(() => {
+    (refreshCoordinatorRef.current ??= new KitchenBoardRefreshCoordinator()).schedule(
+      () => performFetchOrders(false),
+      EVENT_BATCH_MS,
+    );
+  }, [performFetchOrders]);
+
+  useEffect(() => {
+    const coordinator = new KitchenBoardRefreshCoordinator();
+    refreshCoordinatorRef.current = coordinator;
+    hasConnectedRef.current = false;
+    pendingMutationsRef.current.clear();
+    return () => coordinator.dispose();
+  }, [restaurantSlug]);
 
   // Auth check on mount
   useEffect(() => {
@@ -261,47 +289,73 @@ export default function KitchenDashboardClient({
     return () => window.clearTimeout(timeout);
   }, [fetchOrders, restaurantSlug, router]);
 
-  // Setup tab visibility and polling loop
-  useEffect(() => {
-    if (authLoading || authError || !staffInfo) return;
-
-    const handleVisibility = () => {
-      if (document.visibilityState === "visible") {
-        void fetchOrders(false);
-      }
-    };
-    document.addEventListener("visibilitychange", handleVisibility);
-
-    const interval = setInterval(() => {
-      if (document.visibilityState === "visible") {
-        void fetchOrders(false);
-      }
-    }, 5000);
-    const unregister = registerAuthenticatedCleanup(() => {
-      document.removeEventListener("visibilitychange", handleVisibility);
-      clearInterval(interval);
-    });
-
-    return () => {
-      unregister();
-      document.removeEventListener("visibilitychange", handleVisibility);
-      clearInterval(interval);
-    };
-  }, [authLoading, authError, fetchOrders, staffInfo]);
-
   // Realtime Connection Subscription
   const realtimeStatus = useRealtime({
     enabled: Boolean(staffInfo && !authError),
     target: { kind: "staff", channel: "kitchen" },
-    onEvent: () => void fetchOrders(false),
-    onReconnect: () => void fetchOrders(false),
+    onEvent: (event) => {
+      const publicToken = event.state?.public_token?.toString();
+      const status = event.state?.status?.toString();
+      const pending = publicToken ? pendingMutationsRef.current.get(publicToken) : undefined;
+      if (
+        event.type === "order.status_changed" &&
+        publicToken &&
+        status &&
+        pending?.status === status &&
+        pending.expiresAt >= Date.now()
+      ) {
+        pendingMutationsRef.current.delete(publicToken);
+        return;
+      }
+      scheduleEventReconciliation();
+    },
+    onReconnect: () => {
+      if (!hasConnectedRef.current) {
+        hasConnectedRef.current = true;
+        return;
+      }
+      void fetchOrders(false, true);
+    },
   });
+
+  // Reconcile slowly while realtime is healthy and fall back automatically
+  // when the connection is degraded. Hidden boards do not poll.
+  useEffect(() => {
+    if (authLoading || authError || !staffInfo) return;
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") void fetchOrders(false, true);
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    const intervalMs = realtimeStatus === "live"
+      ? HEALTHY_RECONCILIATION_MS
+      : DEGRADED_RECONCILIATION_MS;
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") void fetchOrders(false);
+    }, intervalMs);
+    const unregister = registerAuthenticatedCleanup(() => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.clearInterval(interval);
+    });
+    return () => {
+      unregister();
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.clearInterval(interval);
+    };
+  }, [authLoading, authError, fetchOrders, realtimeStatus, staffInfo]);
 
   // Handle status update endpoint
   const handleUpdateStatus = async (publicToken: string, nextStatus: string) => {
     if (updatingTokens[publicToken]) return;
     setUpdatingTokens((prev) => ({ ...prev, [publicToken]: true }));
     const previousOrders = orders;
+    for (const [token, mutation] of pendingMutationsRef.current) {
+      if (mutation.expiresAt < Date.now()) pendingMutationsRef.current.delete(token);
+    }
+    pendingMutationsRef.current.set(publicToken, {
+      status: nextStatus,
+      expiresAt: Date.now() + SELF_MUTATION_TTL_MS,
+    });
 
     // Optimistic UI update
     setOrders((current) =>
@@ -325,11 +379,15 @@ export default function KitchenDashboardClient({
         if (nextStatus === "served" || nextStatus === "rejected") {
           return prev.filter((o) => o.public_token !== publicToken);
         }
-        return prev.map((o) => (o.public_token === publicToken ? updated : o));
+        return prev.map((o) =>
+          o.public_token === publicToken && o.status === nextStatus ? updated : o
+        );
       });
       setError(null);
     } catch (err) {
+      pendingMutationsRef.current.delete(publicToken);
       setOrders(previousOrders);
+      void fetchOrders(false, true);
       if (err instanceof ApiError) {
         if (err.status === 401) {
           router.replace("/login");

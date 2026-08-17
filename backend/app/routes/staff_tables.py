@@ -6,7 +6,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
 from pydantic import BaseModel
-from sqlalchemy import or_
+from sqlalchemy import case, func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload, selectinload
 
@@ -208,6 +208,104 @@ def _table_summary(db: Session, table: RestaurantTable, session: DiningSession |
     }
 
 
+def _list_table_summaries(db: Session, restaurant_id: int, tables: list[RestaurantTable]) -> list[dict]:
+    """Build compact table-grid rows using a fixed number of bulk queries."""
+    sessions = db.query(DiningSession).filter(
+        DiningSession.restaurant_id == restaurant_id,
+        DiningSession.status.in_(ACTIVE_DINING_SESSION_STATUSES),
+    ).all()
+    sessions_by_table = {session.table_id: session for session in sessions}
+    session_ids = [session.id for session in sessions]
+
+    order_stats: dict[int, tuple[int, int, Decimal]] = {}
+    bills_by_session: dict[int, Decimal] = {}
+    if session_ids:
+        order_rows = db.query(
+            Order.dining_session_id,
+            func.sum(case((Order.status != "rejected", 1), else_=0)),
+            func.sum(case((Order.status == "ready", 1), else_=0)),
+            func.coalesce(
+                func.sum(case((Order.status != "rejected", Order.subtotal), else_=Decimal("0.00"))),
+                0,
+            ),
+        ).filter(
+            Order.dining_session_id.in_(session_ids),
+        ).group_by(Order.dining_session_id).all()
+        order_stats = {
+            session_id: (
+                int(active_count or 0),
+                int(ready_count or 0),
+                subtotal or Decimal("0.00"),
+            )
+            for session_id, active_count, ready_count, subtotal in order_rows
+        }
+        bills_by_session = {
+            session_id: total_amount
+            for session_id, total_amount in db.query(Bill.dining_session_id, Bill.total_amount).filter(
+                Bill.dining_session_id.in_(session_ids)
+            ).all()
+        }
+
+    requests_by_table: dict[int, list[str]] = {}
+    request_rows = db.query(ServiceRequest.table_id, ServiceRequest.request_type).filter(
+        ServiceRequest.restaurant_id == restaurant_id,
+        ServiceRequest.status == "pending",
+        ServiceRequest.request_type != "bill",
+    ).all()
+    for table_id, request_type in request_rows:
+        requests_by_table.setdefault(table_id, []).append(request_type)
+
+    reports_by_session: dict[int, dict[str, str]] = {}
+    if session_ids:
+        report_rows = db.query(
+            EmptyTableReport.session_id,
+            EmptyTableReport.reported_at,
+            StaffUser.name,
+        ).outerjoin(
+            StaffUser,
+            StaffUser.id == EmptyTableReport.reported_by_user_id,
+        ).filter(
+            EmptyTableReport.restaurant_id == restaurant_id,
+            EmptyTableReport.session_id.in_(session_ids),
+            EmptyTableReport.status == "open",
+        ).all()
+        reports_by_session = {
+            session_id: {
+                "reported_at": reported_at.isoformat(),
+                "reported_by_name": reporter_name or "Staff",
+            }
+            for session_id, reported_at, reporter_name in report_rows
+        }
+
+    items = []
+    for table in tables:
+        session = sessions_by_table.get(table.id)
+        session_id = session.id if session else -1
+        active_count, ready_count, subtotal = order_stats.get(
+            session_id,
+            (0, 0, Decimal("0.00")),
+        )
+        attention = list(requests_by_table.get(table.id, []))
+        if ready_count:
+            attention.append("ready_order")
+        current_bill_amount = bills_by_session.get(session_id, subtotal) if session else Decimal("0.00")
+        items.append({
+            "id": table.id,
+            "table_number": table.table_number,
+            "state": "occupied" if session else "available",
+            "has_open_session": bool(session),
+            "session_token": session.public_token if session else None,
+            "session_status": session.status if session else None,
+            "active_order_count": active_count,
+            "current_bill_amount": _money(current_bill_amount),
+            "opened_minutes_ago": _minutes_since(session.opened_at) if session else None,
+            "attention": attention,
+            "bill_requested": bool(session and session.status in {"payment_requested", "payment_pending"}) or "bill" in attention,
+            "empty_table_report": reports_by_session.get(session_id),
+        })
+    return items
+
+
 def _staff_request_response(db: Session, request: ServiceRequest) -> StaffServiceRequestResponse:
     table = db.query(RestaurantTable).filter(RestaurantTable.id == request.table_id).first()
     order_number = None
@@ -260,8 +358,7 @@ def list_staff_tables(
         .order_by(RestaurantTable.table_number.asc(), RestaurantTable.id.asc())
         .all()
     )
-    sessions = {session.table_id: session for session in _active_session_query(db, current_user.restaurant_id).all()}
-    items = [_table_summary(db, table, sessions.get(table.id)) for table in tables]
+    items = _list_table_summaries(db, current_user.restaurant_id, tables)
     items.sort(key=lambda item: 0 if item["empty_table_report"] else 1)
     if filter == "available":
         items = [item for item in items if not item["has_open_session"]]

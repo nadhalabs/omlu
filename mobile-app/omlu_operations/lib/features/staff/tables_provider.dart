@@ -14,7 +14,6 @@ class TablesNotifier
   TablesNotifier(this._api, Ref ref) : super(const AsyncValue.loading()) {
     _ref = ref;
     fetchTables();
-    Future<void>.microtask(() => fetchTables(silent: true));
     _pollTimer = Timer.periodic(
       const Duration(seconds: 15),
       (_) => fetchTables(silent: true),
@@ -94,6 +93,8 @@ class TablesNotifier
   final OperationsApi _api;
   late final Ref _ref;
   Timer? _pollTimer;
+  Future<void>? _activeFetch;
+  bool _refreshQueued = false;
 
   int? _eventTableId(RealtimeEvent event) =>
       int.tryParse(event.state['table_id']?.toString() ?? '');
@@ -128,7 +129,28 @@ class TablesNotifier
     return table?.sessionToken == sessionToken;
   }
 
-  Future<void> fetchTables({bool silent = false}) async {
+  Future<void> fetchTables({bool silent = false}) {
+    final activeFetch = _activeFetch;
+    if (activeFetch != null) {
+      // Coalesce overlapping poll/realtime/manual triggers. One follow-up keeps
+      // changes committed after the active request began from being lost.
+      _refreshQueued = true;
+      return activeFetch;
+    }
+
+    final request = _fetchTables(silent: silent);
+    _activeFetch = request;
+    request.whenComplete(() {
+      if (identical(_activeFetch, request)) _activeFetch = null;
+      if (_refreshQueued && mounted) {
+        _refreshQueued = false;
+        fetchTables(silent: true);
+      }
+    });
+    return request;
+  }
+
+  Future<void> _fetchTables({required bool silent}) async {
     if (!silent && !state.hasValue) {
       state = const AsyncValue.loading();
     }

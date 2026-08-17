@@ -276,8 +276,7 @@ export default function NewStaffOrderClient({ initialTableId, servedEntry = fals
       setOrderNote("");
       window.localStorage.removeItem(cartKey(tableId));
       setSuccess(servedEntry ? `Served item ${order.order_number} added without a kitchen ticket.` : `Order ${order.order_number} sent to kitchen.`);
-      await loadDetail();
-      window.setTimeout(() => router.replace(`/staff/tables/${tableId}`), 900);
+      router.replace(`/staff/tables/${tableId}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not submit order.");
     } finally {

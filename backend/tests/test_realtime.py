@@ -662,6 +662,7 @@ def test_public_order_websocket_receives_status_change(realtime_context):
 
     assert "restaurant_id" not in event
     assert event["state"]["status"] == "accepted"
+    assert event["state"]["public_token"] == order["public_token"]
 
 
 def test_public_session_websocket_receives_order_status_change(realtime_context):

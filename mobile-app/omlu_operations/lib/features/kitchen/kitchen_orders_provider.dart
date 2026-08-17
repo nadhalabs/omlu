@@ -83,12 +83,21 @@ class KitchenOrdersNotifier
     );
 
     try {
-      await _api.updateKitchenStatus(
+      final updated = await _api.updateKitchenStatus(
         restaurantSlug: _restaurantSlug,
         publicToken: publicToken,
         status: nextStatus,
       );
-      await fetchOrders(silent: true);
+      final current = state.valueOrNull;
+      if (current != null && nextStatus != 'served') {
+        state = AsyncValue.data([
+          for (final order in current)
+            if (order.publicToken == publicToken && order.status == nextStatus)
+              updated
+            else
+              order,
+        ]);
+      }
     } catch (e) {
       state = AsyncValue.data(previous);
       rethrow;
