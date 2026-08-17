@@ -4,12 +4,13 @@ import logging
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from fastapi.responses import JSONResponse
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.database import get_db
 from app.models.bill import Bill
 from app.models.dining_session import DiningSession
 from app.models.empty_table_report import EmptyTableReport
+from app.models.order import Order
 from app.models.staff_user import AuditLog, StaffUser
 from app.services.idempotency import ensure_same_request, request_hash, require_key
 from app.schemas.bill import (
@@ -140,6 +141,47 @@ def _short_order_summary(db: Session, bill: Bill) -> ShortOrderSummary:
         if item.cancellation_status == "active"
     ][:5]
     return ShortOrderSummary(order_count=len(orders), item_count=item_count, items=labels)
+
+
+def _bulk_short_order_summaries(
+    db: Session, bills: list[Bill]
+) -> dict[int, ShortOrderSummary]:
+    """Load summaries for an entire queue in two fixed queries.
+
+    ``selectinload`` deliberately avoids a wide bill/order/item join while
+    keeping statement count independent of the number of bills.
+    """
+    session_ids = {bill.dining_session_id for bill in bills}
+    summaries = {
+        session_id: ShortOrderSummary(order_count=0, item_count=0, items=[])
+        for session_id in session_ids
+    }
+    if not session_ids:
+        return summaries
+    orders = (
+        db.query(Order)
+        .options(selectinload(Order.items))
+        .filter(
+            Order.dining_session_id.in_(session_ids),
+            Order.status.notin_(["rejected", "cancelled", "voided"]),
+        )
+        .order_by(Order.dining_session_id, Order.created_at.asc(), Order.id.asc())
+        .all()
+    )
+    for order in orders:
+        summary = summaries[order.dining_session_id]
+        active_items = [item for item in order.items if item.cancellation_status == "active"]
+        labels = list(summary.items)
+        labels.extend(
+            f"{item.quantity} × {item.item_name}"
+            for item in active_items[: max(0, 5 - len(labels))]
+        )
+        summaries[order.dining_session_id] = ShortOrderSummary(
+            order_count=summary.order_count + 1,
+            item_count=summary.item_count + sum(item.quantity for item in active_items),
+            items=labels[:5],
+        )
+    return summaries
 
 
 def _detached_response(
@@ -451,22 +493,38 @@ def list_pending_counter_payments(
         .order_by(Bill.updated_at.desc(), Bill.id.desc())
         .all()
     )
-    items = []
-    for bill in bills:
-        sent_audit = (
+    summaries = _bulk_short_order_summaries(db, bills)
+    bill_ids = {str(bill.id) for bill in bills}
+    latest_sent_audits: dict[str, AuditLog] = {}
+    if bill_ids:
+        sent_audits = (
             db.query(AuditLog)
             .filter(
                 AuditLog.restaurant_id == current_user.restaurant_id,
                 AuditLog.target_type == "bill",
-                AuditLog.target_id == str(bill.id),
+                AuditLog.target_id.in_(bill_ids),
                 AuditLog.action == "bill.sent_to_counter",
             )
             .order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
-            .first()
+            .all()
         )
-        sender = db.query(StaffUser).filter(StaffUser.id == sent_audit.actor_user_id).first() if sent_audit and sent_audit.actor_user_id else bill.generated_by_staff
+        for audit in sent_audits:
+            latest_sent_audits.setdefault(audit.target_id, audit)
+    sender_ids = {
+        audit.actor_user_id
+        for audit in latest_sent_audits.values()
+        if audit.actor_user_id is not None
+    }
+    senders = {
+        sender.id: sender
+        for sender in db.query(StaffUser).filter(StaffUser.id.in_(sender_ids)).all()
+    } if sender_ids else {}
+    items = []
+    for bill in bills:
+        sent_audit = latest_sent_audits.get(str(bill.id))
+        sender = senders.get(sent_audit.actor_user_id) if sent_audit and sent_audit.actor_user_id else bill.generated_by_staff
         session = bill.dining_session
-        summary = _short_order_summary(db, bill)
+        summary = summaries[bill.dining_session_id]
         items.append({
             "bill_id": bill.id,
             "bill_number": bill.bill_number,
@@ -511,9 +569,8 @@ def list_pending_counter_payments(
     return {"items": items}
 
 
-def _billing_counter_item(db: Session, bill: Bill) -> dict:
+def _billing_counter_item(bill: Bill, summary: ShortOrderSummary) -> dict:
     session = bill.dining_session
-    summary = _short_order_summary(db, bill)
     return {
         "bill_id": bill.id,
         "bill_number": bill.bill_number,
@@ -568,14 +625,15 @@ def get_billing_counter(
         .limit(20)
         .all()
     )
+    summaries = _bulk_short_order_summaries(db, [*active, *paid])
     return {
-        "requested": [_billing_counter_item(db, bill) for bill in active if bill.status == "draft"],
+        "requested": [_billing_counter_item(bill, summaries[bill.dining_session_id]) for bill in active if bill.status == "draft"],
         "awaiting_payment": [
-            _billing_counter_item(db, bill)
+            _billing_counter_item(bill, summaries[bill.dining_session_id])
             for bill in active
             if bill.status in {"issued", "payment_pending"}
         ],
-        "paid_recently": [_billing_counter_item(db, bill) for bill in paid],
+        "paid_recently": [_billing_counter_item(bill, summaries[bill.dining_session_id]) for bill in paid],
     }
 
 

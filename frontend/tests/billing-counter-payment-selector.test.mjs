@@ -32,9 +32,9 @@ test("selected, unselected, hover, focus, and disabled states remain theme-safe"
 });
 
 test("confirmation behavior and wording are unchanged", () => {
-  assert.match(source, /disabled=\{!methods\[item\.bill_number\] \|\| busy === item\.bill_number\}/);
+  assert.match(source, /disabled=\{!methods\[item\.bill_number\] \|\| Boolean\(busyBills\[item\.bill_number\]\)\}/);
   assert.match(source, /onClick=\{\(\) => void collect\(item\)\}/);
-  assert.match(source, />Confirm Payment<\/button>/);
+  assert.match(source, /busyBills\[item\.bill_number\] \|\| "Confirm Payment"/);
   assert.match(source, /title: `Confirm \$\{method === "counter_cash" \? "cash" : "UPI"\} payment\?`/);
   assert.match(source, /await confirmPendingPayment\(item\.bill_number, method\)/);
 });

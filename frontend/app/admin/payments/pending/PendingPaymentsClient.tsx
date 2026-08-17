@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ApiError,
   confirmPendingPayment,
@@ -15,6 +15,7 @@ import { useRealtime } from "@/lib/realtime";
 import { useOmluUi } from "@/components/OmluUiProvider";
 import { registerAuthenticatedCleanup } from "@/lib/authRuntime.mjs";
 import { printIssuedBill } from "@/lib/print_service";
+import { createRefreshCoordinator } from "@/lib/queueRefresh.mjs";
 
 type PaymentMethod = "counter_cash" | "counter_upi";
 
@@ -45,16 +46,18 @@ export default function PendingPaymentsClient({ actorRole, showQueue = true }: P
   const [lookingUp, setLookingUp] = useState(false);
   const [methods, setMethods] = useState<Record<string, PaymentMethod>>({});
   const [submittingBills, setSubmittingBills] = useState<Record<string, boolean>>({});
+  const refreshCoordinator = useRef<(() => Promise<void>) | null>(null);
+  const recentMutations = useRef(new Set<string>());
 
-  const refresh = useCallback(async (showLoading = false) => {
+  const refresh = useCallback((showLoading = false) => {
     if (!showQueue) return;
     if (showLoading) setLoading(true);
-    try {
-      setItems(await getPendingPayments());
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load pending payments.");
-    } finally { if (showLoading) setLoading(false); }
+    if (!refreshCoordinator.current) refreshCoordinator.current = createRefreshCoordinator(async () => {
+      try { setItems(await getPendingPayments()); setError(null); }
+      catch (err) { setError(err instanceof Error ? err.message : "Could not load pending payments."); }
+      finally { setLoading(false); }
+    });
+    return refreshCoordinator.current();
   }, [showQueue]);
 
   useEffect(() => {
@@ -84,7 +87,10 @@ export default function PendingPaymentsClient({ actorRole, showQueue = true }: P
   const realtimeStatus = useRealtime({
     target: { kind: "staff", channel: "operations" },
     onEvent: (event) => {
-      if (["bill.generated", "bill.updated", "bill.detached_for_payment", "bill.sent_to_counter", "bill.payment_pending", "bill.payment_recorded", "bill.paid", "session.closed"].includes(event.type)) void refresh();
+      if (!["bill.generated", "bill.updated", "bill.detached_for_payment", "bill.sent_to_counter", "bill.payment_pending", "bill.payment_recorded", "bill.paid"].includes(event.type)) return;
+      const billNumber = typeof event.state?.bill_number === "string" ? event.state.bill_number : null;
+      if (billNumber && recentMutations.current.has(billNumber)) return;
+      void refresh();
     },
     onReconnect: refresh,
   });
@@ -114,12 +120,13 @@ export default function PendingPaymentsClient({ actorRole, showQueue = true }: P
         setSubmittingBills((prev) => ({ ...prev, [billNumber]: true }));
         try {
           await confirmPendingPayment(billNumber, method);
+          recentMutations.current.add(billNumber);
+          window.setTimeout(() => recentMutations.current.delete(billNumber), 2000);
+          setItems((current) => current.filter((item) => item.bill_number !== billNumber));
           setLookupResult((current) => (current?.bill_number === billNumber ? null : current));
-          await refresh();
           window.dispatchEvent(new Event("admin-operational-counts-changed"));
           toast("Payment confirmed.", "success");
         } catch (err) {
-          await refresh();
           throw new Error(err instanceof ApiError ? err.message : "Payment confirmation failed.");
         } finally {
           setSubmittingBills((prev) => ({ ...prev, [billNumber]: false }));
@@ -150,8 +157,19 @@ export default function PendingPaymentsClient({ actorRole, showQueue = true }: P
 
     try {
       const issued = await issueStaffBill(payment.bill_number);
-      await refresh();
+      recentMutations.current.add(payment.bill_number);
+      window.setTimeout(() => recentMutations.current.delete(payment.bill_number), 2000);
+      setItems((current) => current.map((item) => item.bill_number === payment.bill_number ? {
+        ...item,
+        status: "issued",
+        stage: "bill_issued",
+        total_amount: issued.total_amount,
+        grand_total: issued.total_amount,
+        remaining_amount: issued.total_amount,
+      } : item));
       window.dispatchEvent(new Event("admin-operational-counts-changed"));
+
+      setIssuingBills((prev) => ({ ...prev, [payment.bill_number]: false }));
 
       if (openPrint && issued.receipt_token) {
         toast("Printing bill…", "information");

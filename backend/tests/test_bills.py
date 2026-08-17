@@ -1,5 +1,6 @@
 import datetime
 import json
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from decimal import Decimal
@@ -9,9 +10,10 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy import event
 
 from app.main import app
-from app.database import SessionLocal
+from app.database import SessionLocal, engine
 from app.models.bill import Bill, PaymentCodeLookupAttempt
 from app.models.dining_session import ACTIVE_DINING_SESSION_STATUSES, DiningSession
 from app.models.menu import MenuCategory, MenuItem
@@ -240,6 +242,70 @@ def create_bill(data):
         f"/public/sessions/{data['session_token']}/bill",
         headers=participant_headers(data["participant_token"]),
     )
+
+
+def test_billing_queue_query_counts_do_not_scale_with_bill_count(bill_context):
+    add_order(bill_context)
+    assert create_bill(bill_context).status_code == 201
+
+    def measure(path):
+        statements = []
+        def capture(*args):
+            statements.append(args[2])
+        event.listen(engine, "before_cursor_execute", capture)
+        started = time.perf_counter()
+        try:
+            response = client.get(path, headers={"Authorization": f"Bearer {bill_context['owner_token']}"})
+        finally:
+            event.remove(engine, "before_cursor_execute", capture)
+        elapsed_ms = (time.perf_counter() - started) * 1000
+        assert response.status_code == 200
+        return len(statements), elapsed_ms, len(response.content)
+
+    paths = ["/staff/bills/billing-counter", "/staff/bills/pending-payments"]
+    baseline = {path: measure(path) for path in paths}
+
+    db = SessionLocal()
+    for index in range(19):
+        table = RestaurantTable(
+            restaurant_id=bill_context["restaurant_id"],
+            table_number=f"Scale {index}",
+            table_code=f"SCALE-{uuid.uuid4().hex[:10]}",
+            is_active=True,
+        )
+        db.add(table)
+        db.flush()
+        session = DiningSession(
+            restaurant_id=bill_context["restaurant_id"],
+            table_id=table.id,
+            public_token=f"scale-session-{uuid.uuid4().hex}",
+            status="payment_requested",
+        )
+        db.add(session)
+        db.flush()
+        order = Order(
+            restaurant_id=bill_context["restaurant_id"], table_id=table.id,
+            dining_session_id=session.id, order_number=f"SCALE-{uuid.uuid4().hex[:12]}",
+            public_token=uuid.uuid4().hex, status="pending", subtotal=Decimal("10.00"),
+            idempotency_key=f"scale-{uuid.uuid4().hex}",
+        )
+        db.add(order)
+        db.flush()
+        db.add(OrderItem(order_id=order.id, item_name="Scale item", quantity=1,
+                         unit_price=Decimal("10.00"), total_price=Decimal("10.00")))
+        db.add(Bill(
+            restaurant_id=bill_context["restaurant_id"], dining_session_id=session.id,
+            bill_number=f"SCALE-BILL-{uuid.uuid4().hex[:12]}", status="draft",
+            subtotal=Decimal("10.00"), tax_amount=Decimal("0.00"),
+            discount_amount=Decimal("0.00"), total_amount=Decimal("10.00"),
+        ))
+    db.commit()
+    db.close()
+
+    expanded = {path: measure(path) for path in paths}
+    print("billing queue measurements", {"one_bill": baseline, "twenty_bills": expanded})
+    for path in paths:
+        assert expanded[path][0] <= baseline[path][0] + 1, (path, baseline[path], expanded[path])
 
 
 def issue_bill_for(data, token_key="owner_token"):
