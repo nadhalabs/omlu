@@ -31,10 +31,11 @@ test("SessionClient handleAddMore saves table-scoped and session-scoped authorit
   assert.match(session, /\?session=\$\{encodeURIComponent\(session\.public_token\)\}/);
 });
 
-test("BillClient new visit link does not include old session token", () => {
-  assert.match(
+test("BillClient paid completion does not link back to the table menu", () => {
+  assert.doesNotMatch(bill, /Scan table QR for a new visit/);
+  assert.doesNotMatch(
     bill,
-    /href=\{`\/menu\/\$\{encodeURIComponent\(bill\.restaurant_slug\)\}\/\$\{encodeURIComponent\(bill\.table_code\)\}`\}/
+    /href=\{`\/menu\/\$\{encodeURIComponent\(bill\.restaurant_slug\)\}\/\$\{encodeURIComponent\(bill\.table_code\)\}`\}/,
   );
 });
 

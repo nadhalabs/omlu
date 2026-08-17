@@ -91,12 +91,12 @@ test("Item 3: public_id is not used as a session token storage key", () => {
   assert.match(apiContent, /session: \{ public_id: string; public_token: string;/);
 });
 
-test("Item 4: Add More Items includes ?session= and New Visit link excludes old session", () => {
+test("Item 4: Add More Items includes ?session= and paid bill does not link back to menu", () => {
   const sessionClient = read("app/session/[sessionToken]/SessionClient.tsx");
   assert.match(sessionClient, /\?session=\$\{encodeURIComponent\(session\.public_token\)\}/);
 
   const billClient = read("app/bill/[sessionToken]/BillClient.tsx");
-  assert.match(
+  assert.doesNotMatch(
     billClient,
     /href=\{`\/menu\/\$\{encodeURIComponent\(bill\.restaurant_slug\)\}\/\$\{encodeURIComponent\(bill\.table_code\)\}`\}/
   );
