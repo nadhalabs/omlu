@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PublicThemeControl } from "@/components/PublicThemeControl";
-import { ApiError, getPublicBill, getPublicDiningSession, getQuickSalePrintDocument, isDefiniteAuthFailure } from "@/lib/api";
+import { ApiError, getPublicBill, getPublicDiningSession, getPublicQuickSaleReceipt, getPublicReceiptQrUrl, getQuickSalePrintDocument, isDefiniteAuthFailure } from "@/lib/api";
 import { BillResponse, PublicDiningSessionResponse } from "@/lib/types";
 import { buildWhatsAppBillShareUrl } from "@/lib/billShare";
 import { clearCustomerCartState, completionPath, markCompletedSession, readCompletedSession } from "@/lib/customerCompletion";
@@ -25,6 +25,7 @@ interface BillClientProps {
   sessionToken: string;
   receiptToken?: string;
   quickSale?: boolean;
+  publicReceipt?: boolean;
 }
 
 function CompletedSessionRedirect({ sessionToken }: { sessionToken: string }) {
@@ -79,7 +80,7 @@ export default function BillClient(props: BillClientProps) {
   return <ActiveBillClient {...props} receiptToken={receiptTokenFromQuery} />;
 }
 
-function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false }: BillClientProps) {
+function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false, publicReceipt = false }: BillClientProps) {
   const router = useRouter();
   const [bill, setBill] = useState<BillResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -141,7 +142,6 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false }
   }, [bill, receiptAccessToken, receiptToken, sessionToken]);
   const labels = {
     en: {
-      title: "Table Bill",
       table: "Table",
       status: "Status",
       generated: "Generated",
@@ -177,7 +177,7 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false }
       paymentReceived: "Payment successful",
       receiptAction: "View receipt",
       paidAmount: "Paid amount",
-      sessionComplete: "Your dining session is complete. Scan the table QR again to start a new order.",
+      sessionComplete: "Your dining session is complete.",
       tableReady: "This table is now ready for the next guest.",
       doneLabel: "Done",
       viewFullReceipt: "View full receipt",
@@ -207,7 +207,6 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false }
       } as Record<string, string>,
     },
     ml: {
-      title: "ടേബിൾ ബിൽ",
       table: "മേശ",
       status: "നില",
       generated: "സൃഷ്ടിച്ചത്",
@@ -243,7 +242,7 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false }
       paymentReceived: "പണം ലഭിച്ചു",
       receiptAction: "രസീത് കാണുക",
       paidAmount: "അടച്ച തുക",
-      sessionComplete: "നിങ്ങളുടെ ഡൈനിംഗ് സെഷൻ പൂർത്തിയായി. പുതിയ ഓർഡർ തുടങ്ങാൻ ടേബിൾ QR വീണ്ടും സ്കാൻ ചെയ്യുക.",
+      sessionComplete: "നിങ്ങളുടെ ഡൈനിംഗ് സെഷൻ പൂർത്തിയായി.",
       tableReady: "ഈ ടേബിൾ അടുത്ത അതിഥിക്കായി തയ്യാറാണ്.",
       doneLabel: "പൂർത്തിയായി",
       viewFullReceipt: "പൂർണ്ണ രസീത് കാണുക",
@@ -331,8 +330,16 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false }
       paidStatusRef.current = data.status;
       if (data.status !== "draft" && data.receipt_token) {
         setReceiptAccessToken(data.receipt_token);
-        const receiptUrl = `/bill/${encodeURIComponent(data.session_token)}?receipt=${encodeURIComponent(data.receipt_token)}${quickSale ? "&quickSale=1" : ""}`;
+        const receiptUrl = publicReceipt
+          ? `/receipt/${encodeURIComponent(data.receipt_token)}${quickSale ? "?quickSale=1" : ""}`
+          : `/bill/${encodeURIComponent(data.session_token)}?receipt=${encodeURIComponent(data.receipt_token)}${quickSale ? "&quickSale=1" : ""}`;
         window.history.replaceState(window.history.state, "", receiptUrl);
+      }
+
+      if (publicReceipt) {
+        setShowPaymentSuccess(false);
+        hasLoadedBillRef.current = true;
+        return;
       }
 
       if (data.session_status === "detached_awaiting_payment" && data.receipt_token) {
@@ -396,7 +403,7 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false }
 
       hasLoadedBillRef.current = true;
     },
-    [celebratePayment, quickSale, receiptAccessToken, receiptToken, router, sessionToken]
+    [celebratePayment, publicReceipt, quickSale, receiptAccessToken, receiptToken, router, sessionToken]
   );
 
   const fetchInFlightRef = useRef(false);
@@ -430,7 +437,9 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false }
               throw new ApiError(401, "Your access to this table has ended.");
             }
             const data = quickSale
-              ? await getQuickSalePrintDocument(sessionToken)
+              ? publicReceipt
+                ? await getPublicQuickSaleReceipt(receiptAccessToken || sessionToken)
+                : await getQuickSalePrintDocument(sessionToken)
               : await getPublicBill(sessionToken, authority, receiptAccessToken);
             applyFetchedBill(data, source);
           } catch (err) {
@@ -469,11 +478,14 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false }
         fetchInFlightRef.current = false;
       }
     },
-    [applyFetchedBill, bill, participantToken, quickSale, receiptAccessToken, sessionToken, waitingSession, t.unavailable]
+    [applyFetchedBill, bill, participantToken, publicReceipt, quickSale, receiptAccessToken, sessionToken, waitingSession, t.unavailable]
   );
 
   useEffect(() => {
-    const timeout = window.setTimeout(() => fetchBill(true, "initial"), 0);
+    const timeout = window.setTimeout(() => {
+      if (!publicReceipt || !hasLoadedBillRef.current) fetchBill(true, "initial");
+    }, 0);
+    if (publicReceipt) return () => window.clearTimeout(timeout);
     const handleVisibility = () => {
       if (document.visibilityState === "visible") {
         fetchBill(false, "poll");
@@ -492,7 +504,7 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false }
       window.removeEventListener("focus", handlePageRestore);
       window.removeEventListener("pageshow", handlePageRestore);
     };
-  }, [fetchBill]);
+  }, [fetchBill, publicReceipt]);
 
   const realtimeStatus = useRealtime({
     enabled: Boolean(participantToken),
@@ -502,18 +514,19 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false }
   });
 
   useEffect(() => {
+    if (publicReceipt) return;
     const intervalMs = realtimeStatus === "live" ? 90_000 : 15_000;
     const interval = window.setInterval(() => {
       if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       fetchBill(false, "poll");
     }, intervalMs);
     return () => window.clearInterval(interval);
-  }, [fetchBill, realtimeStatus]);
+  }, [fetchBill, publicReceipt, realtimeStatus]);
 
   const billUrl =
     typeof window === "undefined"
       ? ""
-      : `${window.location.origin}/bill/${encodeURIComponent(sessionToken)}?receipt=${encodeURIComponent(receiptAccessToken)}`;
+      : `${window.location.origin}/receipt/${encodeURIComponent(receiptAccessToken)}${quickSale ? "?quickSale=1" : ""}`;
 
   if (loading && !bill && !waitingSession) {
     return (
@@ -596,6 +609,8 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false }
 
   const isPaid = bill.status === "paid";
   const canPrintOfficially = ["issued", "payment_pending", "paid"].includes(bill.status);
+  const documentTitle = bill.document_title;
+  const qrToken = receiptAccessToken || bill.receipt_token;
   const downloadBill = () => {
     const previousTitle = document.title;
     document.title = `${bill.bill_number || "OMLU-bill"}`;
@@ -739,15 +754,15 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false }
                 <p className="text-sm font-black text-[var(--omlu-text-primary)] print:text-black">
                   {bill.restaurant_name}
                 </p>
-                <h1 className="mt-1 text-2xl font-black">{quickSale ? (bill.table_number === "Late Entry" ? "Late Entry Receipt" : "Takeaway Receipt") : t.title}</h1>
+                <h1 className="mt-1 text-lg font-black tracking-wide">{documentTitle}</h1>
                 <p className="mt-1 text-sm font-bold text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)] print:text-black">
                   {quickSale ? (bill.table_number === "Late Entry" ? "Late Entry" : "Takeaway") : `${t.table} ${bill.table_number}`}
                 </p>
                 {bill.gst_enabled && (
                   <div className="mt-3 text-xs text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)] print:text-black">
-                    <p className="font-black">{bill.legal_business_name}</p>
-                    <p>{bill.registered_billing_address}</p>
-                    <p>GSTIN: {bill.gstin}</p>
+                    {bill.legal_business_name && <p className="font-black">{bill.legal_business_name}</p>}
+                    {bill.registered_billing_address && <p>{bill.registered_billing_address}</p>}
+                    {bill.gstin && <p>GSTIN: {bill.gstin}</p>}
                   </div>
                 )}
               </div>
@@ -755,8 +770,8 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false }
                 <p className="text-xs font-bold uppercase text-[var(--omlu-text-secondary)] print:text-black">
                   {t.status}
                 </p>
-                <p className="mt-1 rounded-xl bg-orange-50 px-3 py-1 text-sm font-black text-orange-700 dark:bg-orange-950/20 dark:text-orange-500 print:bg-white print:px-0 print:text-black">
-                  {t.statusLabels[bill.status] || bill.status}
+                <p className="mt-1 rounded-xl bg-orange-50 px-3 py-1 text-sm font-black uppercase text-orange-700 dark:bg-orange-950/20 dark:text-orange-500 print:bg-white print:px-0 print:text-black">
+                  {isPaid ? `PAID${bill.payment_method ? ` · ${(t.paymentLabels[bill.payment_method] || bill.payment_method).toUpperCase()}` : ""}` : t.statusLabels[bill.status] || bill.status}
                 </p>
               </div>
             </div>
@@ -843,12 +858,12 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false }
                       </div>
                     ))}
                   </div>
-                  <div className="mt-3 flex justify-between border-t border-[var(--omlu-border-strong)] pt-2 text-sm dark:border-[var(--omlu-border)] print:border-black">
+                  {bill.orders.length > 1 && <div className="mt-3 flex justify-between border-t border-[var(--omlu-border-strong)] pt-2 text-sm dark:border-[var(--omlu-border)] print:border-black">
                     <span className="font-bold">{t.subtotal}</span>
                     <span className="font-black">
                       {bill.currency} {Number(order.subtotal).toFixed(2)}
                     </span>
-                  </div>
+                  </div>}
                 </section>
               ))}
             </div>
@@ -871,9 +886,11 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false }
               {bill.gst_enabled ? (
                 <>
                   <div className="flex justify-between"><span>Taxable subtotal</span><span className="font-bold">{bill.currency} {Number(bill.taxable_amount).toFixed(2)}</span></div>
-                  <div className="flex justify-between"><span>CGST ({Number(bill.gst_rate) / 2}%)</span><span className="font-bold">{bill.currency} {Number(bill.cgst_amount).toFixed(2)}</span></div>
-                  <div className="flex justify-between"><span>SGST ({Number(bill.gst_rate) / 2}%)</span><span className="font-bold">{bill.currency} {Number(bill.sgst_amount).toFixed(2)}</span></div>
-                  {Number(bill.igst_amount) > 0 && <div className="flex justify-between"><span>IGST ({bill.gst_rate}%)</span><span className="font-bold">{bill.currency} {Number(bill.igst_amount).toFixed(2)}</span></div>}
+                  {Number(bill.igst_amount) > 0 ? (
+                    <div className="flex justify-between"><span>IGST ({bill.gst_rate}%)</span><span className="font-bold">{bill.currency} {Number(bill.igst_amount).toFixed(2)}</span></div>
+                  ) : (
+                    <><div className="flex justify-between"><span>CGST ({Number(bill.gst_rate) / 2}%)</span><span className="font-bold">{bill.currency} {Number(bill.cgst_amount).toFixed(2)}</span></div><div className="flex justify-between"><span>SGST ({Number(bill.gst_rate) / 2}%)</span><span className="font-bold">{bill.currency} {Number(bill.sgst_amount).toFixed(2)}</span></div></>
+                  )}
                 </>
               ) : (
                 <div className="flex justify-between">
@@ -888,6 +905,16 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false }
                 </span>
               </div>
             </div>
+            {canPrintOfficially && qrToken && (
+              <section className="mt-6 border-t border-[var(--omlu-border-strong)] pt-5 text-center print:border-black" aria-label="Digital bill QR code">
+                <h2 className="text-sm font-black tracking-wide">VIEW YOUR DIGITAL BILL</h2>
+                <p className="mt-1 text-xs text-[var(--omlu-text-secondary)] print:text-black">Scan for complete bill details</p>
+                {/* Dynamic receipt QR is intentionally served by the backend. */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img className="mx-auto mt-3 h-36 w-36 bg-white object-contain p-1 print:h-32 print:w-32" src={getPublicReceiptQrUrl(qrToken, quickSale)} alt={`QR code for bill ${bill.bill_number}`} />
+                <p className="mt-2 text-xs font-bold">Bill No. {bill.bill_number}</p>
+              </section>
+            )}
           </footer>
         </article>
 

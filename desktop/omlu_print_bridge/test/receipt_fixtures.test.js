@@ -8,10 +8,11 @@ const mockReceiptData = {
   table_number: '12',
   restaurant_name: 'Manga Manzil',
   legal_business_name: 'Manga Manzil Hospitality LLP',
-  registered_billing_address: 'Kochi, Kerala',
+  address: 'Kochi, Kerala',
   gstin: '32ABCDE1234F1Z5',
-  requested_at: '2026-08-05T20:00:00Z',
-  issued_at: '2026-08-05T20:05:00Z',
+  created_at: '2026-08-05T20:05:00Z',
+  receipt_title: 'TAX INVOICE',
+  digital_bill_url: 'https://omlu.in/receipt/secure-random-token',
   status: 'issued',
   items: [
     {
@@ -32,7 +33,7 @@ const mockReceiptData = {
   tax_amount: '18.00',
   cgst_amount: '9.00',
   sgst_amount: '9.00',
-  total_amount: '378.00'
+  grand_total: '378.00'
 };
 
 test('Golden receipt fixture encoding - 58 mm layout', () => {
@@ -44,7 +45,7 @@ test('Golden receipt fixture encoding - 58 mm layout', () => {
 
   // Verify header & titles
   assert.match(outputText, /MANGA MANZIL/);
-  assert.match(outputText, /\*\*\* TAX INVOICE \*\*\*/);
+  assert.match(outputText, /TAX INVOICE/);
   assert.match(outputText, /Bill #: NS-20260805-0001/);
   assert.match(outputText, /Table #: 12/);
 
@@ -57,8 +58,10 @@ test('Golden receipt fixture encoding - 58 mm layout', () => {
   assert.match(outputText, /Subtotal:/);
   assert.match(outputText, /CGST:/);
   assert.match(outputText, /SGST:/);
-  assert.match(outputText, /TOTAL AMOUNT:/);
+  assert.match(outputText, /TOTAL:/);
   assert.match(outputText, /378\.00/);
+  assert.match(outputText, /VIEW YOUR DIGITAL BILL/);
+  assert.ok(buffer.indexOf(Buffer.from([0x1D, 0x28, 0x6B])) > 0, 'QR command must be present');
 
   // Verify Cut command (0x1D, 0x56, 0x41, 0x00)
   const cutIndex = buffer.indexOf(Buffer.from([0x1D, 0x56, 0x41, 0x00]));
@@ -73,7 +76,7 @@ test('Golden receipt fixture encoding - 80 mm layout', () => {
   const outputText = buffer.toString('ascii');
 
   assert.match(outputText, /MANGA MANZIL/);
-  assert.match(outputText, /TOTAL AMOUNT:/);
+  assert.match(outputText, /TOTAL:/);
   assert.match(outputText, /378\.00/);
 });
 

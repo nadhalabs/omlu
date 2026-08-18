@@ -34,6 +34,7 @@ Map<String, dynamic> receiptJson({String status = 'issued'}) => {
   'currency': 'INR',
   'payment_status': status == 'paid' ? 'PAID' : 'UNPAID',
   'is_official_invoice': status != 'draft',
+  'digital_bill_url': 'https://omlu.in/receipt/secure-random-token',
 };
 
 ReceiptData receipt({String status = 'issued'}) =>
@@ -96,6 +97,7 @@ void main() {
     final parsed = receipt();
     expect(parsed.items.single.lineTotal, '150.00');
     expect(parsed.items.single.options, ['Size: Large', 'Drink: Lime']);
+    expect(parsed.digitalBillUrl, contains('/receipt/secure-random-token'));
   });
 
   test(

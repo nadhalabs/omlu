@@ -63,6 +63,7 @@ class ReceiptData {
   final String? paymentMethod;
   final String paymentStatus;
   final bool isOfficialInvoice;
+  final String digitalBillUrl;
 
   ReceiptData({
     required this.billNumber,
@@ -91,6 +92,7 @@ class ReceiptData {
     this.paymentMethod,
     required this.paymentStatus,
     required this.isOfficialInvoice,
+    this.digitalBillUrl = '',
   });
 
   factory ReceiptData.fromJson(Map<String, dynamic> json) {
@@ -125,6 +127,7 @@ class ReceiptData {
       paymentMethod: json['payment_method'] as String?,
       paymentStatus: json['payment_status'] as String? ?? 'unpaid',
       isOfficialInvoice: json['is_official_invoice'] as bool? ?? false,
+      digitalBillUrl: json['digital_bill_url'] as String? ?? '',
     );
   }
 
@@ -155,5 +158,6 @@ class ReceiptData {
     'payment_method': paymentMethod,
     'payment_status': paymentStatus,
     'is_official_invoice': isOfficialInvoice,
+    'digital_bill_url': digitalBillUrl,
   };
 }

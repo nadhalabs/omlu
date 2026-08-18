@@ -713,6 +713,20 @@ def test_completed_late_entry_quick_sale_printing_and_receipt_payload(quick_sale
     assert rcpt["table_number"] == "Late Entry"
     assert rcpt["bill_number"] == sale["order_number"]
 
+    public = client.get(f"/public/quick-sales/{sale['public_token']}")
+    assert public.status_code == 200
+    assert public.json()["bill_number"] == sale["order_number"]
+    assert public.json()["receipt_token"] == sale["public_token"]
+    assert "paid_by_staff_id" not in public.json()
+    assert "session_token" not in public.json()
+    assert client.get("/public/quick-sales/invalid-token").status_code == 404
+
+    qr = client.get(f"/public/quick-sales/{sale['public_token']}/qr")
+    assert qr.status_code == 200
+    assert qr.headers["content-type"] == "image/png"
+    assert qr.content.startswith(b"\x89PNG\r\n\x1a\n")
+    assert client.get("/public/quick-sales/invalid-token/qr").status_code == 404
+
 
 def test_incomplete_late_entry_quick_sale_print_blocked(quick_sale_context):
     """Test that a non-completed Quick Sale cannot be printed and returns 409 Conflict."""

@@ -184,6 +184,7 @@ class ReceiptPayloadResponse(BaseModel):
     payment_method: Optional[str] = None
     payment_status: Literal["PAID", "UNPAID"]
     is_official_invoice: Literal[True]
+    digital_bill_url: str = ""
 
     @field_serializer(
         "subtotal", "discount_amount", "taxable_amount", "cgst_amount",
@@ -195,6 +196,7 @@ class ReceiptPayloadResponse(BaseModel):
 
 class BillResponse(BaseModel):
     bill_number: str
+    document_title: Literal["BILL", "TAX INVOICE"]
     receipt_token: Optional[str] = None
     restaurant_name: str
     restaurant_slug: str

@@ -1,13 +1,18 @@
 import datetime
 import json
 import logging
+from io import BytesIO
+
+import qrcode
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.database import get_db
 from app.models.bill import Bill
+from app.models.quick_sale import QuickSale, QuickSaleItem
+from app.models.restaurant import Restaurant
 from app.models.dining_session import DiningSession
 from app.models.empty_table_report import EmptyTableReport
 from app.models.order import Order
@@ -66,6 +71,23 @@ from app.services.realtime import (
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+_PUBLIC_RECEIPT_EXCLUDED_FIELDS = {
+    "restaurant_slug",
+    "table_code",
+    "session_token",
+    "paid_by_staff_id",
+    "generated_by_role",
+    "sent_to_counter_by_role",
+    "session_status",
+    "payment_requested_at",
+    "detached_at",
+    "payment_code",
+    "payment_code_expires_at",
+    "original_table",
+    "detached_session_status",
+    "receipt_access",
+}
 
 _staff_bill_write_roles = OperationalWriteChecker(["owner", "admin", "staff"])
 _official_billing_roles = BillingRoleChecker(["owner", "admin"])
@@ -419,7 +441,11 @@ def _load_public_receipt(db: Session, receipt_token: str, restaurant_slug: str |
     return bill
 
 
-@router.get("/public/bills/{receipt_token}", response_model=BillResponse)
+@router.get(
+    "/public/bills/{receipt_token}",
+    response_model=BillResponse,
+    response_model_exclude=_PUBLIC_RECEIPT_EXCLUDED_FIELDS,
+)
 def get_public_bill_receipt(receipt_token: str, db: Session = Depends(get_db)):
     """Read-only bill access, independent of active dining-session authority."""
     bill = _load_public_receipt(db, receipt_token)
@@ -441,6 +467,64 @@ def get_public_bill_receipt_payload(receipt_token: str, db: Session = Depends(ge
     from app.services.bills import build_receipt_payload
     bill = _load_public_receipt(db, receipt_token)
     return build_receipt_payload(db, bill)
+
+
+def _qr_png(url: str) -> Response:
+    qr = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=8, border=4)
+    qr.add_data(url)
+    qr.make(fit=True)
+    image = qr.make_image(fill_color="black", back_color="white")
+    output = BytesIO()
+    image.save(output, format="PNG")
+    return Response(
+        content=output.getvalue(),
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=86400, immutable"},
+    )
+
+
+@router.get("/public/bills/{receipt_token}/qr")
+def get_public_bill_qr(receipt_token: str, db: Session = Depends(get_db)):
+    from app.config import settings
+    bill = _load_public_receipt(db, receipt_token)
+    return _qr_png(f"{settings.public_frontend_url.rstrip('/')}/receipt/{bill.receipt_token}")
+
+
+def _load_public_quick_sale(db: Session, receipt_token: str) -> tuple[QuickSale, Restaurant]:
+    sale = (
+        db.query(QuickSale)
+        .options(selectinload(QuickSale.items).selectinload(QuickSaleItem.selected_options))
+        .filter(
+            QuickSale.public_token == receipt_token,
+            QuickSale.sale_type.in_(("takeaway", "late_entry")),
+            QuickSale.status == "completed",
+        )
+        .first()
+    )
+    if not sale:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Receipt not found")
+    restaurant = db.query(Restaurant).filter(Restaurant.id == sale.restaurant_id).one()
+    return sale, restaurant
+
+
+@router.get(
+    "/public/quick-sales/{receipt_token}",
+    response_model=BillResponse,
+    response_model_exclude=_PUBLIC_RECEIPT_EXCLUDED_FIELDS,
+)
+def get_public_quick_sale_receipt(receipt_token: str, db: Session = Depends(get_db)):
+    from app.routes.quick_sales import _quick_sale_print_document
+    sale, restaurant = _load_public_quick_sale(db, receipt_token)
+    return _quick_sale_print_document(sale, restaurant)
+
+
+@router.get("/public/quick-sales/{receipt_token}/qr")
+def get_public_quick_sale_qr(receipt_token: str, db: Session = Depends(get_db)):
+    from app.config import settings
+    sale, _ = _load_public_quick_sale(db, receipt_token)
+    return _qr_png(
+        f"{settings.public_frontend_url.rstrip('/')}/receipt/{sale.public_token}?quickSale=1"
+    )
 
 
 @router.get("/staff/bills/{bill_number}/receipt-payload", response_model=ReceiptPayloadResponse)

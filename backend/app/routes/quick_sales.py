@@ -123,6 +123,7 @@ def _quick_sale_print_document(sale: QuickSale, restaurant: Restaurant) -> dict:
     table_label = "Takeaway" if sale.sale_type == "takeaway" else "Late Entry"
     return {
         "bill_number": sale.order_number,
+        "document_title": "TAX INVOICE" if sale.gst_enabled_snapshot and sale.invoice_number else "BILL",
         "receipt_token": sale.public_token,
         "restaurant_name": restaurant.name,
         "restaurant_slug": restaurant.slug,
@@ -174,12 +175,13 @@ def _quick_sale_print_document(sale: QuickSale, restaurant: Restaurant) -> dict:
 
 
 def _quick_sale_receipt_payload(sale: QuickSale, restaurant: Restaurant) -> dict:
+    from app.config import settings
     document = _quick_sale_print_document(sale, restaurant)
     table_label = "Takeaway" if sale.sale_type == "takeaway" else "Late Entry"
     return {
         "bill_number": sale.order_number,
         "invoice_number": sale.invoice_number,
-        "receipt_title": "PAYMENT RECEIPT",
+        "receipt_title": "TAX INVOICE" if sale.gst_enabled_snapshot and sale.invoice_number else "BILL",
         "status": "paid",
         "restaurant_name": restaurant.name,
         "legal_business_name": sale.legal_business_name_snapshot or restaurant.legal_business_name or restaurant.name,
@@ -211,6 +213,7 @@ def _quick_sale_receipt_payload(sale: QuickSale, restaurant: Restaurant) -> dict
         "payment_method": sale.payment_method,
         "payment_status": "PAID",
         "is_official_invoice": True,
+        "digital_bill_url": f"{settings.public_frontend_url.rstrip('/')}/receipt/{sale.public_token}?quickSale=1",
     }
 
 

@@ -844,6 +844,7 @@ def build_bill_response(db: Session, bill: Bill):
     )
     return {
         "bill_number": bill.bill_number,
+        "document_title": bill_document_title(bill),
         # Drafts are provisional and must not grant durable receipt access.
         "receipt_token": bill.receipt_token if bill.status != "draft" else None,
         "restaurant_name": bill.restaurant.name,
@@ -925,7 +926,13 @@ def build_bill_response(db: Session, bill: Bill):
     }
 
 
+def bill_document_title(bill: Bill) -> str:
+    """Return the legal document title from immutable issuance snapshots."""
+    return "TAX INVOICE" if bill.gst_enabled_snapshot and bill.invoice_number else "BILL"
+
+
 def build_receipt_payload(db: Session, bill: Bill) -> dict:
+    from app.config import settings
     bill = load_bill_for_response(db, bill.id)
     orders = get_billable_orders(db, bill.dining_session_id)
     items = []
@@ -944,11 +951,7 @@ def build_receipt_payload(db: Session, bill: Bill) -> dict:
                 "line_total": item.total_price,
                 "options": options,
             })
-    receipt_title = (
-        "PROVISIONAL BILL PREVIEW" if bill.status == "draft"
-        else "TAX INVOICE" if bill.status in {"issued", "payment_pending"}
-        else "PAYMENT RECEIPT"
-    )
+    receipt_title = bill_document_title(bill)
     return {
         "bill_number": bill.bill_number,
         "invoice_number": bill.invoice_number,
@@ -984,4 +987,5 @@ def build_receipt_payload(db: Session, bill: Bill) -> dict:
         "payment_method": bill.payment_method,
         "payment_status": "PAID" if bill.status == "paid" else "UNPAID",
         "is_official_invoice": bill.status in {"issued", "payment_pending", "paid"},
+        "digital_bill_url": f"{settings.public_frontend_url.rstrip('/')}/receipt/{bill.receipt_token}",
     }
