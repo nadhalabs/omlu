@@ -80,7 +80,8 @@ export class PrintBridgeServer {
     try {
       if (method === 'GET' && path === '/v1/health') {
         const config = this.configManager.getConfig();
-        const transport = this.getTransport(config);
+        const billingTransport = this.getBillingPrinterTransport(config);
+        const transport = billingTransport ?? this.getTransport(config);
         const isOnline = await transport.testConnection();
 
         return this.json(res, 200, {
@@ -243,7 +244,7 @@ export class PrintBridgeServer {
         const result = await this.coordinator.executePrintJob({
           schema_version: '1.0', job_id: `billing_test_${Date.now()}`, idempotency_key: `billing_test_${Date.now()}`,
           installation_id: config.installationId, tenant_id: config.tenantId, receipt_type: 'test', copy_count: 1,
-          created_at: new Date().toISOString(), expires_at: new Date(Date.now() + 60000).toISOString(), retry_count: 0, signed_token: '',
+          created_at: new Date().toISOString(), expires_at: new Date(Date.now() + 60000).toISOString(), retry_count: 0, signed_token: token,
         }, config, billingTransport);
         return this.json(res, result.state === 'completed' ? 200 : 503, { success: result.state === 'completed', message: result.state === 'completed' ? 'Billing printer test completed.' : 'Billing printer unavailable.' });
       }
