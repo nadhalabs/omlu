@@ -10,18 +10,15 @@ test("Settings contains Printing section with stable id='printing'", () => {
   assert.match(settings, /<SettingsSection id="printing" title="Printing"/);
 });
 
-test("Settings explains browser printing vs Android direct thermal printing", () => {
-  assert.ok(settings.includes("Print bills and receipts using your system print dialog."));
-  assert.ok(settings.includes("Use the Android Operations app for direct LAN thermal printing."));
-  assert.ok(settings.includes("Thermal printers and the Android device must be connected to the same local network."));
-  assert.ok(settings.includes("Direct ESC/POS printing (IP address, port, paper width, and copies) is configured directly inside the Android app settings."));
-  assert.ok(settings.includes("Web admin does not store raw TCP printer IP addresses, ports, paper widths, or copy preferences."));
+test("Settings explains browser printing vs desktop thermal printing", () => {
+  assert.ok(settings.includes("Available as a fallback when the Desktop Printer Bridge is offline or a Billing Printer is not configured. Uses your system print dialog."));
+  assert.match(settings, /The Kitchen Printer and Billing Printer are separate network printers with independent IP addresses/);
 });
 
-test("Settings APK download link points to /downloads/omlu.apk", () => {
-  assert.match(settings, /href="\/downloads\/omlu\.apk"/);
+test("Settings developer package download link points to /downloads/omlu-print-bridge-developer-package.zip", () => {
+  assert.match(settings, /href="\/downloads\/omlu-print-bridge-developer-package\.zip"/);
   assert.match(settings, /download/);
-  assert.match(settings, /Download Operations App/);
+  assert.match(settings, /Download Desktop Printer Bridge/);
 });
 
 test("Billing Counter Printer Setup action links to /admin/settings#printing", () => {
@@ -29,18 +26,12 @@ test("Billing Counter Printer Setup action links to /admin/settings#printing", (
   assert.match(billingCounter, /Printer Setup/);
 });
 
-test("Billing Counter APK download action points to /downloads/omlu.apk", () => {
-  assert.match(billingCounter, /href="\/downloads\/omlu\.apk"/);
-  assert.match(billingCounter, /Download App/);
-});
-
-test("Printer Setup is rendered as guidance section and not treated as a bill queue", () => {
+test("Printer Setup is rendered as guidance link in header and not treated as a bill queue", () => {
   // Tabs contain only 3 queue tabs
   assert.match(billingCounter, /type Tab = "requested" \| "awaiting_payment" \| "paid_recently";/);
   // Does not include printer_setup in queue items array
   assert.doesNotMatch(billingCounter, /tab === "printer_setup"/);
-  // Printer setup is a separate guidance section card
-  assert.match(billingCounter, /Configure direct LAN thermal printing in the OMLU Operations Android app\./);
+  assert.match(billingCounter, /Printer Setup/);
 });
 
 test("Settings no longer contains outdated 'Billing uses Pending Payments' text", () => {

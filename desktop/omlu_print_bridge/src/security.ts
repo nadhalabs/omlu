@@ -61,11 +61,23 @@ export function validateOriginAndHost(req: http.IncomingMessage, res: http.Serve
     return false;
   }
 
-  // Host header validation
-  if (host && !host.includes('127.0.0.1') && !host.includes('localhost')) {
-    res.writeHead(403, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'INVALID_HOST', message: 'Forbidden host header.' }));
-    return false;
+  // Host header validation.
+  // Allow localhost and RFC1918 private IPv4 LAN addresses only.
+  if (host) {
+    const hostname = host.split(':')[0];
+
+    const isAllowedHost =
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname.startsWith('10.') ||
+      /^192\.168\.\d{1,3}\.\d{1,3}$/.test(hostname) ||
+      /^172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}$/.test(hostname);
+
+    if (!isAllowedHost) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'INVALID_HOST', message: 'Forbidden host header.' }));
+      return false;
+    }
   }
 
   return true;
