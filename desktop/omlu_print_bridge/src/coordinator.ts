@@ -70,7 +70,7 @@ export class PrintJobCoordinator {
 
     try {
       // 4. Encode Payload
-      const encoder = new DesktopEscPosEncoder(config.paperWidth, config.autoCut, config.feedLines);
+      const encoder = new DesktopEscPosEncoder(config.paperWidth, config.autoCut, config.feedLines, config.qrMode || 'raster');
       let payloadBuffer: Buffer;
 
       if (job.receipt_type === 'test') {

@@ -40,6 +40,20 @@ Map<String, dynamic> receiptJson({String status = 'issued'}) => {
 ReceiptData receipt({String status = 'issued'}) =>
     ReceiptData.fromJson(receiptJson(status: status));
 
+bool _containsSequence(List<int> bytes, List<int> sequence) {
+  for (var index = 0; index <= bytes.length - sequence.length; index++) {
+    var matches = true;
+    for (var offset = 0; offset < sequence.length; offset++) {
+      if (bytes[index + offset] != sequence[offset]) {
+        matches = false;
+        break;
+      }
+    }
+    if (matches) return true;
+  }
+  return false;
+}
+
 class FailingAdapter implements PrinterAdapter {
   @override
   String get name => 'failure';
@@ -261,6 +275,9 @@ void main() {
       expect(text, contains('CGST:'));
       expect(text, contains('SGST:'));
       expect(text, contains('TOTAL:'));
+      expect(bytes.indexOf(0x1D), greaterThanOrEqualTo(0));
+      expect(_containsSequence(bytes, [0x1D, 0x76, 0x30, 0x00]), isTrue);
+      expect(_containsSequence(bytes, [0x1D, 0x28, 0x6B]), isFalse);
       expect(encoder.maxColumns, width == PaperWidth.mm58 ? 32 : 48);
       expect(
         text,
@@ -288,7 +305,7 @@ void main() {
     expect(adapter.calls, 1);
     expect(
       utf8.decode(adapter.lastBytes, allowMalformed: true),
-      contains('OMLU PRINTER TEST'),
+      contains('OMLU QR TEST'),
     );
   });
 

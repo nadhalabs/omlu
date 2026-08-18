@@ -1,13 +1,20 @@
 import 'dart:convert';
-import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
+import 'package:qr/qr.dart';
 import 'receipt_data.dart';
 
 enum PaperWidth { mm58, mm80 }
 
+enum QrPrintMode { native, raster }
+
 class EscPosEncoder {
   final PaperWidth paperWidth;
+  final QrPrintMode qrMode;
 
-  EscPosEncoder({this.paperWidth = PaperWidth.mm58});
+  EscPosEncoder({
+    this.paperWidth = PaperWidth.mm58,
+    this.qrMode = QrPrintMode.raster,
+  });
 
   int get maxColumns => paperWidth == PaperWidth.mm58 ? 32 : 48;
 
@@ -33,49 +40,39 @@ class EscPosEncoder {
     if (receipt.gstin != null && receipt.gstin!.isNotEmpty) {
       bytes.addAll(utf8.encode('GSTIN: ${receipt.gstin}\n'));
     }
-    bytes.addAll(utf8.encode('\n'));
-
-    // Receipt Title Banner
     bytes.addAll(_boldOn());
     bytes.addAll(utf8.encode('${receipt.receiptTitle}\n'));
     bytes.addAll(_boldOff());
+    final status = receipt.paymentStatus.toUpperCase();
+    if (receipt.tableNumber != null && receipt.tableNumber!.isNotEmpty) {
+      bytes.addAll(utf8.encode('Table ${receipt.tableNumber} - $status\n'));
+    }
     bytes.addAll(_alignLeft());
-
-    bytes.addAll(utf8.encode(_divider()));
 
     // Metadata
     if (receipt.invoiceNumber != null && receipt.invoiceNumber!.isNotEmpty) {
       bytes.addAll(
-        utf8.encode(_wrappedText('Invoice #: ${receipt.invoiceNumber}')),
+        utf8.encode(_wrappedText('Invoice: ${receipt.invoiceNumber}')),
       );
     }
-    bytes.addAll(utf8.encode(_wrappedText('Bill #:    ${receipt.billNumber}')));
-    if (receipt.tableNumber != null && receipt.tableNumber!.isNotEmpty) {
-      bytes.addAll(
-        utf8.encode(_wrappedText('Table #:   ${receipt.tableNumber}')),
-      );
+    bytes.addAll(utf8.encode(_wrappedText('Bill: ${receipt.billNumber}')));
+    bytes.addAll(utf8.encode(_wrappedText(receipt.createdAt)));
+    if (receipt.tableNumber == null || receipt.tableNumber!.isEmpty) {
+      bytes.addAll(utf8.encode('$status\n'));
     }
-    if (receipt.staffName != null && receipt.staffName!.isNotEmpty) {
-      bytes.addAll(
-        utf8.encode(_wrappedText('Served by: ${receipt.staffName}')),
-      );
-    }
-    bytes.addAll(utf8.encode(_wrappedText('Date:      ${receipt.createdAt}')));
 
-    bytes.addAll(utf8.encode(_divider()));
-
-    // Column Headers
-    bytes.addAll(_boldOn());
-    bytes.addAll(utf8.encode(_row2Cols('Item', 'Amount')));
-    bytes.addAll(_boldOff());
     bytes.addAll(utf8.encode(_divider()));
 
     // Line Items
     for (final item in receipt.items) {
-      final String itemHeader = '${item.quantity}x ${item.name}';
-      for (final row in _wrappedAmountRows(itemHeader, item.lineTotal)) {
-        bytes.addAll(utf8.encode(row));
+      for (final line in _wrap(item.name, maxColumns)) {
+        bytes.addAll(utf8.encode('$line\n'));
       }
+      bytes.addAll(
+        utf8.encode(
+          _row2Cols('${item.quantity} x ${item.unitPrice}', item.lineTotal),
+        ),
+      );
       for (final option in item.options) {
         for (final line in _wrap('   + $option', maxColumns)) {
           bytes.addAll(utf8.encode('$line\n'));
@@ -98,9 +95,7 @@ class EscPosEncoder {
     if (receipt.isOfficialInvoice &&
         double.tryParse(receipt.taxAmount) != null &&
         double.parse(receipt.taxAmount) > 0) {
-      bytes.addAll(
-        utf8.encode(_row2Cols('Taxable Value:', receipt.taxableAmount)),
-      );
+      bytes.addAll(utf8.encode(_row2Cols('Taxable:', receipt.taxableAmount)));
       if ((double.tryParse(receipt.igstAmount) ?? 0) > 0) {
         bytes.addAll(utf8.encode(_row2Cols('IGST:', receipt.igstAmount)));
       } else {
@@ -108,8 +103,6 @@ class EscPosEncoder {
         bytes.addAll(utf8.encode(_row2Cols('SGST:', receipt.sgstAmount)));
       }
     }
-
-    bytes.addAll(utf8.encode(_divider()));
 
     // Grand Total
     bytes.addAll(_boldOn());
@@ -125,15 +118,26 @@ class EscPosEncoder {
     // Footer & Status
     bytes.addAll(_alignCenter());
     bytes.addAll(
-      utf8.encode('${receipt.paymentStatus.toUpperCase()}${receipt.paymentMethod == null ? '' : ' · ${receipt.paymentMethod!.toUpperCase()}'}\n\n'),
+      utf8.encode(
+        '$status${receipt.paymentMethod == null ? '' : ' - ${receipt.paymentMethod!.toUpperCase()}'}\n',
+      ),
     );
     if (receipt.digitalBillUrl.isNotEmpty) {
-      bytes.addAll(utf8.encode('VIEW YOUR DIGITAL BILL\n'));
-      bytes.addAll(utf8.encode('Scan for complete bill details\n'));
-      bytes.addAll(_qrCode(receipt.digitalBillUrl));
-      bytes.addAll(utf8.encode('\nBill No. ${receipt.billNumber}\n'));
+      bytes.addAll(utf8.encode('VIEW DIGITAL BILL\n'));
+      try {
+        bytes.addAll(
+          qrMode == QrPrintMode.native
+              ? _nativeQrCode(receipt.digitalBillUrl)
+              : _rasterQrCode(receipt.digitalBillUrl),
+        );
+      } catch (error) {
+        debugPrint(
+          'OMLU receipt QR encoding failed; printing receipt without QR: $error',
+        );
+      }
+      bytes.addAll(utf8.encode('Scan for bill details\n'));
     }
-    bytes.addAll(utf8.encode('Thank you\n\n\n\n'));
+    bytes.addAll(utf8.encode('Thank you\n'));
 
     // Cut paper command GS V A 0
     bytes.addAll([0x1D, 0x56, 0x41, 0x00]);
@@ -145,12 +149,9 @@ class EscPosEncoder {
     0x1B,
     0x40,
     ..._alignCenter(),
-    ..._boldOn(),
-    ...utf8.encode('OMLU PRINTER TEST\n'),
-    ..._boldOff(),
-    ...utf8.encode(
-      '${paperWidth == PaperWidth.mm58 ? '58 mm' : '80 mm'} TCP/LAN printer\n\n\n',
-    ),
+    ...utf8.encode('OMLU QR TEST\n'),
+    ..._rasterQrCode('https://omlu.in/receipt/qr-test'),
+    ...utf8.encode('Scan me\n'),
     0x1D,
     0x56,
     0x41,
@@ -172,21 +173,6 @@ class EscPosEncoder {
 
     final int padding = maxColumns - formattedLeft.length - rightLen;
     return '$formattedLeft${' ' * (padding > 0 ? padding : 1)}$right\n';
-  }
-
-  List<String> _wrappedAmountRows(String left, String right) {
-    final available = maxColumns - right.length - 1;
-    final firstParts = _wrap(left, available > 0 ? available : 1);
-    final rows = <String>[_row2Cols(firstParts.first, right)];
-    if (firstParts.length > 1) {
-      rows.addAll(
-        firstParts
-            .skip(1)
-            .expand((part) => _wrap(part, maxColumns))
-            .map((part) => '$part\n'),
-      );
-    }
-    return rows;
   }
 
   List<String> _wrap(String value, int width) {
@@ -212,18 +198,100 @@ class EscPosEncoder {
   List<int> _boldOn() => [0x1B, 0x45, 0x01];
   List<int> _boldOff() => [0x1B, 0x45, 0x00];
 
-  List<int> _qrCode(String value) {
+  List<int> _nativeQrCode(String value) {
     final data = ascii.encode(value);
     final length = data.length + 3;
     final size = paperWidth == PaperWidth.mm58 ? 5 : 7;
     return [
-      0x1D, 0x28, 0x6B, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00,
-      0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x43, size,
-      0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x45, 0x31,
-      0x1D, 0x28, 0x6B, length & 0xFF, (length >> 8) & 0xFF, 0x31, 0x50, 0x30,
+      0x1D,
+      0x28,
+      0x6B,
+      0x04,
+      0x00,
+      0x31,
+      0x41,
+      0x32,
+      0x00,
+      0x1D,
+      0x28,
+      0x6B,
+      0x03,
+      0x00,
+      0x31,
+      0x43,
+      size,
+      0x1D,
+      0x28,
+      0x6B,
+      0x03,
+      0x00,
+      0x31,
+      0x45,
+      0x31,
+      0x1D,
+      0x28,
+      0x6B,
+      length & 0xFF,
+      (length >> 8) & 0xFF,
+      0x31,
+      0x50,
+      0x30,
       ...data,
-      0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x51, 0x30,
+      0x1D,
+      0x28,
+      0x6B,
+      0x03,
+      0x00,
+      0x31,
+      0x51,
+      0x30,
     ];
+  }
+
+  List<int> _rasterQrCode(String value) {
+    final code = QrCode.fromData(
+      data: value,
+      errorCorrectLevel: QrErrorCorrectLevel.M,
+    );
+    final image = QrImage(code);
+    const quiet = 4;
+    final targetDots = paperWidth == PaperWidth.mm58 ? 200 : 240;
+    final modules = image.moduleCount + quiet * 2;
+    final scale = (targetDots + modules - 1) ~/ modules;
+    final size = modules * (scale < 1 ? 1 : scale);
+    final actualScale = size ~/ modules;
+    final widthBytes = (size + 7) ~/ 8;
+    final bytes = <int>[
+      0x1D,
+      0x76,
+      0x30,
+      0x00,
+      widthBytes & 0xFF,
+      (widthBytes >> 8) & 0xFF,
+      size & 0xFF,
+      (size >> 8) & 0xFF,
+    ];
+    for (var y = 0; y < size; y++) {
+      for (var xb = 0; xb < widthBytes; xb++) {
+        var packed = 0;
+        for (var bit = 0; bit < 8; bit++) {
+          final x = xb * 8 + bit;
+          final mx = x ~/ actualScale - quiet;
+          final my = y ~/ actualScale - quiet;
+          if (x < size &&
+              mx >= 0 &&
+              my >= 0 &&
+              mx < image.moduleCount &&
+              my < image.moduleCount &&
+              image.isDark(my, mx)) {
+            packed |= 0x80 >> bit;
+          }
+        }
+        bytes.add(packed);
+      }
+    }
+    bytes.add(0x0A);
+    return bytes;
   }
 
   /// Encodes a grayscale raster image (Monochrome 1-bit GS v 0 format)

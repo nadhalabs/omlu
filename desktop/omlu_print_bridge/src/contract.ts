@@ -92,34 +92,20 @@ export class DesktopEscPosEncoder {
   private width: number;
   private autoCut: boolean;
   private feedLines: number;
+  private qrMode: 'native' | 'raster';
 
-  constructor(width: '58' | '80' = '58', autoCut: boolean = true, feedLines: number = 3) {
+  constructor(width: '58' | '80' = '58', autoCut: boolean = true, feedLines: number = 3, qrMode: 'native' | 'raster' = 'raster') {
     this.width = width === '80' ? 48 : 32;
     this.autoCut = autoCut;
     this.feedLines = feedLines;
+    this.qrMode = qrMode;
   }
 
   public encodeTestPage(): Buffer {
-    const bytes: number[] = [];
-
-    // Init (ESC @)
-    bytes.push(0x1B, 0x40);
-    // Align Center (ESC a 1)
-    bytes.push(0x1B, 0x61, 0x01);
-
-    this.addString(bytes, '================================\n');
-    this.addString(bytes, 'OMLU PRINT BRIDGE TEST PAGE\n');
-    this.addString(bytes, '================================\n');
-
-    // Align Left (ESC a 0)
-    bytes.push(0x1B, 0x61, 0x00);
-    this.addString(bytes, `Paper Width: ${this.width === 48 ? '80 mm (48 cols)' : '58 mm (32 cols)'}\n`);
-    this.addString(bytes, `Timestamp: ${new Date().toLocaleString()}\n`);
-    this.addString(bytes, 'Status: SUCCESSFUL TEST PRINT\n');
-    this.addString(bytes, '--------------------------------\n');
-    this.addString(bytes, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ\n');
-    this.addString(bytes, '0123456789 - ₹ INR Currency\n');
-    this.addString(bytes, '--------------------------------\n\n');
+    const bytes: number[] = [0x1B, 0x40, 0x1B, 0x61, 0x01];
+    this.addString(bytes, 'OMLU QR TEST\n');
+    this.addRasterQrCode(bytes, 'https://omlu.in/receipt/qr-test');
+    this.addString(bytes, 'Scan me\n');
 
     // Feed lines
     bytes.push(0x1B, 0x64, this.feedLines);
@@ -166,9 +152,10 @@ export class DesktopEscPosEncoder {
     // Init (ESC @)
     bytes.push(0x1B, 0x40);
 
-    // Header - Center Aligned
     bytes.push(0x1B, 0x61, 0x01);
+    bytes.push(0x1B, 0x45, 0x01);
     this.addString(bytes, `${data.restaurant_name.toUpperCase()}\n`);
+    bytes.push(0x1B, 0x45, 0x00);
     if (data.legal_business_name) {
       this.addString(bytes, `${data.legal_business_name}\n`);
     }
@@ -179,40 +166,36 @@ export class DesktopEscPosEncoder {
       this.addString(bytes, `GSTIN: ${data.gstin}\n`);
     }
 
-    this.addString(bytes, this.divider('-', w) + '\n');
+    bytes.push(0x1B, 0x45, 0x01);
     this.addString(bytes, `${data.receipt_title}\n`);
-    this.addString(bytes, this.divider('-', w) + '\n');
+    bytes.push(0x1B, 0x45, 0x00);
+    const status = data.status.toUpperCase();
+    if (data.table_number) this.addString(bytes, `Table ${data.table_number} - ${status}\n`);
 
-    // Left Aligned Meta
     bytes.push(0x1B, 0x61, 0x00);
-    this.addString(bytes, `Bill #: ${data.bill_number}\n`);
+    this.addString(bytes, `Bill: ${data.bill_number}\n`);
     if (data.invoice_number) {
-      this.addString(bytes, `Inv #: ${data.invoice_number}\n`);
+      this.addString(bytes, `Invoice: ${data.invoice_number}\n`);
     }
-    this.addString(bytes, `Table #: ${data.table_number}\n`);
-    this.addString(bytes, `Generated: ${new Date(data.created_at).toLocaleString()}\n`);
-    if (data.paid_at) this.addString(bytes, `Paid at: ${new Date(data.paid_at).toLocaleString()}\n`);
-    this.addString(bytes, this.divider('=', w) + '\n');
-
-    // Item Table Header
-    this.addString(bytes, this.formatTwoColumn('Item', 'Amount', w) + '\n');
+    this.addString(bytes, `${this.compactDate(data.created_at)}\n`);
+    if (!data.table_number) this.addString(bytes, `${status}\n`);
     this.addString(bytes, this.divider('-', w) + '\n');
 
     // Items
     for (const item of data.items) {
       const qtyStr = `${item.quantity} x ₹${Number(item.unit_price).toFixed(2)}`;
       const lineTotalStr = `₹${Number(item.line_total).toFixed(2)}`;
-      this.addString(bytes, `${item.name}\n`);
-      this.addString(bytes, this.formatTwoColumn(`  ${qtyStr}`, lineTotalStr, w) + '\n');
+      for (const line of this.wrap(item.name, w)) this.addString(bytes, `${line}\n`);
+      this.addString(bytes, this.formatTwoColumn(qtyStr, lineTotalStr, w) + '\n');
 
       // Options
       if (item.selected_options && item.selected_options.length > 0) {
         for (const opt of item.selected_options) {
-          this.addString(bytes, `   + ${opt.group_name}: ${opt.option_name}\n`);
+          for (const line of this.wrap(`  + ${opt.option_name}`, w)) this.addString(bytes, `${line}\n`);
         }
       } else if (item.options && item.options.length > 0) {
         for (const opt of item.options) {
-          this.addString(bytes, `   + ${opt}\n`);
+          for (const line of this.wrap(`  + ${opt}`, w)) this.addString(bytes, `${line}\n`);
         }
       }
     }
@@ -225,7 +208,7 @@ export class DesktopEscPosEncoder {
       this.addString(bytes, this.formatTwoColumn('Discount:', `-₹${Number(data.discount_amount).toFixed(2)}`, w) + '\n');
     }
     if (data.taxable_amount && Number(data.taxable_amount) > 0) {
-      this.addString(bytes, this.formatTwoColumn('Taxable amount:', `₹${Number(data.taxable_amount).toFixed(2)}`, w) + '\n');
+      this.addString(bytes, this.formatTwoColumn('Taxable:', `₹${Number(data.taxable_amount).toFixed(2)}`, w) + '\n');
     }
 
     if (data.cgst_amount && Number(data.cgst_amount) > 0) {
@@ -238,20 +221,23 @@ export class DesktopEscPosEncoder {
       this.addString(bytes, this.formatTwoColumn('IGST:', `₹${Number(data.igst_amount).toFixed(2)}`, w) + '\n');
     }
 
-    this.addString(bytes, this.divider('=', w) + '\n');
+    bytes.push(0x1B, 0x45, 0x01);
     this.addString(bytes, this.formatTwoColumn('TOTAL:', `₹${Number(data.grand_total).toFixed(2)}`, w) + '\n');
-    this.addString(bytes, this.divider('=', w) + '\n');
+    bytes.push(0x1B, 0x45, 0x00);
+    this.addString(bytes, this.divider('-', w) + '\n');
 
     // Status Banner - Center Aligned
     bytes.push(0x1B, 0x61, 0x01);
-    this.addString(bytes, `${data.status.toUpperCase()}${data.payment_method ? ` - ${data.payment_method.toUpperCase()}` : ''}\n`);
-    if (data.payment_method) {
-      this.addString(bytes, `Payment Method: ${data.payment_method}\n`);
-    }
+    this.addString(bytes, `${status}${data.payment_method ? ` - ${data.payment_method.toUpperCase()}` : ''}\n`);
     if (data.digital_bill_url) {
-      this.addString(bytes, '\nVIEW YOUR DIGITAL BILL\nScan for complete bill details\n');
-      this.addQrCode(bytes, data.digital_bill_url);
-      this.addString(bytes, `\nBill No. ${data.bill_number}\n`);
+      this.addString(bytes, 'VIEW DIGITAL BILL\n');
+      try {
+        if (this.qrMode === 'native') this.addNativeQrCode(bytes, data.digital_bill_url);
+        else this.addRasterQrCode(bytes, data.digital_bill_url);
+      } catch (error) {
+        console.warn('OMLU receipt QR raster encoding failed; printing receipt without QR.', error);
+      }
+      this.addString(bytes, 'Scan for bill details\n');
     }
     this.addString(bytes, 'Thank you\n');
 
@@ -274,7 +260,13 @@ export class DesktopEscPosEncoder {
     }
   }
 
-  private addQrCode(bytes: number[], value: string): void {
+  public encodeNativeQr(value: string): Buffer {
+    const bytes: number[] = [0x1B, 0x40, 0x1B, 0x61, 0x01];
+    this.addNativeQrCode(bytes, value);
+    return Buffer.from(bytes);
+  }
+
+  private addNativeQrCode(bytes: number[], value: string): void {
     const data = Buffer.from(value, 'ascii');
     const storeLength = data.length + 3;
     bytes.push(0x1D, 0x28, 0x6B, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00);
@@ -282,6 +274,52 @@ export class DesktopEscPosEncoder {
     bytes.push(0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x45, 0x31);
     bytes.push(0x1D, 0x28, 0x6B, storeLength & 0xff, (storeLength >> 8) & 0xff, 0x31, 0x50, 0x30, ...data);
     bytes.push(0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x51, 0x30);
+  }
+
+  private addRasterQrCode(bytes: number[], value: string): void {
+    // Generic POS58/80 profiles cannot guarantee Epson native QR support.
+    // Raster is deterministic GS v 0 output and remains scannable with a 4-module quiet zone.
+    const QRCode = require('qrcode');
+    const qr = QRCode.create(value, { errorCorrectionLevel: 'M' });
+    const quiet = 4;
+    const targetDots = this.width === 48 ? 240 : 200;
+    const modules = qr.modules.size + quiet * 2;
+    const scale = Math.max(1, Math.ceil(targetDots / modules));
+    const size = modules * scale;
+    const widthBytes = Math.ceil(size / 8);
+    bytes.push(0x1D, 0x76, 0x30, 0x00, widthBytes & 0xff, (widthBytes >> 8) & 0xff, size & 0xff, (size >> 8) & 0xff);
+    for (let y = 0; y < size; y++) {
+      for (let xb = 0; xb < widthBytes; xb++) {
+        let packed = 0;
+        for (let bit = 0; bit < 8; bit++) {
+          const x = xb * 8 + bit;
+          const mx = Math.floor(x / scale) - quiet;
+          const my = Math.floor(y / scale) - quiet;
+          if (x < size && mx >= 0 && my >= 0 && mx < qr.modules.size && my < qr.modules.size && qr.modules.get(mx, my)) packed |= 0x80 >> bit;
+        }
+        bytes.push(packed);
+      }
+    }
+    this.addString(bytes, '\n');
+  }
+
+  private compactDate(value: string): string {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+  }
+
+  private wrap(value: string, width: number): string[] {
+    const lines: string[] = [];
+    let remaining = value.trim();
+    while (remaining.length > width) {
+      let split = remaining.lastIndexOf(' ', width);
+      if (split < 1) split = width;
+      lines.push(remaining.slice(0, split));
+      remaining = remaining.slice(split).trimStart();
+    }
+    if (remaining) lines.push(remaining);
+    return lines;
   }
 
   private divider(char: string, width: number): string {

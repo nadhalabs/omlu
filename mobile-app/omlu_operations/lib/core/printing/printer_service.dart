@@ -27,6 +27,7 @@ class PrinterConfig {
     this.writeTimeoutSeconds = 5,
     this.chunkSize = 128,
     this.interChunkDelayMs = 20,
+    this.qrMode = QrPrintMode.raster,
 
     // TCP
     this.tcpIpAddress = '',
@@ -58,6 +59,7 @@ class PrinterConfig {
   final int writeTimeoutSeconds;
   final int chunkSize;
   final int interChunkDelayMs;
+  final QrPrintMode qrMode;
 
   final String tcpIpAddress;
   final int tcpPort;
@@ -98,6 +100,7 @@ class PrinterConfig {
     'write_timeout_seconds': writeTimeoutSeconds,
     'chunk_size': chunkSize,
     'inter_chunk_delay_ms': interChunkDelayMs,
+    'qr_mode': qrMode.name,
     'tcp_ip_address': tcpIpAddress,
     'tcp_port': tcpPort,
     'bt_device_name': btDeviceName,
@@ -140,24 +143,22 @@ class PrinterConfig {
       copies: int.tryParse(json['copies']?.toString() ?? '') ?? 1,
       autoCut: json['auto_cut'] == null || json['auto_cut'] == true,
       encoding: json['encoding']?.toString() ?? 'utf-8',
-      charactersPerLine: int.tryParse(
-            json['characters_per_line']?.toString() ?? '',
-          ) ??
+      charactersPerLine:
+          int.tryParse(json['characters_per_line']?.toString() ?? '') ??
           (paperWidth == PaperWidth.mm80 ? 48 : 32),
-      connectTimeoutSeconds: int.tryParse(
-            json['connect_timeout_seconds']?.toString() ?? '',
-          ) ??
-          5,
-      writeTimeoutSeconds: int.tryParse(
-            json['write_timeout_seconds']?.toString() ?? '',
-          ) ??
-          5,
-      chunkSize: int.tryParse(json['chunk_size']?.toString() ?? '') ??
+      connectTimeoutSeconds:
+          int.tryParse(json['connect_timeout_seconds']?.toString() ?? '') ?? 5,
+      writeTimeoutSeconds:
+          int.tryParse(json['write_timeout_seconds']?.toString() ?? '') ?? 5,
+      chunkSize:
+          int.tryParse(json['chunk_size']?.toString() ?? '') ??
           (transport == PrinterTransportType.bluetoothLowEnergy ? 20 : 128),
-      interChunkDelayMs: int.tryParse(
-            json['inter_chunk_delay_ms']?.toString() ?? '',
-          ) ??
-          20,
+      interChunkDelayMs:
+          int.tryParse(json['inter_chunk_delay_ms']?.toString() ?? '') ?? 20,
+      qrMode: QrPrintMode.values.firstWhere(
+        (mode) => mode.name == json['qr_mode']?.toString(),
+        orElse: () => QrPrintMode.raster,
+      ),
 
       tcpIpAddress: json['tcp_ip_address']?.toString() ?? '',
       tcpPort: int.tryParse(json['tcp_port']?.toString() ?? '') ?? 9100,
@@ -170,8 +171,8 @@ class PrinterConfig {
       bleDeviceName: json['ble_device_name']?.toString() ?? '',
       bleDeviceIdentifier: json['ble_device_identifier']?.toString() ?? '',
       bleServiceUuid: json['ble_service_uuid']?.toString(),
-      bleWriteCharacteristicUuid:
-          json['ble_write_characteristic_uuid']?.toString(),
+      bleWriteCharacteristicUuid: json['ble_write_characteristic_uuid']
+          ?.toString(),
       bleWriteMode: json['ble_write_mode']?.toString() ?? 'auto',
     );
   }
@@ -188,7 +189,8 @@ class PrinterService {
   }) : _storage = storage,
        _transportFactory = transportFactory,
        _legacyAdapterFactory = legacyAdapterFactory ?? adapterFactory,
-       _bluetoothPlatform = bluetoothPlatform ?? MethodChannelBluetoothPlatform(),
+       _bluetoothPlatform =
+           bluetoothPlatform ?? MethodChannelBluetoothPlatform(),
        _coordinator = coordinator ?? PrintJobCoordinator();
 
   static const _storageKey = 'omlu_tcp_printer_config_v1';
@@ -297,6 +299,7 @@ class PrinterService {
     if (legacyFactory != null) {
       final bytes = EscPosEncoder(
         paperWidth: _config.paperWidth,
+        qrMode: _config.qrMode,
       ).encodeReceipt(receipt);
       for (var copy = 0; copy < _config.copies; copy++) {
         await legacyFactory(_config).printBytes(bytes);
@@ -306,11 +309,13 @@ class PrinterService {
 
     final bytes = EscPosEncoder(
       paperWidth: _config.paperWidth,
+      qrMode: _config.qrMode,
     ).encodeReceipt(receipt);
 
     final transport = createTransport(_config);
     final printJob = PrintJob(
-      printJobId: 'job-${receipt.billNumber}-${DateTime.now().millisecondsSinceEpoch}',
+      printJobId:
+          'job-${receipt.billNumber}-${DateTime.now().millisecondsSinceEpoch}',
       billId: receipt.billNumber,
       receiptType: receipt.receiptTitle,
       receiptPayload: receipt,
