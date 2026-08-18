@@ -19,6 +19,7 @@ export interface PrinterConfig {
   chunkSize: number;
   interChunkDelayMs: number;
   feedLines: number;
+  qrMode: 'native' | 'raster';
   // TCP settings
   tcpHost: string;
   tcpPort: number;
@@ -56,6 +57,7 @@ export const defaultConfig: PrinterConfig = {
   chunkSize: 128,
   interChunkDelayMs: 10,
   feedLines: 3,
+  qrMode: 'raster',
   tcpHost: '192.168.1.100',
   tcpPort: 9100,
   comPort: 'COM1',
