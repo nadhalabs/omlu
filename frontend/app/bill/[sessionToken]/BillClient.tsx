@@ -122,23 +122,38 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false, 
     if (!bill || !["issued", "payment_pending", "paid"].includes(bill.status)) return;
     if (typeof window === "undefined" || !window.parent) return;
 
-    const notifyReady = () => {
-      const receiptSheet = document.querySelector(".print-bill-sheet");
-      if (receiptSheet) {
-        window.parent.postMessage(
-          {
-            type: "OMLU_PRINT_READY",
-            sessionToken,
-            receiptToken: receiptAccessToken || receiptToken || bill.receipt_token || "",
-          },
-          window.location.origin
-        );
+    let cancelled = false;
+    const waitForImage = async (image: HTMLImageElement) => {
+      if (!image.complete) {
+        await new Promise<void>((resolve) => {
+          image.addEventListener("load", () => resolve(), { once: true });
+          image.addEventListener("error", () => resolve(), { once: true });
+        });
+      }
+      if (image.naturalWidth > 0 && typeof image.decode === "function") {
+        await image.decode().catch(() => undefined);
       }
     };
+    const notifyReady = async () => {
+      const receiptSheet = document.querySelector(".print-bill-sheet");
+      if (!receiptSheet) return;
+      const images = Array.from(receiptSheet.querySelectorAll("img"));
+      await Promise.all(images.map(waitForImage));
+      await document.fonts?.ready;
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      if (cancelled) return;
+      window.parent.postMessage(
+        {
+          type: "OMLU_PRINT_READY",
+          sessionToken,
+          receiptToken: receiptAccessToken || receiptToken || bill.receipt_token || "",
+        },
+        window.location.origin
+      );
+    };
 
-    notifyReady();
-    const frameId = requestAnimationFrame(notifyReady);
-    return () => cancelAnimationFrame(frameId);
+    void notifyReady();
+    return () => { cancelled = true; };
   }, [bill, receiptAccessToken, receiptToken, sessionToken]);
   const labels = {
     en: {

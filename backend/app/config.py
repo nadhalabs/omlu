@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     realtime_max_connections: int = 5000
     realtime_max_connections_per_session: int = 20
     realtime_max_connections_per_ip: int = 100
+    performance_timing_enabled: bool = False
+    db_pool_size: int = 5
+    db_max_overflow: int = 10
+    db_pool_timeout_seconds: int = 30
+    db_pool_recycle_seconds: int = 1800
     gemini_api_key: str | None = None
     gemini_model: str | None = None
 

@@ -5,7 +5,6 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status as fastapi_status
 from sqlalchemy.orm import Session, selectinload, joinedload
 from app.database import get_db
-from app.models.restaurant import Restaurant
 from app.models.order import Order, OrderItem, OrderStatusHistory
 from app.models.bill import Bill
 from app.models.staff_user import StaffUser
@@ -60,9 +59,10 @@ def get_kitchen_orders(
             detail="Access denied for this restaurant"
         )
 
-    # 2. Validate restaurant
-    restaurant = db.query(Restaurant).filter(Restaurant.slug == restaurant_slug).first()
-    if not restaurant or not restaurant.is_active:
+    # Authentication already loaded and tenant-scoped this restaurant. Avoid a
+    # duplicate lookup on every KDS refresh/action.
+    restaurant = current_user.restaurant
+    if not restaurant.is_active:
         raise HTTPException(
             status_code=fastapi_status.HTTP_404_NOT_FOUND,
             detail="Restaurant not found"
@@ -164,9 +164,8 @@ def update_kitchen_order_status(
             detail="Access denied for this restaurant"
         )
 
-    # 2. Validate restaurant
-    restaurant = db.query(Restaurant).filter(Restaurant.slug == restaurant_slug).first()
-    if not restaurant or not restaurant.is_active:
+    restaurant = current_user.restaurant
+    if not restaurant.is_active:
         raise HTTPException(
             status_code=fastapi_status.HTTP_404_NOT_FOUND,
             detail="Restaurant not found"

@@ -18,7 +18,21 @@ from app.utils.platform_auth import create_platform_token
 from app.services.platform_recovery import finalize_paid_session, recover_abandoned_empty_session
 from app.services.table_participants import load_participant
 from app.services.dining_sessions import find_current_open_session_for_table
+from app.config import settings
 from fastapi import HTTPException
+
+
+def test_gated_server_timing_exposes_total_and_sql_breakdown(client: TestClient):
+    previous = settings.performance_timing_enabled
+    settings.performance_timing_enabled = True
+    try:
+        response = client.get("/")
+    finally:
+        settings.performance_timing_enabled = previous
+    assert response.status_code == 200
+    assert "app;dur=" in response.headers["server-timing"]
+    assert "db;dur=" in response.headers["server-timing"]
+    assert response.headers["x-omlu-sql-count"] == "0"
 
 
 @pytest.fixture

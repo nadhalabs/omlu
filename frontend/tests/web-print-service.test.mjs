@@ -28,7 +28,27 @@ test("shared print_service implements Print Bridge direct print and OMLU_PRINT_R
   // BillClient emits readiness postMessage only when official printable receipt is mounted
   assert.match(billClient, /OMLU_PRINT_READY/);
   assert.match(billClient, /document\.querySelector\("\.print-bill-sheet"\)/);
+  assert.match(billClient, /querySelectorAll\("img"\)/);
+  assert.match(billClient, /image\.decode\(\)/);
+  assert.match(billClient, /document\.fonts\?\.ready/);
+  assert.match(billClient, /await new Promise<void>\(\(resolve\) => requestAnimationFrame/);
   assert.match(billClient, /window\.parent\.postMessage/);
+});
+
+test("KDS applies status websocket events locally instead of refetching the full board", () => {
+  const kitchen = read("app/kitchen/[restaurantSlug]/KitchenDashboardClient.tsx");
+  assert.match(kitchen, /event\.type === "order\.status_changed" && publicToken && status/);
+  assert.match(kitchen, /current\.filter\(\(order\) => order\.public_token !== publicToken\)/);
+  assert.match(kitchen, /\? \{ \.\.\.order, status \} : order/);
+});
+
+test("customer menu applies availability websocket payloads without another menu request", () => {
+  const menu = read("app/menu/[restaurantSlug]/[tableCode]/MenuClient.tsx");
+  assert.match(menu, /event\.type !== "availability\.updated"/);
+  assert.match(menu, /kind === "item"/);
+  assert.match(menu, /kind === "category"/);
+  assert.match(menu, /kind === "option"/);
+  assert.match(menu, /\? \{ \.\.\.option, available \}/);
 });
 
 test("admin billing views use print_service and contain zero window.open or target=_blank print calls", () => {

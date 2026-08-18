@@ -1,8 +1,10 @@
 import uuid
 import pytest
+from sqlalchemy import event
 from fastapi.testclient import TestClient
 from app.main import app
 from app.database import SessionLocal
+from app.database import engine
 from app.models.restaurant import Restaurant
 from app.models.restaurant_table import RestaurantTable
 from app.models.menu import MenuCategory, MenuItem
@@ -12,6 +14,19 @@ from app.utils.auth import hash_password
 from tests.auth_helpers import create_session_access_token as create_access_token
 
 client = TestClient(app)
+
+
+def _request_query_count(path: str, headers: dict[str, str]) -> tuple[int, int]:
+    statements = []
+    def capture(conn, cursor, statement, parameters, context, executemany):
+        statements.append(statement)
+    event.listen(engine, "before_cursor_execute", capture)
+    try:
+        response = client.get(path, headers=headers)
+    finally:
+        event.remove(engine, "before_cursor_execute", capture)
+    assert response.status_code == 200
+    return len(statements), len(response.content)
 
 @pytest.fixture(scope="module")
 def setup_kitchen_test_data():
@@ -150,6 +165,43 @@ def test_valid_kitchen_order_list(setup_kitchen_test_data):
     assert "pending" in statuses
     assert "accepted" in statuses
     assert orders[0]["table_number"] == "K1"
+
+
+def test_kitchen_list_query_count_is_fixed_as_order_count_grows(setup_kitchen_test_data):
+    data = setup_kitchen_test_data
+    path = f"/kitchen/restaurants/{data['restaurant_slug']}/orders"
+    headers = {"Authorization": f"Bearer {data['token']}"}
+    baseline_count, _ = _request_query_count(path, headers)
+
+    db = SessionLocal()
+    restaurant = db.query(Restaurant).filter(Restaurant.slug == data["restaurant_slug"]).one()
+    table = db.query(RestaurantTable).filter(RestaurantTable.restaurant_id == restaurant.id).first()
+    added_ids = []
+    for index in range(18):
+        order = Order(
+            restaurant_id=restaurant.id,
+            table_id=table.id,
+            order_number=f"NS-K-PERF-{index}",
+            public_token=f"kds-perf-{uuid.uuid4().hex}",
+            status="pending",
+            subtotal=100.00,
+            idempotency_key=f"idem-k-perf-{uuid.uuid4().hex}",
+        )
+        db.add(order)
+        db.flush()
+        added_ids.append(order.id)
+    db.commit()
+    try:
+        expanded_count, payload_bytes = _request_query_count(path, headers)
+    finally:
+        db.query(OrderStatusHistory).filter(OrderStatusHistory.order_id.in_(added_ids)).delete(synchronize_session=False)
+        db.query(Order).filter(Order.id.in_(added_ids)).delete(synchronize_session=False)
+        db.commit()
+        db.close()
+
+    assert baseline_count == expanded_count
+    assert expanded_count <= 7
+    assert payload_bytes < 100_000
 
 
 def test_restaurant_isolation(setup_kitchen_test_data):

@@ -14,9 +14,16 @@ _db_url = _normalize_db_url(settings.database_url)
 
 engine = create_engine(
     _db_url,
-    pool_pre_ping=True,   # Detect stale connections before use
-    pool_recycle=300,     # Recycle connections every 5 minutes
+    pool_pre_ping=True,
+    pool_size=settings.db_pool_size,
+    max_overflow=settings.db_max_overflow,
+    pool_timeout=settings.db_pool_timeout_seconds,
+    pool_recycle=settings.db_pool_recycle_seconds,
 )
+
+from app.performance_timing import install_engine_timing
+
+install_engine_timing(engine)
 
 SessionLocal = sessionmaker(
     autocommit=False,

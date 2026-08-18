@@ -301,6 +301,17 @@ export default function KitchenDashboardClient({
         selfMutationEventsRef.current.delete(publicToken);
         return;
       }
+      if (event.type === "order.status_changed" && publicToken && status) {
+        setOrders((current) =>
+          status === "served" || status === "rejected"
+            ? current.filter((order) => order.public_token !== publicToken)
+            : current.map((order) =>
+                order.public_token === publicToken ? { ...order, status } : order
+              )
+        );
+        setLastUpdated(new Date());
+        return;
+      }
       scheduleEventReconciliation();
     },
     onReconnect: () => {

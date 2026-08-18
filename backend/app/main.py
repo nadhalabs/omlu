@@ -9,6 +9,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 import app.models  # Ensures all models are registered on Base
 
 from app.config import settings
+from app.performance_timing import begin_request_metrics, end_request_metrics
 
 # Configure structured logging
 logging.basicConfig(
@@ -61,18 +62,25 @@ async def request_logging_middleware(request: Request, call_next):
     """Log every request with method, path, status, and timing. Never log secrets or bodies."""
     request_id = str(uuid.uuid4())[:8]
     request.state.request_id = request_id
-    start_time = time.time()
+    start_time = time.perf_counter()
+    metrics = token = None
+    if settings.performance_timing_enabled:
+        metrics, token = begin_request_metrics()
 
-    response = await call_next(request)
+    try:
+        response = await call_next(request)
+    finally:
+        if token is not None:
+            end_request_metrics(token)
 
-    duration_ms = int((time.time() - start_time) * 1000)
+    duration_ms = (time.perf_counter() - start_time) * 1000
     sanitized_path = sanitize_path_for_logging(request.url.path)
     logger.info(
         "request method=%s path=%s status=%d duration_ms=%d request_id=%s",
         request.method,
         sanitized_path,
         response.status_code,
-        duration_ms,
+        round(duration_ms),
         request_id
     )
     if response.status_code >= 400:
@@ -94,6 +102,13 @@ async def request_logging_middleware(request: Request, call_next):
                 event, request.method, sanitized_path, response.status_code, request_id,
             )
     response.headers["X-Request-ID"] = request_id
+    if metrics is not None:
+        app_ms = max(0.0, duration_ms - metrics["sql_ms"])
+        response.headers["Server-Timing"] = (
+            f'app;dur={app_ms:.1f}, db;dur={metrics["sql_ms"]:.1f};desc="{metrics["sql_count"]} queries", '
+            f'slowest-db;dur={metrics["slowest_sql_ms"]:.1f}, total;dur={duration_ms:.1f}'
+        )
+        response.headers["X-OMLU-SQL-Count"] = str(metrics["sql_count"])
     return response
 
 

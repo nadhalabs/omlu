@@ -402,7 +402,46 @@ function ActiveMenuClient({
 
   useRealtime({
     target: { kind: "menu", restaurantSlug, tableCode },
-    onEvent: () => void fetchMenu(false),
+    onEvent: (event) => {
+      if (event.type !== "availability.updated" || !event.state) {
+        void fetchMenu(false);
+        return;
+      }
+      const kind = event.state.kind;
+      const available = event.state.is_available ?? event.state.available;
+      if (typeof available !== "boolean") {
+        void fetchMenu(false);
+        return;
+      }
+      setMenuData((current) => current ? {
+        ...current,
+        categories: current.categories.map((category) => ({
+          ...category,
+          items: category.items.map((item) => {
+            if (kind === "item" && item.id === Number(event.state?.item_id)) {
+              return { ...item, is_available: available };
+            }
+            if (kind === "category" && category.id === Number(event.state?.category_id)) {
+              return { ...item, is_available: available };
+            }
+            if (kind === "option") {
+              return {
+                ...item,
+                option_groups: item.option_groups?.map((group) => ({
+                  ...group,
+                  options: group.options.map((option) =>
+                    option.id === Number(event.state?.option_id)
+                      ? { ...option, available }
+                      : option
+                  ),
+                })),
+              };
+            }
+            return item;
+          }),
+        })),
+      } : current);
+    },
     onReconnect: () => void fetchMenu(false),
   });
 
