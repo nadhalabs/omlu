@@ -2086,6 +2086,14 @@ def test_unique_bill_number(bill_context):
     ).json()
 
     assert second["bill_number"] != first["bill_number"]
+    db = SessionLocal()
+    tokens = {
+        bill.receipt_token
+        for bill in db.query(Bill).filter(Bill.bill_number.in_([first["bill_number"], second["bill_number"]])).all()
+    }
+    db.close()
+    assert len(tokens) == 2
+    assert all(len(token) >= 48 for token in tokens)
 
 
 def test_concurrent_generation_creates_one_bill(bill_context):
@@ -2728,7 +2736,7 @@ def test_receipt_payload_endpoint_returns_authoritative_data(bill_context):
     assert payload_resp.status_code == 200
     payload = payload_resp.json()
     assert payload["bill_number"] == issued_number
-    assert payload["receipt_title"] == "TAX INVOICE"
+    assert payload["receipt_title"] == "BILL"
     assert payload["grand_total"] == "100.00"
     assert len(payload["items"]) == 1
     assert payload["items"][0] == {
@@ -2763,12 +2771,76 @@ def test_receipt_payload_endpoint_returns_authoritative_data(bill_context):
     )
     assert paid_payload.status_code == 200
     assert paid_payload.json()["status"] == "paid"
-    assert paid_payload.json()["receipt_title"] == "PAYMENT RECEIPT"
+    assert paid_payload.json()["receipt_title"] == "BILL"
     db = SessionLocal()
     bill = db.query(Bill).filter(Bill.bill_number == issued_number).one()
     after = (bill.status, bill.total_amount, db.query(Payment).filter(Payment.bill_id == bill.id).count())
     db.close()
     assert after == before
+
+
+def test_public_receipt_is_token_isolated_minimal_and_qr_is_stable(bill_context):
+    add_order(bill_context)
+    issued = issue_bill_for(bill_context)
+    token = issued["receipt_token"]
+
+    def measured_get(path):
+        statements = []
+        def capture(*args):
+            statements.append(args[2])
+        event.listen(engine, "before_cursor_execute", capture)
+        try:
+            response = client.get(path)
+        finally:
+            event.remove(engine, "before_cursor_execute", capture)
+        return response, len(statements)
+
+    first, receipt_sql_count = measured_get(f"/public/bills/{token}")
+    second = client.get(f"/public/bills/{token}")
+    assert first.status_code == second.status_code == 200
+    assert first.json()["bill_number"] == issued["bill_number"]
+    assert second.json() == first.json()
+    assert client.get("/public/bills/not-a-real-receipt-token").status_code == 404
+
+    forbidden = {
+        "paid_by_staff_id", "generated_by_role", "sent_to_counter_by_role",
+        "restaurant_slug", "table_code", "session_token", "payment_code",
+        "payment_code_expires_at", "receipt_access", "session_status",
+    }
+    assert forbidden.isdisjoint(first.json())
+
+    before = first.json()
+    qr_one, qr_sql_count = measured_get(f"/public/bills/{token}/qr")
+    qr_two = client.get(f"/public/bills/{token}/qr")
+    assert qr_one.status_code == qr_two.status_code == 200
+    assert qr_one.headers["content-type"] == "image/png"
+    assert qr_one.headers["cache-control"] == "public, max-age=86400, immutable"
+    assert qr_one.content.startswith(b"\x89PNG\r\n\x1a\n")
+    assert qr_one.content == qr_two.content
+    assert receipt_sql_count <= 8
+    assert qr_sql_count <= 2
+    print("public receipt query measurements", {"receipt": receipt_sql_count, "qr": qr_sql_count, "payload_bytes": len(first.content)})
+    assert client.get("/public/bills/not-a-real-receipt-token/qr").status_code == 404
+    assert client.get(f"/public/bills/{token}").json() == before
+
+
+def test_qr_generation_failure_cannot_roll_back_issued_bill(bill_context, monkeypatch):
+    add_order(bill_context)
+    issued = issue_bill_for(bill_context)
+
+    def fail_qr(*_args, **_kwargs):
+        raise RuntimeError("simulated QR encoder failure")
+
+    monkeypatch.setattr("app.routes.bills.qrcode.QRCode.make", fail_qr)
+    failure_client = TestClient(app, raise_server_exceptions=False)
+    response = failure_client.get(f"/public/bills/{issued['receipt_token']}/qr")
+    assert response.status_code == 500
+
+    db = SessionLocal()
+    persisted = db.query(Bill).filter(Bill.bill_number == issued["bill_number"]).one()
+    assert persisted.status == "issued"
+    assert persisted.receipt_token == issued["receipt_token"]
+    db.close()
 
 
 def test_staff_receipt_payload_rejects_draft_bill(bill_context):

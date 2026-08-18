@@ -20,9 +20,7 @@ class EscPosEncoder {
     // Header: Restaurant Name & Title
     bytes.addAll(_alignCenter());
     bytes.addAll(_boldOn());
-    bytes.addAll(_setTextSize(doubleWidth: true, doubleHeight: true));
     bytes.addAll(utf8.encode('${receipt.restaurantName}\n'));
-    bytes.addAll(_setTextSize(doubleWidth: false, doubleHeight: false));
     bytes.addAll(_boldOff());
 
     if (receipt.legalBusinessName != null &&
@@ -39,7 +37,7 @@ class EscPosEncoder {
 
     // Receipt Title Banner
     bytes.addAll(_boldOn());
-    bytes.addAll(utf8.encode('*** ${receipt.receiptTitle} ***\n'));
+    bytes.addAll(utf8.encode('${receipt.receiptTitle}\n'));
     bytes.addAll(_boldOff());
     bytes.addAll(_alignLeft());
 
@@ -103,21 +101,23 @@ class EscPosEncoder {
       bytes.addAll(
         utf8.encode(_row2Cols('Taxable Value:', receipt.taxableAmount)),
       );
-      bytes.addAll(utf8.encode(_row2Cols('CGST:', receipt.cgstAmount)));
-      bytes.addAll(utf8.encode(_row2Cols('SGST:', receipt.sgstAmount)));
+      if ((double.tryParse(receipt.igstAmount) ?? 0) > 0) {
+        bytes.addAll(utf8.encode(_row2Cols('IGST:', receipt.igstAmount)));
+      } else {
+        bytes.addAll(utf8.encode(_row2Cols('CGST:', receipt.cgstAmount)));
+        bytes.addAll(utf8.encode(_row2Cols('SGST:', receipt.sgstAmount)));
+      }
     }
 
     bytes.addAll(utf8.encode(_divider()));
 
     // Grand Total
     bytes.addAll(_boldOn());
-    bytes.addAll(_setTextSize(doubleWidth: true, doubleHeight: false));
     bytes.addAll(
       utf8.encode(
         _row2Cols('TOTAL:', '${receipt.currency} ${receipt.grandTotal}'),
       ),
     );
-    bytes.addAll(_setTextSize(doubleWidth: false, doubleHeight: false));
     bytes.addAll(_boldOff());
 
     bytes.addAll(utf8.encode(_divider()));
@@ -125,10 +125,15 @@ class EscPosEncoder {
     // Footer & Status
     bytes.addAll(_alignCenter());
     bytes.addAll(
-      utf8.encode('Status: ${receipt.paymentStatus.toUpperCase()}\n\n'),
+      utf8.encode('${receipt.paymentStatus.toUpperCase()}${receipt.paymentMethod == null ? '' : ' · ${receipt.paymentMethod!.toUpperCase()}'}\n\n'),
     );
-    bytes.addAll(utf8.encode('Thank you for dining with us!\n'));
-    bytes.addAll(utf8.encode('Powered by OMLU\n\n\n\n'));
+    if (receipt.digitalBillUrl.isNotEmpty) {
+      bytes.addAll(utf8.encode('VIEW YOUR DIGITAL BILL\n'));
+      bytes.addAll(utf8.encode('Scan for complete bill details\n'));
+      bytes.addAll(_qrCode(receipt.digitalBillUrl));
+      bytes.addAll(utf8.encode('\nBill No. ${receipt.billNumber}\n'));
+    }
+    bytes.addAll(utf8.encode('Thank you\n\n\n\n'));
 
     // Cut paper command GS V A 0
     bytes.addAll([0x1D, 0x56, 0x41, 0x00]);
@@ -207,14 +212,18 @@ class EscPosEncoder {
   List<int> _boldOn() => [0x1B, 0x45, 0x01];
   List<int> _boldOff() => [0x1B, 0x45, 0x00];
 
-  List<int> _setTextSize({
-    required bool doubleWidth,
-    required bool doubleHeight,
-  }) {
-    int size = 0;
-    if (doubleWidth) size |= 0x10;
-    if (doubleHeight) size |= 0x01;
-    return [0x1D, 0x21, size];
+  List<int> _qrCode(String value) {
+    final data = ascii.encode(value);
+    final length = data.length + 3;
+    final size = paperWidth == PaperWidth.mm58 ? 5 : 7;
+    return [
+      0x1D, 0x28, 0x6B, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00,
+      0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x43, size,
+      0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x45, 0x31,
+      0x1D, 0x28, 0x6B, length & 0xFF, (length >> 8) & 0xFF, 0x31, 0x50, 0x30,
+      ...data,
+      0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x51, 0x30,
+    ];
   }
 
   /// Encodes a grayscale raster image (Monochrome 1-bit GS v 0 format)

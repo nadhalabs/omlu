@@ -109,12 +109,17 @@ export function parseApiError(data: unknown, fallback: string): ParsedApiError {
   return { message, code, field };
 }
 
-function publicBackendBaseUrl() {
+export function publicBackendBaseUrl() {
   return (
     process.env.NEXT_PUBLIC_BACKEND_URL ||
     process.env.NEXT_PUBLIC_API_BASE_URL ||
     "http://localhost:8000"
   ).replace(/\/+$/, "");
+}
+
+export function getPublicReceiptQrUrl(receiptToken: string, quickSale = false): string {
+  const kind = quickSale ? "quick-sales" : "bills";
+  return `${publicBackendBaseUrl()}/public/${kind}/${encodeURIComponent(receiptToken)}/qr`;
 }
 
 export async function getPublicMenu(
@@ -507,6 +512,16 @@ export async function getPublicBill(
     if (error instanceof ApiError) throw error;
     throw new ApiError(500, "Could not connect to the backend server.");
   }
+}
+
+export async function getPublicQuickSaleReceipt(receiptToken: string): Promise<BillResponse> {
+  const response = await fetch(
+    `${publicBackendBaseUrl()}/public/quick-sales/${encodeURIComponent(receiptToken)}`,
+    { method: "GET", cache: "no-store", headers: { "Content-Type": "application/json" } },
+  );
+  const body = await response.json().catch(() => null);
+  if (!response.ok) throw new ApiError(response.status, body?.detail || "Receipt not found.");
+  return body;
 }
 
 export async function issueStaffBill(

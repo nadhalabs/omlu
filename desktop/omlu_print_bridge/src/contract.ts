@@ -13,10 +13,9 @@ export interface AuthoritativeReceiptPayload {
   table_number: string;
   restaurant_name: string;
   legal_business_name?: string;
-  registered_billing_address?: string;
+  address?: string;
   gstin?: string;
-  requested_at: string;
-  issued_at?: string;
+  created_at: string;
   paid_at?: string;
   status: 'draft' | 'issued' | 'payment_pending' | 'paid';
   items: ReceiptItemPayload[];
@@ -25,7 +24,11 @@ export interface AuthoritativeReceiptPayload {
   cgst_amount?: string;
   sgst_amount?: string;
   igst_amount?: string;
-  total_amount: string;
+  discount_amount?: string;
+  taxable_amount?: string;
+  grand_total: string;
+  receipt_title: string;
+  digital_bill_url: string;
   payment_method?: string;
   customer_name?: string;
   customer_phone?: string;
@@ -169,16 +172,15 @@ export class DesktopEscPosEncoder {
     if (data.legal_business_name) {
       this.addString(bytes, `${data.legal_business_name}\n`);
     }
-    if (data.registered_billing_address) {
-      this.addString(bytes, `${data.registered_billing_address}\n`);
+    if (data.address) {
+      this.addString(bytes, `${data.address}\n`);
     }
     if (data.gstin) {
       this.addString(bytes, `GSTIN: ${data.gstin}\n`);
     }
 
     this.addString(bytes, this.divider('-', w) + '\n');
-    const title = data.status === 'paid' ? '*** PAYMENT RECEIPT ***' : '*** TAX INVOICE ***';
-    this.addString(bytes, `${title}\n`);
+    this.addString(bytes, `${data.receipt_title}\n`);
     this.addString(bytes, this.divider('-', w) + '\n');
 
     // Left Aligned Meta
@@ -188,7 +190,8 @@ export class DesktopEscPosEncoder {
       this.addString(bytes, `Inv #: ${data.invoice_number}\n`);
     }
     this.addString(bytes, `Table #: ${data.table_number}\n`);
-    this.addString(bytes, `Date: ${new Date(data.issued_at || data.requested_at).toLocaleString()}\n`);
+    this.addString(bytes, `Generated: ${new Date(data.created_at).toLocaleString()}\n`);
+    if (data.paid_at) this.addString(bytes, `Paid at: ${new Date(data.paid_at).toLocaleString()}\n`);
     this.addString(bytes, this.divider('=', w) + '\n');
 
     // Item Table Header
@@ -218,6 +221,12 @@ export class DesktopEscPosEncoder {
 
     // Totals
     this.addString(bytes, this.formatTwoColumn('Subtotal:', `₹${Number(data.subtotal).toFixed(2)}`, w) + '\n');
+    if (data.discount_amount && Number(data.discount_amount) > 0) {
+      this.addString(bytes, this.formatTwoColumn('Discount:', `-₹${Number(data.discount_amount).toFixed(2)}`, w) + '\n');
+    }
+    if (data.taxable_amount && Number(data.taxable_amount) > 0) {
+      this.addString(bytes, this.formatTwoColumn('Taxable amount:', `₹${Number(data.taxable_amount).toFixed(2)}`, w) + '\n');
+    }
 
     if (data.cgst_amount && Number(data.cgst_amount) > 0) {
       this.addString(bytes, this.formatTwoColumn('CGST:', `₹${Number(data.cgst_amount).toFixed(2)}`, w) + '\n');
@@ -230,16 +239,21 @@ export class DesktopEscPosEncoder {
     }
 
     this.addString(bytes, this.divider('=', w) + '\n');
-    this.addString(bytes, this.formatTwoColumn('TOTAL AMOUNT:', `₹${Number(data.total_amount).toFixed(2)}`, w) + '\n');
+    this.addString(bytes, this.formatTwoColumn('TOTAL:', `₹${Number(data.grand_total).toFixed(2)}`, w) + '\n');
     this.addString(bytes, this.divider('=', w) + '\n');
 
     // Status Banner - Center Aligned
     bytes.push(0x1B, 0x61, 0x01);
-    this.addString(bytes, `STATUS: ${data.status.toUpperCase()}\n`);
+    this.addString(bytes, `${data.status.toUpperCase()}${data.payment_method ? ` - ${data.payment_method.toUpperCase()}` : ''}\n`);
     if (data.payment_method) {
       this.addString(bytes, `Payment Method: ${data.payment_method}\n`);
     }
-    this.addString(bytes, 'Thank you for dining with us!\n');
+    if (data.digital_bill_url) {
+      this.addString(bytes, '\nVIEW YOUR DIGITAL BILL\nScan for complete bill details\n');
+      this.addQrCode(bytes, data.digital_bill_url);
+      this.addString(bytes, `\nBill No. ${data.bill_number}\n`);
+    }
+    this.addString(bytes, 'Thank you\n');
 
     // Feed lines
     bytes.push(0x1B, 0x64, this.feedLines);
@@ -258,6 +272,16 @@ export class DesktopEscPosEncoder {
     for (let i = 0; i < asciiStr.length; i++) {
       bytes.push(asciiStr.charCodeAt(i));
     }
+  }
+
+  private addQrCode(bytes: number[], value: string): void {
+    const data = Buffer.from(value, 'ascii');
+    const storeLength = data.length + 3;
+    bytes.push(0x1D, 0x28, 0x6B, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00);
+    bytes.push(0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x43, this.width === 48 ? 7 : 5);
+    bytes.push(0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x45, 0x31);
+    bytes.push(0x1D, 0x28, 0x6B, storeLength & 0xff, (storeLength >> 8) & 0xff, 0x31, 0x50, 0x30, ...data);
+    bytes.push(0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x51, 0x30);
   }
 
   private divider(char: string, width: number): string {

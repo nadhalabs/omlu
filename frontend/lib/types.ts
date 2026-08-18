@@ -236,6 +236,7 @@ export interface ReceiptPayload {
   payment_method: string | null;
   payment_status: "PAID" | "UNPAID";
   is_official_invoice: true;
+  digital_bill_url: string;
 }
 
 export interface BillItem {
@@ -255,6 +256,7 @@ export interface BillOrder {
 
 export interface BillResponse {
   bill_number: string;
+  document_title: "BILL" | "TAX INVOICE";
   receipt_token: string;
   restaurant_name: string;
   restaurant_slug: string;
