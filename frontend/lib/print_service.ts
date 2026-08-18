@@ -1,4 +1,4 @@
-import { checkBridgeHealth, sendPrintJobToBridge } from "@/lib/print_bridge";
+import { checkBridgeHealth, sendPrintJobToBridge, BridgeHealth } from "@/lib/print_bridge";
 import { getQuickSaleReceiptPayload, getStaffBillReceiptPayload, requestPrintBridgeToken } from "@/lib/api";
 
 export type PrintResult =
@@ -10,6 +10,7 @@ export interface PrintIssuedBillOptions {
   billNumber: string;
   sessionToken: string;
   receiptToken: string;
+  forceIframe?: boolean;
 }
 
 export async function printIssuedBill(
@@ -23,7 +24,7 @@ export async function printIssuedBill(
   });
 }
 
-export async function printCompletedQuickSale(options: { orderNumber: string; publicToken: string }): Promise<PrintResult> {
+export async function printCompletedQuickSale(options: { orderNumber: string; publicToken: string; forceIframe?: boolean }): Promise<PrintResult> {
   return printDocument({
     billNumber: options.orderNumber,
     sessionToken: options.publicToken,
@@ -31,6 +32,7 @@ export async function printCompletedQuickSale(options: { orderNumber: string; pu
     receiptType: "receipt",
     printUrl: `/bill/${encodeURIComponent(options.publicToken)}?receipt=${encodeURIComponent(options.publicToken)}&quickSale=1`,
     fetchPayload: () => getQuickSaleReceiptPayload(options.publicToken),
+    forceIframe: options.forceIframe,
   });
 }
 
@@ -38,58 +40,160 @@ async function printDocument(options: PrintIssuedBillOptions & {
   receiptType: "bill" | "receipt";
   printUrl: string;
   fetchPayload: () => Promise<Record<string, unknown>>;
+  forceIframe?: boolean;
 }): Promise<PrintResult> {
-  const { billNumber, sessionToken, receiptToken } = options;
-
   if (typeof window === "undefined") {
-    return { success: false, method: "none", error: "Printing is only supported in browser environment." };
+    return {
+      success: false,
+      method: "none",
+      error: "Printing is only supported in browser environment.",
+    };
   }
 
-  // 1. Attempt Desktop Print Bridge — Billing Printer direct print.
-  //    Requires bridge online AND a billing printer configured AND a valid installation.
+  if (options.forceIframe) {
+    return browserPrint(options);
+  }
+
+  return bridgePrint(options);
+}
+
+async function bridgePrint(options: PrintIssuedBillOptions & {
+  receiptType: "bill" | "receipt";
+  fetchPayload: () => Promise<Record<string, unknown>>;
+}): Promise<PrintResult> {
+  const { billNumber } = options;
+
+  let bridge: BridgeHealth | null = null;
   try {
-    const bridge = await checkBridgeHealth();
-    if (bridge && bridge.installation_id && bridge.billing_printer_configured && bridge.billing_printer_host) {
-      const payload = await options.fetchPayload();
-      const authRes = await requestPrintBridgeToken(
-        "bill:print",
-        bridge.installation_id,
-        billNumber
-      );
-
-      const jobId = `job_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-      const jobPayload = {
-        schema_version: "1.0" as const,
-        job_id: jobId,
-        idempotency_key: `idemp_${billNumber}_${Date.now()}`,
-        installation_id: bridge.installation_id,
-        tenant_id: bridge.tenant_id || "default",
-        bill_id: billNumber,
-        bill_number: billNumber,
-        receipt_type: options.receiptType,
-        receipt_data: payload,
-        copy_count: 1,
-        created_at: new Date().toISOString(),
-        expires_at: new Date(Date.now() + 300000).toISOString(),
-        retry_count: 0,
-        signed_token: authRes.token,
-      };
-
-      const printRes = await sendPrintJobToBridge(jobPayload);
-      if (printRes.success) {
-        return { success: true, method: "bridge", confirmed: true };
-      }
-      // If the billing printer was configured but failed, report the error
-      // rather than silently falling through to iframe, so the operator
-      // can make an informed decision about the browser print fallback.
-      return { success: false, method: "none", error: printRes.error || "Billing printer unavailable." };
-    }
-  } catch {
-    // Bridge auth failure or unreachable — fall through to iframe fallback.
+    bridge = await checkBridgeHealth();
+  } catch (err) {
+    return {
+      success: false,
+      method: "none",
+      error: err instanceof Error ? err.message : "OMLU Printer Bridge is unavailable.",
+    };
   }
 
-  // 2. Browser print fallback using hidden same-origin iframe with OMLU_PRINT_READY signal.
-  //    Used when: bridge is offline, billing printer not configured, or auth failed.
+  if (!bridge) {
+    return {
+      success: false,
+      method: "none",
+      error: "OMLU Printer Bridge is unavailable.",
+    };
+  }
+
+  if (!bridge.paired || !bridge.installation_id) {
+    return {
+      success: false,
+      method: "none",
+      error: "Printer Bridge is not paired.",
+    };
+  }
+
+  if (!bridge.billing_printer_configured) {
+    return {
+      success: false,
+      method: "none",
+      error: "Billing printer is not configured.",
+    };
+  }
+
+  if (!bridge.billing_printer_host) {
+    return {
+      success: false,
+      method: "none",
+      error: "Billing printer address is missing.",
+    };
+  }
+
+  if (bridge.printer_online === false) {
+    return {
+      success: false,
+      method: "none",
+      error: "Billing printer is offline.",
+    };
+  }
+
+  let payload: Record<string, unknown>;
+  try {
+    payload = await options.fetchPayload();
+  } catch (err) {
+    return {
+      success: false,
+      method: "none",
+      error: err instanceof Error ? err.message : "Could not fetch receipt payload.",
+    };
+  }
+
+  let authRes: { token: string };
+  try {
+    authRes = await requestPrintBridgeToken(
+      "bill:print",
+      bridge.installation_id,
+      billNumber
+    );
+  } catch {
+    return {
+      success: false,
+      method: "none",
+      error: "Unable to authorize printer job.",
+    };
+  }
+
+  if (!authRes || !authRes.token) {
+    return {
+      success: false,
+      method: "none",
+      error: "Unable to authorize printer job.",
+    };
+  }
+
+  const jobId = `job_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const jobPayload = {
+    schema_version: "1.0" as const,
+    job_id: jobId,
+    idempotency_key: `idemp_${billNumber}_${Date.now()}`,
+    installation_id: bridge.installation_id,
+    tenant_id: bridge.tenant_id || "default",
+    bill_id: billNumber,
+    bill_number: billNumber,
+    receipt_type: options.receiptType,
+    receipt_data: payload,
+    copy_count: 1,
+    created_at: new Date().toISOString(),
+    expires_at: new Date(Date.now() + 300000).toISOString(),
+    retry_count: 0,
+    signed_token: authRes.token,
+  };
+
+  try {
+    const printRes = await sendPrintJobToBridge(jobPayload);
+    if (printRes.success) {
+      return { success: true, method: "bridge", confirmed: true };
+    }
+    return {
+      success: false,
+      method: "none",
+      error: printRes.error || "Billing printer unavailable.",
+    };
+  } catch (err) {
+    if (err instanceof Error && (err.name === "AbortError" || err.name === "TimeoutError" || err.message.includes("aborted") || err.message.includes("timeout"))) {
+      return { success: false, method: "none", error: "Printing timed out." };
+    }
+    return {
+      success: false,
+      method: "none",
+      error: err instanceof Error ? err.message : "OMLU Printer Bridge is unavailable.",
+    };
+  }
+}
+
+async function browserPrint(options: {
+  sessionToken: string;
+  receiptToken: string;
+  printUrl: string;
+}): Promise<PrintResult> {
+  const { sessionToken, receiptToken, printUrl } = options;
   return new Promise<PrintResult>((resolve) => {
     try {
       const iframe = document.createElement("iframe");
@@ -117,7 +221,6 @@ async function printDocument(options: PrintIssuedBillOptions & {
         } catch {}
       };
 
-      // 10-second timeout if print-ready message is never received
       const timeoutId = setTimeout(() => {
         if (!hasTriggeredPrint) {
           cleanup();
@@ -157,7 +260,6 @@ async function printDocument(options: PrintIssuedBillOptions & {
             return;
           }
 
-          // Extended cleanup timeout (2 minutes) for afterprint completion
           const afterprintCleanupTimeout = setTimeout(cleanup, 120000);
 
           win.addEventListener(
@@ -192,7 +294,7 @@ async function printDocument(options: PrintIssuedBillOptions & {
         resolve({ success: false, method: "none", error: "Failed to load printable receipt frame." });
       };
 
-      iframe.src = options.printUrl;
+      iframe.src = printUrl;
       document.body.appendChild(iframe);
     } catch (err) {
       resolve({

@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => fs.readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("shared print_service implements Print Bridge direct print and OMLU_PRINT_READY iframe fallback", () => {
+test("shared print_service implements strict Print Bridge direct print and explicit OMLU_PRINT_READY browser print", () => {
   const printService = read("lib/print_service.ts");
   const billClient = read("app/bill/[sessionToken]/BillClient.tsx");
 
@@ -24,6 +24,19 @@ test("shared print_service implements Print Bridge direct print and OMLU_PRINT_R
   assert.match(printService, /afterprint/);
   assert.match(printService, /win\.print\(\)/);
   assert.match(printService, /Printable bill did not become ready\./);
+
+  // Strict separation assertions:
+  // 1. forceIframe triggers browserPrint
+  assert.match(printService, /if \(options\.forceIframe\) \{\s*return browserPrint\(options\);\s*\}/);
+  // 2. Otherwise calls bridgePrint directly
+  assert.match(printService, /return bridgePrint\(options\);/);
+  // 3. Explicit error messages for bridge failures
+  assert.match(printService, /OMLU Printer Bridge is unavailable\./);
+  assert.match(printService, /Printer Bridge is not paired\./);
+  assert.match(printService, /Billing printer is not configured\./);
+  assert.match(printService, /Billing printer address is missing\./);
+  assert.match(printService, /Billing printer is offline\./);
+  assert.match(printService, /Unable to authorize printer job\./);
 
   // BillClient emits readiness postMessage only when official printable receipt is mounted
   assert.match(billClient, /OMLU_PRINT_READY/);
@@ -67,6 +80,9 @@ test("admin billing views use print_service and contain zero window.open or targ
 
   // Print Bill / Reprint Bill in BillingCounter must be buttons, not target="_blank" links
   assert.doesNotMatch(billingCounter, /Link href=\{receiptUrl\(item\)!\} target="_blank"/);
+  // Explicit Browser Print passes forceIframe: true
+  assert.match(billingCounter, /handleBrowserPrint/);
+  assert.match(billingCounter, /forceIframe:\s*true/);
 });
 
 test("PendingPaymentsClient and AdminRequestsClient issue bill prior to calling printIssuedBill", () => {
@@ -80,4 +96,13 @@ test("PendingPaymentsClient and AdminRequestsClient issue bill prior to calling 
   const reqIssueIdx = adminRequests.indexOf("issueStaffBill");
   const reqPrintIdx = adminRequests.indexOf("printIssuedBill");
   assert.ok(reqIssueIdx > -1 && reqPrintIdx > -1 && reqIssueIdx < reqPrintIdx, "AdminRequestsClient must call issueStaffBill before printIssuedBill");
+});
+
+test("direct print flow handles errors without falling through to browser print", () => {
+  const printService = read("lib/print_service.ts");
+  // Ensure bridgePrint does NOT reference browserPrint or iframe creation
+  const bridgePrintCode = printService.slice(printService.indexOf("async function bridgePrint"), printService.indexOf("async function browserPrint"));
+  assert.doesNotMatch(bridgePrintCode, /browserPrint/);
+  assert.doesNotMatch(bridgePrintCode, /document\.createElement\("iframe"\)/);
+  assert.doesNotMatch(bridgePrintCode, /win\.print/);
 });

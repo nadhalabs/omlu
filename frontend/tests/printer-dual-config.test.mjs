@@ -9,6 +9,7 @@ const printBridge = read("lib/print_bridge.ts");
 const printService = read("lib/print_service.ts");
 const billingCounter = read("app/admin/billing/BillingCounterClient.tsx");
 const api = read("lib/api.ts");
+const server = read("../desktop/omlu_print_bridge/src/server.ts");
 
 test("Kitchen and Billing printer configurations are independent", () => {
   // Admin settings contains separate cards & state for kitchen vs billing printer
@@ -36,6 +37,15 @@ test("Kitchen and Billing printer configurations are independent", () => {
   assert.match(printBridge, /\/billing-printer\/test/);
 });
 
+test("Billing Printer test endpoint passes verified printer:test signed token", () => {
+  // server.ts POST /v1/billing-printer/test verifies token and passes it to executePrintJob
+  assert.match(server, /\/v1\/billing-printer\/test/);
+  const testSection = server.slice(server.indexOf("/v1/billing-printer/test"), server.indexOf("/v1/printers/test"));
+  assert.match(testSection, /verifySignedToken\(token, 'printer:test'\)/);
+  assert.match(testSection, /signed_token: token/);
+  assert.doesNotMatch(testSection, /signed_token: ''/);
+});
+
 test("Pair Again UI flow handles INSTALLATION_UNAUTHORIZED cleanly", () => {
   // Admin settings checks backend authorization separately using listBridgeInstallations
   assert.match(settings, /listBridgeInstallations/);
@@ -54,17 +64,21 @@ test("Pair Again UI flow handles INSTALLATION_UNAUTHORIZED cleanly", () => {
   assert.match(settings, /disabled=\{!printerActionsAvailable\}/);
 });
 
-test("Issue & Print routes to Billing Printer and falls back to iframe without double invoicing", () => {
+test("Issue & Print routes to Billing Printer and does NOT automatically fall back to iframe", () => {
   // printService checks billing_printer_configured & billing_printer_host
-  assert.match(printService, /bridge\.billing_printer_configured && bridge\.billing_printer_host/);
+  assert.match(printService, /bridge\.billing_printer_configured/);
+  assert.match(printService, /bridge\.billing_printer_host/);
+  assert.match(printService, /forceIframe/);
 
   // Billing counter calls issueStaffBill first, then printIssuedBill
   const issueIdx = billingCounter.indexOf("issueStaffBill");
   const printIdx = billingCounter.indexOf("printIssuedBill");
   assert.ok(issueIdx > -1 && printIdx > -1 && issueIdx < printIdx, "issueStaffBill must be called before printIssuedBill");
 
-  // Reprint does not re-issue bill
+  // Reprint does not re-issue bill and provides explicit Browser Print button
   assert.match(billingCounter, /handleReprint/);
+  assert.match(billingCounter, /handleBrowserPrint/);
+  assert.match(billingCounter, /Browser Print/);
   const reprintCode = billingCounter.slice(billingCounter.indexOf("async function handleReprint"));
   assert.doesNotMatch(reprintCode, /issueStaffBill/);
   assert.match(reprintCode, /printIssuedBill/);
@@ -75,5 +89,5 @@ test("Bridge health normalization includes billing printer properties", () => {
   assert.match(printBridge, /billing_printer_name/);
   assert.match(printBridge, /billing_printer_host/);
   assert.match(printBridge, /billing_printer_port/);
-  assert.match(printBridge, /billing_printer_configured: false/);
+  assert.match(printBridge, /billing_printer_configured = false/);
 });
