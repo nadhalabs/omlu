@@ -204,28 +204,8 @@ export default function BillingCounterClient() {
         <Link href="/admin/settings#printing" className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] px-3.5 py-2 text-xs font-bold text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-muted-surface)] transition">
           🖨️ Printer Setup
         </Link>
-        <a href="/downloads/omlu.apk" download className="inline-flex items-center gap-1.5 rounded-xl bg-orange-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-orange-700 transition">
-          📱 Download App
-        </a>
       </div>
     </header>
-
-    <section className="rounded-2xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-      <div>
-        <h2 className="text-sm font-black text-[var(--omlu-text-primary)]">Configure Thermal Printing</h2>
-        <p className="mt-0.5 text-xs text-[var(--omlu-text-secondary)]">
-          Configure direct LAN thermal printing in the OMLU Operations Android app.
-        </p>
-      </div>
-      <div className="flex items-center gap-2 shrink-0">
-        <Link href="/admin/settings#printing" className="rounded-xl bg-orange-600 px-3.5 py-2 text-xs font-black text-white hover:bg-orange-700 transition inline-flex items-center gap-1.5">
-          Printer Setup
-        </Link>
-        <a href="/downloads/omlu.apk" download className="rounded-xl border border-[var(--omlu-border)] px-3.5 py-2 text-xs font-bold text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-muted-surface)] transition inline-flex items-center gap-1.5">
-          Download App
-        </a>
-      </div>
-    </section>
 
     <nav className="flex flex-wrap gap-2" aria-label="Billing Counter sections">
       {tabs.map(([value, label, count]) => <button key={value} onClick={() => setTab(value)} aria-current={tab === value ? "page" : undefined} className={`min-h-11 rounded-xl px-4 text-sm font-black ${tab === value ? "bg-orange-600 text-white" : "bg-[var(--omlu-muted-surface)]"}`}>{label} ({count})</button>)}

@@ -67,6 +67,8 @@ class PrintJobStatusRequest(BaseModel):
 class ConsumerHeartbeatRequest(BaseModel):
     kitchen_printer_configured: bool
     kitchen_printer_label: Optional[str] = Field(None, max_length=100)
+    billing_printer_configured: bool = False
+    billing_printer_label: Optional[str] = Field(None, max_length=100)
 
 
 class ConsumerJobResultRequest(BaseModel):
@@ -468,6 +470,8 @@ def consumer_heartbeat(
     installation.last_seen_at = datetime.now(timezone.utc)
     installation.kitchen_printer_configured = req.kitchen_printer_configured
     installation.kitchen_printer_label = req.kitchen_printer_label
+    installation.billing_printer_configured = req.billing_printer_configured
+    installation.billing_printer_label = req.billing_printer_label
     db.commit()
     return {"status": "online", "server_time": datetime.now(timezone.utc)}
 

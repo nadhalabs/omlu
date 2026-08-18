@@ -1868,3 +1868,29 @@ export async function getPrintBridgePublicKey(): Promise<{ public_key_pem: strin
   if (!res.ok || typeof body.public_key_pem !== "string") throw new ApiError(res.status, "Could not load Printer Bridge security key.");
   return { public_key_pem: body.public_key_pem };
 }
+
+export async function listBridgeInstallations(): Promise<{
+  installations: Array<{
+    id: string;
+    installation_id: string;
+    tenant_id: string;
+    status: string;
+    paired_by_user_id: string;
+    credential_version: number;
+    created_at: string | null;
+    last_used_at: string | null;
+    last_seen_at: string | null;
+    kitchen_printer_configured: boolean;
+    kitchen_printer_label: string | null;
+    kitchen_printer_last_success_at: string | null;
+    billing_printer_configured: boolean;
+    billing_printer_label: string | null;
+    billing_printer_last_success_at: string | null;
+    revoked_at: string | null;
+  }>;
+}> {
+  const res = await fetch("/api/admin/print-bridge/installations");
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError(res.status, body.detail || "Could not list bridge installations.");
+  return body;
+}

@@ -19,14 +19,14 @@ test("Desktop Print Bridge client connects to 127.0.0.1:24242/v1 and implements 
 });
 
 test("Admin Settings renders Desktop Print Bridge section with dynamic status and developer package link", () => {
-  assert.match(settings, /Windows Printer Bridge/);
+  assert.match(settings, /Desktop Printer Bridge/);
   assert.match(settings, /checkBridgeHealth/);
   assert.match(settings, /127\.0\.0\.1:24242/);
-  assert.match(settings, /Not running/);
-  assert.match(settings, /Bridge detected/);
+  assert.match(settings, /Offline/);
+  assert.match(settings, /Authorization required/);
   assert.match(settings, /Paired/);
   assert.doesNotMatch(settings, /● Bridge Support Active/);
-  assert.match(settings, /Download Windows Bridge \(Developer \/ Hardware Test Package\)/);
+  assert.match(settings, /Download Desktop Printer Bridge \(Developer \/ Hardware Test Package\)/);
   assert.match(settings, /href="\/downloads\/omlu-print-bridge-developer-package\.zip"/);
 });
 

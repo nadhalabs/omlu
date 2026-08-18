@@ -46,7 +46,12 @@ export class KitchenPrintConsumer {
     try {
       await this.request(`${base}/api/admin/print-bridge/consumer/heartbeat`, {
         method: 'POST', headers: this.headers(config),
-        body: JSON.stringify({ kitchen_printer_configured: true, kitchen_printer_label: config.kitchenPrinterName }),
+        body: JSON.stringify({
+          kitchen_printer_configured: true,
+          kitchen_printer_label: config.kitchenPrinterName,
+          billing_printer_configured: Boolean(config.billingPrinterEnabled && config.billingPrinterHost),
+          billing_printer_label: config.billingPrinterName || null,
+        }),
       });
       const claimResponse = await this.request(`${base}/api/admin/print-bridge/consumer/claim`, {
         method: 'POST', headers: this.headers(config), body: '{}',

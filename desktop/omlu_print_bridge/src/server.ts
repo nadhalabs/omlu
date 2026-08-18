@@ -12,7 +12,7 @@ import { PrinterTransport } from './transports/transport';
 import { KitchenPrintConsumer } from './kitchen_consumer';
 
 const PORT = 24242;
-const HOST = '127.0.0.1';
+const HOST = '0.0.0.0';
 
 export class PrintBridgeServer {
   private server: http.Server;
@@ -57,6 +57,19 @@ export class PrintBridgeServer {
     }
   }
 
+  /** Returns a TCP transport pointing at the configured Billing Printer, or null if not configured. */
+  private getBillingPrinterTransport(config: PrinterConfig): TcpPrinterTransport | null {
+    if (!config.billingPrinterEnabled || !config.billingPrinterHost) return null;
+    return new TcpPrinterTransport(
+      config.billingPrinterHost,
+      config.billingPrinterPort,
+      Math.min(config.connectTimeoutMs, 8000),
+      Math.min(config.writeTimeoutMs, 8000),
+      config.chunkSize,
+      config.interChunkDelayMs,
+    );
+  }
+
   private async handleRequest(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
     if (!validateOriginAndHost(req, res)) return;
 
@@ -86,6 +99,10 @@ export class PrintBridgeServer {
           kitchen_printer_name: config.kitchenPrinterName,
           kitchen_printer_host: config.kitchenPrinterHost,
           kitchen_printer_port: config.kitchenPrinterPort,
+          billing_printer_configured: Boolean(config.billingPrinterEnabled && config.billingPrinterHost),
+          billing_printer_name: config.billingPrinterName,
+          billing_printer_host: config.billingPrinterHost,
+          billing_printer_port: config.billingPrinterPort,
         });
       }
 
@@ -196,6 +213,43 @@ export class PrintBridgeServer {
         return this.json(res, result.state === 'completed' ? 200 : 503, { success: result.state === 'completed', message: result.state === 'completed' ? 'Kitchen printer test completed.' : 'Kitchen printer unavailable.' });
       }
 
+      // ── Billing Printer ─────────────────────────────────────────────────────
+
+      if (method === 'POST' && path === '/v1/billing-printer/setup') {
+        const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+        const sec = verifySignedToken(token, 'printer:configure');
+        if (!sec.valid) return this.json(res, 401, { error: 'UNAUTHORIZED', message: sec.reason });
+        const body = await this.readJson(req);
+        const port = Number(body.billingPrinterPort || 9100);
+        if (!body.billingPrinterHost || !Number.isInteger(port) || port < 1 || port > 65535) {
+          return this.json(res, 422, { error: 'INVALID_BILLING_PRINTER', message: 'Enter a valid billing printer host and port.' });
+        }
+        this.configManager.saveConfig({
+          billingPrinterEnabled: true,
+          billingPrinterName: String(body.billingPrinterName || 'Billing Printer').slice(0, 100),
+          billingPrinterHost: String(body.billingPrinterHost).trim(),
+          billingPrinterPort: port,
+        });
+        return this.json(res, 200, { status: 'configured' });
+      }
+
+      if (method === 'POST' && path === '/v1/billing-printer/test') {
+        const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+        const sec = verifySignedToken(token, 'printer:test');
+        if (!sec.valid) return this.json(res, 401, { error: 'UNAUTHORIZED', message: sec.reason });
+        const config = this.configManager.getConfig();
+        const billingTransport = this.getBillingPrinterTransport(config);
+        if (!billingTransport) return this.json(res, 409, { error: 'NOT_CONFIGURED', message: 'Billing printer is not configured.' });
+        const result = await this.coordinator.executePrintJob({
+          schema_version: '1.0', job_id: `billing_test_${Date.now()}`, idempotency_key: `billing_test_${Date.now()}`,
+          installation_id: config.installationId, tenant_id: config.tenantId, receipt_type: 'test', copy_count: 1,
+          created_at: new Date().toISOString(), expires_at: new Date(Date.now() + 60000).toISOString(), retry_count: 0, signed_token: '',
+        }, config, billingTransport);
+        return this.json(res, result.state === 'completed' ? 200 : 503, { success: result.state === 'completed', message: result.state === 'completed' ? 'Billing printer test completed.' : 'Billing printer unavailable.' });
+      }
+
+      // ── Generic billing printer test (legacy path) ───────────────────────────
+
       if (method === 'POST' && path === '/v1/printers/test') {
         const authHeader = req.headers.authorization || '';
         const token = authHeader.replace(/^Bearer\s+/i, '');
@@ -233,7 +287,9 @@ export class PrintBridgeServer {
         }
 
         const config = this.configManager.getConfig();
-        const transport = this.getTransport(config);
+        // Use dedicated billing printer transport if configured; fall back to legacy default transport.
+        const billingTransport = this.getBillingPrinterTransport(config);
+        const transport = billingTransport ?? this.getTransport(config);
         const result = await this.coordinator.executePrintJob(body, config, transport);
         return this.json(res, result.state === 'completed' ? 200 : 500, { result });
       }

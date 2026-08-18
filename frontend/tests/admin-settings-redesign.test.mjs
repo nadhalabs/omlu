@@ -138,9 +138,11 @@ test("Appearance remains outside server dirty-state tracking", () => {
 test("Print Bridge exposes unreachable, detected, and paired UX states", () => {
   assert.match(settings, /Printer Bridge is not running on this device\./);
   assert.match(settings, /Pair this device to your restaurant before configuring printers\./);
-  assert.match(settings, /paired \? "Paired" : "Bridge detected"/);
+  assert.match(settings, /label="Bridge"/);
+  assert.match(settings, /label="Authorization"/);
+  assert.match(settings, /label="Pairing"/);
   assert.match(settings, /"Pair Bridge"/);
-  assert.match(settings, /if \(!refreshed\?\.paired\)/);
+  assert.match(settings, /"Pair Again"/);
 });
 
 test("pairing uses existing challenge, exchange, public-key, and local confirmation contracts", () => {
@@ -153,8 +155,8 @@ test("pairing uses existing challenge, exchange, public-key, and local confirmat
 });
 
 test("unpaired bridge locks kitchen configuration and paired bridge unlocks it", () => {
-  assert.match(settings, /Pair the OMLU Printer Bridge before configuring a kitchen printer\./);
-  assert.match(settings, /disabled=\{!bridgeHealth\?\.paired\}/);
-  assert.match(settings, /disabled=\{printerBusy \|\| !bridgeHealth\?\.paired/);
-  assert.match(settings, /if \(!health\.paired\) throw new Error/);
+  assert.match(settings, /Pair the Desktop Printer Bridge before configuring a kitchen printer\./);
+  assert.match(settings, /disabled=\{!printerActionsAvailable\}/);
+  assert.match(settings, /disabled=\{kitchenPrinterBusy \|\| !printerActionsAvailable/);
 });
+

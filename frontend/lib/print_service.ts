@@ -45,10 +45,11 @@ async function printDocument(options: PrintIssuedBillOptions & {
     return { success: false, method: "none", error: "Printing is only supported in browser environment." };
   }
 
-  // 1. Attempt direct OMLU Windows Print Bridge direct print first
+  // 1. Attempt Desktop Print Bridge — Billing Printer direct print.
+  //    Requires bridge online AND a billing printer configured AND a valid installation.
   try {
     const bridge = await checkBridgeHealth();
-    if (bridge && bridge.printer_online && bridge.installation_id) {
+    if (bridge && bridge.installation_id && bridge.billing_printer_configured && bridge.billing_printer_host) {
       const payload = await options.fetchPayload();
       const authRes = await requestPrintBridgeToken(
         "bill:print",
@@ -78,12 +79,17 @@ async function printDocument(options: PrintIssuedBillOptions & {
       if (printRes.success) {
         return { success: true, method: "bridge", confirmed: true };
       }
+      // If the billing printer was configured but failed, report the error
+      // rather than silently falling through to iframe, so the operator
+      // can make an informed decision about the browser print fallback.
+      return { success: false, method: "none", error: printRes.error || "Billing printer unavailable." };
     }
   } catch {
-    // Print bridge failed or unavailable, fallback to hidden iframe
+    // Bridge auth failure or unreachable — fall through to iframe fallback.
   }
 
-  // 2. Browser print fallback using hidden same-origin iframe with OMLU_PRINT_READY signal
+  // 2. Browser print fallback using hidden same-origin iframe with OMLU_PRINT_READY signal.
+  //    Used when: bridge is offline, billing printer not configured, or auth failed.
   return new Promise<PrintResult>((resolve) => {
     try {
       const iframe = document.createElement("iframe");

@@ -398,3 +398,46 @@ def test_kitchen_consumer_claim_success_failure_and_tenant_scope(db_session, set
 
     wrong = client.post("/api/admin/print-bridge/consumer/claim", headers={**headers, "X-Bridge-Credential": "wrong"}, json={})
     assert wrong.status_code == 401
+
+
+def test_billing_printer_heartbeat_and_installation_reporting(db_session, setup_bridge_test_data):
+    restaurant = setup_bridge_test_data["restaurant"]
+    secret = uuid.uuid4().hex
+    installation_id = f"consumer_billing_{uuid.uuid4().hex[:8]}"
+    installation = PrintBridgeInstallation(
+        installation_id=installation_id, tenant_id=str(restaurant.id),
+        hashed_credential=hashlib.sha256(secret.encode()).hexdigest(), status="paired",
+        paired_by_user_id=str(setup_bridge_test_data["owner"].id),
+    )
+    db_session.add(installation); db_session.commit()
+    headers = {"X-Bridge-Installation": installation_id, "X-Bridge-Credential": secret}
+
+    heartbeat = client.post(
+        "/api/admin/print-bridge/consumer/heartbeat",
+        headers=headers,
+        json={
+            "kitchen_printer_configured": True,
+            "kitchen_printer_label": "Kitchen LAN",
+            "billing_printer_configured": True,
+            "billing_printer_label": "Billing Front",
+        },
+    )
+    assert heartbeat.status_code == 200
+
+    db_session.refresh(installation)
+    assert installation.billing_printer_configured is True
+    assert installation.billing_printer_label == "Billing Front"
+    d = installation.to_dict()
+    assert d["billing_printer_configured"] is True
+    assert d["billing_printer_label"] == "Billing Front"
+
+    # Installations API endpoint includes billing printer fields
+    owner_headers = setup_bridge_test_data["headers"]
+    res = client.get("/api/admin/print-bridge/installations", headers=owner_headers)
+    assert res.status_code == 200
+    inst_list = res.json()["installations"]
+    target = next((i for i in inst_list if i["installation_id"] == installation_id), None)
+    assert target is not None
+    assert target["billing_printer_configured"] is True
+    assert target["billing_printer_label"] == "Billing Front"
+

@@ -40,6 +40,10 @@ export interface PrinterConfig {
   kitchenPrinterName: string;
   kitchenPrinterHost: string;
   kitchenPrinterPort: number;
+  billingPrinterEnabled: boolean;
+  billingPrinterName: string;
+  billingPrinterHost: string;
+  billingPrinterPort: number;
 }
 
 export const defaultConfig: PrinterConfig = {
@@ -74,6 +78,10 @@ export const defaultConfig: PrinterConfig = {
   kitchenPrinterName: 'Kitchen Printer',
   kitchenPrinterHost: '',
   kitchenPrinterPort: 9100,
+  billingPrinterEnabled: false,
+  billingPrinterName: 'Billing Printer',
+  billingPrinterHost: '',
+  billingPrinterPort: 9100,
 };
 
 export function isPersistedPairingComplete(config: PrinterConfig): boolean {

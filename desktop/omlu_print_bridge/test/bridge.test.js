@@ -176,6 +176,24 @@ test('HTTP API Server health and capabilities endpoints', async () => {
     const pairedHealth = await pairedHealthRes.json();
     assert.equal(pairedHealth.paired, true);
     assert.equal(pairedHealth.tenant_id, 'tenant-1');
+    assert.equal(pairedHealth.billing_printer_configured, false);
+
+    // POST /v1/billing-printer/setup
+    const token = makeEd25519Token('printer:configure');
+    const billingSetupRes = await fetch('http://127.0.0.1:24299/v1/billing-printer/setup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ billingPrinterName: 'Front Billing Printer', billingPrinterHost: '192.168.1.101', billingPrinterPort: 9100 }),
+    });
+    assert.equal(billingSetupRes.status, 200);
+
+    const postBillingHealthRes = await fetch('http://127.0.0.1:24299/v1/health');
+    const postBillingHealth = await postBillingHealthRes.json();
+    assert.equal(postBillingHealth.billing_printer_configured, true);
+    assert.equal(postBillingHealth.billing_printer_name, 'Front Billing Printer');
+    assert.equal(postBillingHealth.billing_printer_host, '192.168.1.101');
+    assert.equal(postBillingHealth.billing_printer_port, 9100);
+
     const persistedPairing = fs.readFileSync(tmpConfig, 'utf8');
     assert.doesNotMatch(persistedPairing, /PRIVATE KEY|exchange_token/i);
   } finally {

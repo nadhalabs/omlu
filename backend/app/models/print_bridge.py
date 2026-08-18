@@ -19,6 +19,9 @@ class PrintBridgeInstallation(Base):
     kitchen_printer_configured = Column(Boolean, nullable=False, default=False, server_default="false")
     kitchen_printer_label = Column(String(100), nullable=True)
     kitchen_printer_last_success_at = Column(DateTime(timezone=True), nullable=True)
+    billing_printer_configured = Column(Boolean, nullable=False, default=False, server_default="false")
+    billing_printer_label = Column(String(100), nullable=True)
+    billing_printer_last_success_at = Column(DateTime(timezone=True), nullable=True)
     revoked_at = Column(DateTime(timezone=True), nullable=True)
 
     def to_dict(self):
@@ -35,6 +38,9 @@ class PrintBridgeInstallation(Base):
             "kitchen_printer_configured": self.kitchen_printer_configured,
             "kitchen_printer_label": self.kitchen_printer_label,
             "kitchen_printer_last_success_at": self.kitchen_printer_last_success_at.isoformat() if self.kitchen_printer_last_success_at else None,
+            "billing_printer_configured": self.billing_printer_configured,
+            "billing_printer_label": self.billing_printer_label,
+            "billing_printer_last_success_at": self.billing_printer_last_success_at.isoformat() if self.billing_printer_last_success_at else None,
             "revoked_at": self.revoked_at.isoformat() if self.revoked_at else None,
         }
 

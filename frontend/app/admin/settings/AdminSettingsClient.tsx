@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { FormEvent, ReactNode, useCallback, useEffect, useState } from "react";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { ApiError, confirmBridgePairing, createPairingChallenge, exchangeBridgeCredential, getPrintBridgePublicKey, getRestaurantSettings, requestPrintBridgeToken, updateRestaurantSettings } from "@/lib/api";
-import { BridgeHealth, checkBridgeHealth, completeLocalPairing, configureKitchenPrinter, createLocalPairingCode, testKitchenPrinter } from "@/lib/print_bridge";
+import { ApiError, confirmBridgePairing, createPairingChallenge, exchangeBridgeCredential, getPrintBridgePublicKey, getRestaurantSettings, listBridgeInstallations, requestPrintBridgeToken, updateRestaurantSettings } from "@/lib/api";
+import { BridgeHealth, checkBridgeHealth, completeLocalPairing, configureBillingPrinter, configureKitchenPrinter, createLocalPairingCode, testBillingPrinter, testKitchenPrinter } from "@/lib/print_bridge";
 import { RestaurantSettingsResponse, RestaurantSettingsUpdate } from "@/lib/types";
 
 const TIMEZONES = [
@@ -34,15 +34,26 @@ export default function AdminSettingsClient() {
   const [success, setSuccess] = useState<string | null>(null);
   const [bridgeStatus, setBridgeStatus] = useState<"checking" | "connected" | "disconnected">("checking");
   const [bridgeHealth, setBridgeHealth] = useState<BridgeHealth | null>(null);
+  const [backendAuthorized, setBackendAuthorized] = useState<boolean | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
   const [pairing, setPairing] = useState(false);
   const [pairingMessage, setPairingMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
-  const [printerHost, setPrinterHost] = useState("");
-  const [printerPort, setPrinterPort] = useState("9100");
-  const [printerName, setPrinterName] = useState("Kitchen Printer");
-  const [printerBusy, setPrinterBusy] = useState(false);
-  const [printerMessage, setPrinterMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
-  const [gstEditing, setGstEditing] = useState(false);
 
+  // Kitchen Printer state
+  const [kitchenPrinterHost, setKitchenPrinterHost] = useState("");
+  const [kitchenPrinterPort, setKitchenPrinterPort] = useState("9100");
+  const [kitchenPrinterName, setKitchenPrinterName] = useState("Kitchen Printer");
+  const [kitchenPrinterBusy, setKitchenPrinterBusy] = useState(false);
+  const [kitchenPrinterMessage, setKitchenPrinterMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+
+  // Billing Printer state
+  const [billingPrinterHost, setBillingPrinterHost] = useState("");
+  const [billingPrinterPort, setBillingPrinterPort] = useState("9100");
+  const [billingPrinterName, setBillingPrinterName] = useState("Billing Printer");
+  const [billingPrinterBusy, setBillingPrinterBusy] = useState(false);
+  const [billingPrinterMessage, setBillingPrinterMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+
+  const [gstEditing, setGstEditing] = useState(false);
   const [timezone, setTimezone] = useState("");
   const [orderPrefix, setOrderPrefix] = useState("");
   const [serviceRequestsEnabled, setServiceRequestsEnabled] = useState<boolean | null>(null);
@@ -107,37 +118,83 @@ export default function AdminSettingsClient() {
     return () => window.clearTimeout(timeout);
   }, [loadSettings]);
 
-  useEffect(() => {
-    let active = true;
-    void checkBridgeHealth().then((health) => {
-      if (active) {
-        setBridgeHealth(health);
-        setBridgeStatus(health ? "connected" : "disconnected");
-        if (health?.kitchen_printer_configured) {
-          setPrinterName(health.kitchen_printer_name || "Kitchen Printer");
-          setPrinterHost(health.kitchen_printer_host || "");
-          setPrinterPort(String(health.kitchen_printer_port || 9100));
-        }
-      }
-    });
-    return () => {
-      active = false;
-    };
+  /** Check backend authorization for a given installation_id. Returns true if paired+active. */
+  const checkBackendAuth = useCallback(async (installationId: string): Promise<boolean> => {
+    try {
+      const result = await listBridgeInstallations();
+      const inst = result.installations.find((i) => i.installation_id === installationId);
+      return Boolean(inst && inst.status === "paired" && !inst.revoked_at);
+    } catch {
+      return false;
+    }
   }, []);
 
-  const refreshBridgeHealth = async () => {
+  const refreshBridgeHealth = useCallback(async () => {
     const health = await checkBridgeHealth();
     setBridgeHealth(health);
     setBridgeStatus(health ? "connected" : "disconnected");
+    if (health?.kitchen_printer_configured) {
+      setKitchenPrinterName(health.kitchen_printer_name || "Kitchen Printer");
+      setKitchenPrinterHost(health.kitchen_printer_host || "");
+      setKitchenPrinterPort(String(health.kitchen_printer_port || 9100));
+    }
+    if (health?.billing_printer_configured) {
+      setBillingPrinterName(health.billing_printer_name || "Billing Printer");
+      setBillingPrinterHost(health.billing_printer_host || "");
+      setBillingPrinterPort(String(health.billing_printer_port || 9100));
+    }
+    // Also refresh backend authorization status
+    if (health?.installation_id) {
+      const authorized = await checkBackendAuth(health.installation_id);
+      setBackendAuthorized(authorized);
+      if (!authorized) {
+        setAuthError("Printer Bridge authorization expired or was revoked. Pair this device again to continue printing.");
+      } else {
+        setAuthError(null);
+      }
+    } else {
+      setBackendAuthorized(null);
+      setAuthError(null);
+    }
     return health;
-  };
+  }, [checkBackendAuth]);
+
+  useEffect(() => {
+    let active = true;
+    void checkBridgeHealth().then(async (health) => {
+      if (!active) return;
+      setBridgeHealth(health);
+      setBridgeStatus(health ? "connected" : "disconnected");
+      if (health?.kitchen_printer_configured) {
+        setKitchenPrinterName(health.kitchen_printer_name || "Kitchen Printer");
+        setKitchenPrinterHost(health.kitchen_printer_host || "");
+        setKitchenPrinterPort(String(health.kitchen_printer_port || 9100));
+      }
+      if (health?.billing_printer_configured) {
+        setBillingPrinterName(health.billing_printer_name || "Billing Printer");
+        setBillingPrinterHost(health.billing_printer_host || "");
+        setBillingPrinterPort(String(health.billing_printer_port || 9100));
+      }
+      if (health?.installation_id) {
+        const authorized = await checkBackendAuth(health.installation_id);
+        if (!active) return;
+        setBackendAuthorized(authorized);
+        if (!authorized) {
+          setAuthError("Printer Bridge authorization expired or was revoked. Pair this device again to continue printing.");
+        }
+      }
+    });
+    return () => { active = false; };
+  }, [checkBackendAuth]);
 
   const pairBridge = async () => {
     if (pairing) return;
-    setPairing(true); setPairingMessage(null);
+    setPairing(true); setPairingMessage(null); setAuthError(null);
     try {
-      const health = await refreshBridgeHealth();
-      if (!health?.installation_id) throw new Error("Printer Bridge is not running on this device.");
+      const health = await checkBridgeHealth();
+      setBridgeHealth(health);
+      setBridgeStatus(health ? "connected" : "disconnected");
+      if (!health?.installation_id) throw new Error("Desktop Printer Bridge is not running on this device.");
       const localChallenge = await createLocalPairingCode();
       const serverChallenge = await createPairingChallenge(health.installation_id);
       const confirmed = await confirmBridgePairing(health.installation_id, serverChallenge.pairing_code);
@@ -154,8 +211,8 @@ export default function AdminSettingsClient() {
         credential_secret: credential.credential_secret,
       });
       const refreshed = await refreshBridgeHealth();
-      if (!refreshed?.paired) throw new Error("Could not verify Printer Bridge pairing.");
-      setPairingMessage({ tone: "success", text: "Printer Bridge paired successfully." });
+      if (!refreshed?.paired) throw new Error("Could not verify Desktop Printer Bridge pairing.");
+      setPairingMessage({ tone: "success", text: "✓ Desktop Printer Bridge paired successfully." });
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : "Could not pair the Printer Bridge.";
       setPairingMessage({ tone: "error", text: /INVALID_PAIRING|WRONG_PAIRING|expired|pairing code/i.test(message) ? "Pairing code expired. Start pairing again." : message.includes("MISSING_PUBLIC_KEY") ? "Printer Bridge is not paired yet." : message });
@@ -163,39 +220,99 @@ export default function AdminSettingsClient() {
   };
 
   const saveKitchenPrinter = async () => {
-    if (printerBusy) return;
-    const port = Number(printerPort);
-    if (!printerHost.trim() || !Number.isInteger(port) || port < 1 || port > 65535) {
-      setPrinterMessage({ tone: "error", text: "Enter a valid printer IP or host and port." }); return;
+    if (kitchenPrinterBusy) return;
+    const port = Number(kitchenPrinterPort);
+    if (!kitchenPrinterHost.trim() || !Number.isInteger(port) || port < 1 || port > 65535) {
+      setKitchenPrinterMessage({ tone: "error", text: "Enter a valid printer IP or host and port." }); return;
     }
-    setPrinterBusy(true); setPrinterMessage(null);
+    setKitchenPrinterBusy(true); setKitchenPrinterMessage(null);
     try {
       const health = await refreshBridgeHealth();
-      if (!health?.installation_id) throw new Error("Install or start the OMLU Windows Printer Bridge first.");
+      if (!health?.installation_id) throw new Error("Install or start the OMLU Desktop Printer Bridge first.");
       if (!health.paired) throw new Error("Pair the OMLU Printer Bridge before configuring a kitchen printer.");
       const auth = await requestPrintBridgeToken("printer:configure", health.installation_id);
       const result = await configureKitchenPrinter(auth.token, {
-        kitchenPrinterName: printerName.trim() || "Kitchen Printer", kitchenPrinterHost: printerHost.trim(), kitchenPrinterPort: port,
+        kitchenPrinterName: kitchenPrinterName.trim() || "Kitchen Printer", kitchenPrinterHost: kitchenPrinterHost.trim(), kitchenPrinterPort: port,
       });
       if (!result.success) throw new Error(result.error);
       await refreshBridgeHealth();
-      setPrinterMessage({ tone: "success", text: "Kitchen printer configured. Send a test print to confirm the connection." });
+      setKitchenPrinterMessage({ tone: "success", text: "Kitchen printer configured. Send a test print to confirm the connection." });
     } catch (reason) {
-      setPrinterMessage({ tone: "error", text: reason instanceof Error ? reason.message : "Could not configure the kitchen printer." });
-    } finally { setPrinterBusy(false); }
+      const message = reason instanceof Error ? reason.message : "Could not configure the kitchen printer.";
+      if (message.includes("INSTALLATION_UNAUTHORIZED")) {
+        setAuthError("Printer Bridge authorization expired or was revoked. Pair this device again to continue printing.");
+        setKitchenPrinterMessage({ tone: "error", text: "Bridge authorization required. Use Pair Again above." });
+      } else {
+        setKitchenPrinterMessage({ tone: "error", text: message });
+      }
+    } finally { setKitchenPrinterBusy(false); }
   };
 
   const runKitchenPrinterTest = async () => {
-    if (printerBusy || !bridgeHealth?.installation_id) return;
-    setPrinterBusy(true); setPrinterMessage(null);
+    if (kitchenPrinterBusy || !bridgeHealth?.installation_id) return;
+    setKitchenPrinterBusy(true); setKitchenPrinterMessage(null);
     try {
       const auth = await requestPrintBridgeToken("printer:test", bridgeHealth.installation_id);
       const result = await testKitchenPrinter(auth.token);
       if (!result.success) throw new Error(result.error);
-      setPrinterMessage({ tone: "success", text: "Kitchen printer test completed successfully." });
+      setKitchenPrinterMessage({ tone: "success", text: "Kitchen printer test completed successfully." });
     } catch (reason) {
-      setPrinterMessage({ tone: "error", text: reason instanceof Error ? reason.message : "Kitchen printer unavailable." });
-    } finally { setPrinterBusy(false); }
+      const message = reason instanceof Error ? reason.message : "Kitchen printer unavailable.";
+      if (message.includes("INSTALLATION_UNAUTHORIZED")) {
+        setAuthError("Printer Bridge authorization expired or was revoked. Pair this device again to continue printing.");
+        setKitchenPrinterMessage({ tone: "error", text: "Bridge authorization required. Use Pair Again above." });
+      } else {
+        setKitchenPrinterMessage({ tone: "error", text: message });
+      }
+    } finally { setKitchenPrinterBusy(false); }
+  };
+
+  const saveBillingPrinter = async () => {
+    if (billingPrinterBusy) return;
+    const port = Number(billingPrinterPort);
+    if (!billingPrinterHost.trim() || !Number.isInteger(port) || port < 1 || port > 65535) {
+      setBillingPrinterMessage({ tone: "error", text: "Enter a valid printer IP or host and port." }); return;
+    }
+    setBillingPrinterBusy(true); setBillingPrinterMessage(null);
+    try {
+      const health = await refreshBridgeHealth();
+      if (!health?.installation_id) throw new Error("Install or start the OMLU Desktop Printer Bridge first.");
+      if (!health.paired) throw new Error("Pair the OMLU Printer Bridge before configuring a billing printer.");
+      const auth = await requestPrintBridgeToken("printer:configure", health.installation_id);
+      const result = await configureBillingPrinter(auth.token, {
+        billingPrinterName: billingPrinterName.trim() || "Billing Printer", billingPrinterHost: billingPrinterHost.trim(), billingPrinterPort: port,
+      });
+      if (!result.success) throw new Error(result.error);
+      await refreshBridgeHealth();
+      setBillingPrinterMessage({ tone: "success", text: "Billing printer configured. Send a test print to confirm the connection." });
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : "Could not configure the billing printer.";
+      if (message.includes("INSTALLATION_UNAUTHORIZED")) {
+        setAuthError("Printer Bridge authorization expired or was revoked. Pair this device again to continue printing.");
+        setBillingPrinterMessage({ tone: "error", text: "Bridge authorization required. Use Pair Again above." });
+      } else {
+        setBillingPrinterMessage({ tone: "error", text: message });
+      }
+    } finally { setBillingPrinterBusy(false); }
+  };
+
+  const runBillingPrinterTest = async () => {
+    if (billingPrinterBusy || !bridgeHealth?.installation_id) return;
+    setBillingPrinterBusy(true); setBillingPrinterMessage(null);
+    try {
+      const auth = await requestPrintBridgeToken("printer:test", bridgeHealth.installation_id);
+      const result = await testBillingPrinter(auth.token);
+      if (!result.success) throw new Error(result.error);
+      setBillingPrinterMessage({ tone: "success", text: "Billing printer test completed successfully." });
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : "Billing printer unavailable.";
+      if (message.includes("INSTALLATION_UNAUTHORIZED")) {
+        setAuthError("Printer Bridge authorization expired or was revoked. Pair this device again to continue printing.");
+        setBillingPrinterMessage({ tone: "error", text: "Bridge authorization required. Use Pair Again above." });
+      } else {
+        setBillingPrinterMessage({ tone: "error", text: message });
+      }
+    } finally { setBillingPrinterBusy(false); }
   };
 
   const handleSave = async (event: FormEvent<HTMLFormElement>) => {
@@ -258,6 +375,11 @@ export default function AdminSettingsClient() {
     setSuccess(null);
   };
 
+  // Computed: whether printer config actions are available
+  const printerActionsAvailable = Boolean(bridgeHealth?.paired && backendAuthorized);
+  // Show Pair Again when: bridge is online AND (not locally paired OR backend unauthorized)
+  const showPairAgain = bridgeStatus === "connected" && (!bridgeHealth?.paired || backendAuthorized === false);
+
   if (loading) {
     return (
       <div className="flex flex-1 items-center justify-center py-20">
@@ -289,7 +411,7 @@ export default function AdminSettingsClient() {
             </div>
           </div>
         )}
-        <SettingsSection title="General" description="Your restaurant’s core display and numbering preferences.">
+        <SettingsSection title="General" description="Your restaurant's core display and numbering preferences.">
           <div className="grid gap-5 md:grid-cols-2">
             <Field label="Timezone" htmlFor="timezone" help="Used for dashboard metrics, order timestamps, and daily revenue calculations.">
               <select id="timezone" value={timezone} onChange={(event) => setTimezone(event.target.value)} className={controlClass}>
@@ -368,38 +490,122 @@ export default function AdminSettingsClient() {
           </div>
         </SettingsSection>
 
-        <SettingsSection id="printing" title="Printing" description="Choose the printing option that fits each billing device.">
-          <div id="kitchen-printer" className="scroll-mt-24 rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] p-4">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"><div><h3 className="text-sm font-black text-[var(--omlu-text-primary)]">Kitchen Printer</h3><p className="mt-1 text-xs leading-5 text-[var(--omlu-text-secondary)]">Dedicated LAN thermal printer for kitchen tickets. Customer bill printing remains separate.</p></div><span className={`w-fit rounded-full border px-3 py-1 text-xs font-bold ${bridgeHealth?.kitchen_printer_configured ? "border-emerald-600/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "border-[var(--omlu-border-strong)] text-[var(--omlu-text-secondary)]"}`}>{!bridgeHealth ? "Bridge offline" : bridgeHealth.kitchen_printer_configured ? "Configured" : "Not configured"}</span></div>
-            {bridgeHealth && !bridgeHealth.paired && <p role="status" className="mt-3 text-sm font-semibold text-amber-700 dark:text-amber-400">Pair the OMLU Printer Bridge before configuring a kitchen printer.</p>}
-            <div className={`mt-4 grid gap-4 md:grid-cols-[1fr_1fr_140px] ${bridgeHealth?.paired ? "" : "opacity-60"}`}>
-              <SettingsInput id="kitchen-printer-name" label="Printer name" value={printerName} onChange={setPrinterName} disabled={!bridgeHealth?.paired} />
-              <SettingsInput id="kitchen-printer-host" label="Printer IP / Host" value={printerHost} onChange={setPrinterHost} disabled={!bridgeHealth?.paired} />
-              <SettingsInput id="kitchen-printer-port" label="Port" value={printerPort} onChange={setPrinterPort} disabled={!bridgeHealth?.paired} />
+        <SettingsSection id="printing" title="Printing" description="Configure printers used by this restaurant.">
+
+          {/* Desktop Printer Bridge */}
+          <div className="rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] p-4 space-y-4">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h3 className="text-sm font-black text-[var(--omlu-text-primary)]">Desktop Printer Bridge</h3>
+                <p className="mt-1 text-xs leading-5 text-[var(--omlu-text-secondary)]">
+                  {bridgeStatus === "disconnected"
+                    ? "Printer Bridge is not running on this device."
+                    : backendAuthorized === false
+                      ? "Pair this device to your restaurant before configuring printers."
+                      : bridgeHealth?.paired
+                        ? "This device is securely paired to your restaurant."
+                        : "Pair this device to your restaurant before configuring printers."}
+                </p>
+              </div>
             </div>
-            {printerMessage && <p role={printerMessage.tone === "error" ? "alert" : "status"} className={`mt-3 text-sm font-bold ${printerMessage.tone === "error" ? "text-red-600 dark:text-red-400" : "text-emerald-700 dark:text-emerald-400"}`}>{printerMessage.text}</p>}
-            <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end"><button type="button" disabled={printerBusy || !bridgeHealth?.paired || !bridgeHealth.kitchen_printer_configured} onClick={() => void runKitchenPrinterTest()} className="min-h-11 rounded-xl border border-[var(--omlu-border-strong)] px-5 text-sm font-black disabled:opacity-50">Test Print</button><button type="button" disabled={printerBusy || !bridgeHealth?.paired} onClick={() => void saveKitchenPrinter()} className="min-h-11 rounded-xl bg-orange-600 px-5 text-sm font-black text-white disabled:opacity-50">{printerBusy ? "Working…" : bridgeHealth?.kitchen_printer_configured ? "Reconfigure" : "Save kitchen printer"}</button></div>
+
+            {/* Three-line status display */}
+            <div className="space-y-1.5">
+              <BridgeStatusRow
+                label="Bridge"
+                status={bridgeStatus === "checking" ? "checking" : bridgeStatus === "connected" ? "online" : "offline"}
+              />
+              {bridgeStatus === "connected" && (
+                <BridgeStatusRow
+                  label="Authorization"
+                  status={backendAuthorized === null ? "checking" : backendAuthorized ? "authorized" : "unauthorized"}
+                />
+              )}
+              {bridgeStatus === "connected" && bridgeHealth?.paired && backendAuthorized && (
+                <BridgeStatusRow label="Pairing" status="paired" />
+              )}
+            </div>
+
+            {/* Authorization error message */}
+            {authError && (
+              <div role="alert" className="rounded-xl border border-amber-500/50 bg-amber-500/10 p-3 text-sm font-semibold text-amber-800 dark:text-amber-300">
+                {authError}
+              </div>
+            )}
+
+            {/* Pair Again / Pair Bridge button */}
+            {showPairAgain && (
+              <button type="button" disabled={pairing} onClick={() => void pairBridge()} className="min-h-10 rounded-xl bg-orange-600 px-5 text-sm font-black text-white hover:bg-orange-700 disabled:opacity-50">
+                {pairing ? "Pairing…" : authError ? "Pair Again" : "Pair Bridge"}
+              </button>
+            )}
+
+            {pairingMessage && <p role={pairingMessage.tone === "error" ? "alert" : "status"} className={`text-sm font-bold ${pairingMessage.tone === "error" ? "text-red-600 dark:text-red-400" : "text-emerald-700 dark:text-emerald-400"}`}>{pairingMessage.text}</p>}
+
+            <a href="/downloads/omlu-print-bridge-developer-package.zip" download className="inline-flex min-h-10 items-center justify-center rounded-xl border border-[var(--omlu-border-strong)] px-4 py-2 text-xs font-black text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-hover-background)]">Download Desktop Printer Bridge (Developer / Hardware Test Package)</a>
           </div>
-          <div className="grid gap-4 lg:grid-cols-3">
-            <InfoCard title="Browser Printing" description="Print bills and receipts using your system print dialog." />
-            <InfoCard title="Windows Printer Bridge" description={!bridgeHealth ? "Printer Bridge is not running on this device." : bridgeHealth.paired ? "This device is securely paired to your restaurant." : "Pair this device to your restaurant before configuring printers."}>
-              <BridgeStatus status={bridgeStatus} paired={bridgeHealth?.paired === true} />
-              {bridgeHealth && !bridgeHealth.paired && <button type="button" disabled={pairing} onClick={() => void pairBridge()} className={primaryLinkClass}>{pairing ? "Pairing…" : "Pair Bridge"}</button>}
-              {pairingMessage && <p role={pairingMessage.tone === "error" ? "alert" : "status"} className={`text-xs font-bold ${pairingMessage.tone === "error" ? "text-red-600 dark:text-red-400" : "text-emerald-700 dark:text-emerald-400"}`}>{pairingMessage.text}</p>}
-              <a href="/downloads/omlu-print-bridge-developer-package.zip" download className={primaryLinkClass}>Download Windows Bridge (Developer / Hardware Test Package)</a>
-            </InfoCard>
-            <InfoCard title="OMLU Operations App" description="Use the Android Operations app for direct LAN thermal printing.">
-              <a href="/downloads/omlu.apk" download className={secondaryLinkClass}>Download Operations App</a>
-            </InfoCard>
+
+          {/* Kitchen Printer */}
+          <div id="kitchen-printer" className="scroll-mt-24 rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] p-4">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h3 className="text-sm font-black text-[var(--omlu-text-primary)]">Kitchen Printer</h3>
+                <p className="mt-1 text-xs leading-5 text-[var(--omlu-text-secondary)]">Dedicated LAN thermal printer for kitchen tickets. Customer bill printing remains separate.</p>
+              </div>
+              <span className={`w-fit rounded-full border px-3 py-1 text-xs font-bold ${bridgeHealth?.kitchen_printer_configured ? "border-emerald-600/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "border-[var(--omlu-border-strong)] text-[var(--omlu-text-secondary)]"}`}>
+                {!bridgeHealth ? "Bridge offline" : bridgeHealth.kitchen_printer_configured ? "Configured" : "Not configured"}
+              </span>
+            </div>
+            {bridgeHealth && !printerActionsAvailable && <p role="status" className="mt-3 text-sm font-semibold text-amber-700 dark:text-amber-400">Pair the Desktop Printer Bridge before configuring a kitchen printer.</p>}
+            <div className={`mt-4 grid gap-4 md:grid-cols-[1fr_1fr_140px] ${printerActionsAvailable ? "" : "opacity-60"}`}>
+              <SettingsInput id="kitchen-printer-name" label="Printer name" value={kitchenPrinterName} onChange={setKitchenPrinterName} disabled={!printerActionsAvailable} />
+              <SettingsInput id="kitchen-printer-host" label="Printer IP / Host" value={kitchenPrinterHost} onChange={setKitchenPrinterHost} disabled={!printerActionsAvailable} />
+              <SettingsInput id="kitchen-printer-port" label="Port" value={kitchenPrinterPort} onChange={setKitchenPrinterPort} disabled={!printerActionsAvailable} />
+            </div>
+            {kitchenPrinterMessage && <p role={kitchenPrinterMessage.tone === "error" ? "alert" : "status"} className={`mt-3 text-sm font-bold ${kitchenPrinterMessage.tone === "error" ? "text-red-600 dark:text-red-400" : "text-emerald-700 dark:text-emerald-400"}`}>{kitchenPrinterMessage.text}</p>}
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <button type="button" disabled={kitchenPrinterBusy || !printerActionsAvailable || !bridgeHealth?.kitchen_printer_configured} onClick={() => void runKitchenPrinterTest()} className="min-h-11 rounded-xl border border-[var(--omlu-border-strong)] px-5 text-sm font-black disabled:opacity-50">Test Print</button>
+              <button type="button" disabled={kitchenPrinterBusy || !printerActionsAvailable} onClick={() => void saveKitchenPrinter()} className="min-h-11 rounded-xl bg-orange-600 px-5 text-sm font-black text-white disabled:opacity-50">{kitchenPrinterBusy ? "Working…" : bridgeHealth?.kitchen_printer_configured ? "Reconfigure" : "Save kitchen printer"}</button>
+            </div>
           </div>
+
+          {/* Billing Printer */}
+          <div id="billing-printer" className="scroll-mt-24 rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] p-4">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h3 className="text-sm font-black text-[var(--omlu-text-primary)]">Billing Printer</h3>
+                <p className="mt-1 text-xs leading-5 text-[var(--omlu-text-secondary)]">Dedicated LAN thermal printer for customer bills, GST invoices, and receipts. Used for Issue &amp; Print, reprints, and quick sale receipts.</p>
+              </div>
+              <span className={`w-fit rounded-full border px-3 py-1 text-xs font-bold ${bridgeHealth?.billing_printer_configured ? "border-emerald-600/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "border-[var(--omlu-border-strong)] text-[var(--omlu-text-secondary)]"}`}>
+                {!bridgeHealth ? "Bridge offline" : bridgeHealth.billing_printer_configured ? "Configured" : "Not configured"}
+              </span>
+            </div>
+            {bridgeHealth && !printerActionsAvailable && <p role="status" className="mt-3 text-sm font-semibold text-amber-700 dark:text-amber-400">Pair the Desktop Printer Bridge before configuring a billing printer.</p>}
+            <div className={`mt-4 grid gap-4 md:grid-cols-[1fr_1fr_140px] ${printerActionsAvailable ? "" : "opacity-60"}`}>
+              <SettingsInput id="billing-printer-name" label="Printer name" value={billingPrinterName} onChange={setBillingPrinterName} disabled={!printerActionsAvailable} />
+              <SettingsInput id="billing-printer-host" label="Printer IP / Host" value={billingPrinterHost} onChange={setBillingPrinterHost} disabled={!printerActionsAvailable} />
+              <SettingsInput id="billing-printer-port" label="Port" value={billingPrinterPort} onChange={setBillingPrinterPort} disabled={!printerActionsAvailable} />
+            </div>
+            {billingPrinterMessage && <p role={billingPrinterMessage.tone === "error" ? "alert" : "status"} className={`mt-3 text-sm font-bold ${billingPrinterMessage.tone === "error" ? "text-red-600 dark:text-red-400" : "text-emerald-700 dark:text-emerald-400"}`}>{billingPrinterMessage.text}</p>}
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <button type="button" disabled={billingPrinterBusy || !printerActionsAvailable || !bridgeHealth?.billing_printer_configured} onClick={() => void runBillingPrinterTest()} className="min-h-11 rounded-xl border border-[var(--omlu-border-strong)] px-5 text-sm font-black disabled:opacity-50">Test Print</button>
+              <button type="button" disabled={billingPrinterBusy || !printerActionsAvailable} onClick={() => void saveBillingPrinter()} className="min-h-11 rounded-xl bg-orange-600 px-5 text-sm font-black text-white disabled:opacity-50">{billingPrinterBusy ? "Working…" : bridgeHealth?.billing_printer_configured ? "Reconfigure" : "Save billing printer"}</button>
+            </div>
+          </div>
+
+          {/* Browser Printing */}
+          <div className="rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] p-4">
+            <h3 className="text-sm font-black text-[var(--omlu-text-primary)]">Browser Printing</h3>
+            <p className="mt-1 text-xs leading-5 text-[var(--omlu-text-secondary)]">Available as a fallback when the Desktop Printer Bridge is offline or a Billing Printer is not configured. Uses your system print dialog.</p>
+          </div>
+
           <details className="rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)]">
             <summary className="cursor-pointer px-4 py-3 text-sm font-bold text-[var(--omlu-text-primary)]">Advanced / Troubleshooting</summary>
             <div className="space-y-2 border-t border-[var(--omlu-border)] px-4 py-4 text-xs leading-5 text-[var(--omlu-text-secondary)]">
-              <p>The Windows bridge runs locally at <code className="font-mono">127.0.0.1:24242</code> and supports Windows RAW Spooler, Driver Spooler, TCP/LAN, and Bluetooth COM transports.</p>
-              <p>Browser printing remains available when the bridge is offline. The developer / hardware test package requires Node.js v18+ and uses <code className="font-mono">npm install --omit=dev &amp;&amp; npm start</code>.</p>
-              <p>Thermal printers and the Android device must be connected to the same local network.</p>
-              <p>Direct ESC/POS printing (IP address, port, paper width, and copies) is configured directly inside the Android app settings.</p>
-              <p>Web admin does not store raw TCP printer IP addresses, ports, paper widths, or copy preferences.</p>
+              <p>The Desktop Printer Bridge HTTP service runs locally at <code className="font-mono">127.0.0.1:24242</code> and supports Windows RAW Spooler, Driver Spooler, TCP/LAN, and Bluetooth COM transports.</p>
+              <p>The Kitchen Printer and Billing Printer are separate network printers with independent IP addresses. Both may use port <code className="font-mono">9100</code>. The bridge port <code className="font-mono">24242</code> is the local HTTP API — do not confuse it with ESC/POS printer ports.</p>
+              <p>Browser printing remains available when the bridge is offline. The developer / hardware test package requires Node.js v18+ and uses <code className="font-mono">npm install --omit=dev && npm start</code>.</p>
+              <p>Thermal printers must be connected to the same local network as this device.</p>
             </div>
           </details>
         </SettingsSection>
@@ -421,8 +627,6 @@ export default function AdminSettingsClient() {
 }
 
 const controlClass = "min-h-11 w-full min-w-0 rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] px-4 py-2.5 text-sm font-semibold text-[var(--omlu-text-primary)] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 disabled:cursor-not-allowed";
-const primaryLinkClass = "inline-flex min-h-10 w-full items-center justify-center rounded-xl bg-orange-600 px-3 py-2 text-center text-xs font-black text-white hover:bg-orange-700";
-const secondaryLinkClass = "inline-flex min-h-10 w-full items-center justify-center rounded-xl border border-[var(--omlu-border-strong)] px-3 py-2 text-center text-xs font-black text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-hover-background)]";
 
 function SettingsSection({ id, title, description, children }: { id?: string; title: string; description: string; children: ReactNode }) {
   const headingId = `${id || title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-heading`;
@@ -453,11 +657,34 @@ function KitchenModeCard({ value, selected, onChange, title, description }: { va
   return <button type="button" role="radio" aria-checked={selected} data-selected={selected} onClick={() => onChange(value)} className={`flex w-full cursor-pointer gap-3 rounded-xl border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--omlu-primary-surface)] ${selected ? "border-orange-600 bg-orange-500/10 ring-1 ring-orange-500/30" : "border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] hover:border-[var(--omlu-border-strong)]"}`}><span aria-hidden="true" className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 text-[10px] font-black transition-colors ${selected ? "border-orange-600 bg-orange-600 text-white" : "border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] text-transparent"}`}>✓</span><span className="min-w-0 flex-1"><span className="block text-sm font-bold text-[var(--omlu-text-primary)]">{title}</span><span className="mt-1 block text-xs leading-5 text-[var(--omlu-text-secondary)]">{description}</span></span><span className="sr-only">{selected ? "Selected" : "Not selected"}</span></button>;
 }
 
-function InfoCard({ title, description, children }: { title: string; description: string; children?: ReactNode }) {
-  return <div className="flex min-w-0 flex-col gap-4 rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] p-4"><div className="flex-1"><h3 className="text-sm font-black text-[var(--omlu-text-primary)]">{title}</h3><p className="mt-1 text-xs leading-5 text-[var(--omlu-text-secondary)]">{description}</p></div>{children}</div>;
-}
+type BridgeRowStatus = "checking" | "online" | "offline" | "authorized" | "unauthorized" | "paired";
 
-function BridgeStatus({ status, paired = false }: { status: "checking" | "connected" | "disconnected"; paired?: boolean }) {
-  const label = status === "checking" ? "Checking…" : status === "disconnected" ? "Not running" : paired ? "Paired" : "Bridge detected";
-  return <span role="status" className={`w-fit rounded-full border px-3 py-1 text-xs font-bold ${paired ? "border-emerald-600/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "border-[var(--omlu-border-strong)] text-[var(--omlu-text-secondary)]"}`}>{label}</span>;
+function BridgeStatusRow({ label, status }: { label: string; status: BridgeRowStatus }) {
+  const dotColor = status === "online" || status === "authorized" || status === "paired"
+    ? "bg-emerald-500"
+    : status === "offline" || status === "unauthorized"
+      ? "bg-red-500"
+      : "bg-[var(--omlu-border-strong)] animate-pulse";
+
+  const textColor = status === "online" || status === "authorized" || status === "paired"
+    ? "text-emerald-700 dark:text-emerald-400"
+    : status === "offline" || status === "unauthorized"
+      ? "text-red-600 dark:text-red-400"
+      : "text-[var(--omlu-text-secondary)]";
+
+  const statusLabel: Record<BridgeRowStatus, string> = {
+    checking: "Checking…",
+    online: "Online",
+    offline: "Offline",
+    authorized: "Authorized",
+    unauthorized: "Authorization required",
+    paired: "Paired",
+  };
+
+  return (
+    <div className="flex items-center gap-2">
+      <span className={`h-2 w-2 shrink-0 rounded-full ${dotColor}`} aria-hidden="true" />
+      <span className={`text-xs font-bold ${textColor}`}>{label}: {statusLabel[status]}</span>
+    </div>
+  );
 }
