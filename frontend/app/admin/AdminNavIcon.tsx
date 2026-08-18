@@ -23,6 +23,7 @@ export type NavIconId =
   | "staff"
   | "performance"
   | "gst"
+  | "printing"
   | "settings"
   | "building";
 
@@ -32,6 +33,24 @@ type IconProps = {
 };
 
 const base = "shrink-0 stroke-current fill-none";
+
+function IconPrinter(props: IconProps) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={`${base} ${props.className ?? ""}`}
+      aria-hidden={props["aria-hidden"]}
+    >
+      <polyline points="6 9 6 2 18 2 18 9" />
+      <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+      <rect x="6" y="14" width="12" height="8" />
+    </svg>
+  );
+}
 
 function Icon({ d, className = "", ...rest }: IconProps & { d: string | string[] }) {
   const paths = Array.isArray(d) ? d : [d];
@@ -310,6 +329,7 @@ export const NAV_ICONS: Record<NavIconId, (props: IconProps) => React.JSX.Elemen
   staff: IconUsers,
   performance: IconTrendingUp,
   gst: IconLandmark,
+  printing: IconPrinter,
   settings: IconSettings,
   building: IconBuilding,
 };

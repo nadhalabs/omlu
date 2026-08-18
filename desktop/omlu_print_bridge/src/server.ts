@@ -1,6 +1,6 @@
 import * as http from 'http';
 import * as crypto from 'crypto';
-import { ConfigManager, PrinterConfig, isPersistedPairingComplete } from './config';
+import { ConfigManager, PrinterConfig, PrinterProfile, isPersistedPairingComplete } from './config';
 import { validateOriginAndHost, verifySignedToken, sanitizeErrorMessage, setPublicKeyPem } from './security';
 import { getBleCapability } from './capabilities/ble_capability';
 import { PrintJobCoordinator } from './coordinator';
@@ -20,6 +20,7 @@ export class PrintBridgeServer {
   private coordinator: PrintJobCoordinator;
   private activePairingCode: string | null = null;
   private kitchenConsumer: KitchenPrintConsumer;
+  private startTime: number = Date.now();
 
   constructor(customConfigPath?: string) {
     this.configManager = new ConfigManager(customConfigPath);
@@ -57,17 +58,65 @@ export class PrintBridgeServer {
     }
   }
 
-  /** Returns a TCP transport pointing at the configured Billing Printer, or null if not configured. */
-  private getBillingPrinterTransport(config: PrinterConfig): TcpPrinterTransport | null {
-    if (!config.billingPrinterEnabled || !config.billingPrinterHost) return null;
-    return new TcpPrinterTransport(
-      config.billingPrinterHost,
-      config.billingPrinterPort,
-      Math.min(config.connectTimeoutMs, 8000),
-      Math.min(config.writeTimeoutMs, 8000),
-      config.chunkSize,
-      config.interChunkDelayMs,
-    );
+  public getTransportForProfile(profile: PrinterProfile, config: PrinterConfig): PrinterTransport {
+    if (profile.transport === 'tcp_lan' && profile.host) {
+      return new TcpPrinterTransport(
+        profile.host,
+        profile.port || 9100,
+        Math.min(config.connectTimeoutMs, 8000),
+        Math.min(config.writeTimeoutMs, 8000),
+        config.chunkSize,
+        config.interChunkDelayMs
+      );
+    }
+    if (profile.transport === 'windows_raw_spooler' && profile.queueName) {
+      return new WindowsRawSpoolerTransport(profile.queueName);
+    }
+    if (profile.transport === 'windows_driver_spooler' && profile.queueName) {
+      return new WindowsDriverSpoolerTransport(profile.queueName);
+    }
+    return this.getTransport(config);
+  }
+
+  private getDefaultPrinterProfile(purpose: 'billing' | 'kitchen', config: PrinterConfig): PrinterProfile | null {
+    const profiles = config.printers || [];
+    const matching = profiles.filter((p) => p.purpose === purpose && p.enabled);
+    const defaultProfile = matching.find((p) => p.is_default);
+    if (defaultProfile) return defaultProfile;
+    if (matching.length > 0) return matching[0];
+
+    // Fallback to legacy fields if profiles array is empty
+    if (purpose === 'billing' && config.billingPrinterEnabled && config.billingPrinterHost) {
+      return {
+        id: 'legacy_billing',
+        name: config.billingPrinterName || 'Billing Printer',
+        purpose: 'billing',
+        transport: 'tcp_lan',
+        host: config.billingPrinterHost,
+        port: config.billingPrinterPort || 9100,
+        paperWidth: '80',
+        enabled: true,
+        is_default: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    }
+    if (purpose === 'kitchen' && config.kitchenPrinterEnabled && config.kitchenPrinterHost) {
+      return {
+        id: 'legacy_kitchen',
+        name: config.kitchenPrinterName || 'Kitchen Printer',
+        purpose: 'kitchen',
+        transport: 'tcp_lan',
+        host: config.kitchenPrinterHost,
+        port: config.kitchenPrinterPort || 9100,
+        paperWidth: '80',
+        enabled: true,
+        is_default: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    }
+    return null;
   }
 
   private async handleRequest(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
@@ -80,30 +129,39 @@ export class PrintBridgeServer {
     try {
       if (method === 'GET' && path === '/v1/health') {
         const config = this.configManager.getConfig();
-        const billingTransport = this.getBillingPrinterTransport(config);
-        const transport = billingTransport ?? this.getTransport(config);
-        const isOnline = await transport.testConnection();
+        const defaultBilling = this.getDefaultPrinterProfile('billing', config);
+        const defaultKitchen = this.getDefaultPrinterProfile('kitchen', config);
+
+        let isOnline = false;
+        if (defaultBilling) {
+          const transport = this.getTransportForProfile(defaultBilling, config);
+          isOnline = await transport.testConnection();
+        } else {
+          const transport = this.getTransport(config);
+          isOnline = await transport.testConnection();
+        }
 
         return this.json(res, 200, {
           bridge_version: '1.0.0',
           operating_system: process.platform,
           readiness: 'ready',
-          configured_printer: config.printerName,
-          active_transport: config.transport,
+          configured_printer: defaultBilling?.name || config.printerName,
+          active_transport: defaultBilling?.transport || config.transport,
           supported_transports: ['windows_raw_spooler', 'windows_driver_spooler', 'tcp_lan', 'bluetooth_com'],
           active_job_id: this.coordinator.getActiveJobId(),
           printer_online: isOnline,
           installation_id: config.installationId || null,
           tenant_id: config.tenantId || null,
           paired: isPersistedPairingComplete(config),
-          kitchen_printer_configured: Boolean(config.kitchenPrinterEnabled && config.kitchenPrinterHost),
-          kitchen_printer_name: config.kitchenPrinterName,
-          kitchen_printer_host: config.kitchenPrinterHost,
-          kitchen_printer_port: config.kitchenPrinterPort,
-          billing_printer_configured: Boolean(config.billingPrinterEnabled && config.billingPrinterHost),
-          billing_printer_name: config.billingPrinterName,
-          billing_printer_host: config.billingPrinterHost,
-          billing_printer_port: config.billingPrinterPort,
+          kitchen_printer_configured: Boolean(defaultKitchen?.enabled),
+          kitchen_printer_name: defaultKitchen?.name || config.kitchenPrinterName,
+          kitchen_printer_host: defaultKitchen?.host || config.kitchenPrinterHost,
+          kitchen_printer_port: defaultKitchen?.port || config.kitchenPrinterPort,
+          billing_printer_configured: Boolean(defaultBilling?.enabled),
+          billing_printer_name: defaultBilling?.name || config.billingPrinterName,
+          billing_printer_host: defaultBilling?.host || config.billingPrinterHost,
+          billing_printer_port: defaultBilling?.port || config.billingPrinterPort,
+          printers: config.printers || [],
         });
       }
 
@@ -125,7 +183,7 @@ export class PrintBridgeServer {
         return this.json(res, 200, { printers });
       }
 
-      if (method === 'POST' && path === '/v1/printers/discover') {
+      if ((method === 'POST' || method === 'GET') && (path === '/v1/printers/discover' || path === '/v1/printer-discovery')) {
         const config = this.configManager.getConfig();
         const transport = this.getTransport(config);
         const discovered = await transport.discover();
@@ -179,6 +237,185 @@ export class PrintBridgeServer {
         return this.json(res, 200, { status: 'success', settings: updated });
       }
 
+      // ── Printer Profiles (Multi-Printer Management) ──────────────────────────
+
+      if (method === 'GET' && path === '/v1/printer-profiles') {
+        const config = this.configManager.getConfig();
+        return this.json(res, 200, { printers: config.printers || [] });
+      }
+
+      if (method === 'POST' && path === '/v1/printer-profiles') {
+        const body = await this.readJson(req);
+        if (!body.name || !body.purpose) {
+          return this.json(res, 422, { error: 'INVALID_PROFILE', message: 'Printer name and purpose are required.' });
+        }
+        const config = this.configManager.getConfig();
+        const currentProfiles = config.printers || [];
+
+        const isDefault = Boolean(body.is_default) || currentProfiles.filter((p) => p.purpose === body.purpose).length === 0;
+
+        const updatedProfiles = currentProfiles.map((p) => {
+          if (isDefault && p.purpose === body.purpose) {
+            return { ...p, is_default: false };
+          }
+          return p;
+        });
+
+        const newProfile: PrinterProfile = {
+          id: `profile_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          name: String(body.name).trim().slice(0, 100),
+          purpose: body.purpose === 'kitchen' ? 'kitchen' : 'billing',
+          transport: body.transport || 'tcp_lan',
+          host: body.host ? String(body.host).trim() : undefined,
+          port: body.port ? Number(body.port) : 9100,
+          queueName: body.queueName ? String(body.queueName).trim() : undefined,
+          paperWidth: body.paperWidth === '58' ? '58' : '80',
+          enabled: body.enabled !== false,
+          is_default: isDefault,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+
+        updatedProfiles.push(newProfile);
+
+        // Update legacy default fields if this is default
+        const legacyUpdate: Partial<PrinterConfig> = { printers: updatedProfiles };
+        if (isDefault && newProfile.purpose === 'billing') {
+          legacyUpdate.billingPrinterEnabled = newProfile.enabled;
+          legacyUpdate.billingPrinterName = newProfile.name;
+          legacyUpdate.billingPrinterHost = newProfile.host || '';
+          legacyUpdate.billingPrinterPort = newProfile.port || 9100;
+        }
+        if (isDefault && newProfile.purpose === 'kitchen') {
+          legacyUpdate.kitchenPrinterEnabled = newProfile.enabled;
+          legacyUpdate.kitchenPrinterName = newProfile.name;
+          legacyUpdate.kitchenPrinterHost = newProfile.host || '';
+          legacyUpdate.kitchenPrinterPort = newProfile.port || 9100;
+        }
+
+        this.configManager.saveConfig(legacyUpdate);
+        return this.json(res, 200, { status: 'success', profile: newProfile });
+      }
+
+      if ((method === 'PUT' || method === 'POST') && path.startsWith('/v1/printer-profiles/')) {
+        const id = path.replace('/v1/printer-profiles/', '').split('/')[0];
+        const subAction = path.endsWith('/set-default') ? 'set-default' : path.endsWith('/test') ? 'test' : 'update';
+        const config = this.configManager.getConfig();
+        const currentProfiles = config.printers || [];
+        const target = currentProfiles.find((p) => p.id === id);
+
+        if (!target) {
+          return this.json(res, 404, { error: 'NOT_FOUND', message: 'Printer profile not found.' });
+        }
+
+        if (subAction === 'set-default') {
+          const updatedProfiles = currentProfiles.map((p) => ({
+            ...p,
+            is_default: p.id === id,
+            updatedAt: p.id === id ? new Date().toISOString() : p.updatedAt,
+          }));
+          const updatedTarget = updatedProfiles.find((p) => p.id === id)!;
+          const legacyUpdate: Partial<PrinterConfig> = { printers: updatedProfiles };
+          if (updatedTarget.purpose === 'billing') {
+            legacyUpdate.billingPrinterEnabled = updatedTarget.enabled;
+            legacyUpdate.billingPrinterName = updatedTarget.name;
+            legacyUpdate.billingPrinterHost = updatedTarget.host || '';
+            legacyUpdate.billingPrinterPort = updatedTarget.port || 9100;
+          } else {
+            legacyUpdate.kitchenPrinterEnabled = updatedTarget.enabled;
+            legacyUpdate.kitchenPrinterName = updatedTarget.name;
+            legacyUpdate.kitchenPrinterHost = updatedTarget.host || '';
+            legacyUpdate.kitchenPrinterPort = updatedTarget.port || 9100;
+          }
+          this.configManager.saveConfig(legacyUpdate);
+          return this.json(res, 200, { status: 'success', profile: updatedTarget });
+        }
+
+        if (subAction === 'test') {
+          const transport = this.getTransportForProfile(target, config);
+          const testJob = target.purpose === 'kitchen' ? {
+            schema_version: '1.0' as const, job_id: `test_k_${Date.now()}`, idempotency_key: `test_k_${Date.now()}`,
+            installation_id: config.installationId, tenant_id: config.tenantId, receipt_type: 'kitchen' as const, copy_count: 1,
+            created_at: new Date().toISOString(), expires_at: new Date(Date.now() + 60000).toISOString(), retry_count: 0, signed_token: '',
+            kitchen_data: { document_type: 'initial_kot' as const, service_type: 'dine_in' as const, order_number: 'TEST',
+              customer_note: `OMLU KITCHEN PRINTER TEST | ${new Date().toLocaleString()} | Printer: ${target.name}`, items: [] },
+          } : {
+            schema_version: '1.0' as const, job_id: `test_b_${Date.now()}`, idempotency_key: `test_b_${Date.now()}`,
+            installation_id: config.installationId, tenant_id: config.tenantId, receipt_type: 'test' as const, copy_count: 1,
+            created_at: new Date().toISOString(), expires_at: new Date(Date.now() + 60000).toISOString(), retry_count: 0, signed_token: '',
+          };
+          const result = await this.coordinator.executePrintJob(testJob, config, transport);
+          return this.json(res, result.state === 'completed' ? 200 : 503, { success: result.state === 'completed', message: result.state === 'completed' ? 'Printer test completed.' : (result.error || 'Printer unavailable.') });
+        }
+
+        // Standard profile update
+        const body = await this.readJson(req);
+        const updatedProfiles = currentProfiles.map((p) => {
+          if (p.id === id) {
+            return {
+              ...p,
+              name: body.name ? String(body.name).trim() : p.name,
+              purpose: body.purpose ? (body.purpose === 'kitchen' ? 'kitchen' : 'billing') : p.purpose,
+              transport: body.transport || p.transport,
+              host: body.host !== undefined ? String(body.host).trim() : p.host,
+              port: body.port !== undefined ? Number(body.port) : p.port,
+              queueName: body.queueName !== undefined ? String(body.queueName).trim() : p.queueName,
+              paperWidth: body.paperWidth === '58' ? '58' : body.paperWidth === '80' ? '80' : p.paperWidth,
+              enabled: body.enabled !== undefined ? Boolean(body.enabled) : p.enabled,
+              is_default: body.is_default !== undefined ? Boolean(body.is_default) : p.is_default,
+              updatedAt: new Date().toISOString(),
+            };
+          }
+          return p;
+        });
+
+        this.configManager.saveConfig({ printers: updatedProfiles });
+        const updatedProfile = updatedProfiles.find((p) => p.id === id);
+        return this.json(res, 200, { status: 'success', profile: updatedProfile });
+      }
+
+      if (method === 'DELETE' && path.startsWith('/v1/printer-profiles/')) {
+        const id = path.replace('/v1/printer-profiles/', '').trim();
+        const config = this.configManager.getConfig();
+        const currentProfiles = config.printers || [];
+        const updatedProfiles = currentProfiles.filter((p) => p.id !== id);
+
+        this.configManager.saveConfig({ printers: updatedProfiles });
+        return this.json(res, 200, { status: 'deleted', id });
+      }
+
+      // ── Diagnostics & Job History ─────────────────────────────────────────────
+
+      if (method === 'GET' && path === '/v1/diagnostics') {
+        const config = this.configManager.getConfig();
+        return this.json(res, 200, {
+          bridge_version: '1.0.0',
+          operating_system: process.platform,
+          installation_id: config.installationId || null,
+          tenant_id: config.tenantId || null,
+          paired: isPersistedPairingComplete(config),
+          uptime_seconds: Math.floor((Date.now() - this.startTime) / 1000),
+          active_job_id: this.coordinator.getActiveJobId(),
+          supported_transports: ['windows_raw_spooler', 'windows_driver_spooler', 'tcp_lan', 'bluetooth_com'],
+          printers: (config.printers || []).map((p) => ({
+            id: p.id,
+            name: p.name,
+            purpose: p.purpose,
+            transport: p.transport,
+            host: p.host || null,
+            port: p.port || null,
+            enabled: p.enabled,
+            is_default: p.is_default,
+          })),
+        });
+      }
+
+      if (method === 'GET' && path === '/v1/recent-jobs') {
+        return this.json(res, 200, { jobs: this.coordinator.getRecentJobs(20) });
+      }
+
+      // ── Legacy Setup Endpoints ────────────────────────────────────────────────
+
       if (method === 'POST' && path === '/v1/kitchen-printer/setup') {
         const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
         const sec = verifySignedToken(token, 'printer:configure');
@@ -202,19 +439,18 @@ export class PrintBridgeServer {
         const sec = verifySignedToken(token, 'printer:test');
         if (!sec.valid) return this.json(res, 401, { error: 'UNAUTHORIZED', message: sec.reason });
         const config = this.configManager.getConfig();
-        if (!config.kitchenPrinterEnabled || !config.kitchenPrinterHost) return this.json(res, 409, { error: 'NOT_CONFIGURED', message: 'Kitchen printer is not configured.' });
-        const transport = new TcpPrinterTransport(config.kitchenPrinterHost, config.kitchenPrinterPort, 5000, 5000, config.chunkSize, config.interChunkDelayMs);
+        const defaultKitchen = this.getDefaultPrinterProfile('kitchen', config);
+        if (!defaultKitchen) return this.json(res, 409, { error: 'NOT_CONFIGURED', message: 'Kitchen printer is not configured.' });
+        const transport = this.getTransportForProfile(defaultKitchen, config);
         const result = await this.coordinator.executePrintJob({
           schema_version: '1.0', job_id: `kitchen_test_${Date.now()}`, idempotency_key: `kitchen_test_${Date.now()}`,
           installation_id: config.installationId, tenant_id: config.tenantId, receipt_type: 'kitchen', copy_count: 1,
           created_at: new Date().toISOString(), expires_at: new Date(Date.now() + 60000).toISOString(), retry_count: 0, signed_token: '',
           kitchen_data: { document_type: 'initial_kot', service_type: 'dine_in', order_number: 'TEST',
-            customer_note: `OMLU KITCHEN PRINTER TEST | ${new Date().toLocaleString()} | Printer role: Kitchen | Setup confirmed`, items: [] },
+            customer_note: `OMLU KITCHEN PRINTER TEST | ${new Date().toLocaleString()} | Printer: ${defaultKitchen.name}`, items: [] },
         }, config, transport);
         return this.json(res, result.state === 'completed' ? 200 : 503, { success: result.state === 'completed', message: result.state === 'completed' ? 'Kitchen printer test completed.' : 'Kitchen printer unavailable.' });
       }
-
-      // ── Billing Printer ─────────────────────────────────────────────────────
 
       if (method === 'POST' && path === '/v1/billing-printer/setup') {
         const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
@@ -239,8 +475,9 @@ export class PrintBridgeServer {
         const sec = verifySignedToken(token, 'printer:test');
         if (!sec.valid) return this.json(res, 401, { error: 'UNAUTHORIZED', message: sec.reason });
         const config = this.configManager.getConfig();
-        const billingTransport = this.getBillingPrinterTransport(config);
-        if (!billingTransport) return this.json(res, 409, { error: 'NOT_CONFIGURED', message: 'Billing printer is not configured.' });
+        const defaultBilling = this.getDefaultPrinterProfile('billing', config);
+        if (!defaultBilling) return this.json(res, 409, { error: 'NOT_CONFIGURED', message: 'Billing printer is not configured.' });
+        const billingTransport = this.getTransportForProfile(defaultBilling, config);
         const result = await this.coordinator.executePrintJob({
           schema_version: '1.0', job_id: `billing_test_${Date.now()}`, idempotency_key: `billing_test_${Date.now()}`,
           installation_id: config.installationId, tenant_id: config.tenantId, receipt_type: 'test', copy_count: 1,
@@ -248,8 +485,6 @@ export class PrintBridgeServer {
         }, config, billingTransport);
         return this.json(res, result.state === 'completed' ? 200 : 503, { success: result.state === 'completed', message: result.state === 'completed' ? 'Billing printer test completed.' : 'Billing printer unavailable.' });
       }
-
-      // ── Generic billing printer test (legacy path) ───────────────────────────
 
       if (method === 'POST' && path === '/v1/printers/test') {
         const authHeader = req.headers.authorization || '';
@@ -260,7 +495,8 @@ export class PrintBridgeServer {
         }
 
         const config = this.configManager.getConfig();
-        const transport = this.getTransport(config);
+        const defaultBilling = this.getDefaultPrinterProfile('billing', config);
+        const transport = defaultBilling ? this.getTransportForProfile(defaultBilling, config) : this.getTransport(config);
         const testJob = {
           schema_version: '1.0' as const,
           job_id: `test_${Date.now()}`,
@@ -288,9 +524,9 @@ export class PrintBridgeServer {
         }
 
         const config = this.configManager.getConfig();
-        // Use dedicated billing printer transport if configured; fall back to legacy default transport.
-        const billingTransport = this.getBillingPrinterTransport(config);
-        const transport = billingTransport ?? this.getTransport(config);
+        const purpose = body.receipt_type === 'kitchen' ? 'kitchen' : 'billing';
+        const defaultProfile = this.getDefaultPrinterProfile(purpose, config);
+        const transport = defaultProfile ? this.getTransportForProfile(defaultProfile, config) : this.getTransport(config);
         const result = await this.coordinator.executePrintJob(body, config, transport);
         return this.json(res, result.state === 'completed' ? 200 : 500, { result });
       }
@@ -350,6 +586,10 @@ export class PrintBridgeServer {
     return new Promise((resolve) => {
       this.server.close(() => resolve());
     });
+  }
+
+  public stop(): Promise<void> {
+    return this.close();
   }
 }
 

@@ -1,20 +1,57 @@
 {
   "name": "omlu-print-bridge",
   "version": "1.0.0",
-  "description": "Production OMLU Desktop Print Bridge for Windows Direct Thermal Printing",
-  "main": "dist/server.js",
+  "description": "Production OMLU Desktop Print Bridge for Windows and macOS Direct Thermal Printing",
+  "main": "dist/app.js",
   "type": "commonjs",
   "scripts": {
     "build": "../../frontend/node_modules/.bin/tsc",
-    "start": "node dist/server.js",
+    "start": "electron dist/app.js",
+    "start:cli": "node dist/server.js",
     "test": "node --test test/*.test.js",
-    "package": "powershell -ExecutionPolicy Bypass -File build-installer.ps1"
+    "package:mac": "electron-builder --mac",
+    "package:win": "electron-builder --win",
+    "package": "electron-builder"
+  },
+  "build": {
+    "appId": "in.omlu.printerbridge",
+    "productName": "OMLU Printer Bridge",
+    "directories": {
+      "output": "dist/installer"
+    },
+    "files": [
+      "dist/**/*",
+      "!dist/installer/**/*"
+    ],
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.business",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "runAfterFinish": true
+    }
   },
   "keywords": [
     "omlu",
     "escpos",
     "thermal-printer",
     "windows-printing",
+    "macos-printing",
     "spooler"
   ],
   "author": "OMLU Team",
@@ -23,6 +60,8 @@
     "qrcode": "^1.5.4"
   },
   "devDependencies": {
-    "@types/qrcode": "^1.5.5"
+    "@types/qrcode": "^1.5.5",
+    "electron": "^43.4.0",
+    "electron-builder": "^26.15.3"
   }
 }

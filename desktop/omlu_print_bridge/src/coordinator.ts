@@ -7,6 +7,9 @@ export type JobState = 'received' | 'validated' | 'queued' | 'connecting' | 'pri
 
 export interface JobRecord {
   jobId: string;
+  billNumber?: string;
+  receiptType?: string;
+  printerName?: string;
   state: JobState;
   createdAt: string;
   completedAt?: string;
@@ -26,16 +29,27 @@ export class PrintJobCoordinator {
     return this.completedJobs.get(jobId);
   }
 
+  public getRecentJobs(limit = 20): JobRecord[] {
+    return Array.from(this.completedJobs.values())
+      .slice(-limit)
+      .reverse();
+  }
+
   public async executePrintJob(
     job: PrintJobPayload,
     config: PrinterConfig,
     transport: PrinterTransport
   ): Promise<JobRecord> {
+    const billNumber = job.bill_number || job.bill_id || (job.receipt_data?.bill_number as string) || (job.kitchen_data?.order_number as string);
+    const receiptType = job.receipt_type;
+
     // 1. Validation
     const val = validatePrintJob(job);
     if (!val.valid) {
       const record: JobRecord = {
         jobId: job.job_id || 'unknown',
+        billNumber,
+        receiptType,
         state: 'rejected',
         createdAt: new Date().toISOString(),
         error: val.reason,
@@ -63,6 +77,8 @@ export class PrintJobCoordinator {
     this.activeJobId = job.job_id;
     const record: JobRecord = {
       jobId: job.job_id,
+      billNumber,
+      receiptType,
       state: 'queued',
       createdAt: new Date().toISOString(),
     };

@@ -4,6 +4,21 @@ import * as os from 'os';
 
 export type TransportType = 'windows_raw_spooler' | 'windows_driver_spooler' | 'tcp_lan' | 'bluetooth_com';
 
+export interface PrinterProfile {
+  id: string;
+  name: string;
+  purpose: 'billing' | 'kitchen';
+  transport: TransportType;
+  host?: string;
+  port?: number;
+  queueName?: string;
+  paperWidth: '58' | '80';
+  enabled: boolean;
+  is_default: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface PrinterConfig {
   enabled: boolean;
   transport: TransportType;
@@ -44,6 +59,8 @@ export interface PrinterConfig {
   billingPrinterName: string;
   billingPrinterHost: string;
   billingPrinterPort: number;
+  // Multiple Printer Profiles
+  printers: PrinterProfile[];
 }
 
 export const defaultConfig: PrinterConfig = {
@@ -82,6 +99,7 @@ export const defaultConfig: PrinterConfig = {
   billingPrinterName: 'Billing Printer',
   billingPrinterHost: '',
   billingPrinterPort: 9100,
+  printers: [],
 };
 
 export function isPersistedPairingComplete(config: PrinterConfig): boolean {
@@ -141,22 +159,60 @@ export class ConfigManager {
   }
 
   public load(): PrinterConfig {
+    let loaded: PrinterConfig = { ...defaultConfig };
     try {
       if (fs.existsSync(this.configPath)) {
         const raw = fs.readFileSync(this.configPath, 'utf-8');
-        return { ...defaultConfig, ...JSON.parse(raw) };
+        loaded = { ...defaultConfig, ...JSON.parse(raw) };
       }
     } catch {
       const backupPath = `${this.configPath}.bak`;
       if (fs.existsSync(backupPath)) {
         try {
           const raw = fs.readFileSync(backupPath, 'utf-8');
-          return { ...defaultConfig, ...JSON.parse(raw) };
+          loaded = { ...defaultConfig, ...JSON.parse(raw) };
         } catch {
           // Fall through
         }
       }
     }
-    return { ...defaultConfig };
+
+    // Idempotently migrate legacy config into printers array
+    if (!Array.isArray(loaded.printers) || loaded.printers.length === 0) {
+      const profiles: PrinterProfile[] = [];
+      if (loaded.billingPrinterHost) {
+        profiles.push({
+          id: 'profile_billing_default',
+          name: loaded.billingPrinterName || 'Default Billing Printer',
+          purpose: 'billing',
+          transport: 'tcp_lan',
+          host: loaded.billingPrinterHost,
+          port: loaded.billingPrinterPort || 9100,
+          paperWidth: loaded.paperWidth || '80',
+          enabled: loaded.billingPrinterEnabled !== false,
+          is_default: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+      }
+      if (loaded.kitchenPrinterHost) {
+        profiles.push({
+          id: 'profile_kitchen_default',
+          name: loaded.kitchenPrinterName || 'Main Kitchen Printer',
+          purpose: 'kitchen',
+          transport: 'tcp_lan',
+          host: loaded.kitchenPrinterHost,
+          port: loaded.kitchenPrinterPort || 9100,
+          paperWidth: '80',
+          enabled: loaded.kitchenPrinterEnabled !== false,
+          is_default: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+      }
+      loaded.printers = profiles;
+    }
+
+    return loaded;
   }
 }
