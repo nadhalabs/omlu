@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'api_exceptions.dart';
+import 'backend_selection_manager.dart';
 import '../auth/native_auth_runtime.dart';
 
 class ApiRequest {
@@ -40,22 +41,29 @@ class ApiClient {
     Duration timeout = const Duration(seconds: 20),
     ApiTransport? transport,
     NativeAuthRuntime? authRuntime,
-  }) : _baseUrl = baseUrl,
-       _accessToken = accessToken,
-       _timeout = timeout,
-       _transport = transport ?? _dartIoTransport,
-       _authRuntime = authRuntime;
+    BackendSelectionManager? backendSelectionManager,
+  })  : _baseUrl = baseUrl,
+        _accessToken = accessToken,
+        _timeout = timeout,
+        _transport = transport ?? _dartIoTransport,
+        _authRuntime = authRuntime,
+        _backendSelectionManager = backendSelectionManager;
 
   final Uri _baseUrl;
   final Duration _timeout;
   final ApiTransport _transport;
   final NativeAuthRuntime? _authRuntime;
+  final BackendSelectionManager? _backendSelectionManager;
   String? _accessToken;
   Future<void> Function(NativeAuthorityLease lease)? onAuthenticationInvalid;
 
   set accessToken(String? value) => _accessToken = value;
 
-  Uri get baseUrl => _baseUrl;
+  Uri get baseUrl =>
+      _backendSelectionManager?.activeBackendUrl ?? _baseUrl;
+
+  BackendSelectionManager? get backendSelectionManager =>
+      _backendSelectionManager;
 
   Future<Map<String, Object?>> getJson(
     String path, {
@@ -109,8 +117,10 @@ class ApiClient {
     } else if (authenticated && runtime != null && !isAuthorityBootstrap) {
       throw StateError('Authenticated request blocked until /me validation.');
     }
-    final uri = _baseUrl.replace(
-      path: _joinPath(_baseUrl.path, path),
+
+    final currentBaseUrl = baseUrl;
+    final uri = currentBaseUrl.replace(
+      path: _joinPath(currentBaseUrl.path, path),
       queryParameters: query.isEmpty ? null : query,
     );
     final headers = <String, String>{
@@ -121,23 +131,142 @@ class ApiClient {
           : {'Authorization': 'Bearer $_accessToken'}),
       ...?(idempotencyKey == null ? null : {'Idempotency-Key': idempotencyKey}),
     };
+
+    final isWrite = method.toUpperCase() != 'GET';
+
     try {
       final response = await _transport(
         ApiRequest(method: method, uri: uri, headers: headers, body: body),
       ).timeout(_timeout);
+
+      // Server was reached and responded with an HTTP status code.
+      // Do NOT trigger backend fallback for any HTTP status response (2xx, 4xx, 5xx).
       if (response.statusCode == 401 && lease != null) {
         if (runtime!.isCurrent(lease)) {
           await onAuthenticationInvalid?.call(lease);
         }
       }
+
       _throwForStatus(response);
       if (lease != null) runtime!.ensureCurrent(lease);
       return response;
-    } on TimeoutException {
-      throw const ApiTimeoutException('The request timed out.');
+    } on TimeoutException catch (error) {
+      return _handleTransportError(
+        method: method,
+        path: path,
+        body: body,
+        idempotencyKey: idempotencyKey,
+        query: query,
+        lease: lease,
+        isWrite: isWrite,
+        error: error,
+        exceptionToThrow: const ApiTimeoutException('The request timed out.'),
+      );
     } on SocketException catch (error) {
-      throw ApiException('Network request failed.', details: error.message);
+      return _handleTransportError(
+        method: method,
+        path: path,
+        body: body,
+        idempotencyKey: idempotencyKey,
+        query: query,
+        lease: lease,
+        isWrite: isWrite,
+        error: error,
+        exceptionToThrow: ApiException('Network request failed.', details: error.message),
+      );
+    } on HttpException catch (error) {
+      return _handleTransportError(
+        method: method,
+        path: path,
+        body: body,
+        idempotencyKey: idempotencyKey,
+        query: query,
+        lease: lease,
+        isWrite: isWrite,
+        error: error,
+        exceptionToThrow: ApiException('HTTP connection error.', details: error.message),
+      );
+    } on HandshakeException catch (error) {
+      return _handleTransportError(
+        method: method,
+        path: path,
+        body: body,
+        idempotencyKey: idempotencyKey,
+        query: query,
+        lease: lease,
+        isWrite: isWrite,
+        error: error,
+        exceptionToThrow: ApiException('TLS handshake failed.', details: error.message),
+      );
+    } catch (error) {
+      if (error is ApiException) {
+        rethrow;
+      }
+      return _handleTransportError(
+        method: method,
+        path: path,
+        body: body,
+        idempotencyKey: idempotencyKey,
+        query: query,
+        lease: lease,
+        isWrite: isWrite,
+        error: error,
+        exceptionToThrow: error is Exception ? error : ApiException(error.toString()),
+      );
     }
+  }
+
+  Future<ApiResponse> _handleTransportError({
+    required String method,
+    required String path,
+    required Object? body,
+    required String? idempotencyKey,
+    required Map<String, String> query,
+    required NativeAuthorityLease? lease,
+    required bool isWrite,
+    required Object error,
+    required Exception exceptionToThrow,
+  }) async {
+    final manager = _backendSelectionManager;
+
+    // Activate fallback target for future requests if primary transport failed
+    final targetChanged = manager != null && manager.isPrimary
+        ? manager.activateFallback(error: error, reason: 'Transport failure on $method $path')
+        : false;
+
+    // REQUIREMENT 4: Mutating write requests are NEVER automatically retried on fallback to prevent duplicate execution.
+    if (isWrite) {
+      throw exceptionToThrow;
+    }
+
+    // For read-only GET requests: if target changed to fallback, retry ONCE on newly active fallback backend
+    if (targetChanged && !isWrite) {
+      final newBaseUrl = baseUrl;
+      final uri = newBaseUrl.replace(
+        path: _joinPath(newBaseUrl.path, path),
+        queryParameters: query.isEmpty ? null : query,
+      );
+      final headers = <String, String>{
+        'Accept': 'application/json',
+        if (body != null) 'Content-Type': 'application/json',
+        ...?(_accessToken == null
+            ? null
+            : {'Authorization': 'Bearer $_accessToken'}),
+        ...?(idempotencyKey == null ? null : {'Idempotency-Key': idempotencyKey}),
+      };
+      try {
+        final response = await _transport(
+          ApiRequest(method: method, uri: uri, headers: headers, body: body),
+        ).timeout(_timeout);
+        _throwForStatus(response);
+        if (lease != null) _authRuntime!.ensureCurrent(lease);
+        return response;
+      } catch (_) {
+        throw exceptionToThrow;
+      }
+    }
+
+    throw exceptionToThrow;
   }
 
   static String _joinPath(String basePath, String path) {

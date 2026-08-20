@@ -7,7 +7,7 @@ import 'auth_provider.dart';
 
 final realtimeClientProvider = Provider<RealtimeClient?>((ref) {
   final authState = ref.watch(authProvider);
-  final config = ref.read(appConfigProvider);
+  final backendManager = ref.watch(backendSelectionManagerProvider);
 
   final session = authState.value;
   if (session == null) return null;
@@ -22,7 +22,8 @@ final realtimeClientProvider = Provider<RealtimeClient?>((ref) {
   };
 
   final client = RealtimeClient(
-    baseUrl: config.backendUrl,
+    baseUrl: backendManager.activeBackendUrl,
+    backendSelectionManager: backendManager,
     accessToken: session.accessToken,
     channel: channel,
     authRuntime: authRuntime,

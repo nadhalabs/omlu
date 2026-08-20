@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/api/api_client.dart';
+import '../core/api/backend_selection_manager.dart';
 import '../core/api/operations_api.dart';
 import '../core/auth/auth_repository.dart';
 import '../core/models/role_session.dart';
@@ -13,14 +14,21 @@ final appConfigProvider = Provider<AppConfig>((ref) {
   return AppConfig.fromEnvironment();
 });
 
+final backendSelectionManagerProvider =
+    ChangeNotifierProvider<BackendSelectionManager>((ref) {
+  final config = ref.watch(appConfigProvider);
+  return BackendSelectionManager(config: config);
+});
+
 final tokenStorageProvider = Provider<TokenStorage>((ref) {
   return SecureTokenStorage();
 });
 
 final apiClientProvider = Provider<ApiClient>((ref) {
-  final config = ref.watch(appConfigProvider);
+  final backendManager = ref.watch(backendSelectionManagerProvider);
   return ApiClient(
-    baseUrl: config.backendUrl,
+    baseUrl: backendManager.activeBackendUrl,
+    backendSelectionManager: backendManager,
     authRuntime: ref.watch(nativeAuthRuntimeProvider),
   );
 });

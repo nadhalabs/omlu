@@ -1,27 +1,43 @@
 class AppConfig {
   AppConfig({
     required this.frontendUrl,
-    required this.backendUrl,
+    required this.primaryBackendUrl,
+    required this.fallbackBackendUrl,
     required this.allowedHosts,
     required this.allowHttp,
   });
 
   static const String fallbackFrontendUrl = 'https://omlu.in';
-  static const String fallbackBackendUrl = 'https://omlu-api.onrender.com';
+  static const String defaultPrimaryBackendUrl = 'https://api.omlu.in';
+  static const String defaultFallbackBackendUrl = 'https://omlu-server.onrender.com';
+  // Legacy fallback constant for backward compatibility
+  static const String fallbackBackendUrlConstant = defaultPrimaryBackendUrl;
 
   final Uri frontendUrl;
-  final Uri backendUrl;
+  final Uri primaryBackendUrl;
+  final Uri fallbackBackendUrl;
   final Set<String> allowedHosts;
   final bool allowHttp;
+
+  /// Convenience getter for backward compatibility, returns primaryBackendUrl.
+  Uri get backendUrl => primaryBackendUrl;
 
   static AppConfig fromEnvironment() {
     const configuredFrontend = String.fromEnvironment(
       'OMLU_FRONTEND_URL',
       defaultValue: fallbackFrontendUrl,
     );
-    const configuredBackend = String.fromEnvironment(
+    const configuredPrimaryBackend = String.fromEnvironment(
+      'OMLU_PRIMARY_BACKEND_URL',
+      defaultValue: '',
+    );
+    const configuredFallbackBackend = String.fromEnvironment(
+      'OMLU_FALLBACK_BACKEND_URL',
+      defaultValue: defaultFallbackBackendUrl,
+    );
+    const legacyBackend = String.fromEnvironment(
       'OMLU_BACKEND_URL',
-      defaultValue: fallbackBackendUrl,
+      defaultValue: '',
     );
     const allowedDomains = String.fromEnvironment('OMLU_ALLOWED_DOMAINS');
     const allowHttpValue = bool.fromEnvironment(
@@ -29,9 +45,14 @@ class AppConfig {
       defaultValue: false,
     );
 
+    final primaryUrl = configuredPrimaryBackend.isNotEmpty
+        ? configuredPrimaryBackend
+        : (legacyBackend.isNotEmpty ? legacyBackend : defaultPrimaryBackendUrl);
+
     return AppConfig.fromValues(
       configuredFrontendUrl: configuredFrontend,
-      configuredBackendUrl: configuredBackend,
+      configuredPrimaryBackendUrl: primaryUrl,
+      configuredFallbackBackendUrl: configuredFallbackBackend,
       allowedDomains: allowedDomains,
       allowHttp: allowHttpValue,
     );
@@ -56,22 +77,36 @@ class AppConfig {
 
   static AppConfig fromValues({
     required String configuredFrontendUrl,
-    required String configuredBackendUrl,
+    String configuredPrimaryBackendUrl = defaultPrimaryBackendUrl,
+    String configuredFallbackBackendUrl = defaultFallbackBackendUrl,
+    String? configuredBackendUrl,
     required String allowedDomains,
     required bool allowHttp,
   }) {
+    final effectivePrimary = (configuredPrimaryBackendUrl.isNotEmpty &&
+            configuredPrimaryBackendUrl != defaultPrimaryBackendUrl)
+        ? configuredPrimaryBackendUrl
+        : (configuredBackendUrl != null && configuredBackendUrl.isNotEmpty
+            ? configuredBackendUrl
+            : configuredPrimaryBackendUrl);
+
     final frontend = _parseAndNormalize(
       configuredFrontendUrl,
       allowHttp: allowHttp,
     );
-    final backend = _parseAndNormalize(
-      configuredBackendUrl,
+    final primary = _parseAndNormalize(
+      effectivePrimary,
+      allowHttp: allowHttp,
+    );
+    final fallback = _parseAndNormalize(
+      configuredFallbackBackendUrl,
       allowHttp: allowHttp,
     );
 
     final hosts = <String>{
       frontend.host.toLowerCase(),
-      backend.host.toLowerCase(),
+      primary.host.toLowerCase(),
+      fallback.host.toLowerCase(),
     };
     for (final host in allowedDomains.split(',')) {
       final normalized = host.trim().toLowerCase();
@@ -80,7 +115,8 @@ class AppConfig {
 
     return AppConfig(
       frontendUrl: frontend,
-      backendUrl: backend,
+      primaryBackendUrl: primary,
+      fallbackBackendUrl: fallback,
       allowedHosts: hosts,
       allowHttp: allowHttp,
     );

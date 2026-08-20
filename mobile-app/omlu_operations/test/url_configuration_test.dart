@@ -1,41 +1,45 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omlu_operations/core/api/api_client.dart';
 import 'package:omlu_operations/core/api/api_exceptions.dart';
 import 'package:omlu_operations/core/realtime/realtime_client.dart';
 import 'package:omlu_operations/src/app_config.dart';
-import 'dart:io';
 
 void main() {
   group('URL Configuration and Protection', () {
     test(
-      'WebView fallback uses frontend URL and native API uses backend URL',
+      'WebView fallback uses frontend URL and native API uses primary/fallback backend URLs',
       () {
         final config = AppConfig.fromValues(
-          configuredFrontendUrl: 'https://omlu.vercel.app',
-          configuredBackendUrl: 'https://omlu-api.onrender.com',
+          configuredFrontendUrl: 'https://omlu.in',
+          configuredPrimaryBackendUrl: 'https://api.omlu.in',
+          configuredFallbackBackendUrl: 'https://omlu-server.onrender.com',
           allowedDomains: '',
           allowHttp: false,
         );
 
-        // WebView fallback must point to frontend Vercel URL
-        expect(config.frontendUrl.toString(), 'https://omlu.vercel.app');
+        // WebView fallback must point to frontend URL
+        expect(config.frontendUrl.toString(), 'https://omlu.in');
 
-        // Native API client must point to Render backend URL
-        expect(config.backendUrl.toString(), 'https://omlu-api.onrender.com');
+        // Primary API client must point to https://api.omlu.in
+        expect(config.primaryBackendUrl.toString(), 'https://api.omlu.in');
 
-        // Verify that they are distinct
-        expect(config.frontendUrl, isNot(equals(config.backendUrl)));
+        // Fallback API client must point to https://omlu-server.onrender.com
+        expect(config.fallbackBackendUrl.toString(), 'https://omlu-server.onrender.com');
+
+        // Verify distinct backend URLs
+        expect(config.primaryBackendUrl, isNot(equals(config.fallbackBackendUrl)));
       },
     );
 
     test(
-      'RealtimeClient converts HTTPS backend URL to WSS staff WebSocket URL',
+      'RealtimeClient converts HTTPS primary backend URL to WSS staff WebSocket URL',
       () async {
         Uri? capturedUri;
 
         final client = RealtimeClient(
-          baseUrl: Uri.parse('https://omlu-api.onrender.com'),
+          baseUrl: Uri.parse('https://api.omlu.in'),
           accessToken: 'token-abc',
           channel: 'operations',
           connector: (uri) async {
@@ -44,14 +48,14 @@ void main() {
           },
         );
 
-        // Trigger connection attempt to capture WebSocket URL (run asynchronously to avoid connecting loops)
+        // Trigger connection attempt to capture WebSocket URL
         unawaited(client.connect());
         await Future.delayed(const Duration(milliseconds: 50));
         await client.disconnect();
 
         expect(capturedUri, isNotNull);
         expect(capturedUri!.scheme, 'wss');
-        expect(capturedUri!.host, 'omlu-api.onrender.com');
+        expect(capturedUri!.host, 'api.omlu.in');
         expect(capturedUri!.path, '/ws/staff');
         expect(capturedUri!.queryParameters['token'], 'token-abc');
         expect(capturedUri!.queryParameters['channel'], 'operations');

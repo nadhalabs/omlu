@@ -15,7 +15,7 @@ void main() {
       final response = Completer<ApiResponse>();
       final api = OperationsApi(
         ApiClient(
-          baseUrl: Uri.parse('https://omlu-api.onrender.com'),
+          baseUrl: Uri.parse('https://api.omlu.in'),
           transport: (_) => response.future,
         ),
       );
@@ -65,7 +65,7 @@ void main() {
     ], identifier: 'table:8');
     final api = OperationsApi(
       ApiClient(
-        baseUrl: Uri.parse('https://omlu-api.onrender.com'),
+        baseUrl: Uri.parse('https://api.omlu.in'),
         transport: (_) async => throw const ApiException('offline'),
       ),
     );
@@ -89,7 +89,7 @@ void main() {
     var shouldFail = true;
     final api = OperationsApi(
       ApiClient(
-        baseUrl: Uri.parse('https://omlu-api.onrender.com'),
+        baseUrl: Uri.parse('https://api.omlu.in'),
         transport: (_) async {
           if (shouldFail) throw const ApiException('offline');
           return const ApiResponse(

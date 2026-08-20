@@ -228,7 +228,7 @@ void main() {
         };
 
         final client = ApiClient(
-          baseUrl: Uri.parse('https://omlu-api.onrender.com'),
+          baseUrl: Uri.parse('https://api.omlu.in'),
           transport: (request) async {
             return ApiResponse(
               statusCode: 200,

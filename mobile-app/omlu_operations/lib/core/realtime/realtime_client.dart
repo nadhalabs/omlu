@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
+import '../api/backend_selection_manager.dart';
 import '../auth/flutter_tenant_scope.dart';
 import '../auth/native_auth_runtime.dart';
 
@@ -72,27 +73,33 @@ typedef WebSocketConnector = Future<WebSocket> Function(Uri uri);
 class RealtimeClient {
   RealtimeClient({
     required Uri baseUrl,
+    Uri Function()? baseUrlSupplier,
     required String accessToken,
     required String channel,
     ReconnectPolicy reconnectPolicy = const ReconnectPolicy(),
     WebSocketConnector? connector,
     NativeAuthRuntime? authRuntime,
     FlutterTenantScope? tenantScope,
-  }) : _baseUrl = baseUrl,
-       _accessToken = accessToken,
-       _channel = channel,
-       _reconnectPolicy = reconnectPolicy,
-       _connector = connector ?? ((uri) => WebSocket.connect(uri.toString())),
-       _authRuntime = authRuntime,
-       _tenantScope = tenantScope;
+    BackendSelectionManager? backendSelectionManager,
+  })  : _baseUrl = baseUrl,
+        _baseUrlSupplier = baseUrlSupplier,
+        _accessToken = accessToken,
+        _channel = channel,
+        _reconnectPolicy = reconnectPolicy,
+        _connector = connector ?? ((uri) => WebSocket.connect(uri.toString())),
+        _authRuntime = authRuntime,
+        _tenantScope = tenantScope,
+        _backendSelectionManager = backendSelectionManager;
 
   final Uri _baseUrl;
+  final Uri Function()? _baseUrlSupplier;
   final String _accessToken;
   final String _channel;
   final ReconnectPolicy _reconnectPolicy;
   final WebSocketConnector _connector;
   final NativeAuthRuntime? _authRuntime;
   final FlutterTenantScope? _tenantScope;
+  final BackendSelectionManager? _backendSelectionManager;
   final _events = StreamController<RealtimeEvent>.broadcast();
   final _states = StreamController<RealtimeConnectionState>.broadcast();
   final Set<String> _seenEventIds = <String>{};
@@ -200,10 +207,12 @@ class RealtimeClient {
   }
 
   Uri _staffWsUri() {
-    final scheme = _baseUrl.scheme == 'https' ? 'wss' : 'ws';
-    return _baseUrl.replace(
+    final baseUrl = _backendSelectionManager?.activeBackendUrl ??
+        (_baseUrlSupplier != null ? _baseUrlSupplier() : _baseUrl);
+    final scheme = baseUrl.scheme == 'https' ? 'wss' : 'ws';
+    return baseUrl.replace(
       scheme: scheme,
-      path: _joinPath(_baseUrl.path, '/ws/staff'),
+      path: _joinPath(baseUrl.path, '/ws/staff'),
       queryParameters: {'token': _accessToken, 'channel': _channel},
     );
   }

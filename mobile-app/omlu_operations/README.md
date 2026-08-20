@@ -30,18 +30,23 @@ flutter pub get
 
 ## Configuration
 
-Production defaults are `https://omlu.in` for the frontend and
-`https://omlu-api.onrender.com` for the API. Override them with Dart defines:
+Production defaults are:
+- Frontend: `https://omlu.in`
+- Primary API & WebSocket: `https://api.omlu.in` / `wss://api.omlu.in`
+- Fallback API & WebSocket: `https://omlu-server.onrender.com` / `wss://omlu-server.onrender.com`
+
+Override them with Dart defines:
 
 ```bash
 --dart-define=OMLU_FRONTEND_URL=https://omlu.in \
---dart-define=OMLU_BACKEND_URL=https://omlu-api.onrender.com
+--dart-define=OMLU_PRIMARY_BACKEND_URL=https://api.omlu.in \
+--dart-define=OMLU_FALLBACK_BACKEND_URL=https://omlu-server.onrender.com
 ```
 
 Optional:
 
 ```bash
---dart-define=OMLU_ALLOWED_DOMAINS=omlu.in
+--dart-define=OMLU_ALLOWED_DOMAINS=omlu.in,api.omlu.in,omlu-server.onrender.com
 --dart-define=OMLU_ALLOW_HTTP=true
 ```
 
@@ -82,7 +87,7 @@ flutter run
 
 ## Local Development Examples
 
-Use the safe hosted fallback:
+Use default primary/fallback URLs:
 
 ```bash
 flutter run
@@ -93,7 +98,7 @@ Use a local HTTPS tunnel:
 ```bash
 flutter run \
   --dart-define=OMLU_FRONTEND_URL=https://your-ngrok-domain.ngrok-free.app \
-  --dart-define=OMLU_BACKEND_URL=https://your-api-tunnel.ngrok-free.app \
+  --dart-define=OMLU_PRIMARY_BACKEND_URL=https://your-api-tunnel.ngrok-free.app \
   --dart-define=OMLU_ALLOWED_DOMAINS=your-ngrok-domain.ngrok-free.app
 ```
 
@@ -102,7 +107,7 @@ Use HTTP only for local development when Android networking is configured for it
 ```bash
 flutter run \
   --dart-define=OMLU_FRONTEND_URL=http://10.0.2.2:3000 \
-  --dart-define=OMLU_BACKEND_URL=http://10.0.2.2:8000 \
+  --dart-define=OMLU_PRIMARY_BACKEND_URL=http://10.0.2.2:8000 \
   --dart-define=OMLU_ALLOW_HTTP=true \
   --dart-define=OMLU_ALLOWED_DOMAINS=10.0.2.2
 ```
