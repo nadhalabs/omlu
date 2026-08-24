@@ -43,7 +43,7 @@ test("registration consent checkbox in register/page.tsx contains accessible lin
   assert.match(register, /type="checkbox"/);
   assert.match(register, /href="\/terms"/);
   assert.match(register, /href="\/privacy"/);
-  assert.match(register, /I confirm that I am authorized to create this restaurant account/);
+  assert.match(register, /I confirm that I’m authorized to create this restaurant account/);
 });
 
 test("login footer in LoginClient.tsx and landing page in page.tsx contain legal links", () => {

@@ -48,7 +48,7 @@ export function PasswordInput({
           aria-invalid={Boolean(error)}
           aria-describedby={error ? errorId : undefined}
           data-surface={dark ? "dark" : "light"}
-          className={`h-12 w-full rounded-lg border px-4 pr-12 text-sm font-medium outline-none transition focus:border-orange-600 ${
+          className={`h-12 w-full rounded-lg border px-4 pr-12 text-sm font-medium outline-none transition placeholder:text-[var(--omlu-text-muted)] hover:border-[var(--omlu-text-muted)] focus:border-[var(--omlu-focus-ring)] focus:ring-2 focus:ring-[var(--omlu-focus-ring)]/25 ${
             dark ? "bg-[var(--omlu-page-background)] text-[var(--omlu-text-secondary)]" : "bg-[var(--omlu-primary-surface)] text-[var(--omlu-text-primary)]"
           } ${error ? "border-red-500" : dark ? "border-[var(--omlu-border)]" : "border-[var(--omlu-border-strong)]"} ${
             disabled ? "cursor-not-allowed opacity-100" : ""
@@ -59,7 +59,7 @@ export function PasswordInput({
           aria-label={visible ? "Hide password" : "Show password"}
           onClick={() => setVisible((current) => !current)}
           disabled={disabled}
-          className={`absolute inset-y-0 right-0 flex w-12 items-center justify-center transition focus:outline-none focus:ring-2 focus:ring-orange-600 disabled:cursor-not-allowed ${
+          className={`absolute inset-y-0 right-0 flex w-12 items-center justify-center transition focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--omlu-focus-ring)] disabled:cursor-not-allowed ${
             dark ? "text-[var(--omlu-text-secondary)] hover:text-[var(--omlu-text-secondary)]" : "text-[var(--omlu-text-secondary)] hover:text-[var(--omlu-text-primary)]"
           }`}
         >
@@ -93,7 +93,7 @@ export function PasswordInput({
         </ul>
       )}
       {error && (
-        <p id={errorId} className={`text-xs font-semibold ${dark ? "text-red-300" : "text-red-600"}`}>
+        <p id={errorId} className={`text-xs font-semibold ${dark ? "text-red-300" : "text-[var(--omlu-destructive-text)]"}`}>
           {error}
         </p>
       )}

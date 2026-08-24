@@ -107,7 +107,7 @@ def register_restaurant(
             message = (
                 "Owner email is already in use for this restaurant."
                 if field == "owner_email"
-                else "Personal username is already in use for this restaurant."
+                else "Owner username is already in use for this restaurant."
             )
             field_error(field, message, status.HTTP_409_CONFLICT)
 

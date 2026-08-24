@@ -145,7 +145,7 @@ export default function RegisterPage() {
               <h2 className="text-lg font-black">Restaurant</h2>
               <div className="mt-5 grid gap-4">
                 <TextField name="restaurant_name" label="Restaurant name" value={form.restaurant_name} error={fieldErrors.restaurant_name} disabled={loading} onChange={(value) => setField("restaurant_name", value)} autoComplete="organization" />
-                <TextField name="restaurant_slug" label="Unique restaurant username" value={form.restaurant_slug} error={fieldErrors.restaurant_slug} disabled={loading} onChange={(value) => setField("restaurant_slug", value.toLowerCase())} placeholder="nadha-cafe" helperText="This becomes your restaurant login name and may appear in QR links." autoComplete="organization" />
+                <TextField name="restaurant_slug" label="Restaurant username" value={form.restaurant_slug} error={fieldErrors.restaurant_slug} disabled={loading} onChange={(value) => setField("restaurant_slug", value.toLowerCase())} placeholder="nadha-cafe" helperText="Used to sign in to your restaurant and may appear in QR links." autoComplete="organization" />
                 <TextField name="contact_email" label="Contact email" type="email" value={form.contact_email} error={fieldErrors.contact_email} disabled={loading} onChange={(value) => setField("contact_email", value)} autoComplete="email" />
                 <TextField name="phone_number" label="Phone number" value={form.phone_number} error={fieldErrors.phone_number} disabled={loading} onChange={(value) => setField("phone_number", value)} inputMode="numeric" autoComplete="tel" />
                 <TextField name="city" label="City" value={form.city} error={fieldErrors.city} disabled={loading} onChange={(value) => setField("city", value)} autoComplete="address-level2" />
@@ -157,7 +157,7 @@ export default function RegisterPage() {
               <h2 className="text-lg font-black">Owner</h2>
               <div className="mt-5 grid gap-4">
                 <TextField name="owner_full_name" label="Owner full name" value={form.owner_full_name} error={fieldErrors.owner_full_name} disabled={loading} onChange={(value) => setField("owner_full_name", value)} autoComplete="name" />
-                <TextField name="owner_username" label="Personal username" value={form.owner_username} error={fieldErrors.owner_username} disabled={loading} onChange={(value) => setField("owner_username", value.toLowerCase())} placeholder="anjali" helperText="This username is unique only inside your restaurant." autoComplete="username" />
+                <TextField name="owner_username" label="Owner username" value={form.owner_username} error={fieldErrors.owner_username} disabled={loading} onChange={(value) => setField("owner_username", value.toLowerCase())} placeholder="anjali" helperText="This username only needs to be unique within your restaurant." autoComplete="username" />
                 <TextField name="owner_email" label="Owner email" type="email" value={form.owner_email} error={fieldErrors.owner_email} disabled={loading} onChange={(value) => setField("owner_email", value)} autoComplete="email" />
                 <PasswordInput name="password" label="Password" value={form.password} error={fieldErrors.password} disabled={loading} onChange={(value) => setField("password", value)} autoComplete="new-password" showChecklist />
                 <PasswordInput name="confirm_password" label="Confirm password" value={form.confirm_password} error={fieldErrors.confirm_password} disabled={loading} onChange={(value) => setField("confirm_password", value)} autoComplete="new-password" />
@@ -171,18 +171,20 @@ export default function RegisterPage() {
               type="checkbox"
               checked={form.accept_terms}
               onChange={(e) => setField("accept_terms", e.target.checked)}
-              className={`mt-1 h-4 w-4 accent-zinc-950 ${fieldErrors.accept_terms ? "outline outline-2 outline-red-500" : ""}`}
+              disabled={loading}
+              aria-invalid={Boolean(fieldErrors.accept_terms)}
+              className={`mt-1 h-4 w-4 shrink-0 accent-[var(--omlu-primary-action)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--omlu-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60 ${fieldErrors.accept_terms ? "outline outline-2 outline-[var(--omlu-destructive-border)]" : ""}`}
             />
             <span>
-              I confirm that I am authorized to create this restaurant account and agree to the OMLU{" "}
-              <Link href="/terms" target="_blank" className="text-orange-600 underline hover:text-orange-700 font-bold">
+              I confirm that I’m authorized to create this restaurant account and agree to OMLU’s{" "}
+              <Link href="/terms" target="_blank" onClick={(event) => event.stopPropagation()} className="font-bold text-[var(--omlu-accent-dark)] underline underline-offset-2 hover:text-[var(--omlu-accent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--omlu-focus-ring)]">
                 Terms of Service
               </Link>{" "}
               and{" "}
-              <Link href="/privacy" target="_blank" className="text-orange-600 underline hover:text-orange-700 font-bold">
+              <Link href="/privacy" target="_blank" onClick={(event) => event.stopPropagation()} className="font-bold text-[var(--omlu-accent-dark)] underline underline-offset-2 hover:text-[var(--omlu-accent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--omlu-focus-ring)]">
                 Privacy Policy
               </Link>.
-              {fieldErrors.accept_terms && <span className="mt-1 block text-xs font-semibold text-red-600">{fieldErrors.accept_terms}</span>}
+              {fieldErrors.accept_terms && <span className="mt-1 block text-xs font-semibold text-[var(--omlu-destructive-text)]">{fieldErrors.accept_terms}</span>}
             </span>
           </label>
 
@@ -190,9 +192,10 @@ export default function RegisterPage() {
             <button
               type="submit"
               disabled={loading}
-              className="h-12 rounded-lg bg-[var(--omlu-page-background)] px-6 text-sm font-bold text-[var(--omlu-primary-action-text)] transition hover:bg-[var(--omlu-muted-surface)] disabled:cursor-not-allowed disabled:bg-[var(--omlu-muted-surface)]"
+              aria-busy={loading}
+              className="h-12 rounded-lg border border-transparent bg-[var(--omlu-primary-action)] px-6 text-sm font-black text-[var(--omlu-primary-action-text)] shadow-sm transition-[background-color,box-shadow,filter,transform] duration-150 enabled:cursor-pointer enabled:hover:brightness-90 enabled:hover:shadow-md enabled:active:translate-y-px enabled:active:brightness-85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--omlu-focus-ring)] disabled:cursor-not-allowed disabled:border-[var(--omlu-border)] disabled:bg-[var(--omlu-disabled)] disabled:text-[var(--omlu-disabled-text)] disabled:shadow-none"
             >
-              {loading ? "Creating account..." : "Create account"}
+              {loading ? "Creating restaurant…" : "Create restaurant"}
             </button>
             <p className="text-sm text-[var(--omlu-text-secondary)]">
               Staff and kitchen users are added later by an owner or admin.
@@ -244,13 +247,14 @@ function TextField({
         inputMode={inputMode}
         autoComplete={autoComplete}
         aria-invalid={Boolean(error)}
-        className={`h-12 rounded-lg border px-4 text-sm font-medium outline-none transition focus:border-orange-600 ${
+        aria-describedby={error ? `${name}-error` : helperText ? `${name}-help` : undefined}
+        className={`h-12 rounded-lg border bg-[var(--omlu-input-background)] px-4 text-sm font-medium text-[var(--omlu-text-primary)] outline-none transition placeholder:text-[var(--omlu-text-muted)] hover:border-[var(--omlu-text-muted)] focus:border-[var(--omlu-focus-ring)] focus:ring-2 focus:ring-[var(--omlu-focus-ring)]/25 ${
           error ? "border-red-500" : "border-[var(--omlu-border-strong)]"
         } ${disabled ? "cursor-not-allowed opacity-70" : ""}`}
         required={required}
       />
-      {helperText && <span className="text-xs font-medium text-[var(--omlu-text-secondary)]">{helperText}</span>}
-      {error && <span className="text-xs font-semibold text-red-600">{error}</span>}
+      {helperText && <span id={`${name}-help`} className="text-xs font-medium text-[var(--omlu-text-secondary)]">{helperText}</span>}
+      {error && <span id={`${name}-error`} className="text-xs font-semibold text-[var(--omlu-destructive-text)]">{error}</span>}
     </label>
   );
 }
