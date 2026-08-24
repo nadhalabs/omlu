@@ -5,7 +5,7 @@ import test from "node:test";
 const settings = fs.readFileSync(new URL("../app/admin/settings/AdminSettingsClient.tsx", import.meta.url), "utf8");
 
 test("Admin Settings uses the owner-focused section order", () => {
-  const headings = ["General", "Billing &amp; GST", "Operations", "Printing", "Appearance", "Legal &amp; Policies"];
+  const headings = ["General", "Billing &amp; GST", "Google Reviews", "Operations", "Printing", "Appearance", "Legal &amp; Policies"];
   let previous = -1;
   for (const heading of headings) {
     const position = settings.indexOf(`title="${heading}"`);

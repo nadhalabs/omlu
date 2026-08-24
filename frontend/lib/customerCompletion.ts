@@ -10,6 +10,8 @@ export type CompletedSessionMarker = {
   totalAmount?: string;
   /** Table display number, e.g. "4" — for display on the terminal screen only. */
   tableNumber?: string;
+  /** Tenant-scoped external destination copied from the confirmed bill response. */
+  googleReviewUrl?: string;
 };
 
 const sessionKey = (sessionToken: string) => `${PREFIX}:session:${sessionToken}`;

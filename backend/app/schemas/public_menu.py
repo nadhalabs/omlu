@@ -8,6 +8,7 @@ class PublicRestaurant(BaseModel):
     name: str
     slug: str
     logo_url: Optional[str] = None
+    google_review_url: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 

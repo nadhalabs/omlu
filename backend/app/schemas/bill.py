@@ -200,6 +200,7 @@ class BillResponse(BaseModel):
     receipt_token: Optional[str] = None
     restaurant_name: str
     restaurant_slug: str
+    google_review_url: Optional[str] = None
     table_number: str
     table_code: str
     session_token: str

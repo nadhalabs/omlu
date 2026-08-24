@@ -849,6 +849,7 @@ def build_bill_response(db: Session, bill: Bill):
         "receipt_token": bill.receipt_token if bill.status != "draft" else None,
         "restaurant_name": bill.restaurant.name,
         "restaurant_slug": bill.restaurant.slug,
+        "google_review_url": bill.restaurant.google_review_url,
         "table_number": bill.dining_session.table.table_number,
         "table_code": bill.dining_session.table.table_code,
         "session_token": bill.dining_session.public_token,

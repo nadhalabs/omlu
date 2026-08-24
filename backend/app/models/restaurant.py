@@ -12,6 +12,7 @@ class Restaurant(Base):
     name: Mapped[str] = mapped_column(String(255))
     slug: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     logo_url: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    google_review_url: Mapped[Optional[str]] = mapped_column(String(2048), nullable=True)
     contact_email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     phone_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     city: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)

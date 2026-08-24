@@ -56,6 +56,7 @@ export default function AdminSettingsClient() {
   const [gstRate, setGstRate] = useState("0.00");
   const [taxMode, setTaxMode] = useState<"inclusive" | "exclusive">("exclusive");
   const [invoicePrefix, setInvoicePrefix] = useState("INV");
+  const [googleReviewUrl, setGoogleReviewUrl] = useState("");
 
   const hasUnsavedChanges = settings !== null && (
     timezone !== settings.timezone ||
@@ -70,7 +71,8 @@ export default function AdminSettingsClient() {
     (gstStateCode || null) !== settings.gst_state_code ||
     gstRate !== settings.default_gst_rate ||
     taxMode !== settings.tax_mode ||
-    invoicePrefix.toUpperCase() !== settings.invoice_prefix
+    invoicePrefix.toUpperCase() !== settings.invoice_prefix ||
+    (googleReviewUrl.trim() || null) !== settings.google_review_url
   );
 
   const applySettings = useCallback((data: RestaurantSettingsResponse) => {
@@ -88,6 +90,7 @@ export default function AdminSettingsClient() {
     setGstRate(data.default_gst_rate);
     setTaxMode(data.tax_mode);
     setInvoicePrefix(data.invoice_prefix);
+    setGoogleReviewUrl(data.google_review_url || "");
   }, []);
 
   const loadSettings = useCallback(async () => {
@@ -222,6 +225,7 @@ export default function AdminSettingsClient() {
         order_prefix: orderPrefix.toUpperCase() || undefined,
         service_requests_enabled: serviceRequestsEnabled ?? settings?.service_requests_enabled,
         kitchen_mode: kitchenMode ?? settings?.kitchen_mode,
+        google_review_url: googleReviewUrl.trim() || null,
         ...gstUpdateData,
       };
       const updated = await updateRestaurantSettings(updateData);
@@ -352,6 +356,15 @@ export default function AdminSettingsClient() {
               </div>
             </div>
           )}
+        </SettingsSection>
+
+        <SettingsSection title="Google Reviews" description="Invite customers to review this restaurant after confirmed payment.">
+          <Field label="Google Review URL" htmlFor="google-review-url" help="Paste your restaurant's direct Google review link. HTTPS Google and Google Maps links only.">
+            <input id="google-review-url" type="url" value={googleReviewUrl} onChange={(event) => setGoogleReviewUrl(event.target.value)} placeholder="https://g.page/r/…/review" className={controlClass} />
+          </Field>
+          <div className="flex justify-end">
+            <button type="button" disabled={!googleReviewUrl.trim()} onClick={() => { try { const url = new URL(googleReviewUrl.trim()); const allowed = ["g.page", "google.com", "www.google.com", "maps.google.com", "maps.app.goo.gl"]; if (url.protocol === "https:" && allowed.includes(url.hostname.toLowerCase())) window.open(url.href, "_blank", "noopener,noreferrer"); else setError("Enter a valid HTTPS Google Review URL before testing."); } catch { setError("Enter a valid HTTPS Google Review URL before testing."); } }} className="min-h-11 rounded-xl border border-[var(--omlu-border-strong)] px-5 text-sm font-black disabled:cursor-not-allowed disabled:opacity-50">Test Link</button>
+          </div>
         </SettingsSection>
 
         <SettingsSection title="Operations" description="Control customer-facing restaurant operations.">

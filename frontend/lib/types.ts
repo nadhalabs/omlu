@@ -3,6 +3,7 @@ export interface Restaurant {
   name: string;
   slug: string;
   logo_url: string | null;
+  google_review_url: string | null;
 }
 
 export interface RestaurantTable {
@@ -260,6 +261,7 @@ export interface BillResponse {
   receipt_token: string;
   restaurant_name: string;
   restaurant_slug: string;
+  google_review_url: string | null;
   table_number: string;
   table_code: string;
   session_token: string;
@@ -412,6 +414,7 @@ export interface RestaurantRegistrationRequest {
   contact_email: string;
   phone_number: string;
   city: string;
+  google_review_url?: string | null;
   owner_full_name: string;
   owner_username: string;
   owner_email: string;
@@ -710,6 +713,7 @@ export interface RestaurantSettingsResponse {
   default_gst_rate: string;
   tax_mode: "inclusive" | "exclusive";
   invoice_prefix: string;
+  google_review_url: string | null;
 }
 
 export interface RestaurantSettingsUpdate {
@@ -727,6 +731,7 @@ export interface RestaurantSettingsUpdate {
   default_gst_rate?: string;
   tax_mode?: "inclusive" | "exclusive";
   invoice_prefix?: string;
+  google_review_url?: string | null;
 }
 
 

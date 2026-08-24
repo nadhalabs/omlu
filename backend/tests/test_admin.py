@@ -225,6 +225,55 @@ def test_kitchen_mode_update_is_tenant_scoped(setup_admin_test_data):
         db.close()
 
 
+def test_google_review_url_is_validated_and_tenant_scoped(setup_admin_test_data):
+    data = setup_admin_test_data
+    primary_headers = {"Authorization": f"Bearer {data['owner_token']}"}
+    other_headers = {"Authorization": f"Bearer {data['other_token']}"}
+
+    for unsafe_url in ("javascript:alert(1)", "data:text/html,test", "ftp://google.com/review", "https://evil.example/review"):
+        response = client.patch("/admin/settings", headers=primary_headers, json={"google_review_url": unsafe_url})
+        assert response.status_code == 422
+
+    response = client.patch(
+        "/admin/settings",
+        headers=primary_headers,
+        json={"google_review_url": "  https://g.page/r/primary/review  "},
+    )
+    assert response.status_code == 200
+    assert response.json()["google_review_url"] == "https://g.page/r/primary/review"
+
+    response = client.patch(
+        "/admin/settings",
+        headers=other_headers,
+        json={"google_review_url": "https://maps.app.goo.gl/other"},
+    )
+    assert response.status_code == 200
+
+    db = SessionLocal()
+    try:
+        primary = db.query(Restaurant).filter(Restaurant.id == data["restaurant_id"]).one()
+        other = db.query(Restaurant).filter(Restaurant.slug == data["other_restaurant_slug"]).one()
+        assert primary.google_review_url == "https://g.page/r/primary/review"
+        assert other.google_review_url == "https://maps.app.goo.gl/other"
+    finally:
+        db.close()
+
+    primary_menu = client.get(
+        f"/public/restaurants/{data['restaurant_slug']}/tables/{data['table_code']}/menu"
+    )
+    other_menu = client.get(
+        f"/public/restaurants/{data['other_restaurant_slug']}/tables/{data['other_table_code']}/menu"
+    )
+    assert primary_menu.status_code == other_menu.status_code == 200
+    assert primary_menu.json()["restaurant"]["google_review_url"] == "https://g.page/r/primary/review"
+    assert other_menu.json()["restaurant"]["google_review_url"] == "https://maps.app.goo.gl/other"
+
+
+def test_google_review_url_can_be_cleared(setup_admin_test_data):
+    headers = {"Authorization": f"Bearer {setup_admin_test_data['owner_token']}"}
+    assert client.patch("/admin/settings", headers=headers, json={"google_review_url": ""}).json()["google_review_url"] is None
+
+
 # --- Role and Authentication Checks ---
 
 def test_missing_authentication():
