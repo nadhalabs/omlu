@@ -1,3 +1,5 @@
+import type { BillResponse } from "@/lib/types";
+
 const PREFIX = "omlu:completed-session";
 
 export type CompletedSessionMarker = {
@@ -21,6 +23,24 @@ const tableKey = (restaurantSlug: string, tableCode: string) => `${PREFIX}:table
 
 export function completionPath(sessionToken: string) {
   return `/complete/${encodeURIComponent(sessionToken)}`;
+}
+
+export function buildPaidCompletionMarker(bill: BillResponse): CompletedSessionMarker | null {
+  if (bill.status !== "paid") return null;
+  return {
+    sessionToken: bill.session_token,
+    restaurantSlug: bill.restaurant_slug,
+    restaurantName: bill.restaurant_name,
+    tableCode: bill.table_code,
+    receiptToken: bill.receipt_token || undefined,
+    totalAmount: new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency: bill.currency || "INR",
+    }).format(Number(bill.total_amount)),
+    tableNumber: String(bill.table_number),
+    billStatus: "paid",
+    googleReviewUrl: bill.google_review_url?.trim() || undefined,
+  };
 }
 
 export function markCompletedSession(marker: CompletedSessionMarker) {

@@ -6,7 +6,7 @@ import { PublicThemeControl } from "@/components/PublicThemeControl";
 import { ApiError, getPublicBill, getPublicDiningSession, getPublicQuickSaleReceipt, getPublicReceiptQrUrl, getQuickSalePrintDocument, isDefiniteAuthFailure } from "@/lib/api";
 import { BillResponse, PublicDiningSessionResponse } from "@/lib/types";
 import { buildWhatsAppBillShareUrl } from "@/lib/billShare";
-import { clearCustomerCartState, completionPath, markCompletedSession, readCompletedSession } from "@/lib/customerCompletion";
+import { buildPaidCompletionMarker, clearCustomerCartState, completionPath, markCompletedSession, readCompletedSession } from "@/lib/customerCompletion";
 import { useRealtime } from "@/lib/realtime";
 import {
   clearLegacyPublicReceiptToken,
@@ -375,20 +375,11 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false, 
       clearDetachedSession(sessionToken);
       setParticipantToken(null);
       if (shouldEnterPaidCompletion(enteredAsReceiptViewRef.current)) {
-        markCompletedSession({
-          sessionToken,
-          restaurantSlug: data.restaurant_slug,
-          restaurantName: data.restaurant_name,
-          tableCode: data.table_code,
-          receiptToken: data.receipt_token || receiptAccessToken || undefined,
-          totalAmount: new Intl.NumberFormat("en-IN", {
-            style: "currency",
-            currency: data.currency || "INR",
-          }).format(Number(data.total_amount)),
-          tableNumber: String(data.table_number),
-          billStatus: "paid",
-          googleReviewUrl: data.google_review_url?.trim() || undefined,
+        const completionMarker = buildPaidCompletionMarker({
+          ...data,
+          receipt_token: data.receipt_token || receiptAccessToken,
         });
+        if (completionMarker) markCompletedSession(completionMarker);
         router.replace(completionPath(sessionToken));
       }
 

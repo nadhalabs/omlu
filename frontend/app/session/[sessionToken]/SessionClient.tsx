@@ -8,6 +8,7 @@ import {
   cancelPublicOrderItem,
   createPublicServiceRequest,
   requestPublicSessionBill,
+  getPublicBill,
   getPublicDiningSession,
   getTableParticipantAuthority,
   isDefiniteAuthFailure,
@@ -25,7 +26,7 @@ import {
   saveSessionParticipantToken,
   clearSessionParticipantToken,
 } from "@/lib/publicSessionStorage";
-import { clearCustomerCartState, completionPath, markCompletedSession, readCompletedSession } from "@/lib/customerCompletion";
+import { buildPaidCompletionMarker, clearCustomerCartState, completionPath, markCompletedSession, readCompletedSession } from "@/lib/customerCompletion";
 import { useRealtime } from "@/lib/realtime";
 import { customerPushSupported, enableCustomerPush } from "@/lib/customerPush";
 import { detachedBillPath, markDetachedSession, readDetachedSession } from "@/lib/customerDetachment";
@@ -347,6 +348,12 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
             setLastUpdated(new Date());
 
             if (["closed", "cancelled"].includes(data.status)) {
+              const paidBill = data.bill?.status === "paid" && data.bill.receipt_token
+                ? await getPublicBill(sessionToken, "", data.bill.receipt_token)
+                : null;
+              const paidCompletionMarker = paidBill
+                ? buildPaidCompletionMarker(paidBill)
+                : null;
               setVisibleJoinCode(null);
               clearPublicSessionToken(data.restaurant_slug, data.table_code);
               clearParticipantToken(data.restaurant_slug, data.table_code);
@@ -354,7 +361,12 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
               clearSessionParticipantToken(sessionToken);
               clearCustomerCartState(data.restaurant_slug, data.table_code, sessionToken);
               setParticipantToken(null);
-              markCompletedSession({ sessionToken, restaurantSlug: data.restaurant_slug, restaurantName: data.restaurant_name, tableCode: data.table_code });
+              markCompletedSession(paidCompletionMarker || {
+                sessionToken,
+                restaurantSlug: data.restaurant_slug,
+                restaurantName: data.restaurant_name,
+                tableCode: data.table_code,
+              });
               router.replace(completionPath(sessionToken));
               return;
             } else {
