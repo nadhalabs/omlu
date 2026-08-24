@@ -10,6 +10,8 @@ export type CompletedSessionMarker = {
   totalAmount?: string;
   /** Table display number, e.g. "4" — for display on the terminal screen only. */
   tableNumber?: string;
+  /** Confirmed bill state that caused this completion marker to be written. */
+  billStatus?: "paid";
   /** Tenant-scoped external destination copied from the confirmed bill response. */
   googleReviewUrl?: string;
 };
