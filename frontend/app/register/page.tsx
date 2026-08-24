@@ -24,6 +24,7 @@ const initialForm: RestaurantRegistrationRequest = {
   contact_email: "",
   phone_number: "",
   city: "",
+  google_review_url: "",
   owner_full_name: "",
   owner_username: "",
   owner_email: "",
@@ -148,6 +149,7 @@ export default function RegisterPage() {
                 <TextField name="contact_email" label="Contact email" type="email" value={form.contact_email} error={fieldErrors.contact_email} disabled={loading} onChange={(value) => setField("contact_email", value)} autoComplete="email" />
                 <TextField name="phone_number" label="Phone number" value={form.phone_number} error={fieldErrors.phone_number} disabled={loading} onChange={(value) => setField("phone_number", value)} inputMode="numeric" autoComplete="tel" />
                 <TextField name="city" label="City" value={form.city} error={fieldErrors.city} disabled={loading} onChange={(value) => setField("city", value)} autoComplete="address-level2" />
+                <TextField name="google_review_url" label="Google Review URL (optional)" type="url" value={form.google_review_url || ""} error={fieldErrors.google_review_url} disabled={loading} onChange={(value) => setField("google_review_url", value)} placeholder="https://g.page/r/…/review" helperText="You can also add this later in Restaurant Settings." required={false} />
               </div>
             </section>
 
@@ -214,6 +216,7 @@ function TextField({
   disabled,
   inputMode,
   autoComplete,
+  required = true,
 }: {
   name: string;
   label: string;
@@ -226,6 +229,7 @@ function TextField({
   disabled?: boolean;
   inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
   autoComplete?: string;
+  required?: boolean;
 }) {
   return (
     <label className="flex flex-col gap-1.5 text-sm font-bold">
@@ -243,7 +247,7 @@ function TextField({
         className={`h-12 rounded-lg border px-4 text-sm font-medium outline-none transition focus:border-orange-600 ${
           error ? "border-red-500" : "border-[var(--omlu-border-strong)]"
         } ${disabled ? "cursor-not-allowed opacity-70" : ""}`}
-        required
+        required={required}
       />
       {helperText && <span className="text-xs font-medium text-[var(--omlu-text-secondary)]">{helperText}</span>}
       {error && <span className="text-xs font-semibold text-red-600">{error}</span>}

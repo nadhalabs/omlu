@@ -9,9 +9,14 @@ import { clearPublicSessionToken, clearParticipantToken } from "@/lib/publicSess
 export default function CompletionClient({ sessionToken }: { sessionToken: string }) {
   const [marker, setMarker] = useState<CompletedSessionMarker | null>(null);
   const [tabClosedFallback, setTabClosedFallback] = useState(false);
+  const [showReviewPrompt, setShowReviewPrompt] = useState(false);
 
   useEffect(() => {
-    const timeout = window.setTimeout(() => setMarker(readCompletedSession(sessionToken)), 0);
+    const timeout = window.setTimeout(() => {
+      const completed = readCompletedSession(sessionToken);
+      setMarker(completed);
+      setShowReviewPrompt(Boolean(completed?.googleReviewUrl));
+    }, 0);
     return () => window.clearTimeout(timeout);
   }, [sessionToken]);
 
@@ -36,6 +41,17 @@ export default function CompletionClient({ sessionToken }: { sessionToken: strin
 
   return (
     <main className="min-h-screen bg-[var(--omlu-page-background)] px-4 py-6 text-[var(--omlu-text-primary)]">
+      {showReviewPrompt && marker?.googleReviewUrl && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowReviewPrompt(false); }}>
+          <section role="dialog" aria-modal="true" aria-labelledby="google-review-title" className="relative w-full max-w-sm rounded-3xl bg-[var(--omlu-primary-surface)] p-6 text-center shadow-2xl">
+            <button type="button" aria-label="Close review invitation" onClick={() => setShowReviewPrompt(false)} className="absolute right-4 top-4 grid size-10 place-items-center rounded-full text-xl text-[var(--omlu-text-secondary)]">×</button>
+            <h2 id="google-review-title" className="pr-6 text-xl font-black">Enjoyed your visit?</h2>
+            <p className="mt-3 text-sm text-[var(--omlu-text-secondary)]">Support us with a Google review.</p>
+            <a href={marker.googleReviewUrl} className="mt-6 flex min-h-12 items-center justify-center rounded-xl bg-orange-600 px-5 py-3 text-sm font-black text-white">★&nbsp; Rate us on Google</a>
+            <button type="button" onClick={() => setShowReviewPrompt(false)} className="mt-3 min-h-11 w-full rounded-xl text-sm font-bold text-[var(--omlu-text-secondary)]">Not now</button>
+          </section>
+        </div>
+      )}
       <div className="mx-auto max-w-md">
         <div className="flex justify-end"><PublicThemeControl /></div>
         <section

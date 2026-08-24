@@ -86,6 +86,7 @@ def register_restaurant(
             currency="INR",
             order_prefix="NS",
             service_requests_enabled=True,
+            google_review_url=body.google_review_url,
             plan="free_pilot",
             subscription_status="active",
             trial_started_at=now,

@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Literal, Optional
 from pydantic import BaseModel, Field, model_validator
 
 from app.utils.validation import (
@@ -13,6 +13,7 @@ from app.utils.validation import (
     validate_restaurant_username,
     validate_terms,
 )
+from app.schemas.settings import RestaurantSettingsUpdate
 
 
 class RestaurantRegistrationRequest(BaseModel):
@@ -27,6 +28,7 @@ class RestaurantRegistrationRequest(BaseModel):
     password: str = Field(..., min_length=1, max_length=256)
     confirm_password: str = Field(..., min_length=1, max_length=256)
     accept_terms: Literal[True]
+    google_review_url: Optional[str] = Field(default=None, max_length=2048)
 
     @model_validator(mode="after")
     def validate_registration(self):
@@ -55,6 +57,9 @@ class RestaurantRegistrationRequest(BaseModel):
             if self.password != self.confirm_password:
                 raise ValueError("confirm_password|Passwords do not match.")
             validate_terms(self.accept_terms)
+            self.google_review_url = RestaurantSettingsUpdate(
+                google_review_url=self.google_review_url
+            ).google_review_url
         except ValueError as error:
             raise structured_validation_error(error) from error
         return self

@@ -397,6 +397,7 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false, 
             currency: data.currency || "INR",
           }).format(Number(data.total_amount)),
           tableNumber: String(data.table_number),
+          googleReviewUrl: data.google_review_url || undefined,
         });
         router.replace(completionPath(sessionToken));
       }

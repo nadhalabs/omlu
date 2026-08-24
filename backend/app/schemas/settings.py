@@ -1,4 +1,5 @@
 import re
+from urllib.parse import urlsplit
 from decimal import Decimal
 from typing import Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -19,6 +20,7 @@ class RestaurantSettingsResponse(BaseModel):
     default_gst_rate: Decimal
     tax_mode: str
     invoice_prefix: str
+    google_review_url: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -38,6 +40,28 @@ class RestaurantSettingsUpdate(BaseModel):
     default_gst_rate: Optional[Decimal] = Field(default=None, ge=0, le=100)
     tax_mode: Optional[str] = None
     invoice_prefix: Optional[str] = None
+    google_review_url: Optional[str] = Field(default=None, max_length=2048)
+
+    @field_validator("google_review_url")
+    @classmethod
+    def validate_google_review_url(cls, v: Optional[str]) -> Optional[str]:
+        if v is None or not v.strip():
+            return None
+        normalized = v.strip()
+        try:
+            parsed = urlsplit(normalized)
+        except ValueError as exc:
+            raise ValueError("Enter a valid Google Review URL.") from exc
+        host = (parsed.hostname or "").lower().rstrip(".")
+        allowed_hosts = {
+            "g.page", "google.com", "www.google.com", "maps.google.com",
+            "maps.app.goo.gl",
+        }
+        if parsed.scheme.lower() != "https" or not host or host not in allowed_hosts:
+            raise ValueError("Use an HTTPS Google Review or Google Maps URL.")
+        if parsed.username or parsed.password:
+            raise ValueError("Google Review URL must not contain credentials.")
+        return normalized
 
     @field_validator("timezone")
     @classmethod
