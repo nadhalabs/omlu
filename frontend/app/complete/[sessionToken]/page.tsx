@@ -1,6 +1,7 @@
 import CompletionClient from "./CompletionClient";
 
-export default async function CompletionPage({ params }: { params: Promise<{ sessionToken: string }> }) {
+export default async function CompletionPage({ params, searchParams }: { params: Promise<{ sessionToken: string }>; searchParams: Promise<{ receipt?: string }> }) {
   const { sessionToken } = await params;
-  return <CompletionClient sessionToken={sessionToken} />;
+  const { receipt } = await searchParams;
+  return <CompletionClient sessionToken={sessionToken} receiptToken={receipt} />;
 }

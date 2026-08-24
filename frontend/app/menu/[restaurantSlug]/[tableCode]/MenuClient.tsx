@@ -646,7 +646,7 @@ function ActiveMenuClient({
       if (!completed) return;
       clearOrderingState();
       setParticipantToken(null);
-      router.replace(completionPath(completed.sessionToken));
+      router.replace(completionPath(completed.sessionToken, completed.receiptToken));
     };
     enforceCompletedHistory();
     const handlePageShow = (event: PageTransitionEvent) => { if (event.persisted) enforceCompletedHistory(); };

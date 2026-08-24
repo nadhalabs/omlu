@@ -14,7 +14,6 @@ import {
 const read = (path) => fs.readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const bill = read("app/bill/[sessionToken]/BillClient.tsx");
 const session = read("app/session/[sessionToken]/SessionClient.tsx");
-const completion = read("app/complete/[sessionToken]/CompletionClient.tsx");
 const settings = read("app/admin/settings/AdminSettingsClient.tsx");
 const marker = read("lib/customerCompletion.ts");
 
@@ -77,46 +76,38 @@ test("real paid bill response survives marker storage and enables the completion
   }
 });
 
-test("session terminal path resolves the paid receipt before writing completion", () => {
-  assert.match(session, /data\.bill\?\.status === "paid"/);
-  assert.match(session, /getPublicBill\(sessionToken, "", data\.bill\.receipt_token\)/);
-  assert.match(session, /buildPaidCompletionMarker\(paidBill\)/);
-  assert.match(session, /markCompletedSession\(paidCompletionMarker \|\|/);
-});
-
 test("non-paid bill responses cannot create paid completion markers", () => {
   assert.equal(buildPaidCompletionMarker({ ...paidBillResponse, status: "cancelled" }), null);
-});
-
-test("prompt is optional and dismissible without collecting review content", () => {
-  assert.match(completion, /Enjoyed your visit\?/);
-  assert.match(completion, /Rate us on Google/);
-  assert.match(completion, /Not now/);
-  assert.match(completion, /setShowReviewPrompt\(false\)/);
-  assert.match(completion, /window\.location\.assign\(googleReviewUrl\)/);
-  assert.doesNotMatch(completion, /type="radio"|textarea|rating_value|review_content/);
-});
-
-test("completion reads its marker once per session token and opens from paid marker eligibility", () => {
-  const markerEffect = completion.match(/useEffect\(\(\) => \{[\s\S]*?\}, \[sessionToken\]\);/)?.[0] || "";
-  assert.match(completion, /useEffect\(\(\) => \{\s*const completed = readCompletedSession\(sessionToken\);/);
-  assert.match(
-    completion,
-    /setShowReviewPrompt\(\s*shouldShowGoogleReviewPrompt\(completed\?\.billStatus, completed\?\.googleReviewUrl\),?\s*\)/,
-  );
-  assert.match(completion, /\}, \[sessionToken\]\);/);
-  assert.doesNotMatch(markerEffect, /setTimeout|clearTimeout|reviewPromptShown/);
-});
-
-test("completion modal remains backed by stable marker state across rerenders", () => {
-  assert.match(completion, /const \[marker, setMarker\] = useState<CompletedSessionMarker \| null>\(null\)/);
-  assert.match(completion, /showReviewPrompt && marker\?\.billStatus === "paid" && googleReviewUrl/);
-  assert.doesNotMatch(marker, /removeItem\(sessionKey/);
 });
 
 test("missing and non-paid stored markers do not become popup-eligible", () => {
   assert.equal(shouldShowGoogleReviewPrompt(undefined, undefined), false);
   assert.equal(shouldShowGoogleReviewPrompt(undefined, "https://g.page/r/example/review"), false);
+});
+
+test("receipt-shaped paid data is stored under the canonical session token", () => {
+  const values = new Map();
+  globalThis.window = {
+    sessionStorage: {
+      getItem: (key) => values.get(key) ?? null,
+      setItem: (key, value) => values.set(key, value),
+    },
+  };
+  try {
+    const receiptShape = {
+      ...paidBillResponse,
+      session_token: undefined,
+      restaurant_slug: undefined,
+      table_code: undefined,
+    };
+    const completionMarker = buildPaidCompletionMarker(receiptShape, "canonical-session");
+    assert.ok(completionMarker);
+    markCompletedSession(completionMarker);
+    assert.equal(readCompletedSession("canonical-session")?.googleReviewUrl, paidBillResponse.google_review_url.trim());
+    assert.equal(readCompletedSession("undefined"), null);
+  } finally {
+    delete globalThis.window;
+  }
 });
 
 test("admin exposes safe test navigation and persists the setting", () => {

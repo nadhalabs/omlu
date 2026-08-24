@@ -258,7 +258,7 @@ export interface BillOrder {
 export interface BillResponse {
   bill_number: string;
   document_title: "BILL" | "TAX INVOICE";
-  receipt_token: string;
+  receipt_token: string | null;
   restaurant_name: string;
   restaurant_slug: string;
   google_review_url: string | null;
@@ -311,6 +311,45 @@ export interface BillResponse {
   detached_session_status: DiningSessionStatus | null;
   receipt_access: string | null;
 }
+
+/**
+ * The token-authorized public receipt endpoint intentionally omits dining-session
+ * and table identifiers. Keep that runtime contract distinct from BillResponse so
+ * receipt data cannot accidentally be used as if it contained a session key.
+ */
+export type PublicReceiptBillResponse = Omit<
+  BillResponse,
+  | "restaurant_slug"
+  | "table_code"
+  | "session_token"
+  | "paid_by_staff_id"
+  | "generated_by_role"
+  | "sent_to_counter_by_role"
+  | "session_status"
+  | "payment_requested_at"
+  | "detached_at"
+  | "payment_code"
+  | "payment_code_expires_at"
+  | "original_table"
+  | "detached_session_status"
+  | "receipt_access"
+> & Partial<Pick<
+  BillResponse,
+  | "restaurant_slug"
+  | "table_code"
+  | "session_token"
+  | "paid_by_staff_id"
+  | "generated_by_role"
+  | "sent_to_counter_by_role"
+  | "session_status"
+  | "payment_requested_at"
+  | "detached_at"
+  | "payment_code"
+  | "payment_code_expires_at"
+  | "original_table"
+  | "detached_session_status"
+  | "receipt_access"
+>>;
 
 export interface ShortOrderSummary {
   order_count: number;

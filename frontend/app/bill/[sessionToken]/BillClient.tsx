@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PublicThemeControl } from "@/components/PublicThemeControl";
 import { ApiError, getPublicBill, getPublicDiningSession, getPublicQuickSaleReceipt, getPublicReceiptQrUrl, getQuickSalePrintDocument, isDefiniteAuthFailure } from "@/lib/api";
-import { BillResponse, PublicDiningSessionResponse } from "@/lib/types";
+import { BillResponse, PublicDiningSessionResponse, PublicReceiptBillResponse } from "@/lib/types";
 import { buildWhatsAppBillShareUrl } from "@/lib/billShare";
 import { buildPaidCompletionMarker, clearCustomerCartState, completionPath, markCompletedSession, readCompletedSession } from "@/lib/customerCompletion";
 import { useRealtime } from "@/lib/realtime";
@@ -83,7 +83,7 @@ export default function BillClient(props: BillClientProps) {
 
 function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false, publicReceipt = false }: BillClientProps) {
   const router = useRouter();
-  const [bill, setBill] = useState<BillResponse | null>(null);
+  const [bill, setBill] = useState<BillResponse | PublicReceiptBillResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [waitingSession, setWaitingSession] = useState<PublicDiningSessionResponse | null>(null);
@@ -295,7 +295,7 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false, 
   const t = labels[language];
 
   const formatBillTotal = useCallback(
-    (nextBill: BillResponse) =>
+    (nextBill: BillResponse | PublicReceiptBillResponse) =>
       new Intl.NumberFormat("en-IN", {
         style: "currency",
         currency: nextBill.currency || "INR",
@@ -337,7 +337,7 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false, 
   }, []);
 
   const applyFetchedBill = useCallback(
-    (data: BillResponse, source: "initial" | "event" | "poll" | "action") => {
+    (data: BillResponse | PublicReceiptBillResponse, source: "initial" | "event" | "poll" | "action") => {
       const previousStatus = paidStatusRef.current;
       const isPaid = data.status === "paid";
       const billKey = data.bill_number;
@@ -351,7 +351,7 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false, 
         setReceiptAccessToken(data.receipt_token);
         const receiptUrl = publicReceipt
           ? `/receipt/${encodeURIComponent(data.receipt_token)}${quickSale ? "?quickSale=1" : ""}`
-          : `/bill/${encodeURIComponent(data.session_token)}?receipt=${encodeURIComponent(data.receipt_token)}${quickSale ? "&quickSale=1" : ""}`;
+          : `/bill/${encodeURIComponent(sessionToken)}?receipt=${encodeURIComponent(data.receipt_token)}${quickSale ? "&quickSale=1" : ""}`;
         window.history.replaceState(window.history.state, "", receiptUrl);
       }
 
@@ -361,7 +361,7 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false, 
         return;
       }
 
-      if (data.session_status === "detached_awaiting_payment" && data.receipt_token) {
+      if (data.session_status === "detached_awaiting_payment" && data.receipt_token && data.restaurant_slug && data.table_code) {
         clearPublicSessionToken(data.restaurant_slug, data.table_code);
         clearParticipantToken(data.restaurant_slug, data.table_code);
         clearSessionParticipantToken(sessionToken);
@@ -382,20 +382,22 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false, 
         return;
       }
 
-      clearPublicSessionToken(data.restaurant_slug, data.table_code);
-      clearParticipantToken(data.restaurant_slug, data.table_code);
-      clearLegacyPublicReceiptToken(data.restaurant_slug, data.table_code);
+      if (data.restaurant_slug && data.table_code) {
+        clearPublicSessionToken(data.restaurant_slug, data.table_code);
+        clearParticipantToken(data.restaurant_slug, data.table_code);
+        clearLegacyPublicReceiptToken(data.restaurant_slug, data.table_code);
+        clearCustomerCartState(data.restaurant_slug, data.table_code, sessionToken);
+      }
       clearSessionParticipantToken(sessionToken);
-      clearCustomerCartState(data.restaurant_slug, data.table_code, sessionToken);
       clearDetachedSession(sessionToken);
       setParticipantToken(null);
       if (shouldEnterPaidCompletion(enteredAsReceiptViewRef.current)) {
         const completionMarker = buildPaidCompletionMarker({
           ...data,
           receipt_token: data.receipt_token || receiptAccessToken,
-        });
+        }, sessionToken);
         if (completionMarker) markCompletedSession(completionMarker);
-        router.replace(completionPath(sessionToken));
+        router.replace(completionPath(sessionToken, completionMarker?.receiptToken));
       }
 
       if (!hasLoadedBillRef.current && source === "initial") {
