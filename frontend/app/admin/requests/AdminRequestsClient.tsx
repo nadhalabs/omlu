@@ -188,13 +188,7 @@ export default function AdminRequestsClient() {
         throw new Error("Bill could not be prepared.");
       }
       const issued = await issueStaffBill(billNumber);
-      setRequests((prev) =>
-        prev.map((item) =>
-          item.id === req.id
-            ? { ...item, bill_number: issued.bill_number }
-            : item
-        )
-      );
+      await fetchRequests(false);
 
       if (openPrint && issued.receipt_token) {
         toast("Printing bill…", "information");

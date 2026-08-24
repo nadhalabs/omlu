@@ -63,16 +63,7 @@ export default function BillingCounterClient() {
       const issued = await issueStaffBill(item.bill_number);
       recentMutations.current.add(item.bill_number);
       window.setTimeout(() => recentMutations.current.delete(item.bill_number), 2000);
-      const updated: BillingCounterItem = {
-        ...item, status: "issued", receipt_token: issued.receipt_token,
-        invoice_number: issued.invoice_number, subtotal: issued.subtotal,
-        tax_amount: issued.tax_amount, total_amount: issued.total_amount,
-      };
-      setQueues((current) => ({
-        ...current,
-        requested: current.requested.filter((bill) => bill.bill_number !== item.bill_number),
-        awaiting_payment: [updated, ...current.awaiting_payment.filter((bill) => bill.bill_number !== item.bill_number)],
-      }));
+      await refresh();
       setTab("awaiting_payment");
       setBillBusy(item.bill_number);
 
@@ -175,6 +166,9 @@ export default function BillingCounterClient() {
         paid_recently: [updated, ...current.paid_recently.filter((bill) => bill.bill_number !== item.bill_number)].slice(0, 20),
       }));
       setTab("paid_recently");
+      // Reconcile with the authoritative backend queue. Table screens receive
+      // the committed table.status_changed event and refetch their table data.
+      await refresh();
       toast("Payment confirmed.", "success");
     } catch (err) {
       toast(err instanceof Error ? err.message : "Payment could not be confirmed.", "error");

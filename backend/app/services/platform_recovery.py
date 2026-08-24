@@ -9,9 +9,8 @@ from app.models.dining_session import DiningSession, ACTIVE_DINING_SESSION_STATU
 from app.models.bill import Bill
 from app.models.order import Order
 from app.models.platform_user import PlatformAuditLog
-from app.models.empty_table_report import EmptyTableReport
-from app.services.table_participants import invalidate_session_participants
 from app.services.dining_sessions import find_current_open_session_for_table
+from app.services.bills import complete_paid_dining_session
 from app.services.realtime import (
     publish_event,
     EVENT_SESSION_CLOSED,
@@ -80,29 +79,15 @@ def finalize_paid_session(
     old_status = session.status
     now = datetime.datetime.now(datetime.timezone.utc)
 
-    # 3. Transition session state
-    session.status = "closed"
-    session.closed_at = now
-
-    # 4. Invalidate participant authority & join code
-    invalidated_count = invalidate_session_participants(
-        db, session, f"Paid session finalized: {reason.strip()}"
+    # 3-5. Use the same transactional paid-session completion as checkout.
+    completion = complete_paid_dining_session(
+        db,
+        session=session,
+        bill=bill,
+        reason=f"Paid session finalized: {reason.strip()}",
+        now=now,
     )
-
-    # 5. Resolve open empty table reports if present
-    open_report = (
-        db.query(EmptyTableReport)
-        .filter(
-            EmptyTableReport.restaurant_id == session.restaurant_id,
-            EmptyTableReport.session_id == session.id,
-            EmptyTableReport.status == "open",
-        )
-        .with_for_update()
-        .first()
-    )
-    if open_report:
-        open_report.status = "resolved_by_session_close"
-        open_report.resolved_at = now
+    invalidated_count = completion.invalidated_participants
 
     # 6. Bounded allowlisted transactional audit log (No PII, zero tokens/PINs/bill amounts)
     audit_entry = PlatformAuditLog(

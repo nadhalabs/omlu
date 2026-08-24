@@ -14,7 +14,6 @@ from app.models.bill import Bill
 from app.models.quick_sale import QuickSale, QuickSaleItem
 from app.models.restaurant import Restaurant
 from app.models.dining_session import DiningSession
-from app.models.empty_table_report import EmptyTableReport
 from app.models.order import Order
 from app.models.staff_user import AuditLog, StaffUser
 from app.services.idempotency import ensure_same_request, request_hash, require_key
@@ -48,7 +47,6 @@ from app.services.bills import (
 )
 from app.services.dining_sessions import find_current_open_session_for_table
 from app.services.table_participants import authority_hash, enforce_session_action_rate, load_participant, participant_token_header
-from app.services.table_participants import invalidate_session_participants
 from app.utils.auth import BillingRoleChecker, OperationalWriteChecker, RoleChecker
 from app.utils.gst import GST_STATE_NAMES
 from app.services.realtime import (
@@ -1062,30 +1060,55 @@ def issue_staff_bill(
     if not bill:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
 
-    if bill.issue_idempotency_key:
-        if bill.issue_idempotency_key != key:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Bill was already issued with a different Idempotency-Key.",
-            )
-        return build_bill_response(db, bill)
-
-    if not bill.generated_by_staff_id:
-        bill.generated_by_staff_id = current_user.id
-    issued = issue_bill(db, bill)
-    issued.issue_idempotency_key = key
+    result = detach_issued_bill_and_release_table(
+        db,
+        restaurant_id=current_user.restaurant_id,
+        bill_id=bill.id,
+        actor=current_user,
+        issue_idempotency_key=key,
+        allocate_payment_code=False,
+        allow_open_session=True,
+    )
+    issued = result.bill
     db.commit()
+    current_table_session = find_current_open_session_for_table(
+        db, issued.dining_session.table_id
+    )
+    channels = [
+        restaurant_channel(current_user.restaurant_id, "operations"),
+        restaurant_channel(current_user.restaurant_id, "staff"),
+        restaurant_channel(current_user.restaurant_id, "admin"),
+        session_channel(issued.dining_session.public_token),
+        table_channel(current_user.restaurant_id, issued.dining_session.table_id),
+    ]
+    publish_event(
+        EVENT_BILL_DETACHED_FOR_PAYMENT,
+        restaurant_id=current_user.restaurant_id,
+        channels=channels,
+        resource_id=issued.id,
+        state={
+            "bill_number": issued.bill_number,
+            "bill_status": issued.status,
+            "session_status": issued.dining_session.status,
+            "session_token": issued.dining_session.public_token,
+        },
+    )
     publish_event(
         EVENT_BILL_UPDATED,
         restaurant_id=current_user.restaurant_id,
-        channels=[
-            restaurant_channel(current_user.restaurant_id, "operations"),
-            restaurant_channel(current_user.restaurant_id, "staff"),
-            session_channel(issued.dining_session.public_token),
-            table_channel(current_user.restaurant_id, issued.dining_session.table_id),
-        ],
+        channels=channels,
         resource_id=issued.id,
         state={"bill_number": issued.bill_number, "status": issued.status},
+    )
+    publish_event(
+        EVENT_TABLE_STATUS_CHANGED,
+        restaurant_id=current_user.restaurant_id,
+        channels=channels,
+        resource_id=issued.dining_session.table_id,
+        state={
+            "status": current_table_session.status if current_table_session else "free",
+            "session_token": current_table_session.public_token if current_table_session else None,
+        },
     )
     return build_bill_response(db, issued)
 
@@ -1114,23 +1137,14 @@ def confirm_staff_counter_payment(
 
     previous_bill_status = bill.status
     had_payment_code = bool(bill.payment_code_hash or bill.payment_code_ciphertext)
-    previous_session_status = (
-        "detached_awaiting_payment" if had_payment_code else "payment_pending"
+    previous_session_status = bill.dining_session.status
+    paid, replayed, completion = confirm_counter_payment(
+        db, bill, current_user, payload.method, key, payload_hash
     )
-    paid, replayed = confirm_counter_payment(db, bill, current_user, payload.method, key, payload_hash)
     if replayed:
         return build_bill_response(db, paid)
-    invalidated = invalidate_session_participants(db, paid.dining_session, "Session closed after payment")
-    open_report = db.query(EmptyTableReport).filter(
-        EmptyTableReport.restaurant_id == current_user.restaurant_id,
-        EmptyTableReport.session_id == paid.dining_session_id,
-        EmptyTableReport.status == "open",
-    ).with_for_update().first()
-    if open_report:
-        open_report.status = "resolved_by_session_close"
-        open_report.resolved_at = paid.paid_at
-        open_report.resolved_by_user_id = current_user.id
-        open_report.resolution_reason = "payment_completed"
+    assert completion is not None
+    invalidated = completion.invalidated_participants
     db.add(AuditLog(
         restaurant_id=current_user.restaurant_id,
         actor_user_id=current_user.id,

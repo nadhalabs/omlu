@@ -472,11 +472,13 @@ def test_issue_bill(bill_context):
 
     assert response.status_code == 200
     body = response.json()
-    assert body["status"] == "issued"
+    assert body["status"] == "payment_pending"
+    assert body["session_status"] == "detached_awaiting_payment"
     db = SessionLocal()
     session = db.query(DiningSession).filter(DiningSession.id == bill_context["session_id"]).one()
-    assert session.status == "payment_requested"
+    assert session.status == "detached_awaiting_payment"
     assert session.payment_requested_at is not None
+    assert find_current_open_session_for_table(db, bill_context["table_id"]) is None
     db.close()
 
 
@@ -515,7 +517,37 @@ def test_owner_admin_allowed_to_issue_bill(bill_context, token_key):
     )
 
     assert response.status_code == 200
-    assert response.json()["status"] == "issued"
+    assert response.json()["status"] == "payment_pending"
+    assert response.json()["session_status"] == "detached_awaiting_payment"
+
+
+def test_repeated_admin_issue_is_idempotent_and_different_key_conflicts(bill_context):
+    add_order(bill_context)
+    draft = create_bill(bill_context).json()
+    url = f"/staff/bills/{draft['bill_number']}/issue"
+    headers = {
+        "Authorization": f"Bearer {bill_context['admin_token']}",
+        "Idempotency-Key": f"issue-once-{uuid.uuid4().hex}",
+    }
+
+    first = client.post(url, headers=headers)
+    replay = client.post(url, headers=headers)
+    conflict = client.post(url, headers={**headers, "Idempotency-Key": f"other-{uuid.uuid4().hex}"})
+
+    assert first.status_code == replay.status_code == 200
+    assert first.json()["status"] == replay.json()["status"] == "payment_pending"
+    assert conflict.status_code == 409
+    db = SessionLocal()
+    bill = db.query(Bill).filter(Bill.bill_number == draft["bill_number"]).one()
+    session = db.query(DiningSession).filter(DiningSession.id == bill_context["session_id"]).one()
+    assert bill.issue_idempotency_key == headers["Idempotency-Key"]
+    assert session.status == "detached_awaiting_payment"
+    assert db.query(AuditLog).filter(
+        AuditLog.target_type == "bill",
+        AuditLog.target_id == str(bill.id),
+        AuditLog.action == "bill.detached_and_table_released",
+    ).count() == 1
+    db.close()
 
 
 def test_staff_official_billing_actions_are_rejected(bill_context):
@@ -633,16 +665,22 @@ def test_issued_bill_remains_unchanged(bill_context):
     assert issued.status_code == 200
     assert issued.json()["total_amount"] == "100.00"
 
-    add_order(
-        bill_context,
-        subtotal=Decimal("50.00"),
-        item_name="Late Manual Adjustment",
-        unit_price=Decimal("50.00"),
+    next_order = client.post(
+        f"/staff/tables/{bill_context['table_id']}/orders",
+        headers={
+            "Authorization": f"Bearer {bill_context['owner_token']}",
+            "Idempotency-Key": f"next-session-{uuid.uuid4().hex}",
+        },
+        json={"items": [{"menu_item_id": bill_context["item_id"], "quantity": 1}]},
     )
-    refreshed = create_bill(bill_context)
+    assert next_order.status_code == 201
+    refreshed = client.get(
+        f"/staff/bills/{bill['bill_number']}",
+        headers={"Authorization": f"Bearer {bill_context['owner_token']}"},
+    )
 
-    assert refreshed.status_code == 201
-    assert refreshed.json()["status"] == "issued"
+    assert refreshed.status_code == 200
+    assert refreshed.json()["status"] == "payment_pending"
     assert refreshed.json()["total_amount"] == "100.00"
 
 
@@ -722,7 +760,7 @@ def test_public_bill_identifies_staff_preparation_and_counter_handoff(bill_conte
     assert issued_response.status_code == 200
     issued = issued_response.json()
 
-    assert issued["status"] == "issued"
+    assert issued["status"] == "payment_pending"
     assert issued["generated_by_role"] == "staff"
     assert issued["sent_to_counter_by_role"] is None
 
@@ -731,10 +769,10 @@ def test_public_bill_identifies_staff_preparation_and_counter_handoff(bill_conte
     assert sent.json()["status"] == "payment_pending"
     assert sent.json()["sent_to_counter_by_role"] == "staff"
 
-    customer = client.get(f"/public/sessions/{bill_context['session_token']}/bill")
+    customer = client.get(f"/public/bills/{issued['receipt_token']}")
     assert customer.status_code == 200
-    assert customer.json()["generated_by_role"] == "staff"
-    assert customer.json()["sent_to_counter_by_role"] == "staff"
+    assert customer.json()["bill_number"] == issued["bill_number"]
+    assert "generated_by_role" not in customer.json()
 
 
 @pytest.mark.parametrize(
@@ -747,13 +785,14 @@ def test_public_bill_identifies_owner_or_admin_direct_issue(
     add_order(bill_context)
     issued = issue_bill_for(bill_context, token_key=token_key)
 
-    assert issued["status"] == "issued"
+    assert issued["status"] == "payment_pending"
     assert issued["generated_by_role"] == expected_role
     assert issued["sent_to_counter_by_role"] is None
 
-    customer = client.get(f"/public/sessions/{bill_context['session_token']}/bill")
+    customer = client.get(f"/public/bills/{issued['receipt_token']}")
     assert customer.status_code == 200
-    assert customer.json()["generated_by_role"] == expected_role
+    assert customer.json()["bill_number"] == issued["bill_number"]
+    assert "generated_by_role" not in customer.json()
 
 
 def test_old_pending_bill_is_recovered_by_authoritative_queue(bill_context):
@@ -909,6 +948,78 @@ def test_payment_confirmation_updates_queue_table_and_histories(bill_context):
     assert all(request.get("request_type") != "payment_pending" for request in requests)
 
 
+def test_admin_issue_releases_table_and_later_payment_does_not_touch_next_session(bill_context):
+    add_order(bill_context)
+    issued = issue_bill_for(bill_context, token_key="admin_token")
+
+    assert issued["status"] == "payment_pending"
+    assert issued["session_status"] == "detached_awaiting_payment"
+    preview = client.get(f"/public/bills/{issued['receipt_token']}")
+    assert preview.status_code == 200
+    available = client.get(
+        f"/public/restaurants/{bill_context['restaurant_slug']}/tables/"
+        f"{bill_context['table_code']}/session-status"
+    )
+    assert available.json() == {"occupied": False}
+
+    next_customer = client.post(
+        f"/public/restaurants/{bill_context['restaurant_slug']}/tables/"
+        f"{bill_context['table_code']}/sessions",
+        headers={"X-Device-ID": uuid.uuid4().hex},
+    )
+    assert next_customer.status_code == 201
+    next_session_token = next_customer.json()["session"]["public_id"]
+
+    completed = confirm_counter_payment(
+        bill_context, issued["bill_number"], token_key="admin_token"
+    )
+    assert completed.status_code == 200
+    assert completed.json()["status"] == "paid"
+
+    occupied = client.get(
+        f"/public/restaurants/{bill_context['restaurant_slug']}/tables/"
+        f"{bill_context['table_code']}/session-status"
+    )
+    assert occupied.json() == {"occupied": True}
+
+    db = SessionLocal()
+    old_session = db.query(DiningSession).filter(DiningSession.id == bill_context["session_id"]).one()
+    new_session = db.query(DiningSession).filter(DiningSession.public_token == next_session_token).one()
+    assert old_session.status == "closed"
+    assert new_session.status == "open"
+    db.close()
+
+
+def test_admin_issue_failure_rolls_back_bill_and_table_release(monkeypatch, bill_context):
+    from app.services import bills as bill_service
+
+    add_order(bill_context)
+    draft = create_bill(bill_context).json()
+
+    def fail_release(*args, **kwargs):
+        raise RuntimeError("simulated table-release failure")
+
+    monkeypatch.setattr(bill_service, "invalidate_session_participants", fail_release)
+    with pytest.raises(RuntimeError, match="simulated table-release failure"):
+        client.post(
+            f"/staff/bills/{draft['bill_number']}/issue",
+            headers={
+                "Authorization": f"Bearer {bill_context['admin_token']}",
+                "Idempotency-Key": f"failure-{uuid.uuid4().hex}",
+            },
+        )
+
+    db = SessionLocal()
+    bill = db.query(Bill).filter(Bill.bill_number == draft["bill_number"]).one()
+    session = db.query(DiningSession).filter(DiningSession.id == bill_context["session_id"]).one()
+    assert bill.status == "draft"
+    assert bill.issue_idempotency_key is None
+    assert session.status == "open"
+    assert find_current_open_session_for_table(db, bill_context["table_id"]).id == session.id
+    assert db.query(Payment).filter(Payment.bill_id == bill.id).count() == 0
+    db.close()
+
+
 @pytest.mark.parametrize(("method"), ["counter_cash", "counter_upi"])
 def test_staff_cannot_confirm_counter_payment(bill_context, method):
     add_order(bill_context)
@@ -1021,11 +1132,9 @@ def test_staff_can_send_bill_to_counter(monkeypatch, bill_context):
 
     assert response.status_code == 200
     assert response.json()["status"] == "payment_pending"
-    assert any(event.type == realtime.EVENT_BILL_SENT_TO_COUNTER for event in published)
-    assert any(event.type == realtime.EVENT_BILL_PAYMENT_PENDING for event in published)
-    sent_event = next(event for event in published if event.type == realtime.EVENT_BILL_SENT_TO_COUNTER)
-    assert sent_event.restaurant_id == bill_context["restaurant_id"]
-    assert "restaurant:%s:operations" % bill_context["restaurant_id"] in sent_event.channels
+    # Normal issue already placed the bill in the detached pending queue, so
+    # this legacy handoff is an idempotent no-op and emits no duplicate event.
+    assert published == []
 
 
 def test_payment_assistance_respects_restaurant_isolation(bill_context):
@@ -1255,7 +1364,7 @@ def test_repeated_send_to_counter_does_not_publish_duplicate_banner_event(monkey
 
     assert first.status_code == 200
     assert second.status_code == 200
-    assert first_count == 3
+    assert first_count == 0
     assert len(published) == first_count
 
 
@@ -1273,7 +1382,7 @@ def test_invalid_payment_transition_rolls_back_bill_and_session(bill_context):
     db.close()
     assert bill.status == "payment_pending"
     assert bill.payment_method is None
-    assert session.status == "payment_pending"
+    assert session.status == "detached_awaiting_payment"
 
 
 def test_counter_payment_closes_session_and_blocks_old_session_orders(bill_context):
@@ -1571,11 +1680,11 @@ def test_detachment_failure_rolls_back_every_change(monkeypatch, bill_context):
     db = SessionLocal()
     bill = db.query(Bill).filter(Bill.bill_number == issued["bill_number"]).one()
     session = db.query(DiningSession).filter(DiningSession.id == bill_context["session_id"]).one()
-    assert bill.status == "issued"
+    assert bill.status == "payment_pending"
     assert bill.payment_code_hash is None
-    assert session.status == "payment_requested"
-    assert session.detached_at is None
-    assert any(participant.revoked_at is None for participant in session.participants)
+    assert session.status == "detached_awaiting_payment"
+    assert session.detached_at is not None
+    assert all(participant.revoked_at is not None for participant in session.participants)
     db.close()
 
 
@@ -1604,8 +1713,8 @@ def test_concurrent_detachment_has_one_winner(bill_context):
 
     with ThreadPoolExecutor(max_workers=2) as executor:
         outcomes = list(executor.map(lambda _value: attempt(), range(2)))
-    assert [kind for kind, _value in outcomes].count("ok") == 1
-    assert [kind for kind, _value in outcomes].count("conflict") == 1
+    assert [kind for kind, _value in outcomes].count("ok") == 2
+    assert len({value for kind, value in outcomes if kind == "ok"}) == 1
 
 
 def test_concurrent_detached_payment_creates_one_payment(bill_context):
@@ -2335,7 +2444,7 @@ def test_payment_revokes_all_active_participant_tokens(bill_context):
     session = db.query(DiningSession).filter(DiningSession.id == bill_context["session_id"]).one()
     active_before = sum(1 for p in session.participants if p.revoked_at is None)
     db.close()
-    assert active_before >= 1, "at least one active participant must exist before payment"
+    assert active_before == 0, "issuance must revoke participant authority before payment"
 
     paid = confirm_counter_payment(bill_context, issued["bill_number"])
     assert paid.status_code == 200
@@ -2356,7 +2465,7 @@ def test_payment_clears_join_code_from_session(bill_context):
 
     db = SessionLocal()
     session = db.query(DiningSession).filter(DiningSession.id == bill_context["session_id"]).one()
-    assert session.join_code_hash is not None, "join code hash must exist before payment"
+    assert session.join_code_hash is None, "issuance must clear join authority before payment"
     db.close()
 
     paid = confirm_counter_payment(bill_context, issued["bill_number"])
@@ -2554,16 +2663,19 @@ def test_draft_bill_recalculates_on_late_staff_order_and_freezes_on_issue(bill_c
     )
     assert issued.status_code == 200
     issued_dict = issued.json()
-    assert issued_dict["status"] == "issued"
+    assert issued_dict["status"] == "payment_pending"
     assert issued_dict["total_amount"] == "200.00"
 
-    # Post-issuance staff ordering is blocked
+    # Post-issuance table ordering starts the next independent session and
+    # cannot mutate the frozen bill above.
     staff_blocked_post = client.post(
         f"/staff/tables/{bill_context['table_id']}/orders",
         headers={**staff_headers, "Idempotency-Key": f"staff-late-post-{uuid.uuid4().hex}"},
         json={"items": [{"menu_item_id": bill_context["item_id"], "quantity": 1}]},
     )
-    assert staff_blocked_post.status_code == 409
+    assert staff_blocked_post.status_code == 201
+    frozen = client.get(f"/staff/bills/{draft['bill_number']}", headers=staff_headers).json()
+    assert frozen["total_amount"] == "200.00"
 
 
 def test_concurrent_issue_and_staff_order_are_serialized_safely(bill_context):
@@ -2597,13 +2709,15 @@ def test_concurrent_issue_and_staff_order_are_serialized_safely(bill_context):
     final_bill = client.get(
         f"/staff/bills/{draft['bill_number']}", headers=staff_headers
     ).json()
-    assert final_bill["status"] == "issued"
-    expected_total = "200.00" if order_response.status_code == 201 else "100.00"
-    assert final_bill["total_amount"] == expected_total
-    assert sum(Decimal(order["subtotal"]) for order in final_bill["orders"]) == Decimal(expected_total)
+    assert final_bill["status"] == "payment_pending"
+    # A 201 can mean the order serialized before issue into S1, or after issue
+    # into a new S2. In either ordering, B1 must be internally frozen and
+    # consistent rather than absorbing an S2 order.
+    assert final_bill["total_amount"] in {"100.00", "200.00"}
+    assert sum(Decimal(order["subtotal"]) for order in final_bill["orders"]) == Decimal(final_bill["total_amount"])
 
     blocked = order()
-    assert blocked.status_code == 409
+    assert blocked.status_code == 201
 
 
 @pytest.mark.parametrize("token_key", ["owner_token", "admin_token"])
@@ -2708,7 +2822,7 @@ def test_post_request_normal_and_served_entry_paths_are_distinct(bill_context):
             "late_entry_reason": "Should be blocked",
         },
     )
-    assert blocked.status_code == 409
+    assert blocked.status_code == 404
 
 
 def test_receipt_payload_endpoint_returns_authoritative_data(bill_context):
@@ -2838,7 +2952,7 @@ def test_qr_generation_failure_cannot_roll_back_issued_bill(bill_context, monkey
 
     db = SessionLocal()
     persisted = db.query(Bill).filter(Bill.bill_number == issued["bill_number"]).one()
-    assert persisted.status == "issued"
+    assert persisted.status == "payment_pending"
     assert persisted.receipt_token == issued["receipt_token"]
     db.close()
 
