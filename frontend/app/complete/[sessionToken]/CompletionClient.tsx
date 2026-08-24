@@ -11,22 +11,17 @@ export default function CompletionClient({ sessionToken }: { sessionToken: strin
   const [marker, setMarker] = useState<CompletedSessionMarker | null>(null);
   const [tabClosedFallback, setTabClosedFallback] = useState(false);
   const [showReviewPrompt, setShowReviewPrompt] = useState(false);
-  const [reviewPromptShown, setReviewPromptShown] = useState(false);
 
   useEffect(() => {
-    const timeout = window.setTimeout(() => {
-      const completed = readCompletedSession(sessionToken);
-      setMarker(completed);
-      if (
-        !reviewPromptShown &&
-        shouldShowGoogleReviewPrompt(completed?.billStatus, completed?.googleReviewUrl)
-      ) {
-        setReviewPromptShown(true);
-        setShowReviewPrompt(true);
-      }
-    }, 0);
-    return () => window.clearTimeout(timeout);
-  }, [reviewPromptShown, sessionToken]);
+    const completed = readCompletedSession(sessionToken);
+    // This is the client-only hydration boundary for sessionStorage. Reading it
+    // during render would return null on the server and risk a hydration mismatch.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMarker(completed);
+    setShowReviewPrompt(
+      shouldShowGoogleReviewPrompt(completed?.billStatus, completed?.googleReviewUrl),
+    );
+  }, [sessionToken]);
 
   const googleReviewUrl = marker?.googleReviewUrl?.trim();
 
