@@ -97,6 +97,28 @@ test("prompt is optional and dismissible without collecting review content", () 
   assert.doesNotMatch(completion, /type="radio"|textarea|rating_value|review_content/);
 });
 
+test("completion reads its marker once per session token and opens from paid marker eligibility", () => {
+  const markerEffect = completion.match(/useEffect\(\(\) => \{[\s\S]*?\}, \[sessionToken\]\);/)?.[0] || "";
+  assert.match(completion, /useEffect\(\(\) => \{\s*const completed = readCompletedSession\(sessionToken\);/);
+  assert.match(
+    completion,
+    /setShowReviewPrompt\(\s*shouldShowGoogleReviewPrompt\(completed\?\.billStatus, completed\?\.googleReviewUrl\),?\s*\)/,
+  );
+  assert.match(completion, /\}, \[sessionToken\]\);/);
+  assert.doesNotMatch(markerEffect, /setTimeout|clearTimeout|reviewPromptShown/);
+});
+
+test("completion modal remains backed by stable marker state across rerenders", () => {
+  assert.match(completion, /const \[marker, setMarker\] = useState<CompletedSessionMarker \| null>\(null\)/);
+  assert.match(completion, /showReviewPrompt && marker\?\.billStatus === "paid" && googleReviewUrl/);
+  assert.doesNotMatch(marker, /removeItem\(sessionKey/);
+});
+
+test("missing and non-paid stored markers do not become popup-eligible", () => {
+  assert.equal(shouldShowGoogleReviewPrompt(undefined, undefined), false);
+  assert.equal(shouldShowGoogleReviewPrompt(undefined, "https://g.page/r/example/review"), false);
+});
+
 test("admin exposes safe test navigation and persists the setting", () => {
   assert.match(settings, /title="Google Reviews"/);
   assert.match(settings, /google_review_url: googleReviewUrl\.trim\(\) \|\| null/);
