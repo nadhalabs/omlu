@@ -20,6 +20,7 @@ import {
   saveSessionParticipantToken,
 } from "@/lib/publicSessionStorage";
 import { clearDetachedSession, markDetachedSession } from "@/lib/customerDetachment";
+import { shouldEnterPaidCompletion } from "@/lib/googleReviewPrompt.mjs";
 
 interface BillClientProps {
   sessionToken: string;
@@ -94,6 +95,9 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false, 
     () => readSessionParticipantToken(sessionToken)
   );
   const [receiptAccessToken, setReceiptAccessToken] = useState(receiptToken);
+  // A receipt token added to the URL by this component must not turn the live
+  // customer payment flow into a receipt-only view.
+  const enteredAsReceiptViewRef = useRef(Boolean(receiptToken));
   const hasLoadedBillRef = useRef(false);
   const paidStatusRef = useRef<string | null>(null);
 
@@ -370,7 +374,7 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false, 
       clearCustomerCartState(data.restaurant_slug, data.table_code, sessionToken);
       clearDetachedSession(sessionToken);
       setParticipantToken(null);
-      if (!receiptToken) {
+      if (shouldEnterPaidCompletion(enteredAsReceiptViewRef.current)) {
         markCompletedSession({
           sessionToken,
           restaurantSlug: data.restaurant_slug,
@@ -382,7 +386,8 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false, 
             currency: data.currency || "INR",
           }).format(Number(data.total_amount)),
           tableNumber: String(data.table_number),
-          googleReviewUrl: data.google_review_url || undefined,
+          billStatus: "paid",
+          googleReviewUrl: data.google_review_url?.trim() || undefined,
         });
         router.replace(completionPath(sessionToken));
       }
@@ -404,7 +409,7 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false, 
 
       hasLoadedBillRef.current = true;
     },
-    [celebratePayment, publicReceipt, quickSale, receiptAccessToken, receiptToken, router, sessionToken]
+    [celebratePayment, publicReceipt, quickSale, receiptAccessToken, router, sessionToken]
   );
 
   const fetchInFlightRef = useRef(false);
