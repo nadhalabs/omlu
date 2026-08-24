@@ -1,7 +1,7 @@
 """add tenant-scoped Google Review URL
 
 Revision ID: google_review_20260824
-Revises: billingprinter20260818
+Revises: kitchenconsumer20260817
 """
 
 from alembic import op
@@ -9,7 +9,7 @@ import sqlalchemy as sa
 
 
 revision = "google_review_20260824"
-down_revision = "billingprinter20260818"
+down_revision = "kitchenconsumer20260817"
 branch_labels = None
 depends_on = None
 
