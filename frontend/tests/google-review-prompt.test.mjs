@@ -42,10 +42,11 @@ test("review prompt rejects missing URLs and every non-paid state", () => {
   assert.equal(shouldShowGoogleReviewPrompt("cancelled", "https://example.com"), false);
 });
 
-test("live bill flow stays eligible for completion after its URL gains a receipt token", () => {
+test("issued session bill stays eligible for completion when opened with its receipt token", () => {
   assert.equal(shouldEnterPaidCompletion(false), true);
   assert.equal(shouldEnterPaidCompletion(true), false);
-  assert.match(bill, /enteredAsReceiptViewRef = useRef\(Boolean\(receiptToken\)\)/);
+  assert.match(bill, /enteredAsReceiptViewRef = useRef\(publicReceipt\)/);
+  assert.doesNotMatch(bill, /enteredAsReceiptViewRef = useRef\(Boolean\(receiptToken\)\)/);
   assert.match(bill, /shouldEnterPaidCompletion\(enteredAsReceiptViewRef\.current\)/);
   assert.match(bill, /buildPaidCompletionMarker/);
   assert.match(marker, /billStatus\?: "paid"/);
