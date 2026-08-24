@@ -20,7 +20,8 @@ from app.models.bill import (
     RestaurantBillDailySequence,
     RestaurantInvoiceSequence,
 )
-from app.models.dining_session import DiningSession
+from app.models.dining_session import ACTIVE_DINING_SESSION_STATUSES, DiningSession
+from app.models.empty_table_report import EmptyTableReport
 from app.models.order import Order, OrderItem
 from app.models.restaurant import Restaurant
 from app.models.restaurant_table import RestaurantTable
@@ -47,7 +48,87 @@ PAYMENT_CODE_LOOKUP_RETENTION = datetime.timedelta(hours=24)
 @dataclass(frozen=True)
 class DetachedBillResult:
     bill: Bill
-    payment_code: str
+    payment_code: str | None
+
+
+@dataclass(frozen=True)
+class PaidSessionCompletion:
+    invalidated_participants: int
+    table_available: bool
+    other_active_session_ids: tuple[int, ...]
+
+
+def complete_paid_dining_session(
+    db: Session,
+    *,
+    session: DiningSession,
+    bill: Bill,
+    reason: str,
+    closed_by_staff_id: int | None = None,
+    resolved_by_staff_id: int | None = None,
+    now: datetime.datetime | None = None,
+) -> PaidSessionCompletion:
+    """Canonical transactional transition from a paid bill to a free table.
+
+    The caller owns the transaction and must already hold the session and bill
+    row locks. Occupancy is derived from active dining sessions; there is no
+    independent table-status column to update. If legacy data contains another
+    active session for the table, this session is closed but the table remains
+    occupied by that other session.
+    """
+    if bill.dining_session_id != session.id or bill.restaurant_id != session.restaurant_id:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Bill does not belong to this dining session.")
+    if bill.status != "paid":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="A paid bill is required to close the dining session.")
+
+    if session.status == "closed":
+        other_ids = tuple(row.id for row in db.query(DiningSession.id).filter(
+            DiningSession.restaurant_id == session.restaurant_id,
+            DiningSession.table_id == session.table_id,
+            DiningSession.id != session.id,
+            DiningSession.status.in_(ACTIVE_DINING_SESSION_STATUSES),
+        ).with_for_update().all())
+        return PaidSessionCompletion(0, not other_ids, other_ids)
+
+    if session.status not in {
+        "open",
+        "payment_requested",
+        "payment_pending",
+        "detached_awaiting_payment",
+        "paid",
+    }:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Cannot close paid session while session status is {session.status}.",
+        )
+
+    completed_at = now or datetime.datetime.now(datetime.timezone.utc)
+    session.status = "closed"
+    session.paid_at = session.paid_at or completed_at
+    session.closed_at = session.closed_at or completed_at
+    if closed_by_staff_id is not None:
+        session.closed_by_staff_id = closed_by_staff_id
+    invalidated = invalidate_session_participants(db, session, reason)
+
+    open_report = db.query(EmptyTableReport).filter(
+        EmptyTableReport.restaurant_id == session.restaurant_id,
+        EmptyTableReport.session_id == session.id,
+        EmptyTableReport.status == "open",
+    ).with_for_update().first()
+    if open_report:
+        open_report.status = "resolved_by_session_close"
+        open_report.resolved_at = completed_at
+        open_report.resolved_by_user_id = resolved_by_staff_id
+        open_report.resolution_reason = "payment_completed"
+
+    db.flush()
+    other_ids = tuple(row.id for row in db.query(DiningSession.id).filter(
+        DiningSession.restaurant_id == session.restaurant_id,
+        DiningSession.table_id == session.table_id,
+        DiningSession.id != session.id,
+        DiningSession.status.in_(ACTIVE_DINING_SESSION_STATUSES),
+    ).with_for_update().all())
+    return PaidSessionCompletion(invalidated, not other_ids, other_ids)
 
 
 def _payment_code_secret() -> bytes:
@@ -221,6 +302,7 @@ def _lock_session(db: Session, session_id: int) -> DiningSession:
     locked_session = (
         db.query(DiningSession)
         .filter(DiningSession.id == session_id)
+        .populate_existing()
         .with_for_update()
         .first()
     )
@@ -233,6 +315,7 @@ def _lock_bill_for_session(db: Session, session_id: int) -> Bill | None:
     return (
         db.query(Bill)
         .filter(Bill.dining_session_id == session_id)
+        .populate_existing()
         .with_for_update()
         .first()
     )
@@ -242,6 +325,7 @@ def _lock_bill_after_session(db: Session, bill_id: int, session_id: int) -> Bill
     locked_bill = (
         db.query(Bill)
         .filter(Bill.id == bill_id, Bill.dining_session_id == session_id)
+        .populate_existing()
         .with_for_update()
         .first()
     )
@@ -520,13 +604,18 @@ def detach_issued_bill_and_release_table(
     actor: StaffUser | None,
     idempotency_key: str | None = None,
     payload_hash: str | None = None,
+    issue_idempotency_key: str | None = None,
+    allocate_payment_code: bool = True,
+    allow_open_session: bool = False,
     request_id: str | None = None,
 ) -> DetachedBillResult:
-    """Atomically issue a bill, revoke ordering authority, and free its table.
+    """Atomically finalize a bill, revoke ordering authority, and free its table.
 
     The caller owns the outer transaction and must commit the returned result.
     This savepoint guarantees that a raised error cannot leave a partial
-    detachment staged in that transaction.
+    issuance/detachment staged in that transaction. Payment-code allocation is
+    optional because it belongs to the legacy physical-table release UX, not
+    to the canonical Admin/Owner issue transition.
     """
     if actor is not None and actor.restaurant_id != restaurant_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
@@ -543,18 +632,19 @@ def detach_issued_bill_and_release_table(
         if not identity:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
 
+        # Match table-order creation's table -> session -> bill lock order.
         table = db.query(RestaurantTable).filter(
             RestaurantTable.id == identity.table_id,
             RestaurantTable.restaurant_id == restaurant_id,
-        ).with_for_update().first()
+        ).populate_existing().with_for_update().first()
         if not table:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Table not found")
 
         session = db.query(DiningSession).filter(
             DiningSession.id == identity.dining_session_id,
             DiningSession.restaurant_id == restaurant_id,
-            DiningSession.table_id == table.id,
-        ).with_for_update().first()
+            DiningSession.table_id == identity.table_id,
+        ).populate_existing().with_for_update().first()
         if not session:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dining session not found")
 
@@ -562,7 +652,7 @@ def detach_issued_bill_and_release_table(
             Bill.id == bill_id,
             Bill.restaurant_id == restaurant_id,
             Bill.dining_session_id == session.id,
-        ).with_for_update().first()
+        ).populate_existing().with_for_update().first()
         if not bill:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
 
@@ -573,27 +663,52 @@ def detach_issued_bill_and_release_table(
         if (
             session.status == "detached_awaiting_payment"
             and bill.status == "payment_pending"
-            and bill.payment_code_ciphertext
         ):
+            if actor is not None and not bill.generated_by_staff_id:
+                bill.generated_by_staff_id = actor.id
+            if issue_idempotency_key is not None:
+                if bill.issue_idempotency_key != issue_idempotency_key:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="Bill was already issued with a different Idempotency-Key.",
+                    )
+            if idempotency_key is not None:
+                if bill.detachment_idempotency_key and bill.detachment_idempotency_key != idempotency_key:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="Bill was already detached with a different Idempotency-Key.",
+                    )
+                bill.detachment_idempotency_key = idempotency_key
+                bill.detachment_request_hash = payload_hash
+            payment_code = (
+                decrypt_payment_code(bill.payment_code_ciphertext)
+                if bill.payment_code_ciphertext
+                else _assign_unique_payment_code(
+                    db, bill, datetime.datetime.now(datetime.timezone.utc)
+                ) if allocate_payment_code else None
+            )
             return DetachedBillResult(
                 bill=bill,
-                payment_code=decrypt_payment_code(bill.payment_code_ciphertext),
+                payment_code=payment_code,
             )
 
-        active_session = db.query(DiningSession.id).filter(
+        active_session_ids = tuple(row.id for row in db.query(DiningSession.id).filter(
             DiningSession.restaurant_id == restaurant_id,
             DiningSession.table_id == table.id,
             DiningSession.status.in_(("open", "payment_requested", "payment_pending")),
-        ).with_for_update().first()
-        if not active_session or active_session.id != session.id:
+        ).with_for_update().all())
+        if active_session_ids != (session.id,):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="The table is no longer occupied by this dining session.",
+                detail="The table is not exclusively occupied by this dining session.",
             )
-        if session.status != "payment_requested":
+        allowed_session_statuses = {"payment_requested"}
+        if allow_open_session:
+            allowed_session_statuses.add("open")
+        if session.status not in allowed_session_statuses:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Session must have a requested bill before detachment.",
+                detail="Session must be active before bill issuance and detachment.",
             )
         if db.query(Payment.id).filter(Payment.bill_id == bill.id).first() or bill.status == "paid":
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Bill has already been paid.")
@@ -605,6 +720,12 @@ def detach_issued_bill_and_release_table(
         if idempotency_key is not None:
             bill.detachment_idempotency_key = idempotency_key
             bill.detachment_request_hash = payload_hash
+        if issue_idempotency_key is not None:
+            if bill.issue_idempotency_key and bill.issue_idempotency_key != issue_idempotency_key:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Bill was already issued with a different Idempotency-Key.",
+                )
 
         previous_state = {
             "bill_status": bill.status,
@@ -612,8 +733,13 @@ def detach_issued_bill_and_release_table(
             "table_id": table.id,
         }
         if bill.status == "draft":
-            apply_draft_totals(db, bill)
-            bill.status = "issued"
+            # Reuse the canonical accounting/GST finalizer. It validates bill
+            # lines, allocates the GST invoice number, and freezes snapshots.
+            bill = issue_bill(db, bill)
+        if actor is not None and not bill.generated_by_staff_id:
+            bill.generated_by_staff_id = actor.id
+        if issue_idempotency_key is not None:
+            bill.issue_idempotency_key = issue_idempotency_key
 
         now = datetime.datetime.now(datetime.timezone.utc)
         bill.status = "payment_pending"
@@ -625,7 +751,7 @@ def detach_issued_bill_and_release_table(
             db, session, "Ordering authority revoked after bill detachment"
         )
         db.flush()
-        payment_code = _assign_unique_payment_code(db, bill, now)
+        payment_code = _assign_unique_payment_code(db, bill, now) if allocate_payment_code else None
         db.add(AuditLog(
             restaurant_id=restaurant_id,
             actor_user_id=actor.id if actor is not None else None,
@@ -694,7 +820,10 @@ def send_bill_to_counter(db: Session, bill: Bill) -> Bill:
     locked_session = _lock_session(db, bill.dining_session_id)
     locked_bill = _lock_bill_after_session(db, bill.id, locked_session.id)
 
-    if locked_bill.status == "payment_pending" and locked_session.status == "payment_pending":
+    if (
+        locked_bill.status == "payment_pending"
+        and locked_session.status in {"payment_pending", "detached_awaiting_payment"}
+    ):
         return locked_bill
     if locked_bill.status != "issued":
         raise HTTPException(
@@ -721,7 +850,7 @@ def confirm_counter_payment(
     method: str,
     idempotency_key: str,
     payload_hash: str,
-) -> tuple[Bill, bool]:
+) -> tuple[Bill, bool, PaidSessionCompletion | None]:
     if method not in COUNTER_PAYMENT_METHODS:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -740,7 +869,7 @@ def confirm_counter_payment(
 
     if locked_bill.payment_idempotency_key == idempotency_key:
         ensure_same_request(locked_bill.payment_request_hash, payload_hash)
-        return locked_bill, True
+        return locked_bill, True, None
 
     if locked_bill.status == "paid":
         raise HTTPException(
@@ -779,10 +908,7 @@ def confirm_counter_payment(
     locked_bill.payment_code_hash = None
     locked_bill.payment_code_ciphertext = None
     locked_bill.payment_code_expires_at = now
-    locked_session.status = "closed"
     locked_session.paid_at = now
-    locked_session.closed_at = now
-    locked_session.closed_by_staff_id = staff_user.id
     pending_bill_requests = db.query(ServiceRequest).filter(
         ServiceRequest.restaurant_id == staff_user.restaurant_id,
         ServiceRequest.dining_session_id == locked_session.id,
@@ -810,8 +936,17 @@ def confirm_counter_payment(
         currency=locked_bill.currency,
         occurred_at=now,
     ))
+    completion = complete_paid_dining_session(
+        db,
+        session=locked_session,
+        bill=locked_bill,
+        reason="Session closed after payment",
+        closed_by_staff_id=staff_user.id,
+        resolved_by_staff_id=staff_user.id,
+        now=now,
+    )
     db.flush()
-    return locked_bill, False
+    return locked_bill, False, completion
 
 
 def load_bill_for_response(db: Session, bill_id: int) -> Bill:

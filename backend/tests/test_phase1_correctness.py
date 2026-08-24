@@ -471,7 +471,7 @@ def test_issuance_freezes_and_paid_immutable(bill_reopen_setup):
 
     # Confirm counter payment to pay bill
     owner = db.query(StaffUser).filter(StaffUser.id == bill_reopen_setup["owner_id"]).one()
-    paid_bill, _ = confirm_counter_payment(db, issued_bill, owner, "counter_cash", "pay-key-1", "hash-1")
+    paid_bill, _, _ = confirm_counter_payment(db, issued_bill, owner, "counter_cash", "pay-key-1", "hash-1")
     db.commit()
 
     assert paid_bill.status == "paid"

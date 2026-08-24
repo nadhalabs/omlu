@@ -159,14 +159,7 @@ export default function PendingPaymentsClient({ actorRole, showQueue = true }: P
       const issued = await issueStaffBill(payment.bill_number);
       recentMutations.current.add(payment.bill_number);
       window.setTimeout(() => recentMutations.current.delete(payment.bill_number), 2000);
-      setItems((current) => current.map((item) => item.bill_number === payment.bill_number ? {
-        ...item,
-        status: "issued",
-        stage: "bill_issued",
-        total_amount: issued.total_amount,
-        grand_total: issued.total_amount,
-        remaining_amount: issued.total_amount,
-      } : item));
+      await refresh();
       window.dispatchEvent(new Event("admin-operational-counts-changed"));
 
       setIssuingBills((prev) => ({ ...prev, [payment.bill_number]: false }));
