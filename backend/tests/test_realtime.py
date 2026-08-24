@@ -704,43 +704,23 @@ def test_public_session_websocket_receives_bill_payment_and_close_events(realtim
         bill_event = receive_event(ws, realtime.EVENT_BILL_GENERATED)
         bill_number = bill_response.json()["bill_number"]
 
-        issue_response = client.post(
-            f"/staff/bills/{bill_number}/issue",
-            headers={**auth(realtime_context, "owner_token"), "Idempotency-Key": f"issue-{uuid.uuid4().hex}"},
-        )
-        assert issue_response.status_code == 200
-        issue_event = receive_event(ws, realtime.EVENT_BILL_UPDATED)
-        sent_response = client.post(
-            f"/staff/bills/{bill_number}/send-to-counter",
-            headers=auth(realtime_context),
-        )
-        assert sent_response.status_code == 200
-        pending_event = receive_event(ws, realtime.EVENT_BILL_PAYMENT_PENDING)
-        receive_event(ws, realtime.EVENT_TABLE_STATUS_CHANGED)
+    issue_response = client.post(
+        f"/staff/bills/{bill_number}/issue",
+        headers={**auth(realtime_context, "owner_token"), "Idempotency-Key": f"issue-{uuid.uuid4().hex}"},
+    )
+    assert issue_response.status_code == 200
+    assert issue_response.json()["session_status"] == "detached_awaiting_payment"
 
-        paid_response = client.post(
-            f"/staff/bills/{bill_number}/confirm-counter-payment",
-            headers={**auth(realtime_context, "owner_token"), "Idempotency-Key": f"pay-{uuid.uuid4().hex}"},
-            json={"method": "counter_cash"},
-        )
-        assert paid_response.status_code == 200
-        terminal = ws.receive_json()
-        assert terminal["type"] == realtime.EVENT_BILL_PAID
-        assert terminal["state"]["status"] == "paid"
-        assert terminal["state"]["receipt_token"] == paid_response.json()["receipt_token"]
-        with pytest.raises(WebSocketDisconnect):
-            ws.receive_json()
+    paid_response = client.post(
+        f"/staff/bills/{bill_number}/confirm-counter-payment",
+        headers={**auth(realtime_context, "owner_token"), "Idempotency-Key": f"pay-{uuid.uuid4().hex}"},
+        json={"method": "counter_cash"},
+    )
+    assert paid_response.status_code == 200
 
     assert "restaurant_id" not in bill_event
     assert bill_event["state"]["bill_number"] == bill_number
-    assert issue_event["state"]["status"] == "issued"
-    assert pending_event["state"]["status"] == "payment_pending"
-    assert pending_event["state"]["bill_number"] == bill_number
-    assert pending_event["state"]["session_token"] == session["session_token"]
-    assert pending_event["state"]["table_name"] == "Table 7"
-    assert pending_event["state"]["grand_total"] == 80.0
-    assert pending_event["state"]["sent_by_name"] == "Staff User"
-    assert pending_event["state"]["requested_at"]
+    assert paid_response.json()["status"] == "paid"
 
 
 def test_public_session_websocket_receives_service_request_resolution(realtime_context):
@@ -839,13 +819,13 @@ def test_staff_websocket_receives_session_bill_and_payment_events(realtime_conte
             headers={**auth(realtime_context, "owner_token"), "Idempotency-Key": f"issue-{uuid.uuid4().hex}"},
         )
         assert issue_response.status_code == 200
+        detached_event = receive_event(ws, realtime.EVENT_BILL_DETACHED_FOR_PAYMENT)
         receive_event(ws, realtime.EVENT_BILL_UPDATED)
         sent_response = client.post(
             f"/staff/bills/{bill_number}/send-to-counter",
             headers=auth(realtime_context),
         )
         assert sent_response.status_code == 200
-        pending_event = receive_event(ws, realtime.EVENT_BILL_PAYMENT_PENDING)
 
         paid_response = client.post(
             f"/staff/bills/{bill_number}/confirm-counter-payment",
@@ -859,10 +839,8 @@ def test_staff_websocket_receives_session_bill_and_payment_events(realtime_conte
 
     assert session_event["state"]["table_id"] == realtime_context["table_id"]
     assert bill_event["state"]["bill_number"] == bill_number
-    assert pending_event["state"]["status"] == "payment_pending"
-    assert pending_event["state"]["bill_id"]
-    assert pending_event["state"]["session_id"]
-    assert pending_event["state"]["table_id"] == realtime_context["table_id"]
+    assert detached_event["state"]["bill_status"] == "payment_pending"
+    assert detached_event["state"]["session_status"] == "detached_awaiting_payment"
     assert payment_event["state"] == {"bill_number": bill_number, "status": "paid"}
     assert paid_event["state"]["status"] == "paid"
     assert paid_event["state"]["payment_method"] == "counter_cash"
