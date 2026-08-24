@@ -97,7 +97,7 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false, 
   const [receiptAccessToken, setReceiptAccessToken] = useState(receiptToken);
   // A receipt token added to the URL by this component must not turn the live
   // customer payment flow into a receipt-only view.
-  const enteredAsReceiptViewRef = useRef(Boolean(receiptToken));
+  const enteredAsReceiptViewRef = useRef(publicReceipt);
   const hasLoadedBillRef = useRef(false);
   const paidStatusRef = useRef<string | null>(null);
 
