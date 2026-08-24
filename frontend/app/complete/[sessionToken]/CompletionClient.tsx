@@ -2,28 +2,74 @@
 
 import { useEffect, useState } from "react";
 import { PublicThemeControl } from "@/components/PublicThemeControl";
-import { readCompletedSession, CompletedSessionMarker } from "@/lib/customerCompletion";
+import { buildPaidCompletionMarker, markCompletedSession, readCompletedSession, CompletedSessionMarker } from "@/lib/customerCompletion";
 import { clearCustomerCartState } from "@/lib/customerCompletion";
 import { clearPublicSessionToken, clearParticipantToken } from "@/lib/publicSessionStorage";
 import { shouldShowGoogleReviewPrompt } from "@/lib/googleReviewPrompt.mjs";
+import { getPublicBill } from "@/lib/api";
+import type { BillResponse, PublicReceiptBillResponse } from "@/lib/types";
 
-export default function CompletionClient({ sessionToken }: { sessionToken: string }) {
+type CompletionClientProps = {
+  sessionToken: string;
+  receiptToken?: string;
+  readMarker?: (sessionToken: string) => CompletedSessionMarker | null;
+  loadBill?: (sessionToken: string, receiptToken: string) => Promise<BillResponse | PublicReceiptBillResponse>;
+  navigateToReview?: (url: string) => void;
+  showThemeControl?: boolean;
+};
+
+const loadAuthoritativeBill = (sessionToken: string, receiptToken: string) =>
+  getPublicBill(sessionToken, "", receiptToken);
+const navigateToGoogleReview = (url: string) => window.location.assign(url);
+
+export default function CompletionClient({
+  sessionToken,
+  receiptToken = "",
+  readMarker = readCompletedSession,
+  loadBill = loadAuthoritativeBill,
+  navigateToReview = navigateToGoogleReview,
+  showThemeControl = true,
+}: CompletionClientProps) {
   const [marker, setMarker] = useState<CompletedSessionMarker | null>(null);
   const [tabClosedFallback, setTabClosedFallback] = useState(false);
-  const [showReviewPrompt, setShowReviewPrompt] = useState(false);
+  const [resolvedReviewUrl, setResolvedReviewUrl] = useState("");
+  const [reviewPromptDismissed, setReviewPromptDismissed] = useState(false);
 
   useEffect(() => {
-    const completed = readCompletedSession(sessionToken);
-    // This is the client-only hydration boundary for sessionStorage. Reading it
-    // during render would return null on the server and risk a hydration mismatch.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setMarker(completed);
-    setShowReviewPrompt(
-      shouldShowGoogleReviewPrompt(completed?.billStatus, completed?.googleReviewUrl),
-    );
-  }, [sessionToken]);
+    let cancelled = false;
 
-  const googleReviewUrl = marker?.googleReviewUrl?.trim();
+    async function initializeCompletion() {
+      const completed = readMarker(sessionToken);
+      if (!cancelled) setMarker(completed);
+
+      if (shouldShowGoogleReviewPrompt(completed?.billStatus, completed?.googleReviewUrl)) {
+        if (!cancelled) setResolvedReviewUrl(completed!.googleReviewUrl!.trim());
+        return;
+      }
+
+      const authoritativeReceiptToken = receiptToken || completed?.receiptToken || "";
+      if (!authoritativeReceiptToken) return;
+
+      try {
+        const bill = await loadBill(sessionToken, authoritativeReceiptToken);
+        if (cancelled || !shouldShowGoogleReviewPrompt(bill.status, bill.google_review_url)) return;
+
+        const paidMarker = buildPaidCompletionMarker(bill, sessionToken);
+        if (paidMarker) {
+          markCompletedSession(paidMarker);
+          setMarker(paidMarker);
+        }
+        setResolvedReviewUrl(bill.google_review_url!.trim());
+      } catch {
+        // The completion screen remains usable if authoritative receipt lookup fails.
+      }
+    }
+
+    initializeCompletion();
+    return () => { cancelled = true; };
+  }, [loadBill, readMarker, receiptToken, sessionToken]);
+
+  const showGoogleReviewModal = Boolean(resolvedReviewUrl) && !reviewPromptDismissed;
 
   const restaurant = marker?.restaurantName || "the restaurant";
   const tableDisplay = marker?.tableNumber ? `Table ${marker.tableNumber}` : null;
@@ -46,19 +92,19 @@ export default function CompletionClient({ sessionToken }: { sessionToken: strin
 
   return (
     <main className="min-h-screen bg-[var(--omlu-page-background)] px-4 py-6 text-[var(--omlu-text-primary)]">
-      {showReviewPrompt && marker?.billStatus === "paid" && googleReviewUrl && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowReviewPrompt(false); }}>
+      {showGoogleReviewModal && (
+        <div className="fixed inset-0 z-[9999] grid place-items-center bg-black/50 p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setReviewPromptDismissed(true); }}>
           <section role="dialog" aria-modal="true" aria-labelledby="google-review-title" className="relative w-full max-w-sm rounded-3xl bg-[var(--omlu-primary-surface)] p-6 text-center shadow-2xl">
-            <button type="button" aria-label="Close review invitation" onClick={() => setShowReviewPrompt(false)} className="absolute right-4 top-4 grid size-10 place-items-center rounded-full text-xl text-[var(--omlu-text-secondary)]">×</button>
+            <button type="button" aria-label="Close review invitation" onClick={() => setReviewPromptDismissed(true)} className="absolute right-4 top-4 grid size-10 place-items-center rounded-full text-xl text-[var(--omlu-text-secondary)]">×</button>
             <h2 id="google-review-title" className="pr-6 text-xl font-black">Enjoyed your visit?</h2>
             <p className="mt-3 text-sm text-[var(--omlu-text-secondary)]">Support us with a Google review.</p>
-            <button type="button" onClick={() => window.location.assign(googleReviewUrl)} className="mt-6 flex min-h-12 w-full items-center justify-center rounded-xl bg-orange-600 px-5 py-3 text-sm font-black text-white">★&nbsp; Rate us on Google</button>
-            <button type="button" onClick={() => setShowReviewPrompt(false)} className="mt-3 min-h-11 w-full rounded-xl text-sm font-bold text-[var(--omlu-text-secondary)]">Not now</button>
+            <button type="button" onClick={() => navigateToReview(resolvedReviewUrl)} className="mt-6 flex min-h-12 w-full items-center justify-center rounded-xl bg-orange-600 px-5 py-3 text-sm font-black text-white">★&nbsp; Rate us on Google</button>
+            <button type="button" onClick={() => setReviewPromptDismissed(true)} className="mt-3 min-h-11 w-full rounded-xl text-sm font-bold text-[var(--omlu-text-secondary)]">Not now</button>
           </section>
         </div>
       )}
       <div className="mx-auto max-w-md">
-        <div className="flex justify-end"><PublicThemeControl /></div>
+        {showThemeControl && <div className="flex justify-end"><PublicThemeControl /></div>}
         <section
           className="mt-6 rounded-3xl bg-[var(--omlu-primary-surface)] p-6 text-center shadow-sm"
           aria-labelledby="completion-heading"

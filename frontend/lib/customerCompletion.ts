@@ -1,12 +1,12 @@
-import type { BillResponse } from "@/lib/types";
+import type { BillResponse, PublicReceiptBillResponse } from "@/lib/types";
 
 const PREFIX = "omlu:completed-session";
 
 export type CompletedSessionMarker = {
   sessionToken: string;
-  restaurantSlug: string;
+  restaurantSlug?: string;
   restaurantName: string;
-  tableCode: string;
+  tableCode?: string;
   receiptToken?: string;
   /** Human-readable paid amount, e.g. "₹320.00" — for display on the terminal screen only. */
   totalAmount?: string;
@@ -21,14 +21,19 @@ export type CompletedSessionMarker = {
 const sessionKey = (sessionToken: string) => `${PREFIX}:session:${sessionToken}`;
 const tableKey = (restaurantSlug: string, tableCode: string) => `${PREFIX}:table:${restaurantSlug}:${tableCode}`;
 
-export function completionPath(sessionToken: string) {
-  return `/complete/${encodeURIComponent(sessionToken)}`;
+export function completionPath(sessionToken: string, receiptToken?: string | null) {
+  const path = `/complete/${encodeURIComponent(sessionToken)}`;
+  return receiptToken ? `${path}?receipt=${encodeURIComponent(receiptToken)}` : path;
 }
 
-export function buildPaidCompletionMarker(bill: BillResponse): CompletedSessionMarker | null {
-  if (bill.status !== "paid") return null;
+export function buildPaidCompletionMarker(
+  bill: BillResponse | PublicReceiptBillResponse,
+  canonicalSessionToken?: string,
+): CompletedSessionMarker | null {
+  const sessionToken = canonicalSessionToken || bill.session_token;
+  if (bill.status !== "paid" || !sessionToken) return null;
   return {
-    sessionToken: bill.session_token,
+    sessionToken,
     restaurantSlug: bill.restaurant_slug,
     restaurantName: bill.restaurant_name,
     tableCode: bill.table_code,
@@ -47,7 +52,9 @@ export function markCompletedSession(marker: CompletedSessionMarker) {
   if (typeof window === "undefined") return;
   const value = JSON.stringify(marker);
   window.sessionStorage.setItem(sessionKey(marker.sessionToken), value);
-  window.sessionStorage.setItem(tableKey(marker.restaurantSlug, marker.tableCode), value);
+  if (marker.restaurantSlug && marker.tableCode) {
+    window.sessionStorage.setItem(tableKey(marker.restaurantSlug, marker.tableCode), value);
+  }
 }
 
 export function readCompletedSession(sessionToken: string): CompletedSessionMarker | null {

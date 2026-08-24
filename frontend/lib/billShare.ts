@@ -1,7 +1,7 @@
-import { BillResponse } from "./types";
+import { BillResponse, PublicReceiptBillResponse } from "./types";
 
 export function buildWhatsAppBillShareUrl(
-  bill: BillResponse,
+  bill: BillResponse | PublicReceiptBillResponse,
   billUrl: string
 ): string {
   const message = [

@@ -352,7 +352,7 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
                 ? await getPublicBill(sessionToken, "", data.bill.receipt_token)
                 : null;
               const paidCompletionMarker = paidBill
-                ? buildPaidCompletionMarker(paidBill)
+                ? buildPaidCompletionMarker(paidBill, sessionToken)
                 : null;
               setVisibleJoinCode(null);
               clearPublicSessionToken(data.restaurant_slug, data.table_code);
@@ -361,13 +361,16 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
               clearSessionParticipantToken(sessionToken);
               clearCustomerCartState(data.restaurant_slug, data.table_code, sessionToken);
               setParticipantToken(null);
-              markCompletedSession(paidCompletionMarker || {
+              const completionMarker = paidCompletionMarker || {
                 sessionToken,
                 restaurantSlug: data.restaurant_slug,
                 restaurantName: data.restaurant_name,
                 tableCode: data.table_code,
-              });
-              router.replace(completionPath(sessionToken));
+                receiptToken: data.bill?.receipt_token || undefined,
+                billStatus: data.bill?.status === "paid" ? "paid" as const : undefined,
+              };
+              markCompletedSession(completionMarker);
+              router.replace(completionPath(sessionToken, completionMarker.receiptToken));
               return;
             } else {
               saveParticipantToken(data.restaurant_slug, data.table_code, authority);

@@ -21,6 +21,7 @@ import {
   DashboardSummaryResponse,
   RestaurantSettingsResponse,
   RestaurantSettingsUpdate,
+  PublicReceiptBillResponse,
   StaffSessionListItem,
   StaffSessionDetail,
   StaffAccountCreateRequest,
@@ -482,7 +483,7 @@ export async function getPublicBill(
   sessionToken: string,
   participantToken = "",
   receiptToken = ""
-): Promise<BillResponse> {
+): Promise<BillResponse | PublicReceiptBillResponse> {
   const baseUrl = publicBackendBaseUrl();
   const url = receiptToken
     ? `${baseUrl}/public/bills/${encodeURIComponent(receiptToken)}`
