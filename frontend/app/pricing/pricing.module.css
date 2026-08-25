@@ -29,14 +29,15 @@
 }
 
 .header { position: relative; display: flex; min-height: 48px; align-items: center; justify-content: center; padding-inline: 230px; }
-.wordmark { position: absolute; left: 0; top: 8px; color: #ea580c; font-size: 20px; font-weight: 900; letter-spacing: -.035em; }
+.wordmark { position: absolute; left: 0; top: 10px; color: #ea580c; font-size: 15px; font-weight: 900; letter-spacing: -.035em; }
 .wordmark:hover { color: #c2410c; }
 .nav { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 650; color: var(--omlu-text-secondary); }
 .nav a, .nav span { display: inline-flex; min-height: 34px; align-items: center; padding: 0 17px; border-radius: 999px; white-space: nowrap; }
 .nav a:hover { color: var(--omlu-text-primary); background: var(--omlu-hover-background); }
 .nav span { color: #c45118; background: #ffeadc; }
 .headerActions { position: absolute; right: 0; top: 0; display: flex; justify-content: flex-end; align-items: center; gap: 9px; }
-.register { gap: 9px; padding-inline: 20px; }
+.register { display: inline-flex; min-height: 40px; align-items: center; gap: 9px; border-radius: 999px; padding: 0 20px; background: #f86831; color: #fff; font-size: 12px; font-weight: 800; box-shadow: 0 5px 13px rgba(234,88,12,.18); }
+.register:hover { background: #ea580c; }
 
 .hero { padding: 25px 16px 22px; text-align: center; }
 .hero h1 { max-width: 720px; margin: 0 auto; font-size: clamp(36px, 3.25vw, 52px); line-height: .98; font-weight: 580; letter-spacing: -.055em; }
@@ -70,7 +71,8 @@
 .customPrice { justify-content: flex-start; padding-top: 2px; }
 .customPrice .price { font-size: clamp(31px, 2.15vw, 37px); }
 .description { min-height: 44px; margin-top: 6px; color: var(--omlu-text-secondary); font-size: 12px; line-height: 1.45; }
-.cta { width: 100%; min-height: 46px; gap: 10px; margin-top: 17px; font-size: 12px; cursor: pointer; }
+.cta { display: inline-flex; width: 100%; min-height: 46px; align-items: center; justify-content: center; gap: 10px; margin-top: 17px; border: 1px solid #eadfd5; border-radius: 999px; background: #fff; color: #2f2925; font-size: 12px; font-weight: 800; cursor: pointer; }
+.card:not(.recommended) .cta:hover, .card:not(.recommended) .cta:focus-visible { border-color: #f97316; background: #fff7ed; color: #c2410c; box-shadow: 0 6px 14px rgba(234, 88, 12, .12); }
 .cta:active { transform: scale(.99); }
 .features { display: grid; gap: 8px; margin-top: 18px; font-size: 12px; line-height: 1.35; }
 .features li { display: grid; grid-template-columns: 17px 1fr; align-items: start; color: #504a46; }
@@ -82,6 +84,8 @@
 .recommended .badge { display: flex; min-height: 42px; align-items: center; justify-content: center; gap: 7px; padding-block: 10px; border-radius: 20px 20px 0 0; background: linear-gradient(100deg, #f4511e 0%, #ff702c 48%, #f9ad2f 100%); color: #fff; font-size: 11px; font-weight: 850; letter-spacing: .01em; }
 .recommended .cardBody { padding: 23px 19px 24px; }
 .recommended .price { font-weight: 720; }
+.recommended .cta { border-color: #f86831; background: #f86831; color: #fff; box-shadow: 0 7px 16px rgba(234,88,12,.2); }
+.recommended .cta:hover { background: #e95822; }
 
 .srOnly { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 
@@ -91,6 +95,7 @@
 :global(.dark) .billingToggle { border-color: var(--omlu-border); background: #201e1c; }
 :global(.dark) .offerBadge { border-color: #9a3412; background: #431407; color: #fdba74; }
 :global(.dark) .card { background: #201e1c; border-color: var(--omlu-border); }
+:global(.dark) .cta { background: #2b2927; border-color: var(--omlu-border); color: #fb923c; }
 :global(.dark) .features li { color: #d6d3d1; }
 :global(.dark) .features .unavailable { color: #78716c; }
 :global(.dark) .recommended { background: var(--omlu-primary-surface); border-color: #fb923c; }

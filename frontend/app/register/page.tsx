@@ -190,7 +190,7 @@ export default function RegisterPage() {
             <button
               type="submit"
               disabled={loading}
-              className="omlu-button"
+              className="h-12 rounded-lg bg-[var(--omlu-page-background)] px-6 text-sm font-bold text-[var(--omlu-primary-action-text)] transition hover:bg-[var(--omlu-muted-surface)] disabled:cursor-not-allowed disabled:bg-[var(--omlu-muted-surface)]"
             >
               {loading ? "Creating account..." : "Create account"}
             </button>

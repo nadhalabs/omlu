@@ -117,7 +117,7 @@ export default function PricingPage() {
             <Link href="/login">Sign In</Link>
           </nav>
           <div className={styles.headerActions}>
-            <Link href="/register" className={`omlu-button omlu-button--compact ${styles.register}`}>Create Restaurant <span aria-hidden="true">→</span></Link>
+            <Link href="/register" className={styles.register}>Create Restaurant <span aria-hidden="true">→</span></Link>
             <LandingThemeToggle />
           </div>
         </header>
@@ -160,7 +160,7 @@ export default function PricingPage() {
                     </div>
                   </div>
                   <p className={styles.description}>{plan.description}</p>
-                  <button type="button" className={`omlu-button ${styles.cta}`}>{plan.cta} <span aria-hidden="true">→</span></button>
+                  <button type="button" className={styles.cta}>{plan.cta} <span aria-hidden="true">→</span></button>
                   <ul className={styles.features}>
                     {plan.features.map((feature) => {
                       const available = feature.available !== false;

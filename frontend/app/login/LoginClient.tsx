@@ -177,7 +177,7 @@ export default function LoginClient() {
           <button
             type="submit"
             disabled={loading}
-            className="omlu-button mt-2 w-full"
+            className="mt-2 h-12 rounded-lg bg-orange-500 px-6 text-sm font-bold text-[var(--omlu-primary-action-text)] transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-[var(--omlu-muted-surface)]"
           >
             {loading ? "Signing in..." : "Login"}
           </button>
