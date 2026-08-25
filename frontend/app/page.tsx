@@ -9,19 +9,19 @@ export default function Home() {
     <div className="min-h-screen bg-[var(--omlu-page-background)] text-[var(--omlu-text-primary)]">
       {/* Navigation Header */}
       <header className="mx-auto flex w-full max-w-5xl items-center justify-between px-6 py-6 sm:px-8">
-        <Link href="/" className="text-xl font-black tracking-tight text-orange-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 rounded-md">
+        <Link href="/" className="text-2xl font-black tracking-tight text-orange-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 rounded-md">
           OMLU
         </Link>
         <div className="flex items-center gap-3 sm:gap-4">
           <Link
             href="/login"
-            className="text-xs font-bold text-[var(--omlu-text-secondary)] transition hover:text-[var(--omlu-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 rounded-md px-2 py-1"
+            className="omlu-button omlu-button--compact"
           >
             Restaurant Login
           </Link>
           <Link
             href="/register"
-            className="inline-flex min-h-9 items-center justify-center rounded-lg bg-[var(--omlu-primary-action)] px-4 text-xs font-bold text-[var(--omlu-primary-action-text)] shadow-xs transition hover:brightness-95 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500"
+            className="omlu-button omlu-button--compact"
           >
             Create Restaurant
           </Link>
@@ -47,13 +47,13 @@ export default function Home() {
           <div className="omlu-animate-hero-4 mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
             <Link
               href="/register"
-              className="inline-flex min-h-12 items-center justify-center rounded-xl bg-[var(--omlu-primary-action)] px-7 text-sm font-bold text-[var(--omlu-primary-action-text)] shadow-xs transition hover:brightness-95 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500"
+              className="omlu-button"
             >
               Create Restaurant
             </Link>
             <Link
               href="/login"
-              className="inline-flex min-h-12 items-center justify-center rounded-xl border border-[var(--omlu-border-strong)] bg-transparent px-7 text-sm font-bold text-[var(--omlu-text-primary)] transition hover:bg-[var(--omlu-hover-background)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500"
+              className="omlu-button"
             >
               Restaurant Login
             </Link>
@@ -169,13 +169,13 @@ export default function Home() {
           <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
             <Link
               href="/register"
-              className="inline-flex min-h-12 items-center justify-center rounded-xl bg-[var(--omlu-primary-action)] px-7 text-sm font-bold text-[var(--omlu-primary-action-text)] transition hover:brightness-95 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500"
+              className="omlu-button"
             >
               Create Restaurant
             </Link>
             <Link
               href="/login"
-              className="inline-flex min-h-12 items-center justify-center rounded-xl border border-[var(--omlu-border-strong)] bg-transparent px-7 text-sm font-bold text-[var(--omlu-text-primary)] transition hover:bg-[var(--omlu-hover-background)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500"
+              className="omlu-button"
             >
               Restaurant Login
             </Link>

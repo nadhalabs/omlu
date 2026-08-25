@@ -22,8 +22,9 @@
   --omlu-input-background: #ffffff;
   --omlu-hover-background: #f4f4f5;
   --omlu-focus-ring: #f97316;
+  /* Shared public CTA colour: the OMLU orange used throughout the product. */
   --omlu-primary-action: #ea580c;
-  --omlu-primary-action-text: #18181b;
+  --omlu-primary-action-text: #ffffff;
   --omlu-strong-action-text: #ffffff;
   --omlu-success-background: #ecfdf5;
   --omlu-success-text: #047857;
@@ -65,7 +66,7 @@
   --omlu-hover-background: #3f3f46;
   --omlu-focus-ring: #fb923c;
   --omlu-primary-action: #f97316;
-  --omlu-primary-action-text: #18181b;
+  --omlu-primary-action-text: #ffffff;
   --omlu-strong-action-text: #ffffff;
   --omlu-success-background: #052e16;
   --omlu-success-text: #6ee7b7;
@@ -197,6 +198,54 @@ a.text-white[aria-disabled="true"] {
   background-color: #e4e4e7 !important;
   color: #52525b !important;
   opacity: 1 !important;
+}
+
+/*
+ * Public-facing primary actions share one visual language.  Keep this class
+ * independent from the operational controls, where status and icon buttons
+ * intentionally communicate different actions.
+ */
+.omlu-button {
+  display: inline-flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--omlu-primary-action);
+  border-radius: 0.5rem;
+  background: var(--omlu-primary-action);
+  padding: 0.75rem 1.75rem;
+  color: var(--omlu-primary-action-text);
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1.25;
+  text-align: center;
+  box-shadow: 0 1px 2px rgba(154, 52, 18, 0.12);
+  transition: background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease, transform 120ms ease;
+}
+
+.omlu-button:hover {
+  border-color: var(--omlu-accent-dark);
+  background: var(--omlu-accent-dark);
+  color: var(--omlu-primary-action-text);
+}
+
+.omlu-button:focus-visible {
+  outline: 2px solid var(--omlu-focus-ring);
+  outline-offset: 2px;
+}
+
+.omlu-button:disabled,
+.omlu-button[aria-disabled="true"] {
+  border-color: var(--omlu-disabled);
+  background: var(--omlu-disabled);
+  color: var(--omlu-disabled-text);
+  opacity: 1;
+}
+
+.omlu-button--compact {
+  min-height: 40px;
+  padding: 0.5rem 1rem;
+  font-size: 0.75rem;
 }
 
 .omlu-skeleton {
