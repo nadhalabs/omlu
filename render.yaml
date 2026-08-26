@@ -5,7 +5,7 @@ services:
     rootDir: backend
     buildCommand: pip install -r requirements.txt
     preDeployCommand: alembic upgrade head
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    startCommand: HEIMDAL_RELEASE=$RENDER_GIT_COMMIT uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /ready
     envVars:
       - key: PYTHON_VERSION
@@ -34,6 +34,8 @@ services:
       - key: PUBLIC_FRONTEND_URL
         sync: false
       - key: FRONTEND_URL
+        sync: false
+      - key: HEIMDAL_DSN
         sync: false
 
   - type: keyvalue

@@ -5,6 +5,7 @@ import uuid
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from heimdal_sdk import Heimdal
 from starlette.exceptions import HTTPException as StarletteHTTPException
 import app.models  # Ensures all models are registered on Base
 
@@ -23,6 +24,8 @@ app = FastAPI(
     title="OMLU API",
     version="0.1.0",
 )
+heimdal = Heimdal.from_env()
+heimdal.instrument_fastapi(app)
 
 # CORS: use explicit origins from environment, never wildcard with credentials
 app.add_middleware(
