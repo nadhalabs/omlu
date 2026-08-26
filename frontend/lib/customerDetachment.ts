@@ -19,11 +19,26 @@ export function markDetachedSession(marker: DetachedSessionMarker) {
   window.sessionStorage.setItem(key(marker.sessionToken), JSON.stringify(marker));
 }
 
-export function readDetachedSession(sessionToken: string): DetachedSessionMarker | null {
+export function readDetachedSession(
+  sessionToken: string,
+  expectedTable?: Pick<DetachedSessionMarker, "restaurantSlug" | "tableCode">,
+): DetachedSessionMarker | null {
   if (typeof window === "undefined") return null;
+  const storageKey = key(sessionToken);
   try {
-    return JSON.parse(window.sessionStorage.getItem(key(sessionToken)) || "null");
+    const marker = JSON.parse(window.sessionStorage.getItem(storageKey) || "null") as DetachedSessionMarker | null;
+    if (
+      !marker || marker.sessionToken !== sessionToken || !marker.receiptToken ||
+      (expectedTable && (
+        marker.restaurantSlug !== expectedTable.restaurantSlug || marker.tableCode !== expectedTable.tableCode
+      ))
+    ) {
+      window.sessionStorage.removeItem(storageKey);
+      return null;
+    }
+    return marker;
   } catch {
+    window.sessionStorage.removeItem(storageKey);
     return null;
   }
 }

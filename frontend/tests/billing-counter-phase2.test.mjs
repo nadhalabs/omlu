@@ -45,7 +45,8 @@ test("reopen ordering API proxy route exists and proxies request", () => {
 
 test("same-phone QR restoration falls back to active dining session when participant token exists", () => {
   assert.match(menuClient, /getActivePublicDiningSession/);
-  assert.match(menuClient, /readParticipantToken/);
+  assert.match(menuClient, /readLegacyPublicSessionCandidate/);
+  assert.match(menuClient, /readPublicSessionStateForTable/);
   assert.match(menuClient, /savePublicSessionToken/);
 });
 

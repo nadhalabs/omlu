@@ -167,7 +167,8 @@ test("24. focus/visibility restoration revalidates paid state", () => {
 });
 
 test("25. stale participant token is cleared", () => {
-  assert.match(menu, /clearParticipantToken/);
+  assert.match(menu, /clearPublicSessionState/);
+  assert.match(menu, /clearSessionParticipantToken/);
   assert.match(bill, /clearParticipantToken/);
 });
 

@@ -58,6 +58,7 @@ test("real paid bill response survives marker storage and enables the completion
     sessionStorage: {
       getItem: (key) => values.get(key) ?? null,
       setItem: (key, value) => values.set(key, value),
+      removeItem: (key) => values.delete(key),
     },
   };
   try {
@@ -92,6 +93,7 @@ test("receipt-shaped paid data is stored under the canonical session token", () 
     sessionStorage: {
       getItem: (key) => values.get(key) ?? null,
       setItem: (key, value) => values.set(key, value),
+      removeItem: (key) => values.delete(key),
     },
   };
   try {

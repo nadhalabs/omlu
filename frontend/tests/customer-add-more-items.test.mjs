@@ -18,6 +18,19 @@ test("validateSavedSession does not clear authority on transient network or serv
   assert.match(menu, /Connection issue\. Retrying table session status\.\.\./);
 });
 
+test("validated customer authority is promoted to canonical restaurant/table/session scope", () => {
+  assert.match(menu, /restaurantId: menuData\.restaurant\.id/);
+  assert.match(menu, /tableId: menuData\.table\.id/);
+  assert.match(menu, /readPublicSessionStateForTable\(tableOwnership\)/);
+  assert.match(menu, /savePublicSessionState\(/);
+});
+
+test("revoked or mismatched authority removes both scoped and session-token state", () => {
+  assert.match(menu, /if \(isDefiniteAuthFailure\(err\)\)/);
+  assert.match(menu, /clearPublicSessionState\(restaurantSlug, tableCode\)/);
+  assert.match(menu, /clearSessionParticipantToken\(tokenToValidate\)/);
+});
+
 test("handleJoinTable standardizes storage keys on authority.session.public_token", () => {
   assert.match(menu, /const sessionToken = authority\.session\.public_token;/);
   assert.match(menu, /savePublicSessionToken\(restaurantSlug, tableCode, sessionToken\)/);

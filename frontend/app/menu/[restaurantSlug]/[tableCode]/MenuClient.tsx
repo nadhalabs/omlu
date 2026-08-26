@@ -24,13 +24,15 @@ import {
 } from "@/lib/types";
 import {
   clearLegacyPublicReceiptToken,
-  clearPublicSessionToken,
-  clearParticipantToken,
-  readParticipantToken,
+  clearPublicSessionState,
+  clearSessionParticipantToken,
+  readLegacyPublicSessionCandidate,
+  readPublicSessionState,
+  readPublicSessionStateForTable,
   readSessionParticipantToken,
+  savePublicSessionState,
   saveParticipantToken,
   saveSessionParticipantToken,
-  readPublicSessionToken,
   savePublicSessionToken,
 } from "@/lib/publicSessionStorage";
 import { useRealtime } from "@/lib/realtime";
@@ -486,16 +488,27 @@ function ActiveMenuClient({
   const validateSavedSession = useCallback(async (
     options: { clearCachedStateFirst?: boolean } = {}
   ) => {
+    if (!menuData) return;
     const queryToken = new URLSearchParams(window.location.search).get("session");
-    const detached = queryToken ? readDetachedSession(queryToken) : null;
+    const detached = queryToken ? readDetachedSession(queryToken, { restaurantSlug, tableCode }) : null;
     if (detached) {
       clearOrderingState();
       setParticipantToken(null);
       router.replace(detachedBillPath(detached));
       return;
     }
-    const savedToken = readPublicSessionToken(restaurantSlug, tableCode);
-    let savedParticipantToken = readParticipantToken(restaurantSlug, tableCode);
+    const tableOwnership = {
+      restaurantId: menuData.restaurant.id,
+      restaurantSlug,
+      tableId: menuData.table.id,
+      tableCode,
+    };
+    const scopedState = queryToken
+      ? readPublicSessionState({ ...tableOwnership, sessionToken: queryToken })
+      : readPublicSessionStateForTable(tableOwnership);
+    const legacyCandidate = scopedState ? null : readLegacyPublicSessionCandidate(restaurantSlug, tableCode);
+    const savedToken = scopedState?.ownership.sessionToken || legacyCandidate?.sessionToken || null;
+    let savedParticipantToken = scopedState?.participantToken || legacyCandidate?.participantToken || null;
 
     setSessionLoading(true);
     clearLegacyPublicReceiptToken(restaurantSlug, tableCode);
@@ -549,7 +562,8 @@ function ActiveMenuClient({
         session.table_code === tableCode;
 
       if (!belongsToThisTable) {
-        clearPublicSessionToken(restaurantSlug, tableCode);
+        clearPublicSessionState(restaurantSlug, tableCode);
+        clearSessionParticipantToken(tokenToValidate);
         clearOrderingState();
         setSessionCompleteNotice(null);
         if (queryToken) {
@@ -564,7 +578,8 @@ function ActiveMenuClient({
       }
 
       if (["closed", "cancelled"].includes(session.status)) {
-        clearPublicSessionToken(restaurantSlug, tableCode);
+        clearPublicSessionState(restaurantSlug, tableCode);
+        clearSessionParticipantToken(tokenToValidate);
         clearLegacyPublicReceiptToken(restaurantSlug, tableCode);
         clearOrderingState();
         removeSessionQueryParam();
@@ -577,6 +592,10 @@ function ActiveMenuClient({
       savePublicSessionToken(restaurantSlug, tableCode, session.public_token);
       saveParticipantToken(restaurantSlug, tableCode, savedParticipantToken);
       saveSessionParticipantToken(session.public_token, savedParticipantToken);
+      savePublicSessionState(
+        { ...tableOwnership, sessionToken: session.public_token },
+        savedParticipantToken,
+      );
       setParticipantToken(savedParticipantToken);
       setTableOccupied(true);
       clearLegacyPublicReceiptToken(restaurantSlug, tableCode);
@@ -590,8 +609,8 @@ function ActiveMenuClient({
       );
     } catch (err) {
       if (isDefiniteAuthFailure(err)) {
-        clearPublicSessionToken(restaurantSlug, tableCode);
-        clearParticipantToken(restaurantSlug, tableCode);
+        clearPublicSessionState(restaurantSlug, tableCode);
+        clearSessionParticipantToken(tokenToValidate);
         setParticipantToken(null);
         clearLegacyPublicReceiptToken(restaurantSlug, tableCode);
         clearOrderingState();
@@ -612,7 +631,7 @@ function ActiveMenuClient({
     } finally {
       setSessionLoading(false);
     }
-  }, [clearOrderingState, removeSessionQueryParam, restaurantSlug, router, tableCode]);
+  }, [clearOrderingState, menuData, removeSessionQueryParam, restaurantSlug, router, tableCode]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => void validateSavedSession(), 0);
@@ -663,7 +682,7 @@ function ActiveMenuClient({
   useEffect(() => {
     const enforceDetachedHistory = () => {
       const queryToken = new URLSearchParams(window.location.search).get("session");
-      const detached = queryToken ? readDetachedSession(queryToken) : null;
+      const detached = queryToken ? readDetachedSession(queryToken, { restaurantSlug, tableCode }) : null;
       if (!detached) return;
       clearOrderingState();
       setParticipantToken(null);
@@ -678,7 +697,7 @@ function ActiveMenuClient({
       window.removeEventListener("popstate", enforceDetachedHistory);
       window.removeEventListener("focus", enforceDetachedHistory);
     };
-  }, [clearOrderingState, router]);
+  }, [clearOrderingState, restaurantSlug, router, tableCode]);
 
   // Local translations for UI labels
   const translations = {
@@ -989,6 +1008,14 @@ function ActiveMenuClient({
         saveParticipantToken(restaurantSlug, tableCode, authority.participant_token);
         saveSessionParticipantToken(authority.session.public_token, authority.participant_token);
         savePublicSessionToken(restaurantSlug, tableCode, authority.session.public_token);
+        if (!menuData) throw new ApiError(500, "Menu ownership could not be verified.");
+        savePublicSessionState({
+          restaurantId: menuData.restaurant.id,
+          restaurantSlug,
+          tableId: menuData.table.id,
+          tableCode,
+          sessionToken: authority.session.public_token,
+        }, authority.participant_token);
         setParticipantToken(authority.participant_token);
         setCurrentSession(authority.session);
         setTableOccupied(true);
@@ -1013,6 +1040,15 @@ function ActiveMenuClient({
       }
 
       savePublicSessionToken(restaurantSlug, tableCode, sessionToken);
+      if (menuData && activeParticipantToken) {
+        savePublicSessionState({
+          restaurantId: menuData.restaurant.id,
+          restaurantSlug,
+          tableId: menuData.table.id,
+          tableCode,
+          sessionToken,
+        }, activeParticipantToken);
+      }
       
       // Order placed successfully! Clear cart & redirect
       setCart({});
@@ -1047,6 +1083,14 @@ function ActiveMenuClient({
       saveSessionParticipantToken(sessionToken, authority.participant_token);
       setParticipantToken(authority.participant_token);
       const session = await getPublicDiningSession(sessionToken, authority.participant_token);
+      if (!menuData) throw new ApiError(500, "Menu ownership could not be verified.");
+      savePublicSessionState({
+        restaurantId: menuData.restaurant.id,
+        restaurantSlug,
+        tableId: menuData.table.id,
+        tableCode,
+        sessionToken: session.public_token,
+      }, authority.participant_token);
       setCurrentSession(session);
       setJoinCode("");
     } catch (err) {

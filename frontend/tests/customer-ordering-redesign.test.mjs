@@ -71,8 +71,8 @@ test("payment pending copy instructs showing payment code at counter", () => {
 });
 
 test("saved sessions restore while occupied tables still require an explicit code", () => {
-  assert.match(menu, /readPublicSessionToken\(restaurantSlug, tableCode\)/);
-  assert.match(menu, /readParticipantToken\(restaurantSlug, tableCode\)/);
+  assert.match(menu, /readPublicSessionStateForTable\(tableOwnership\)/);
+  assert.match(menu, /readLegacyPublicSessionCandidate\(restaurantSlug, tableCode\)/);
   assert.match(menu, /getPublicDiningSession\(tokenToValidate, savedParticipantToken\)/);
   assert.match(menu, /joinSecureTableSession\(restaurantSlug, tableCode, joinCode\)/);
   assert.match(menu, /tableOccupied && !participantToken/);
@@ -80,8 +80,8 @@ test("saved sessions restore while occupied tables still require an explicit cod
 
 test("closed and rejected participant access is cleared instead of restored", () => {
   assert.match(menu, /\["closed", "cancelled"\]\.includes\(session\.status\)/);
-  assert.match(menu, /clearPublicSessionToken\(restaurantSlug, tableCode\)/);
-  assert.match(menu, /clearParticipantToken\(restaurantSlug, tableCode\)/);
+  assert.match(menu, /clearPublicSessionState\(restaurantSlug, tableCode\)/);
+  assert.match(menu, /clearSessionParticipantToken\(tokenToValidate\)/);
   assert.match(menu, /setParticipantToken\(null\)/);
 });
 

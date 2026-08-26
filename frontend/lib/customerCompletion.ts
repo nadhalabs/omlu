@@ -59,12 +59,34 @@ export function markCompletedSession(marker: CompletedSessionMarker) {
 
 export function readCompletedSession(sessionToken: string): CompletedSessionMarker | null {
   if (typeof window === "undefined") return null;
-  try { return JSON.parse(window.sessionStorage.getItem(sessionKey(sessionToken)) || "null"); } catch { return null; }
+  const key = sessionKey(sessionToken);
+  try {
+    const marker = JSON.parse(window.sessionStorage.getItem(key) || "null") as CompletedSessionMarker | null;
+    if (!marker || marker.sessionToken !== sessionToken || marker.billStatus !== "paid") {
+      window.sessionStorage.removeItem(key);
+      return null;
+    }
+    return marker;
+  } catch {
+    window.sessionStorage.removeItem(key);
+    return null;
+  }
 }
 
 export function readCompletedTable(restaurantSlug: string, tableCode: string): CompletedSessionMarker | null {
   if (typeof window === "undefined") return null;
-  try { return JSON.parse(window.sessionStorage.getItem(tableKey(restaurantSlug, tableCode)) || "null"); } catch { return null; }
+  const key = tableKey(restaurantSlug, tableCode);
+  try {
+    const marker = JSON.parse(window.sessionStorage.getItem(key) || "null") as CompletedSessionMarker | null;
+    if (!marker || marker.restaurantSlug !== restaurantSlug || marker.tableCode !== tableCode || marker.billStatus !== "paid") {
+      window.sessionStorage.removeItem(key);
+      return null;
+    }
+    return marker;
+  } catch {
+    window.sessionStorage.removeItem(key);
+    return null;
+  }
 }
 
 export function clearCustomerCartState(restaurantSlug: string, tableCode: string, sessionToken: string) {
