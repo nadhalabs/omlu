@@ -115,7 +115,9 @@ test("session progressively discloses order and service detail", () => {
   assert.match(session, /overflow-x-auto/);
   assert.match(session, /session\.service_requests\.length > 0 &&/);
   assert.match(session, /expandedOrders/);
-  assert.match(session, /latestActiveOrderToken/);
+  assert.match(session, /aria-expanded=\{isExpanded\}/);
+  assert.match(session, /: false;/);
+  assert.match(session, /₹\{Number\(order\.subtotal\)\.toFixed\(2\)\}/);
   assert.doesNotMatch(session, /\{t\.addMore\}\s*·\s*\{t\.addMoreMl\}/);
 });
 
