@@ -179,7 +179,7 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
       items: "Items",
       note: "Note",
       subtotal: "Subtotal",
-      needSomething: "Need Something?",
+      needSomething: "Need anything?",
       needSomethingDesc: "Ask the staff from this table.",
       callWaiter: "Call Waiter",
       water: "Water",
@@ -618,17 +618,6 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
 
   if (!session) return null;
 
-  const latestActiveOrderToken = (() => {
-    if (!session.orders || session.orders.length === 0) return null;
-    const activeStatuses = ["pending", "accepted", "preparing", "ready"];
-    for (let i = session.orders.length - 1; i >= 0; i--) {
-      if (activeStatuses.includes(session.orders[i].status)) {
-        return session.orders[i].public_token;
-      }
-    }
-    return session.orders[session.orders.length - 1].public_token;
-  })();
-
   const canOrderMore = session.can_order_more && session.status === "open";
   const billStatus = session.bill?.status;
   const billStatusLabel =
@@ -654,27 +643,33 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
 
   return (
     <div className="min-h-screen bg-[var(--omlu-muted-surface)] px-4 py-6 text-[var(--omlu-text-primary)] dark:bg-[var(--omlu-page-background)] dark:text-[var(--omlu-text-secondary)] sm:px-6">
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
-        <div className="flex items-center justify-between gap-3">
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 sm:gap-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
-            <h1 className="truncate text-lg font-extrabold text-[var(--omlu-text-primary)]">{session.restaurant_name}</h1>
-            <p className="text-xs font-semibold text-[var(--omlu-text-secondary)]">{t.table} {session.table_number}</p>
+            <h1 className="truncate text-xl font-bold text-[var(--omlu-text-primary)]">{session.restaurant_name}</h1>
+            <p className="mt-0.5 text-sm font-medium text-[var(--omlu-text-secondary)]">{t.table} {session.table_number}</p>
           </div>
-          <div className="flex gap-2">
-          <PublicThemeControl />
-          <button
-            onClick={handleEnablePush}
-            disabled={pushStatus === "loading" || pushStatus === "enabled"}
-            className="min-h-10 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800 shadow-2xs disabled:opacity-60 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300"
-          >
-            {pushStatus === "enabled" ? t.pushEnabled : pushStatus === "loading" ? "..." : t.enablePush}
-          </button>
-          <button
-            onClick={() => setLanguage(language === "en" ? "ml" : "en")}
-            className="min-h-10 rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-3 py-2 text-xs font-bold text-orange-700 shadow-2xs dark:border-[var(--omlu-border)] dark:bg-[var(--omlu-primary-surface)] dark:text-orange-500"
-          >
-            {language === "en" ? "മലയാളം" : "English"}
-          </button>
+          <div className="flex w-full items-center gap-2 sm:w-auto sm:self-auto">
+            <button
+              onClick={handleEnablePush}
+              disabled={pushStatus === "loading" || pushStatus === "enabled"}
+              className="flex min-h-11 items-center gap-1.5 rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] px-3 text-xs font-semibold text-[var(--omlu-text-secondary)] transition hover:bg-[var(--omlu-muted-surface)] hover:text-[var(--omlu-text-primary)] disabled:opacity-60"
+            >
+              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" className="h-4 w-4" stroke="currentColor" strokeWidth="1.8">
+                <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Z" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M10 21h4" strokeLinecap="round" />
+              </svg>
+              {pushStatus === "enabled" ? t.pushEnabled : pushStatus === "loading" ? "..." : t.enablePush}
+            </button>
+            <button
+              onClick={() => setLanguage(language === "en" ? "ml" : "en")}
+              className="min-h-11 rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] px-3 text-xs font-semibold text-[var(--omlu-text-primary)] transition hover:bg-[var(--omlu-muted-surface)]"
+            >
+              {language === "en" ? "മലയാളം" : "English"}
+            </button>
+            <div className="ml-auto sm:ml-2">
+              <PublicThemeControl />
+            </div>
           </div>
         </div>
 
@@ -695,17 +690,17 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
         )}
 
 
-        <header className="rounded-3xl bg-[var(--omlu-primary-surface)] p-5 shadow-xs">
+        <header className="rounded-2xl bg-[var(--omlu-primary-surface)] p-5 sm:p-6">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-sm font-bold text-[var(--omlu-text-secondary)]">{session.order_count ? (language === "en" ? "Your order" : "നിങ്ങളുടെ ഓർഡർ") : t.noOrders}</p>
-              <h2 className="mt-1 text-xl font-black text-[var(--omlu-text-primary)]">{session.orders.length ? t.statusLabels[session.orders[session.orders.length - 1].status] : (language === "en" ? "Ready when you are" : "നിങ്ങൾ തയ്യാറാകുമ്പോൾ")}</h2>
+              <p className="text-sm font-medium text-[var(--omlu-text-secondary)]">{session.order_count ? (language === "en" ? "Your order" : "നിങ്ങളുടെ ഓർഡർ") : t.noOrders}</p>
+              <h2 className="mt-1 text-2xl font-bold text-[var(--omlu-text-primary)]">{session.orders.length ? t.statusLabels[session.orders[session.orders.length - 1].status] : (language === "en" ? "Ready when you are" : "നിങ്ങൾ തയ്യാറാകുമ്പോൾ")}</h2>
             </div>
             <div className="text-right tabular-nums">
               <p className="text-xs font-semibold text-[var(--omlu-text-secondary)]">
                 {t.sessionStatus}
               </p>
-              <p className="mt-1 rounded-xl bg-orange-50 px-3 py-1 text-sm font-black text-orange-700 dark:bg-orange-950/20 dark:text-orange-500">
+              <p className="mt-1 rounded-full bg-orange-50 px-3 py-1 text-sm font-semibold text-orange-700 dark:bg-orange-950/20 dark:text-orange-400">
                 {t.statusLabels[session.status] || session.status}
               </p>
             </div>
@@ -731,19 +726,19 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
               <p className="text-xs font-bold text-[var(--omlu-text-secondary)]">
                 {t.combinedSubtotal}
               </p>
-              <p className="mt-1 text-2xl font-black tabular-nums text-[var(--omlu-text-primary)]">
+              <p className="mt-1 text-3xl font-bold tabular-nums text-[var(--omlu-text-primary)]">
                 ₹{Number(session.combined_subtotal).toFixed(2)}
               </p>
             </div>
           </div>
 
-          <div className="mt-4 rounded-2xl bg-[var(--omlu-muted-surface)] p-4">
+          <div className="mt-5 border-t border-[var(--omlu-border)] pt-4">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-xs font-black uppercase tracking-wide text-orange-700 dark:text-orange-500">
+                <p className="text-xs font-semibold text-orange-700 dark:text-orange-400">
                   {t.billState}
                 </p>
-                <p className="mt-1 text-lg font-black text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-primary)]">
+                <p className="mt-1 text-lg font-semibold text-[var(--omlu-text-primary)]">
                   {billStatusLabel}
                 </p>
                 {session.bill?.paid_at && (
@@ -753,7 +748,7 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
                 )}
               </div>
               {billTotal && (
-                <p className="text-right text-2xl font-black text-orange-700 dark:text-orange-500">
+                <p className="text-right text-2xl font-bold text-orange-700 dark:text-orange-400">
                   {billTotal}
                 </p>
               )}
@@ -793,11 +788,19 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
               </p>
             )}
             {session.status === "payment_requested" && (
-              <p className="rounded-2xl border border-amber-200 bg-amber-50 p-3.5 text-sm font-bold text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300">
-                {language === "en"
-                  ? "Bill requested · Staff reviewing. Final amount may change until the bill is issued."
-                  : "ബിൽ അഭ്യർത്ഥിച്ചു. ജീവനക്കാർ നിങ്ങളുടെ ബിൽ പരിശോധിക്കുകയാണ്. ജീവനക്കാർ പ്രോസസ്സ് ചെയ്യുമ്പോൾ നിങ്ങൾക്ക് വിഭവങ്ങൾ കാണാം."}
-              </p>
+              <div className="flex items-start gap-3 border-l-2 border-amber-500 py-1 pl-3" role="status">
+                <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-amber-500" aria-hidden="true" />
+                <div>
+                  <p className="text-sm font-semibold text-[var(--omlu-text-primary)]">
+                    {language === "en" ? "Bill requested" : "ബിൽ അഭ്യർത്ഥിച്ചു"}
+                  </p>
+                  <p className="mt-0.5 text-xs leading-5 text-[var(--omlu-text-secondary)]">
+                    {language === "en"
+                      ? "Staff are reviewing it. The final amount may change until it is issued."
+                      : "ജീവനക്കാർ പരിശോധിക്കുകയാണ്. ബിൽ നൽകുന്നതുവരെ അന്തിമ തുകയിൽ മാറ്റമുണ്ടാകാം."}
+                  </p>
+                </div>
+              </div>
             )}
             {!canOrderMore && session.status !== "payment_requested" && (
               <p className="rounded-2xl border border-red-100 bg-red-50 p-3 text-sm font-semibold text-red-700 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-400">
@@ -827,32 +830,48 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
           )}
         </header>
 
-        <section className="border-y border-[var(--omlu-border)] py-5">
-          <h2 className="mb-3 text-base font-black text-[var(--omlu-text-primary)]">
-            {t.needSomething}
-          </h2>
+        <section className="py-2">
+          <div className="mb-4">
+            <h2 className="text-base font-semibold text-[var(--omlu-text-primary)]">
+              {t.needSomething}
+            </h2>
+            <p className="mt-1 text-xs text-[var(--omlu-text-secondary)]">{t.needSomethingDesc}</p>
+          </div>
           {session.service_requests_enabled ? (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 overflow-hidden rounded-2xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)]">
               {serviceTypes.map(({ type, label }) => {
                 const status = serviceStatus[type] || "idle";
                 const message = serviceMessage[type];
                 return (
-                  <div key={type} className="flex flex-col gap-1">
+                  <div key={type} className="flex min-w-0 flex-col border-r border-[var(--omlu-border)] last:border-r-0">
                     <button
                       onClick={() => handleServiceRequest(type)}
                       disabled={status === "loading" || status === "success"}
-                      className={`min-h-11 rounded-xl border px-3 py-2 text-sm font-black transition disabled:cursor-not-allowed ${
+                      className={`flex min-h-16 items-center justify-center gap-2 px-3 py-3 text-sm font-semibold transition disabled:cursor-not-allowed ${
                         status === "success"
-                          ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-700/40 dark:bg-emerald-950/20 dark:text-emerald-400"
+                          ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400"
                           : status === "error"
-                          ? "border-red-200 bg-red-50 text-red-600 dark:border-red-800/40 dark:bg-red-950/20 dark:text-red-400"
-                          : "border-[var(--omlu-border-strong)] bg-[var(--omlu-muted-surface)] text-[var(--omlu-text-primary)] hover:border-orange-300 hover:bg-orange-50 dark:border-[var(--omlu-border)] dark:bg-[var(--omlu-muted-surface)] dark:text-[var(--omlu-text-secondary)]"
+                          ? "bg-red-50 text-red-600 dark:bg-red-950/20 dark:text-red-400"
+                          : "text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-muted-surface)]"
                       }`}
                     >
-                      {status === "loading" ? "..." : status === "success" ? "✓" : label}
+                      {status === "loading" ? (
+                        "..."
+                      ) : status === "success" ? (
+                        <><span aria-hidden="true">✓</span><span>{t.requestSent}</span></>
+                      ) : (
+                        <>
+                          {type === "water" ? (
+                            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" className="h-5 w-5 text-sky-600 dark:text-sky-400" stroke="currentColor" strokeWidth="1.7"><path d="M12 3s6 6.2 6 11a6 6 0 0 1-12 0c0-4.8 6-11 6-11Z" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                          ) : (
+                            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" className="h-5 w-5 text-orange-600 dark:text-orange-400" stroke="currentColor" strokeWidth="1.7"><path d="M5 11a7 7 0 0 1 14 0v3H5v-3Z" strokeLinecap="round" strokeLinejoin="round" /><path d="M3 17h18M12 4V2" strokeLinecap="round" /></svg>
+                          )}
+                          <span>{label}</span>
+                        </>
+                      )}
                     </button>
                     {message && (
-                      <p className="text-center text-[10px] font-semibold text-[var(--omlu-text-secondary)]">
+                      <p className="px-2 pb-2 text-center text-[10px] font-medium text-[var(--omlu-text-secondary)]">
                         {message}
                       </p>
                     )}
@@ -870,26 +889,26 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
             <h3 className="text-xs font-black uppercase tracking-wide text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)]">
               {t.serviceHistory}
             </h3>
-              <div className="mt-3 flex flex-col gap-2">
+              <div className="mt-2 divide-y divide-[var(--omlu-border)]">
                 {session.service_requests.map((request, index) => (
                   <div
                     key={`${request.request_type}-${request.created_at}-${index}`}
-                    className="flex items-start justify-between gap-3 rounded-2xl bg-[var(--omlu-muted-surface)] p-3 dark:bg-[var(--omlu-muted-surface)]"
+                    className="flex items-center justify-between gap-3 py-3"
                   >
                     <div>
-                      <p className="text-sm font-black capitalize text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-secondary)]">
+                      <p className="text-sm font-semibold capitalize text-[var(--omlu-text-primary)]">
                         {request.request_type}
                       </p>
-                      <p className="mt-1 text-[11px] font-semibold text-[var(--omlu-text-secondary)]">
+                      <p className="mt-0.5 text-[11px] text-[var(--omlu-text-secondary)]">
                         {t.requestedAt}: {new Date(request.created_at).toLocaleTimeString()}
                       </p>
                       {request.resolved_at && (
-                        <p className="text-[11px] font-semibold text-[var(--omlu-text-secondary)]">
+                        <p className="text-[11px] text-[var(--omlu-text-secondary)]">
                           {t.completedAt}: {new Date(request.resolved_at).toLocaleTimeString()}
                         </p>
                       )}
                     </div>
-                    <p className="rounded-xl bg-[var(--omlu-primary-surface)] px-3 py-1 text-xs font-black capitalize text-[var(--omlu-text-primary)] dark:bg-[var(--omlu-primary-surface)] dark:text-[var(--omlu-text-secondary)]">
+                    <p className="text-xs font-medium capitalize text-[var(--omlu-text-secondary)]">
                       {requestStatusLabel(request.status)}
                     </p>
                   </div>
@@ -899,18 +918,33 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
         </section>
 
         {session.bill?.status === "draft" && (
-          <section id="provisional-bill" className="scroll-mt-4 rounded-3xl border border-amber-200 bg-[var(--omlu-primary-surface)] p-5" aria-label="Provisional bill">
+          <section id="provisional-bill" className="scroll-mt-4 rounded-2xl border border-amber-200 bg-[var(--omlu-primary-surface)] p-5" aria-label="Bill estimate">
             <div className="flex items-start justify-between gap-4">
-              <div><p className="text-xs font-black uppercase tracking-wide text-amber-700">Status: Draft</p><p className="mt-1 text-sm font-bold">Invoice number: Not issued</p><p className="text-sm font-bold">Invoice date: —</p></div>
-              <p className="text-xl font-black">₹{Number(session.bill.total_amount).toFixed(2)}</p>
+              <div className="min-w-0">
+                <p className="text-xs font-black uppercase tracking-wide text-orange-700 dark:text-orange-400">{language === "en" ? "Bill estimate" : "ബിൽ എസ്റ്റിമേറ്റ്"}</p>
+                <h2 className="mt-1 text-lg font-bold text-[var(--omlu-text-primary)]">{language === "en" ? "Your bill so far" : "ഇതുവരെയുള്ള നിങ്ങളുടെ ബിൽ"}</h2>
+                <p className="mt-1 text-xs font-medium leading-5 text-[var(--omlu-text-primary)]">
+                  {language === "en"
+                    ? `Includes all ${session.order_count} ${session.order_count === 1 ? "order" : "orders"} shown below. The restaurant will confirm your final bill.`
+                    : `താഴെ കാണുന്ന ${session.order_count} ഓർഡറുകൾ ഉൾപ്പെടുന്നു. റെസ്റ്റോറന്റ് നിങ്ങളുടെ അന്തിമ ബിൽ സ്ഥിരീകരിക്കും.`}
+                </p>
+              </div>
+              <div className="shrink-0 text-right">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-orange-700 dark:text-orange-400">{language === "en" ? "Estimated total" : "കണക്കാക്കിയ ആകെ"}</p>
+                <p className="mt-1 text-xl font-black text-orange-700 dark:text-orange-400">₹{Number(session.bill.total_amount).toFixed(2)}</p>
+              </div>
             </div>
-            <div className="mt-4 grid gap-2 border-t border-[var(--omlu-border)] pt-4 text-sm font-semibold">
-              <div className="flex justify-between"><span>Subtotal</span><span>₹{Number(session.bill.subtotal).toFixed(2)}</span></div>
-              <div className="flex justify-between"><span>Discount</span><span>− ₹{Number(session.bill.discount_amount).toFixed(2)}</span></div>
+            <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 border-t border-[var(--omlu-border)] pt-3 text-xs font-medium text-[var(--omlu-text-primary)]">
+              <span><strong className="font-semibold text-[var(--omlu-text-primary)]">{language === "en" ? "Status:" : "നില:"}</strong> {language === "en" ? "Draft" : "ഡ്രാഫ്റ്റ്"}</span>
+              <span><strong className="font-semibold text-[var(--omlu-text-primary)]">{language === "en" ? "Invoice:" : "ഇൻവോയ്സ്:"}</strong> {language === "en" ? "Not issued" : "നൽകിയിട്ടില്ല"}</span>
+            </div>
+            <div className="mt-3 grid gap-2 border-t border-[var(--omlu-border)] pt-3 text-sm font-semibold">
+              <div className="flex justify-between text-[var(--omlu-text-primary)]"><span>{language === "en" ? "All orders subtotal" : "എല്ലാ ഓർഡറുകളുടെയും ആകെ"}</span><span>₹{Number(session.bill.subtotal).toFixed(2)}</span></div>
+              <div className="flex justify-between text-[var(--omlu-text-primary)]"><span>{language === "en" ? "Discount" : "കിഴിവ്"}</span><span>− ₹{Number(session.bill.discount_amount).toFixed(2)}</span></div>
               {Number(session.bill.cgst_amount) > 0 && <div className="flex justify-between"><span>CGST</span><span>₹{Number(session.bill.cgst_amount).toFixed(2)}</span></div>}
               {Number(session.bill.sgst_amount) > 0 && <div className="flex justify-between"><span>SGST</span><span>₹{Number(session.bill.sgst_amount).toFixed(2)}</span></div>}
               {Number(session.bill.igst_amount) > 0 && <div className="flex justify-between"><span>IGST</span><span>₹{Number(session.bill.igst_amount).toFixed(2)}</span></div>}
-              <div className="flex justify-between border-t border-[var(--omlu-border)] pt-2 text-base font-black"><span>Provisional total</span><span>₹{Number(session.bill.total_amount).toFixed(2)}</span></div>
+              <div className="flex justify-between border-t border-[var(--omlu-border)] pt-2 text-base font-black text-orange-700 dark:text-orange-400"><span>{language === "en" ? "Estimated bill total" : "കണക്കാക്കിയ ബിൽ ആകെ"}</span><span>₹{Number(session.bill.total_amount).toFixed(2)}</span></div>
             </div>
           </section>
         )}
@@ -925,7 +959,7 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
             session.orders.map((order, index) => {
               const isExpanded = expandedOrders[order.public_token] !== undefined
                 ? expandedOrders[order.public_token]
-                : (order.public_token === latestActiveOrderToken);
+                : false;
 
               const handleToggle = () => {
                 setExpandedOrders(prev => ({
@@ -975,31 +1009,36 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
               return (
                 <section
                   key={order.public_token}
-                  className="rounded-2xl bg-[var(--omlu-primary-surface)] p-4 shadow-xs"
+                  className="rounded-2xl bg-[var(--omlu-primary-surface)] p-4"
                 >
-                  <div
+                  <button
+                    type="button"
                     onClick={handleToggle}
-                    className="flex cursor-pointer items-center justify-between gap-3 border-b border-[var(--omlu-border-strong)] pb-3 dark:border-[var(--omlu-border)] select-none"
+                    aria-expanded={isExpanded}
+                    className={`flex min-h-12 w-full cursor-pointer items-center justify-between gap-3 text-left select-none ${isExpanded ? "border-b border-[var(--omlu-border-strong)] pb-3 dark:border-[var(--omlu-border)]" : ""}`}
                   >
-                    <div>
+                    <div className="min-w-0">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-bold uppercase text-[var(--omlu-text-secondary)]">
-                          Order {index + 1} of {session.order_count}
+                        <span className="text-[11px] font-bold uppercase text-[var(--omlu-text-secondary)]">
+                          Order {index + 1}
                         </span>
                         <span className="text-[10px] font-semibold text-[var(--omlu-text-secondary)]">
                           • {new Date(order.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                         </span>
                       </div>
-                      <h2 className="text-lg font-black text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-primary)] flex items-center gap-2">
+                      <h2 className="truncate text-sm font-bold text-[var(--omlu-text-primary)]">
                         {order.order_number}
                       </h2>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <p className="rounded-xl bg-[var(--omlu-muted-surface)] px-3 py-1 text-xs font-black text-[var(--omlu-text-primary)] dark:bg-[var(--omlu-muted-surface)] dark:text-[var(--omlu-text-secondary)]">
+                    <div className="flex shrink-0 items-center gap-2">
+                      <div className="text-right">
+                        <p className="text-sm font-bold text-[var(--omlu-text-primary)]">₹{Number(order.subtotal).toFixed(2)}</p>
+                        <p className="text-[10px] font-medium text-[var(--omlu-text-secondary)]">
                         {capabilities.showLiveKitchenProgress ? (t.statusLabels[order.status] || order.status) : (order.status === "rejected" ? t.statusLabels.rejected : "Order sent to kitchen")}
-                      </p>
+                        </p>
+                      </div>
                       <svg
-                        className={`h-5 w-5 text-[var(--omlu-text-secondary)] transition-transform duration-200 ${
+                        className={`h-4 w-4 text-[var(--omlu-text-secondary)] transition-transform duration-200 ${
                           isExpanded ? "rotate-180" : ""
                         }`}
                         fill="none"
@@ -1009,11 +1048,11 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
                       </svg>
                     </div>
-                  </div>
+                  </button>
 
                   {isExpanded && (
                     <div className="mt-4 border-b border-[var(--omlu-border)] pb-4">
-                      <div className="flex items-start overflow-x-auto pb-2" aria-label={`Order progress: ${t.statusLabels[order.status] || order.status}`}>
+                      <div className="flex items-start overflow-x-auto pb-3 pt-2" aria-label={`Order progress: ${t.statusLabels[order.status] || order.status}`}>
                         {stages.map((stage, sIdx) => {
                           let state: "completed" | "current" | "future" = "future";
                           if (order.status === "rejected") {
@@ -1142,7 +1181,7 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
                   )}
 
                   <div className="mt-4 flex items-center justify-between border-t border-[var(--omlu-border-strong)] pt-3 dark:border-[var(--omlu-border)]">
-                    <p className="text-sm font-bold text-[var(--omlu-text-secondary)]">{t.subtotal}</p>
+                    <p className="text-sm font-bold text-[var(--omlu-text-secondary)]">{language === "en" ? `Order ${index + 1} subtotal` : `ഓർഡർ ${index + 1} ആകെ`}</p>
                     <p className="text-lg font-black text-orange-700 dark:text-orange-500">
                       ₹{Number(order.subtotal).toFixed(2)}
                     </p>
