@@ -654,24 +654,24 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
 
   return (
     <div className="min-h-screen bg-[var(--omlu-muted-surface)] px-4 py-6 text-[var(--omlu-text-primary)] dark:bg-[var(--omlu-page-background)] dark:text-[var(--omlu-text-secondary)] sm:px-6">
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
-        <div className="flex items-center justify-between gap-3">
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 sm:gap-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
-            <h1 className="truncate text-lg font-extrabold text-[var(--omlu-text-primary)]">{session.restaurant_name}</h1>
-            <p className="text-xs font-semibold text-[var(--omlu-text-secondary)]">{t.table} {session.table_number}</p>
+            <h1 className="truncate text-xl font-bold text-[var(--omlu-text-primary)]">{session.restaurant_name}</h1>
+            <p className="mt-0.5 text-sm font-medium text-[var(--omlu-text-secondary)]">{t.table} {session.table_number}</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
           <PublicThemeControl />
           <button
             onClick={handleEnablePush}
             disabled={pushStatus === "loading" || pushStatus === "enabled"}
-            className="min-h-10 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800 shadow-2xs disabled:opacity-60 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300"
+            className="min-h-11 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 disabled:opacity-60 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300"
           >
             {pushStatus === "enabled" ? t.pushEnabled : pushStatus === "loading" ? "..." : t.enablePush}
           </button>
           <button
             onClick={() => setLanguage(language === "en" ? "ml" : "en")}
-            className="min-h-10 rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-3 py-2 text-xs font-bold text-orange-700 shadow-2xs dark:border-[var(--omlu-border)] dark:bg-[var(--omlu-primary-surface)] dark:text-orange-500"
+            className="min-h-11 rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] px-3 py-2 text-xs font-semibold text-orange-700 dark:text-orange-400"
           >
             {language === "en" ? "മലയാളം" : "English"}
           </button>
@@ -695,17 +695,17 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
         )}
 
 
-        <header className="rounded-3xl bg-[var(--omlu-primary-surface)] p-5 shadow-xs">
+        <header className="rounded-2xl bg-[var(--omlu-primary-surface)] p-5 sm:p-6">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-sm font-bold text-[var(--omlu-text-secondary)]">{session.order_count ? (language === "en" ? "Your order" : "നിങ്ങളുടെ ഓർഡർ") : t.noOrders}</p>
-              <h2 className="mt-1 text-xl font-black text-[var(--omlu-text-primary)]">{session.orders.length ? t.statusLabels[session.orders[session.orders.length - 1].status] : (language === "en" ? "Ready when you are" : "നിങ്ങൾ തയ്യാറാകുമ്പോൾ")}</h2>
+              <p className="text-sm font-medium text-[var(--omlu-text-secondary)]">{session.order_count ? (language === "en" ? "Your order" : "നിങ്ങളുടെ ഓർഡർ") : t.noOrders}</p>
+              <h2 className="mt-1 text-2xl font-bold text-[var(--omlu-text-primary)]">{session.orders.length ? t.statusLabels[session.orders[session.orders.length - 1].status] : (language === "en" ? "Ready when you are" : "നിങ്ങൾ തയ്യാറാകുമ്പോൾ")}</h2>
             </div>
             <div className="text-right tabular-nums">
               <p className="text-xs font-semibold text-[var(--omlu-text-secondary)]">
                 {t.sessionStatus}
               </p>
-              <p className="mt-1 rounded-xl bg-orange-50 px-3 py-1 text-sm font-black text-orange-700 dark:bg-orange-950/20 dark:text-orange-500">
+              <p className="mt-1 rounded-full bg-orange-50 px-3 py-1 text-sm font-semibold text-orange-700 dark:bg-orange-950/20 dark:text-orange-400">
                 {t.statusLabels[session.status] || session.status}
               </p>
             </div>
@@ -731,19 +731,19 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
               <p className="text-xs font-bold text-[var(--omlu-text-secondary)]">
                 {t.combinedSubtotal}
               </p>
-              <p className="mt-1 text-2xl font-black tabular-nums text-[var(--omlu-text-primary)]">
+              <p className="mt-1 text-3xl font-bold tabular-nums text-[var(--omlu-text-primary)]">
                 ₹{Number(session.combined_subtotal).toFixed(2)}
               </p>
             </div>
           </div>
 
-          <div className="mt-4 rounded-2xl bg-[var(--omlu-muted-surface)] p-4">
+          <div className="mt-5 border-t border-[var(--omlu-border)] pt-4">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-xs font-black uppercase tracking-wide text-orange-700 dark:text-orange-500">
+                <p className="text-xs font-semibold text-orange-700 dark:text-orange-400">
                   {t.billState}
                 </p>
-                <p className="mt-1 text-lg font-black text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-primary)]">
+                <p className="mt-1 text-lg font-semibold text-[var(--omlu-text-primary)]">
                   {billStatusLabel}
                 </p>
                 {session.bill?.paid_at && (
@@ -753,7 +753,7 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
                 )}
               </div>
               {billTotal && (
-                <p className="text-right text-2xl font-black text-orange-700 dark:text-orange-500">
+                <p className="text-right text-2xl font-bold text-orange-700 dark:text-orange-400">
                   {billTotal}
                 </p>
               )}
@@ -793,7 +793,7 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
               </p>
             )}
             {session.status === "payment_requested" && (
-              <p className="rounded-2xl border border-amber-200 bg-amber-50 p-3.5 text-sm font-bold text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300">
+              <p className="rounded-xl bg-[var(--omlu-muted-surface)] px-4 py-3 text-sm font-medium leading-5 text-[var(--omlu-text-secondary)]">
                 {language === "en"
                   ? "Bill requested · Staff reviewing. Final amount may change until the bill is issued."
                   : "ബിൽ അഭ്യർത്ഥിച്ചു. ജീവനക്കാർ നിങ്ങളുടെ ബിൽ പരിശോധിക്കുകയാണ്. ജീവനക്കാർ പ്രോസസ്സ് ചെയ്യുമ്പോൾ നിങ്ങൾക്ക് വിഭവങ്ങൾ കാണാം."}
@@ -828,7 +828,7 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
         </header>
 
         <section className="border-y border-[var(--omlu-border)] py-5">
-          <h2 className="mb-3 text-base font-black text-[var(--omlu-text-primary)]">
+          <h2 className="mb-3 text-base font-semibold text-[var(--omlu-text-primary)]">
             {t.needSomething}
           </h2>
           {session.service_requests_enabled ? (
@@ -899,7 +899,7 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
         </section>
 
         {session.bill?.status === "draft" && (
-          <section id="provisional-bill" className="scroll-mt-4 rounded-3xl border border-amber-200 bg-[var(--omlu-primary-surface)] p-5" aria-label="Provisional bill">
+          <section id="provisional-bill" className="scroll-mt-4 rounded-2xl border border-amber-200 bg-[var(--omlu-primary-surface)] p-5" aria-label="Provisional bill">
             <div className="flex items-start justify-between gap-4">
               <div><p className="text-xs font-black uppercase tracking-wide text-amber-700">Status: Draft</p><p className="mt-1 text-sm font-bold">Invoice number: Not issued</p><p className="text-sm font-bold">Invoice date: —</p></div>
               <p className="text-xl font-black">₹{Number(session.bill.total_amount).toFixed(2)}</p>
@@ -975,7 +975,7 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
               return (
                 <section
                   key={order.public_token}
-                  className="rounded-2xl bg-[var(--omlu-primary-surface)] p-4 shadow-xs"
+                  className="rounded-2xl bg-[var(--omlu-primary-surface)] p-4"
                 >
                   <div
                     onClick={handleToggle}
@@ -1013,7 +1013,7 @@ function ActiveSessionClient({ sessionToken }: SessionClientProps) {
 
                   {isExpanded && (
                     <div className="mt-4 border-b border-[var(--omlu-border)] pb-4">
-                      <div className="flex items-start overflow-x-auto pb-2" aria-label={`Order progress: ${t.statusLabels[order.status] || order.status}`}>
+                      <div className="flex items-start overflow-x-auto pb-3 pt-2" aria-label={`Order progress: ${t.statusLabels[order.status] || order.status}`}>
                         {stages.map((stage, sIdx) => {
                           let state: "completed" | "current" | "future" = "future";
                           if (order.status === "rejected") {

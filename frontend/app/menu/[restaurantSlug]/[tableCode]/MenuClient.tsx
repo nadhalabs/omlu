@@ -1272,13 +1272,13 @@ function ActiveMenuClient({
   return (
     <div className="flex min-h-screen flex-1 flex-col bg-[var(--omlu-page-background)] pb-[calc(6.5rem+env(safe-area-inset-bottom))] text-[var(--omlu-text-primary)]">
       {/* Sticky Top Header */}
-      <header className="sticky top-0 z-40 border-b border-[var(--omlu-border)] bg-[color:var(--omlu-primary-surface)]/95 px-3 py-2.5 backdrop-blur-md sm:px-6">
+      <header className="sticky top-0 z-40 border-b border-[var(--omlu-border)] bg-[color:var(--omlu-primary-surface)]/95 px-4 py-2.5 backdrop-blur-md sm:px-6">
         <div className="mx-auto flex max-w-3xl sm:max-w-4xl items-center justify-between gap-2">
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-sm font-black leading-tight text-[var(--omlu-text-primary)] sm:text-base">
+            <h1 className="truncate text-base font-bold leading-tight text-[var(--omlu-text-primary)] sm:text-lg">
               {restaurant.name}
             </h1>
-            <p className="truncate text-[11px] font-bold text-[var(--omlu-text-secondary)] sm:text-xs">
+            <p className="mt-0.5 truncate text-xs font-medium text-[var(--omlu-text-secondary)]">
               {t.table} {table.table_number} · {t.dineIn}
             </p>
           </div>
@@ -1310,8 +1310,8 @@ function ActiveMenuClient({
       </header>
 
       {/* Floating search and category bar */}
-      <div className="sticky top-[57px] z-30 border-b border-[var(--omlu-border)] bg-[color:var(--omlu-primary-surface)]/95 px-4 py-2.5 backdrop-blur-md sm:px-6">
-        <div className="max-w-3xl sm:max-w-4xl mx-auto flex flex-col gap-3">
+      <div className="sticky top-[57px] z-30 border-b border-[var(--omlu-border)] bg-[color:var(--omlu-primary-surface)]/95 px-4 py-3 backdrop-blur-md sm:px-6">
+        <div className="mx-auto flex max-w-3xl flex-col gap-3 sm:max-w-4xl">
           {sessionLoading && (
             <div className="text-xs font-semibold text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-950/20 border border-orange-100 dark:border-orange-900/40 rounded-xl px-3 py-2">
               {t.checkingSession}
@@ -1392,7 +1392,7 @@ function ActiveMenuClient({
       </div>
 
       {/* Main Content Area */}
-      <main className="max-w-3xl sm:max-w-4xl mx-auto px-4 mt-6 sm:px-6 w-full flex-1">
+      <main className="mx-auto mt-5 w-full max-w-3xl flex-1 px-4 sm:mt-6 sm:max-w-4xl sm:px-6">
         {error && (
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-800 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200" role="alert">
             <span>Menu refresh failed. Your last loaded menu is still shown.</span>
@@ -1411,7 +1411,7 @@ function ActiveMenuClient({
             </p>
           </div>
         ) : (
-          <div className="flex flex-col gap-8">
+          <div className="flex flex-col gap-7 sm:gap-8">
             {visibleCategories.map((category) => (
               <section
                 key={category.id}
@@ -1422,7 +1422,7 @@ function ActiveMenuClient({
                   {getLocalizedText(category.name_en, category.name_ml)}
                 </h2>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2">
                   {category.items.map((item) => {
                     const simpleKey = optionKey(item.id, []);
                     const cartQty = Object.values(cart)
@@ -1432,15 +1432,15 @@ function ActiveMenuClient({
                     return (
                       <div
                         key={item.id}
-                        className="flex min-h-[104px] gap-3 rounded-2xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-4 shadow-xs hover:border-[var(--omlu-border-strong)] transition"
+                        className="flex min-h-[104px] gap-4 rounded-2xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-4 transition hover:border-[var(--omlu-border-strong)]"
                       >
                         <div className="flex-1 flex flex-col justify-between min-w-0">
                           <div>
-                            <h3 className="line-clamp-2 break-words font-bold leading-snug text-[var(--omlu-text-primary)]">
+                            <h3 className="line-clamp-2 break-words text-[15px] font-semibold leading-snug text-[var(--omlu-text-primary)] sm:text-base">
                               {getLocalizedText(item.name_en, item.name_ml)}
                             </h3>
                             {getLocalizedText(item.description_en || "", item.description_ml) && (
-                              <p className="text-xs text-[var(--omlu-text-secondary)] mt-1 line-clamp-2">
+                              <p className="mt-1 line-clamp-2 text-xs leading-5 text-[var(--omlu-text-secondary)]">
                                 {getLocalizedText(
                                   item.description_en || "",
                                   item.description_ml
@@ -1448,8 +1448,8 @@ function ActiveMenuClient({
                               </p>
                             )}
                           </div>
-                          <div className="mt-3 flex items-center justify-between gap-2">
-                            <span className="font-extrabold tabular-nums text-[var(--omlu-text-primary)] text-sm">
+                          <div className="mt-3 flex min-h-10 items-center justify-between gap-2">
+                            <span className="text-sm font-bold tabular-nums text-[var(--omlu-text-primary)]">
                               {menuPriceLabel(item)}
                             </span>
                             {orderingDisabled ? (
@@ -1492,7 +1492,7 @@ function ActiveMenuClient({
                           </div>
                         </div>
                         {item.image_url && (
-                          <div className="relative w-20 h-20 bg-[var(--omlu-muted-surface)] rounded-lg overflow-hidden flex-shrink-0 self-center">
+                          <div className="relative h-20 w-20 flex-shrink-0 self-center overflow-hidden rounded-xl bg-[var(--omlu-muted-surface)]">
                             <Image
                               src={item.image_url}
                               alt={item.name_en}
@@ -1515,7 +1515,7 @@ function ActiveMenuClient({
 
       {/* Sticky Bottom Cart Bar totalQty > 0 && !orderingDisabled */}
       {totalQty > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--omlu-border)] bg-[color:var(--omlu-primary-surface)]/95 px-3 pb-[calc(.75rem+env(safe-area-inset-bottom))] pt-3 shadow-lg backdrop-blur-md sm:px-6">
+        <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--omlu-border)] bg-[color:var(--omlu-primary-surface)]/95 px-4 pb-[calc(.75rem+env(safe-area-inset-bottom))] pt-3 shadow-lg backdrop-blur-md sm:px-6">
           <button
             type="button"
             onClick={() => setIsCartOpen(true)}
@@ -1649,10 +1649,10 @@ function ActiveMenuClient({
 
       {/* Slide-over Cart Modal View */}
       {isCartOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center overscroll-contain bg-black/60 p-4 backdrop-blur-xs">
-          <div className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] shadow-2xl dark:border-[var(--omlu-border)]" role="dialog" aria-modal="true" aria-labelledby="menu-cart-title">
+        <div className="fixed inset-0 z-50 flex items-end justify-center overscroll-contain bg-black/60 sm:items-center sm:p-4 sm:backdrop-blur-xs">
+          <div className="flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl bg-[var(--omlu-primary-surface)] shadow-2xl sm:max-h-[85vh] sm:rounded-3xl sm:border sm:border-[var(--omlu-border)]" role="dialog" aria-modal="true" aria-labelledby="menu-cart-title">
             {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] px-6 py-4">
+            <div className="flex items-center justify-between border-b border-[var(--omlu-border)] px-5 py-4 sm:px-6">
               <h2 id="menu-cart-title" className="break-words text-lg font-bold text-[var(--omlu-text-primary)]">
                 {t.yourCart} ({totalQty})
               </h2>
@@ -1666,7 +1666,7 @@ function ActiveMenuClient({
             </div>
 
             {/* Modal Body */}
-            <div className="flex-1 overflow-y-auto px-6 py-4 flex flex-col gap-6">
+            <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-5 py-4 sm:px-6">
               {checkoutError && (
                 <div className="bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50 text-red-700 dark:text-red-400 p-4 rounded-2xl text-sm font-medium">
                   <strong>{t.checkoutErrorTitle}:</strong> {checkoutError}
@@ -1784,7 +1784,7 @@ function ActiveMenuClient({
 
             {/* Modal Footer */}
             {Object.keys(cart).length > 0 && (
-              <div className="border-t border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] px-6 py-4 flex flex-col gap-4 bg-[var(--omlu-muted-surface)]">
+              <div className="flex flex-col gap-4 border-t border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] px-5 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-4 sm:px-6 sm:pb-4">
                 <div className="flex items-center justify-between">
                   <span className="text-[var(--omlu-text-secondary)] font-medium">
                     {t.subtotal}

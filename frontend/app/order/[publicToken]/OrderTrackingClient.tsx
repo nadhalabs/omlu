@@ -262,29 +262,29 @@ export default function OrderTrackingClient({
   const isRejected = orderData.status === "rejected";
 
   return (
-    <div className="flex flex-col flex-1 min-h-screen bg-[var(--omlu-muted-surface)] dark:bg-[var(--omlu-page-background)] text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-secondary)] py-8 px-4 sm:px-6">
-      <div className="max-w-2xl mx-auto w-full flex flex-col gap-6">
+    <div className="flex min-h-screen flex-1 flex-col bg-[var(--omlu-muted-surface)] px-4 py-6 text-[var(--omlu-text-primary)] dark:bg-[var(--omlu-page-background)] dark:text-[var(--omlu-text-secondary)] sm:px-6 sm:py-8">
+      <div className="mx-auto flex w-full max-w-2xl flex-col gap-5 sm:gap-6">
         
         {/* Language Selector bar at top */}
         <div className="flex justify-end gap-2">
           <PublicThemeControl />
           <button
             onClick={() => setLanguage(language === "en" ? "ml" : "en")}
-            className="text-xs font-bold text-orange-600 dark:text-orange-500 hover:underline px-3 py-1.5 rounded-lg bg-[var(--omlu-primary-surface)] dark:bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] cursor-pointer shadow-2xs"
+            className="min-h-11 rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] px-3 py-2 text-xs font-semibold text-orange-700 shadow-2xs dark:text-orange-400"
           >
             🌐 {language === "en" ? "മലയാളം" : "English"}
           </button>
         </div>
 
         {/* Main Header */}
-        <header className="bg-[var(--omlu-primary-surface)] dark:bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] rounded-3xl p-6 shadow-xs flex flex-col gap-3 relative overflow-hidden">
+        <header className="relative flex flex-col gap-4 overflow-hidden rounded-2xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-5 sm:p-6">
           <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-orange-500 to-orange-600"></div>
           <div className="flex items-start justify-between gap-4 mt-2">
             <div>
               <span className="text-xs font-semibold uppercase tracking-wider text-orange-700 dark:text-orange-500">
                 {orderData.restaurant_name}
               </span>
-              <h1 className="text-2xl font-black text-[var(--omlu-text-primary)] dark:text-[var(--omlu-text-primary)] mt-0.5">
+              <h1 className="mt-1 break-all text-2xl font-bold text-[var(--omlu-text-primary)]">
                 {orderData.order_number}
               </h1>
               <p className="text-xs text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)] font-bold mt-1">
@@ -296,7 +296,7 @@ export default function OrderTrackingClient({
                 {t.status}
               </span>
               <span
-                className={`text-sm font-bold px-3 py-1 rounded-lg mt-1 ${
+                className={`mt-1 rounded-full px-3 py-1 text-sm font-semibold ${
                   isRejected
                     ? "bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400"
                     : "bg-orange-50 dark:bg-orange-950/20 text-orange-600 dark:text-orange-500"
@@ -367,8 +367,8 @@ export default function OrderTrackingClient({
         </header>
 
         {/* Visual Timeline Panel */}
-        <section className="bg-[var(--omlu-primary-surface)] dark:bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] rounded-3xl p-6 shadow-xs flex flex-col gap-4">
-          <h2 className="text-sm font-black text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)] uppercase tracking-wider mb-2">
+        <section className="flex flex-col gap-4 rounded-2xl bg-[var(--omlu-primary-surface)] p-5 sm:p-6">
+          <h2 className="mb-1 text-sm font-semibold text-[var(--omlu-text-secondary)]">
             {t.orderProgress}
           </h2>
 
@@ -384,16 +384,16 @@ export default function OrderTrackingClient({
             </div>
           ) : (
             /* Horizontal Timeline */
-            <div className="relative flex items-center justify-between mt-2">
+            <div className="relative mt-2 grid grid-cols-4 items-start">
               <div className="absolute left-6 right-6 top-[15px] h-0.5 bg-[var(--omlu-muted-surface)] dark:bg-[var(--omlu-muted-surface)] -z-0"></div>
               <div
                 className="absolute left-6 top-[15px] h-0.5 bg-orange-600 -z-0 transition-all duration-500"
                 style={{
-                  width: `${
+                  width: `calc(${
                     currentStatusIndex > 0
                       ? (currentStatusIndex / (stages.length - 1)) * 100
                       : 0
-                  }%`,
+                  }% - ${currentStatusIndex > 0 ? (currentStatusIndex / (stages.length - 1)) * 3 : 0}rem)`,
                   right: "auto",
                 }}
               ></div>
@@ -404,7 +404,7 @@ export default function OrderTrackingClient({
                 return (
                   <div
                     key={label}
-                    className="flex flex-col items-center z-10 w-12"
+                    className="z-10 flex min-w-0 flex-col items-center px-0.5"
                   >
                     <div
                       className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs transition duration-300 ${
@@ -418,7 +418,7 @@ export default function OrderTrackingClient({
                       {isCompleted ? "✓" : idx + 1}
                     </div>
                     <span
-                      className={`text-[9px] sm:text-[10px] font-bold text-center mt-2 ${
+                      className={`mt-2 text-center text-[11px] font-medium leading-tight sm:text-xs ${
                         isActive
                           ? "text-orange-600 dark:text-orange-500 font-extrabold"
                           : isCompleted
@@ -436,8 +436,8 @@ export default function OrderTrackingClient({
         </section>
 
         {/* Order Details Panel */}
-        <section className="bg-[var(--omlu-primary-surface)] dark:bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] rounded-3xl p-6 shadow-xs flex flex-col gap-4">
-          <h2 className="text-sm font-black text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)] uppercase tracking-wider border-b border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] pb-2">
+        <section className="flex flex-col gap-4 rounded-2xl bg-[var(--omlu-primary-surface)] p-5 sm:p-6">
+          <h2 className="border-b border-[var(--omlu-border)] pb-3 text-sm font-semibold text-[var(--omlu-text-secondary)]">
             {t.itemsOrdered}
           </h2>
 
@@ -494,14 +494,14 @@ export default function OrderTrackingClient({
           orderData.status !== "served" &&
           orderData.restaurant_slug &&
           orderData.table_code && (
-          <section className="bg-[var(--omlu-primary-surface)] dark:bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border-strong)] dark:border-[var(--omlu-border)] rounded-3xl p-6 shadow-xs flex flex-col gap-4">
-            <h2 className="text-sm font-black text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)] uppercase tracking-wider">
+          <section className="flex flex-col gap-3 border-y border-[var(--omlu-border)] py-5">
+            <h2 className="text-base font-semibold text-[var(--omlu-text-primary)]">
               {t.needSomething}
             </h2>
             <p className="text-xs text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)]">
               {t.needSomethingDesc}
             </p>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-3 gap-2 sm:gap-3">
               {SR_TYPES.map(({ type, label }) => {
                 const status = srStatus[type] || "idle";
                 const msg = srMessage[type];
@@ -543,7 +543,7 @@ export default function OrderTrackingClient({
                           }, 8_000);
                         }
                       }}
-                      className={`flex flex-col items-center gap-1.5 p-3 rounded-2xl border text-center transition-all duration-200 cursor-pointer disabled:cursor-not-allowed ${
+                      className={`flex min-h-20 flex-col items-center justify-center gap-1.5 rounded-xl border p-2 text-center transition-all duration-200 cursor-pointer disabled:cursor-not-allowed sm:p-3 ${
                         status === "success"
                           ? "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-700/40"
                           : status === "error"
@@ -556,7 +556,7 @@ export default function OrderTrackingClient({
                       <span className="text-xl">
                         {status === "success" ? "✓" : status === "loading" ? "⏳" : label.split(" ")[0]}
                       </span>
-                      <span className={`text-[10px] font-extrabold uppercase tracking-wide ${
+                      <span className={`text-[11px] font-semibold leading-tight ${
                         status === "success"
                           ? "text-emerald-600 dark:text-emerald-400"
                           : status === "error"

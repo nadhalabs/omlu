@@ -103,16 +103,16 @@ export default function CompletionClient({
           </section>
         </div>
       )}
-      <div className="mx-auto max-w-md">
+      <div className="mx-auto max-w-lg">
         {showThemeControl && <div className="flex justify-end"><PublicThemeControl /></div>}
         <section
-          className="mt-6 rounded-3xl bg-[var(--omlu-primary-surface)] p-6 text-center shadow-sm"
+          className="mt-6 rounded-3xl bg-[var(--omlu-primary-surface)] p-6 text-center sm:p-8"
           aria-labelledby="completion-heading"
         >
           {/* Success icon */}
           <div
             aria-hidden="true"
-            className="mx-auto grid size-14 place-items-center rounded-full bg-emerald-600 text-white shadow"
+            className="mx-auto grid size-16 place-items-center rounded-full bg-emerald-600 text-white"
           >
             <svg viewBox="0 0 32 32" className="size-9" fill="none">
               <circle cx="16" cy="16" r="14" stroke="currentColor" strokeWidth="2.5" opacity="0.3" />
@@ -126,7 +126,7 @@ export default function CompletionClient({
             </svg>
           </div>
 
-          <h1 id="completion-heading" className="mt-4 text-2xl font-black">
+          <h1 id="completion-heading" className="mt-5 text-3xl font-bold tracking-tight">
             Payment successful
           </h1>
 
@@ -136,23 +136,23 @@ export default function CompletionClient({
 
           {/* Key payment facts from the session-scoped marker */}
           {(marker?.totalAmount || tableDisplay) && (
-            <dl className="mx-auto mt-5 grid max-w-xs grid-cols-2 gap-3 rounded-2xl bg-[var(--omlu-muted-surface)] p-4 text-left text-sm">
+            <dl className={`mx-auto mt-6 grid max-w-sm gap-4 border-y border-[var(--omlu-border)] py-4 text-left text-sm ${(marker?.totalAmount && tableDisplay) ? "grid-cols-2" : "grid-cols-1 text-center"}`}>
               {marker?.totalAmount && (
                 <div>
-                  <dt className="font-bold text-[var(--omlu-text-secondary)]">Amount paid</dt>
-                  <dd className="mt-0.5 text-base font-black">{marker.totalAmount}</dd>
+                  <dt className="font-medium text-[var(--omlu-text-secondary)]">Amount paid</dt>
+                  <dd className="mt-1 text-2xl font-bold">{marker.totalAmount}</dd>
                 </div>
               )}
               {tableDisplay && (
                 <div>
-                  <dt className="font-bold text-[var(--omlu-text-secondary)]">Table</dt>
-                  <dd className="mt-0.5 font-black">{tableDisplay}</dd>
+                  <dt className="font-medium text-[var(--omlu-text-secondary)]">Table</dt>
+                  <dd className="mt-1 text-base font-semibold">{tableDisplay}</dd>
                 </div>
               )}
             </dl>
           )}
 
-          <p className="mt-4 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+          <p className="mt-5 text-sm font-medium text-emerald-700 dark:text-emerald-400">
             This table is ready for the next guest.
           </p>
 
@@ -162,7 +162,7 @@ export default function CompletionClient({
             </div>
           )}
 
-          <div className="mt-6 grid gap-3">
+          <div className="mt-7 grid gap-3">
             {marker?.receiptToken ? (
               <a
                 href={`/bill/${encodeURIComponent(sessionToken)}?receipt=${encodeURIComponent(marker.receiptToken)}`}
