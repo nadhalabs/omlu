@@ -9,22 +9,21 @@ test("Admin menu editor presents an owner-friendly guided specification flow", (
   const page = read("app/admin/menu/page.tsx");
   assert.match(page, /MenuOptionEditor/);
   for (const copy of [
-    "Customer choices",
-    "Question shown to customer",
-    "What can the customer choose?",
-    "Choose one",
-    "Choose multiple",
-    "Must the customer choose?",
-    "Yes, required",
-    "No, optional",
-    "How should these choices affect the price?",
-    "Different price for each choice",
-    "Extra price",
-    "Included in item price",
-    "Add customer choice",
-    "Add another choice",
+    "Options",
+    "Let customers choose variations, preferences or extras.",
+    "Option name",
+    "Selection",
+    "Single choice",
+    "Multiple choices",
+    "Required",
+    "Pricing",
+    "Set choice prices",
+    "Add to item price",
+    "No price change",
+    "Add option",
+    "+ Add choice",
     "Save changes",
-    "Create choice group",
+    "Create option",
   ]) {
     assert.ok(editor.includes(copy), copy);
   }
@@ -33,11 +32,20 @@ test("Admin menu editor presents an owner-friendly guided specification flow", (
 
 test("choice cards use plain pricing, progressive kitchen help, and ordering actions", () => {
   const editor = read("app/admin/menu/MenuOptionEditor.tsx");
-  for (const copy of ["Choice name", "Kitchen label", "Short text shown to kitchen staff.", "Item price ₹", "Extra price ₹", "Move up", "Move down", "Remove", "Add another choice"]) assert.ok(editor.includes(copy), copy);
+  for (const copy of ["Choice name", "Kitchen label", "Short text shown to kitchen staff.", "Item price ₹", "Extra price ₹", "Move up", "Move down", "Remove", "+ Add choice"]) assert.ok(editor.includes(copy), copy);
   assert.match(editor, /behavior !== "none"/);
   assert.match(editor, /price_delta: behavior === "none" \? 0/);
   assert.match(editor, /display_order: index/);
   assert.match(editor, /function move</);
+});
+
+test("option editor stays readable inside the narrow item modal", () => {
+  const editor = read("app/admin/menu/MenuOptionEditor.tsx");
+  const page = read("app/admin/menu/page.tsx");
+  assert.doesNotMatch(editor, /xl:grid-cols-\[minmax\(0,1fr\)_300px\]/);
+  assert.match(editor, /min-w-0/);
+  assert.match(editor, /min-h-11/);
+  assert.match(page, /max-w-2xl/);
 });
 
 test("new groups use safe smart defaults and existing group meaning is translated", () => {

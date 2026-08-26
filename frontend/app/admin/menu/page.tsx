@@ -752,7 +752,7 @@ export default function AdminMenuPage() {
       {/* DISH FORM MODAL */}
       {itemModal.open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center overscroll-contain bg-black/75 p-4 backdrop-blur-xs">
-          <div className="relative flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col gap-4 overflow-y-auto rounded-3xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-6 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="item-modal-title">
+          <div className="relative flex max-h-[calc(100dvh-2rem)] w-full max-w-2xl flex-col gap-4 overflow-y-auto rounded-3xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-4 shadow-2xl sm:p-6" role="dialog" aria-modal="true" aria-labelledby="item-modal-title">
             <h3 id="item-modal-title" className="text-lg font-black text-[var(--omlu-text-primary)]">
               {itemModal.mode === "create" ? "Add Menu Item" : "Edit Menu Item"}
             </h3>
