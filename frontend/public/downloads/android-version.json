@@ -1,11 +1,17 @@
 {
-  "version": "1.0.2",
-  "build": 3,
+  "version": "1.1.0",
+  "build": 4,
   "minimum_supported_build": 2,
   "apk_url": "https://omlu.in/downloads/omlu.apk",
   "release_notes": [
-    "Improved cancelled-item handling in Kitchen",
-    "Added staff item cancellation",
-    "Improved operational error messages"
+    "Expanded restaurant administration for phones and tablets",
+    "Added operational dashboard, improved KDS navigation, tables and billing workflows",
+    "Added customer session controls and restaurant operating-state controls",
+    "Added menu, category, item, modifier and availability management",
+    "Added staff, permissions, restaurant settings and GST configuration",
+    "Added reports, GST registers and historical operations",
+    "Added Print Bridge administration and printer status tools",
+    "Added native quick sale and takeaway payment workflows",
+    "Added authenticated PDF, XLSX and CSV report downloads"
   ]
 }
