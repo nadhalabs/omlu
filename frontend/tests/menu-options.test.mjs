@@ -115,6 +115,21 @@ test("option-group API contracts and stored fields remain unchanged", () => {
   assert.match(editor, /behavior === "different" \? "variant" : "addon"/);
 });
 
+test("initial item creation supports fixed and option-defined pricing with recoverable drafts", () => {
+  const editor = read("app/admin/menu/MenuOptionEditor.tsx");
+  const page = read("app/admin/menu/page.tsx");
+  for (const copy of ["How is this item priced?", "One price", "Price varies by option", "Save Menu Item"]) assert.ok(page.includes(copy), copy);
+  assert.match(page, /validatePriceDefiningDraft\(itemOptionDrafts\)/);
+  assert.match(page, /Math\.min\([\s\S]*price_delta/);
+  assert.match(page, /let itemId = createdItemId/);
+  assert.match(page, /persistDraftOptionGroups\(itemId, itemOptionDrafts, setItemOptionDrafts\)/);
+  assert.match(page, /without creating a duplicate/);
+  assert.match(editor, /if \(draftMode\)/);
+  assert.match(editor, /onDraftGroupsChange/);
+  assert.match(editor, /method: "DELETE"/);
+  assert.match(editor, /drafts\.slice\(draftIndex \+ 1\)/);
+});
+
 test("Gemini review flow supports universal option group review, editing and customer preview", () => {
   const review = read("app/admin/menu/MenuImportFlow.tsx");
   assert.match(review, /Option Groups for/);
