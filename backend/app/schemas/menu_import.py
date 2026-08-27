@@ -102,6 +102,9 @@ class MenuExtractionResult(BaseModel):
 class DraftItemResponse(BaseModel):
     id: UUID
     category_name: str | None
+    extracted_category_name: str | None = None
+    category_id: int | None = None
+    category_source: Literal["existing", "new", "unresolved"] = "unresolved"
     item_name: str
     description: str | None
     price: float | None
@@ -182,6 +185,8 @@ class ConfirmDraftItem(BaseModel):
     draft_item_id: UUID
     selected: bool = True
     category_name: str | None = None
+    category_id: int | None = None
+    create_new_category: bool = False
     item_name: str = Field(min_length=1, max_length=120)
     description: str | None = Field(default=None, max_length=1024)
     price: float | None = Field(default=None, ge=0)

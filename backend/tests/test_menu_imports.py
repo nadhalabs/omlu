@@ -5,7 +5,7 @@ import pytest
 
 from app.database import SessionLocal
 from app.main import app
-from app.models.menu import MenuItem, MenuOption, MenuOptionGroup
+from app.models.menu import MenuCategory, MenuItem, MenuOption, MenuOptionGroup
 from app.models.menu_import import MenuImportDraftItem, MenuImportJob
 from app.models.restaurant import Restaurant
 from app.models.staff_user import StaffUser
@@ -96,6 +96,85 @@ def create_draft_job(db, restaurant_id, created_by_id, items_data):
     job_id = job.id
     draft_ids = [d.id for d in draft_items]
     return job_id, draft_ids
+
+
+def test_category_normalization_and_scan_reconciliation(import_context):
+    from app.routes.menu_imports import normalize_category_name, serialize_job
+
+    assert normalize_category_name("  Hot   DRINKS ") == "hot drinks"
+
+    db = SessionLocal()
+    owner = db.query(StaffUser).filter(StaffUser.restaurant_id == import_context["restaurant_id"]).first()
+    existing = MenuCategory(
+        restaurant_id=import_context["restaurant_id"], name_en="HOT DRINKS", display_order=0, is_active=True
+    )
+    db.add(existing)
+    db.commit()
+    job_id, _ = create_draft_job(db, import_context["restaurant_id"], owner.id, [
+        {"item_name": "Tea", "price": "20.00", "category_name": " hot   drinks "},
+        {"item_name": "Kapsa", "price": "200.00", "category_name": "Kapsa"},
+        {"item_name": "Mystery", "price": "30.00", "category_name": None},
+    ])
+    job = db.query(MenuImportJob).filter(MenuImportJob.id == job_id).first()
+    payload = serialize_job(job, db)
+    assert payload["items"][0]["category_source"] == "existing"
+    assert payload["items"][0]["category_id"] == existing.id
+    assert payload["items"][0]["category_name"] == "HOT DRINKS"
+    assert payload["items"][1]["category_source"] == "new"
+    assert payload["items"][2]["category_source"] == "unresolved"
+    db.close()
+
+
+def test_confirmation_reuses_equivalent_category_drafts(import_context):
+    from app.routes.menu_imports import normalize_category_name
+
+    db = SessionLocal()
+    owner = db.query(StaffUser).filter(StaffUser.restaurant_id == import_context["restaurant_id"]).first()
+    job_id, draft_ids = create_draft_job(db, import_context["restaurant_id"], owner.id, [
+        {"item_name": "Salt Fries", "price": "60.00", "category_name": "Fries"},
+        {"item_name": "Masala Fries", "price": "70.00", "category_name": " fries  "},
+    ])
+    db.close()
+
+    response = client.post(
+        f"/admin/menu-imports/{job_id}/confirm",
+        headers=auth(import_context),
+        json={"items": [
+            {"draft_item_id": str(draft_ids[0]), "category_name": "Fries", "create_new_category": True,
+             "item_name": "Salt Fries", "price": 60, "food_type": "veg", "option_groups": []},
+            {"draft_item_id": str(draft_ids[1]), "category_name": " fries  ", "create_new_category": True,
+             "item_name": "Masala Fries", "price": 70, "food_type": "veg", "option_groups": []},
+        ]},
+    )
+    assert response.status_code == 200
+    db = SessionLocal()
+    categories = db.query(MenuCategory).filter(MenuCategory.restaurant_id == import_context["restaurant_id"]).all()
+    assert len([category for category in categories if normalize_category_name(category.name_en) == "fries"]) == 1
+    db.close()
+
+
+def test_confirmation_rejects_cross_tenant_category_id(import_context):
+    db = SessionLocal()
+    owner = db.query(StaffUser).filter(StaffUser.restaurant_id == import_context["restaurant_id"]).first()
+    other_category = MenuCategory(
+        restaurant_id=import_context["other_restaurant_id"], name_en="Private", display_order=0, is_active=True
+    )
+    db.add(other_category)
+    db.commit()
+    job_id, draft_ids = create_draft_job(db, import_context["restaurant_id"], owner.id, [
+        {"item_name": "Attempt", "price": "10.00", "category_name": "Private"}
+    ])
+    other_category_id = other_category.id
+    db.close()
+
+    response = client.post(
+        f"/admin/menu-imports/{job_id}/confirm",
+        headers=auth(import_context),
+        json={"items": [{"draft_item_id": str(draft_ids[0]), "category_name": "Private",
+                         "category_id": other_category_id, "item_name": "Attempt", "price": 10,
+                         "food_type": "veg", "option_groups": []}]},
+    )
+    assert response.status_code == 400
 
 
 def test_simple_item_import(import_context):

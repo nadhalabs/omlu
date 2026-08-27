@@ -28,6 +28,11 @@ def normalize_item_name(value: str) -> str:
     return " ".join(value.lower().strip().split())
 
 
+def normalize_category_name(value: str) -> str:
+    """Canonical, deliberately conservative category comparison key."""
+    return " ".join(value.casefold().strip().split())
+
+
 def build_legacy_variant_group(item_name: str, variants: list[dict]) -> dict:
     return {
         "name": f"{item_name.strip()} size",
@@ -58,15 +63,35 @@ def serialize_job(job: MenuImportJob, db: Session) -> dict:
             MenuItem.restaurant_id == job.restaurant_id
         ).all()
     }
+    categories_by_name = {
+        normalize_category_name(category.name_en): category
+        for category in db.query(MenuCategory).filter(
+            MenuCategory.restaurant_id == job.restaurant_id
+        ).all()
+    }
     result = job.original_result or {}
     items = []
     for row in job.draft_items:
         option_groups = row.option_groups or []
         if not option_groups and row.variants:
             option_groups = [build_legacy_variant_group(row.item_name, row.variants)]
+        extracted_category_name = row.category_name.strip() if row.category_name and row.category_name.strip() else None
+        matched_category = (
+            categories_by_name.get(normalize_category_name(extracted_category_name))
+            if extracted_category_name
+            else None
+        )
+        confident_category = float(row.category_confidence) >= 0.75
         items.append({
             "id": row.id,
-            "category_name": row.category_name,
+            "category_name": matched_category.name_en if matched_category else (
+                extracted_category_name if confident_category else None
+            ),
+            "extracted_category_name": extracted_category_name,
+            "category_id": matched_category.id if matched_category else None,
+            "category_source": "existing" if matched_category else (
+                "new" if extracted_category_name and confident_category else "unresolved"
+            ),
             "item_name": row.item_name,
             "description": row.description,
             "price": float(row.price) if row.price is not None else None,
@@ -75,7 +100,7 @@ def serialize_job(job: MenuImportJob, db: Session) -> dict:
             "variants": row.variants,
             "warnings": row.warnings,
             "item_confidence": float(row.item_confidence),
-            "category_confidence": float(row.category_confidence),
+            "category_confidence": 1.0 if matched_category else float(row.category_confidence),
             "selected": row.selected,
             "duplicate": normalize_item_name(row.item_name) in existing,
         })
@@ -268,7 +293,7 @@ def confirm_menu_import(
     imported = 0
     skipped = 0
     category_cache = {
-        category.name_en.casefold(): category
+        normalize_category_name(category.name_en): category
         for category in db.query(MenuCategory).filter(
             MenuCategory.restaurant_id == current_user.restaurant_id
         ).all()
@@ -282,7 +307,12 @@ def confirm_menu_import(
         for submitted in request.items:
             draft = draft_by_id[submitted.draft_item_id]
             draft.selected = submitted.selected
-            draft.category_name = submitted.category_name
+            requested_category_name = (
+                " ".join(submitted.category_name.strip().split())
+                if submitted.category_name
+                else None
+            )
+            draft.category_name = requested_category_name
             draft.item_name = submitted.item_name.strip()
             draft.description = submitted.description
             draft.price = Decimal(str(submitted.price)) if submitted.price is not None else None
@@ -293,7 +323,7 @@ def confirm_menu_import(
             if not submitted.selected:
                 continue
 
-            if not submitted.category_name or not submitted.category_name.strip():
+            if not requested_category_name:
                 raise HTTPException(400, f"{submitted.item_name}: category is required")
             if not submitted.item_name or not submitted.item_name.strip():
                 raise HTTPException(400, "Item name cannot be empty")
@@ -331,12 +361,37 @@ def confirm_menu_import(
                 db.delete(duplicate)
                 db.flush()
 
-            category_key = submitted.category_name.strip().casefold()
-            category = category_cache.get(category_key)
+            category_key = normalize_category_name(requested_category_name)
+            category = None
+            if submitted.category_id is not None:
+                category = db.query(MenuCategory).filter(
+                    MenuCategory.id == submitted.category_id,
+                    MenuCategory.restaurant_id == current_user.restaurant_id,
+                ).first()
+                if category is None:
+                    raise HTTPException(400, "Selected category is not available for this restaurant")
+                if normalize_category_name(category.name_en) != category_key:
+                    raise HTTPException(400, "Selected category does not match the submitted category name")
+            elif submitted.create_new_category:
+                # Re-read under the confirmation transaction: another admin may
+                # have created the same canonical category while review was open.
+                category = db.query(MenuCategory).filter(
+                    MenuCategory.restaurant_id == current_user.restaurant_id
+                ).all()
+                category = next(
+                    (candidate for candidate in category if normalize_category_name(candidate.name_en) == category_key),
+                    None,
+                )
+            else:
+                # Backward compatibility for older Admin clients. Names remain
+                # tenant-scoped and pass through the same canonical reuse path.
+                category = category_cache.get(category_key)
+
+            category = category or category_cache.get(category_key)
             if not category:
                 category = MenuCategory(
                     restaurant_id=current_user.restaurant_id,
-                    name_en=submitted.category_name.strip(),
+                    name_en=requested_category_name,
                     display_order=len(category_cache),
                     is_active=True,
                 )
