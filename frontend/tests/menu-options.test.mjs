@@ -69,6 +69,32 @@ test("customer preview reflects selection, requirement, and existing pricing sem
   assert.match(editor, /behavior === "different" \? `₹/);
 });
 
+test("new option creation opens explicitly and Cancel closes a clean API-free draft", () => {
+  const editor = read("app/admin/menu/MenuOptionEditor.tsx");
+  assert.match(editor, /useState\(false\).*isCreating|\[isCreating, setIsCreating\] = useState\(false\)/);
+  assert.match(editor, /!isCreating && \([\s\S]*onClick=\{startNewOption\}[\s\S]*\+ Add option/);
+  assert.match(editor, /isCreating && <article[\s\S]*Cancel[\s\S]*Create option/);
+
+  const start = editor.match(/const startNewOption = \(\) => \{([\s\S]*?)\n  \};/)?.[1] || "";
+  assert.match(start, /resetNewOptionDraft\(\)/);
+  assert.match(start, /setIsCreating\(true\)/);
+
+  const cancel = editor.match(/const cancelNewOption = \(\) => \{([\s\S]*?)\n  \};/)?.[1] || "";
+  for (const reset of ["resetNewOptionDraft()", "setMessage(null)", "setIsCreating(false)"]) assert.ok(cancel.includes(reset), reset);
+  assert.doesNotMatch(cancel, /jsonRequest|createGroup|saveExisting|updateGroup|setGroups/);
+
+  const reset = editor.match(/const resetNewOptionDraft = \(\) => \{([\s\S]*?)\n  \};/)?.[1] || "";
+  for (const defaultState of [
+    'setName("")',
+    'setSelection("one")',
+    'setNewPricing("none")',
+    "setRequired(true)",
+    "setMinimum(1)",
+    "setMaximum(1)",
+    "setOptionsState([",
+  ]) assert.ok(reset.includes(defaultState), defaultState);
+});
+
 test("advanced constraints and validation use owner-friendly language", () => {
   const editor = read("app/admin/menu/MenuOptionEditor.tsx");
   assert.match(editor, /<details[\s\S]*Advanced settings/);
