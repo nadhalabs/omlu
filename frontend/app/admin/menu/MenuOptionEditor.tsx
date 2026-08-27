@@ -167,6 +167,7 @@ export default function MenuOptionEditor({ itemId, itemName }: Props) {
   const [minimum, setMinimum] = useState(1);
   const [maximum, setMaximum] = useState(1);
   const [options, setOptionsState] = useState<DraftOption[]>([{ name: "", kitchen_display_name: "", amount: "0", available: true, display_order: 0 }]);
+  const [isCreating, setIsCreating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -187,7 +188,7 @@ export default function MenuOptionEditor({ itemId, itemName }: Props) {
   const updateGroup = (groupId: number, patch: Partial<MenuOptionGroup>) => setGroups((current) => current.map((group) => group.id === groupId ? { ...group, ...patch } : group));
   const optionCount = options.length;
   const normalizedNewMaximum = selection === "one" ? 1 : Math.max(maximum, required ? 1 : 0);
-  const resetNewOption = () => {
+  const resetNewOptionDraft = () => {
     setName("");
     setSelection("one");
     setNewPricing("none");
@@ -195,7 +196,16 @@ export default function MenuOptionEditor({ itemId, itemName }: Props) {
     setMinimum(1);
     setMaximum(1);
     setOptionsState([{ name: "", kitchen_display_name: "", amount: "0", available: true, display_order: 0 }]);
+  };
+  const startNewOption = () => {
+    resetNewOptionDraft();
     setMessage(null);
+    setIsCreating(true);
+  };
+  const cancelNewOption = () => {
+    resetNewOptionDraft();
+    setMessage(null);
+    setIsCreating(false);
   };
 
   const validate = (groupName: string, choices: Array<{ name: string; amount: string }>, min: number, max: number, isRequired: boolean) => {
@@ -215,7 +225,8 @@ export default function MenuOptionEditor({ itemId, itemName }: Props) {
       const group = await jsonRequest<MenuOptionGroup>("/api/admin/menu/option-groups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: name.trim(), type: newPricing === "different" ? "variant" : "addon", required, minimum_selections: selection === "one" ? (required ? 1 : 0) : (required ? Math.max(1, minimum) : 0), maximum_selections: normalizedNewMaximum, display_order: groups.length, active: true }) });
       for (const [index, option] of options.entries()) await jsonRequest("/api/admin/menu/options", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ group_id: group.id, name: option.name.trim(), kitchen_display_name: option.kitchen_display_name.trim() || null, price_delta: newPricing === "none" ? 0 : Number(option.amount), available: option.available, display_order: index }) });
       await jsonRequest(`/api/admin/menu/items/${itemId}/option-groups`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ option_group_id: group.id, display_order: groups.length, active: true }) });
-      setName(""); setSelection("one"); setNewPricing("none"); setRequired(true); setMinimum(1); setMaximum(1); setOptions([{ name: "", kitchen_display_name: "", amount: "0", available: true, display_order: 0 }]);
+      resetNewOptionDraft();
+      setIsCreating(false);
       setMessage("Specification group saved."); await load();
     } catch (error) { setMessage(error instanceof Error ? error.message : "Could not save specifications."); } finally { setSaving(false); }
   };
@@ -278,16 +289,19 @@ export default function MenuOptionEditor({ itemId, itemName }: Props) {
       </article>;
     })}</div>
 
-    <article className="mt-6 rounded-2xl border border-[var(--omlu-border)] p-4">
+    {!isCreating && (
+      <button type="button" onClick={startNewOption} className="mt-6 min-h-11 rounded-xl border border-dashed border-[var(--omlu-border-strong)] px-4 py-2.5 text-sm font-semibold text-orange-700 hover:border-orange-400 hover:bg-orange-500/5 dark:text-orange-400">+ Add option</button>
+    )}
+    {isCreating && <article className="mt-6 rounded-2xl border border-[var(--omlu-border)] p-4">
       <h5 className="text-base font-semibold text-[var(--omlu-text-primary)]">Add option</h5>
       <label className="mt-4 block text-sm font-semibold text-[var(--omlu-text-primary)]">Option name<input value={name} onChange={(event) => setName(event.target.value)} className={`${inputClass} mt-2`} placeholder="Choose size, preparation, extras…" /></label>
       <GuidedChoices name="new-group" selection={selection} required={required} pricing={newPricing} onSelection={(value) => { setSelection(value); if (value === "one") { setRequired(true); setMinimum(1); setMaximum(1); } else { setRequired(false); setMinimum(0); setMaximum(Math.max(optionCount, 1)); if (newPricing === "different") setNewPricing("none"); } }} onRequired={(value) => { setRequired(value); setMinimum(value ? Math.max(1, minimum) : 0); }} onPricing={(value) => { setNewPricing(value); if (value === "different") { setSelection("one"); setMaximum(1); } if (value === "none") setOptions(options.map((option) => ({ ...option, amount: "0" }))); }} />
       <div className="mt-5"><h6 className="text-sm font-semibold text-[var(--omlu-text-primary)]">Choices</h6><div className="mt-2"><DraftChoiceRows options={options} pricing={newPricing} setOptions={setOptions} /></div><button type="button" onClick={() => setOptions([...options, { name: "", kitchen_display_name: "", amount: "0", available: true, display_order: options.length }])} className="mt-3 min-h-11 rounded-xl bg-[var(--omlu-muted-surface)] px-4 py-2.5 text-sm font-semibold text-[var(--omlu-text-primary)]">+ Add choice</button></div><CustomerPreview name={name} selection={selection} required={required} pricing={newPricing} options={options} />
       <details className="mt-4 rounded-xl bg-[var(--omlu-muted-surface)] p-3"><summary className="cursor-pointer text-sm font-black text-[var(--omlu-text-primary)]">Advanced settings</summary><p className="mt-2 text-xs text-[var(--omlu-text-secondary)]">Choice order is maintained automatically from the order shown above.</p>{selection === "multiple" && <div className="mt-3 grid gap-3 sm:grid-cols-2"><label className="text-xs font-bold text-[var(--omlu-text-secondary)]">Minimum choices<input type="number" min={required ? 1 : 0} value={minimum} onChange={(event) => setMinimum(Number(event.target.value))} className={`${inputClass} mt-1`} /></label><label className="text-xs font-bold text-[var(--omlu-text-secondary)]">Maximum choices<input type="number" min="1" value={maximum} onChange={(event) => setMaximum(Number(event.target.value))} className={`${inputClass} mt-1`} /></label></div>}</details>
       <div className="mt-5 flex items-center justify-between gap-3 border-t border-[var(--omlu-border)] pt-4">
-        <button type="button" disabled={saving} onClick={resetNewOption} className="min-h-11 rounded-xl px-4 py-2.5 text-sm font-semibold text-[var(--omlu-text-secondary)] hover:bg-[var(--omlu-muted-surface)] disabled:opacity-50">Cancel</button>
+        <button type="button" disabled={saving} onClick={cancelNewOption} className="min-h-11 rounded-xl px-4 py-2.5 text-sm font-semibold text-[var(--omlu-text-secondary)] hover:bg-[var(--omlu-muted-surface)] disabled:opacity-50">Cancel</button>
         <button type="button" disabled={saving} onClick={() => void createGroup()} className="min-h-11 rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-bold text-[var(--omlu-primary-action-text)] disabled:opacity-50">{saving ? "Saving…" : "Create option"}</button>
       </div>
-    </article>
+    </article>}
   </section>;
 }
