@@ -12,6 +12,18 @@ test("Menu Management exposes clear hierarchy, filters, and labelled actions", (
   assert.doesNotMatch(menu, /title="Edit Item"[\s\S]*✏️/);
 });
 
+test("Menu Management category filtering is explicit, clearable, and category-aware", () => {
+  assert.match(menu, /useState<string>\("all"\)/, "All Categories is the default");
+  assert.match(menu, /item\.category_id === Number\(selectedCategoryId\)/, "Items filter client-side by category");
+  assert.match(menu, /selectedCategory \? "border-orange-500 ring-1 ring-orange-500\/30"/, "Selected category has an active state");
+  assert.ok(menu.includes("Filtered by:"));
+  assert.match(menu, /const clearCategoryFilter = \(\) => setSelectedCategoryId\("all"\)/);
+  assert.match(menu, /onClick=\{clearCategoryFilter\}/);
+  assert.ok(menu.includes("Show all categories"));
+  assert.ok(menu.includes("No menu items in ${selectedCategory.name_en} yet."));
+  assert.ok(menu.includes('`${filteredItems.length} ${filteredItems.length === 1 ? "item" : "items"} in ${selectedCategory.name_en}`'));
+});
+
 test("menu destructive actions live in accessible More actions menus", () => {
   assert.match(menu, /aria-label=\{`More actions for \$\{cat\.name_en\}`\}/);
   assert.match(menu, /Delete category/);
