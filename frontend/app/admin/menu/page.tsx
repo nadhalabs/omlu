@@ -146,6 +146,11 @@ export default function AdminMenuPage() {
 
     return matchesCategory && matchesSearch;
   });
+  const selectedCategory =
+    selectedCategoryId === "all"
+      ? null
+      : categories.find((category) => category.id === Number(selectedCategoryId)) || null;
+  const clearCategoryFilter = () => setSelectedCategoryId("all");
 
   // Handle Category Submit
   const handleCategorySubmit = async (e: React.FormEvent) => {
@@ -528,7 +533,7 @@ export default function AdminMenuPage() {
         {/* RIGHT COLUMN: Menu items list with Search/Filters */}
         <section className="flex flex-col gap-4 rounded-3xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-5 shadow-sm lg:col-span-2">
           {/* Header */}
-          <div className="border-b border-[var(--omlu-border-strong)] pb-3"><h2 className="text-lg font-black text-[var(--omlu-text-primary)]">Menu items</h2><p className="text-xs font-medium text-[var(--omlu-text-secondary)]">Showing {filteredItems.length} of {items.length} items</p></div>
+          <div className="border-b border-[var(--omlu-border-strong)] pb-3"><h2 className="text-lg font-black text-[var(--omlu-text-primary)]">Menu items</h2><p className="text-xs font-medium text-[var(--omlu-text-secondary)]">{selectedCategory && !searchQuery.trim() ? `${filteredItems.length} ${filteredItems.length === 1 ? "item" : "items"} in ${selectedCategory.name_en}` : `Showing ${filteredItems.length} of ${items.length} items`}</p></div>
 
           {/* Filters Panel */}
           <div className="flex flex-col sm:flex-row gap-3">
@@ -537,7 +542,7 @@ export default function AdminMenuPage() {
               <select
                 value={selectedCategoryId}
                 onChange={(e) => setSelectedCategoryId(e.target.value)}
-                aria-label="Filter by category" className="min-h-11 w-full rounded-xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-3 py-2.5 text-sm text-[var(--omlu-text-primary)] outline-none focus-visible:outline-2 focus-visible:outline-orange-500"
+                aria-label="Filter by category" className={`min-h-11 w-full rounded-xl border bg-[var(--omlu-primary-surface)] px-3 py-2.5 text-sm font-bold text-[var(--omlu-text-primary)] outline-none focus-visible:outline-2 focus-visible:outline-orange-500 ${selectedCategory ? "border-orange-500 ring-1 ring-orange-500/30" : "border-[var(--omlu-border-strong)]"}`}
               >
                 <option value="all">All Categories</option>
                 {categories.map((c) => (
@@ -560,6 +565,26 @@ export default function AdminMenuPage() {
             </div>
           </div>
 
+          {selectedCategory && (
+            <div className="flex flex-wrap items-center gap-2" aria-live="polite">
+              <span className="text-xs font-bold text-[var(--omlu-text-secondary)]">Filtered by:</span>
+              <span className="inline-flex min-h-9 items-center gap-2 rounded-full border border-orange-500/60 bg-orange-500/10 pl-3 pr-1.5 text-xs font-black text-[var(--omlu-text-primary)]">
+                {selectedCategory.name_en}
+                <button
+                  type="button"
+                  onClick={clearCategoryFilter}
+                  aria-label={`Clear ${selectedCategory.name_en} category filter`}
+                  className="flex min-h-7 min-w-7 items-center justify-center rounded-full text-base text-orange-500 transition hover:bg-orange-500/15 focus-visible:outline-2 focus-visible:outline-orange-500"
+                >
+                  ×
+                </button>
+              </span>
+              <button type="button" onClick={clearCategoryFilter} className="min-h-9 rounded-lg px-2 text-xs font-black text-orange-500 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-orange-500">
+                Clear
+              </button>
+            </div>
+          )}
+
           {/* Dishes List */}
           {itemsLoading ? (
             <div className="flex justify-center py-12">
@@ -570,7 +595,12 @@ export default function AdminMenuPage() {
           ) : filteredItems.length === 0 ? (
             <div className="text-center py-12 text-[var(--omlu-text-secondary)]">
               <span className="text-3xl block mb-2">🍽️</span>
-              <p className="text-xs font-bold">No dishes found matching search parameters.</p>
+              <p className="text-xs font-bold">{selectedCategory && !searchQuery.trim() ? `No menu items in ${selectedCategory.name_en} yet.` : "No dishes match the current filters."}</p>
+              {selectedCategory && (
+                <button type="button" onClick={clearCategoryFilter} className="mt-3 min-h-9 rounded-lg px-3 text-xs font-black text-orange-500 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-orange-500">
+                  Show all categories
+                </button>
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
