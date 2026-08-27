@@ -98,6 +98,83 @@ body {
   overflow-wrap: anywhere;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
+.omlu-lead-input {
+  min-height: 48px;
+  width: 100%;
+  border: 1px solid var(--omlu-border-strong);
+  border-radius: 0.5rem;
+  background: var(--omlu-input-background);
+  padding: 0.75rem;
+  color: var(--omlu-text-primary);
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+}
+
+.omlu-lead-input:hover,
+.omlu-phone-input:hover {
+  border-color: var(--omlu-text-muted);
+}
+
+.omlu-lead-input:user-invalid,
+.omlu-phone-input:has(input:user-invalid) {
+  border-color: var(--omlu-destructive-border);
+}
+
+.omlu-phone-input {
+  display: flex;
+  min-height: 48px;
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--omlu-border-strong);
+  border-radius: 0.5rem;
+  background: var(--omlu-input-background);
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.omlu-phone-input:focus-within {
+  border-color: var(--omlu-focus-ring);
+  outline: 2px solid var(--omlu-focus-ring);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.18);
+}
+
+.omlu-phone-prefix {
+  display: inline-flex;
+  width: 3.75rem;
+  flex: 0 0 3.75rem;
+  align-items: center;
+  justify-content: center;
+  align-self: stretch;
+  border-right: 1px solid var(--omlu-border);
+  color: var(--omlu-text-muted);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.omlu-phone-input input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0.75rem;
+  color: var(--omlu-text-primary);
+  font-size: 0.875rem;
+  font-weight: 600;
+  outline: 0;
+  box-shadow: none;
+}
+
+.omlu-phone-input input:focus-visible {
+  outline: 0;
+  box-shadow: none;
+}
+
 button,
 a,
 input,
@@ -241,6 +318,46 @@ a.text-white[aria-disabled="true"] {
   color: var(--omlu-text-primary);
 }
 
+.legal-article h3 {
+  color: var(--omlu-text-primary);
+  font-size: 1.05rem;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.legal-article ul {
+  list-style: disc;
+  padding-left: 1.35rem;
+}
+
+.legal-article li + li {
+  margin-top: 0.45rem;
+}
+
+.legal-article dt {
+  color: var(--omlu-text-primary);
+  font-size: 0.875rem;
+  font-weight: 800;
+}
+
+.legal-article dd {
+  margin-top: 0.25rem;
+  font-size: 0.875rem;
+}
+
+.legal-article a {
+  color: #ea580c;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
 @keyframes omlu-scan-line {
   0% {
     top: 0%;
@@ -257,49 +374,6 @@ a.text-white[aria-disabled="true"] {
 
 .omlu-scan-line {
   animation: omlu-scan-line 3s ease-in-out infinite alternate;
-}
-
-@keyframes omlu-fade-in-up {
-  from {
-    opacity: 0;
-    transform: translateY(16px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.omlu-animate-hero-1 {
-  animation: omlu-fade-in-up 0.5s ease-out forwards;
-}
-.omlu-animate-hero-2 {
-  animation: omlu-fade-in-up 0.5s ease-out 0.1s forwards;
-  opacity: 0;
-}
-.omlu-animate-hero-3 {
-  animation: omlu-fade-in-up 0.5s ease-out 0.2s forwards;
-  opacity: 0;
-}
-.omlu-animate-hero-4 {
-  animation: omlu-fade-in-up 0.5s ease-out 0.3s forwards;
-  opacity: 0;
-}
-.omlu-animate-hero-5 {
-  animation: omlu-fade-in-up 0.5s ease-out 0.4s forwards;
-  opacity: 0;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .omlu-animate-hero-1,
-  .omlu-animate-hero-2,
-  .omlu-animate-hero-3,
-  .omlu-animate-hero-4,
-  .omlu-animate-hero-5 {
-    animation: none !important;
-    opacity: 1 !important;
-    transform: none !important;
-  }
 }
 
 
@@ -346,5 +420,115 @@ a.text-white[aria-disabled="true"] {
     line-height: 1.3 !important;
     font-family: monospace !important;
     min-height: auto !important;
+  }
+
+  /* Thermal receipts use dense, line-oriented spacing instead of screen-card rhythm. */
+  :is(.print-thermal-58, .print-thermal-80) .receipt-header {
+    padding-bottom: 2mm !important;
+  }
+
+  :is(.print-thermal-58, .print-thermal-80) .receipt-header h1,
+  :is(.print-thermal-58, .print-thermal-80) .receipt-header p,
+  :is(.print-thermal-58, .print-thermal-80) .receipt-header div {
+    margin-top: 0 !important;
+  }
+
+  :is(.print-thermal-58, .print-thermal-80) .receipt-metadata {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 0 !important;
+    margin-top: 1.5mm !important;
+  }
+
+  :is(.print-thermal-58, .print-thermal-80) .receipt-items {
+    padding: 2mm 0 !important;
+  }
+
+  :is(.print-thermal-58, .print-thermal-80) .receipt-items-heading {
+    margin-bottom: 1mm !important;
+  }
+
+  :is(.print-thermal-58, .print-thermal-80) .receipt-orders,
+  :is(.print-thermal-58, .print-thermal-80) .receipt-item-list,
+  :is(.print-thermal-58, .print-thermal-80) .receipt-totals {
+    gap: 1mm !important;
+  }
+
+  :is(.print-thermal-58, .print-thermal-80) .receipt-order {
+    padding: 1mm 0 !important;
+  }
+
+  :is(.print-thermal-58, .print-thermal-80) .receipt-order-heading {
+    margin-bottom: 1mm !important;
+    padding-bottom: 0.5mm !important;
+  }
+
+  :is(.print-thermal-58, .print-thermal-80) .receipt-item {
+    gap: 1.5mm !important;
+    line-height: 1.15 !important;
+  }
+
+  :is(.print-thermal-58, .print-thermal-80) .receipt-option {
+    padding-left: 1.5mm !important;
+    line-height: 1.1 !important;
+  }
+
+  :is(.print-thermal-58, .print-thermal-80) .receipt-footer {
+    padding-top: 2mm !important;
+  }
+
+  :is(.print-thermal-58, .print-thermal-80) .receipt-grand-total {
+    margin-top: 1mm !important;
+    padding-top: 1.5mm !important;
+    font-size: 1.2em !important;
+  }
+
+  .legal-page {
+    background: #fff !important;
+    color: #000 !important;
+    font-family: Arial, Helvetica, sans-serif;
+  }
+
+  .legal-page .legal-screen-only,
+  .legal-page details {
+    display: none !important;
+  }
+
+  .legal-page main,
+  .legal-page article,
+  .legal-page section,
+  .legal-page footer,
+  .legal-page div {
+    background: transparent !important;
+    box-shadow: none !important;
+    color: #000 !important;
+  }
+
+  .legal-page article {
+    max-width: none !important;
+  }
+
+  .legal-page article section {
+    break-inside: auto;
+    page-break-inside: auto;
+  }
+
+  .legal-page article h2,
+  .legal-page article h3 {
+    break-after: avoid-page;
+    page-break-after: avoid;
+    color: #000 !important;
+  }
+
+  .legal-page article p,
+  .legal-page article li,
+  .legal-page article dd,
+  .legal-page article dt,
+  .legal-page footer p {
+    color: #000 !important;
+  }
+
+  .legal-page a {
+    color: #000 !important;
   }
 }

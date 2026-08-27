@@ -229,16 +229,6 @@ export class DesktopEscPosEncoder {
     // Status Banner - Center Aligned
     bytes.push(0x1B, 0x61, 0x01);
     this.addString(bytes, `${status}${data.payment_method ? ` - ${data.payment_method.toUpperCase()}` : ''}\n`);
-    if (data.digital_bill_url) {
-      this.addString(bytes, 'VIEW DIGITAL BILL\n');
-      try {
-        if (this.qrMode === 'native') this.addNativeQrCode(bytes, data.digital_bill_url);
-        else this.addRasterQrCode(bytes, data.digital_bill_url);
-      } catch (error) {
-        console.warn('OMLU receipt QR raster encoding failed; printing receipt without QR.', error);
-      }
-      this.addString(bytes, 'Scan for bill details\n');
-    }
     this.addString(bytes, 'Thank you\n');
 
     // Feed lines

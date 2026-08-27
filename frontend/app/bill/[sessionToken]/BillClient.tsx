@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PublicThemeControl } from "@/components/PublicThemeControl";
-import { ApiError, getPublicBill, getPublicDiningSession, getPublicQuickSaleReceipt, getPublicReceiptQrUrl, getQuickSalePrintDocument, isDefiniteAuthFailure } from "@/lib/api";
+import { ApiError, getPublicBill, getPublicDiningSession, getPublicQuickSaleReceipt, getQuickSalePrintDocument, isDefiniteAuthFailure } from "@/lib/api";
 import { BillResponse, PublicDiningSessionResponse, PublicReceiptBillResponse } from "@/lib/types";
 import { buildWhatsAppBillShareUrl } from "@/lib/billShare";
 import { buildPaidCompletionMarker, clearCustomerCartState, completionPath, markCompletedSession, readCompletedSession } from "@/lib/customerCompletion";
@@ -126,23 +126,38 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false, 
     if (!bill || !["issued", "payment_pending", "paid"].includes(bill.status)) return;
     if (typeof window === "undefined" || !window.parent) return;
 
-    const notifyReady = () => {
-      const receiptSheet = document.querySelector(".print-bill-sheet");
-      if (receiptSheet) {
-        window.parent.postMessage(
-          {
-            type: "OMLU_PRINT_READY",
-            sessionToken,
-            receiptToken: receiptAccessToken || receiptToken || bill.receipt_token || "",
-          },
-          window.location.origin
-        );
+    let cancelled = false;
+    const waitForImage = async (image: HTMLImageElement) => {
+      if (!image.complete) {
+        await new Promise<void>((resolve) => {
+          image.addEventListener("load", () => resolve(), { once: true });
+          image.addEventListener("error", () => resolve(), { once: true });
+        });
+      }
+      if (image.naturalWidth > 0 && typeof image.decode === "function") {
+        await image.decode().catch(() => undefined);
       }
     };
+    const notifyReady = async () => {
+      const receiptSheet = document.querySelector(".print-bill-sheet");
+      if (!receiptSheet) return;
+      const images = Array.from(receiptSheet.querySelectorAll("img"));
+      await Promise.all(images.map(waitForImage));
+      await document.fonts?.ready;
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      if (cancelled) return;
+      window.parent.postMessage(
+        {
+          type: "OMLU_PRINT_READY",
+          sessionToken,
+          receiptToken: receiptAccessToken || receiptToken || bill.receipt_token || "",
+        },
+        window.location.origin
+      );
+    };
 
-    notifyReady();
-    const frameId = requestAnimationFrame(notifyReady);
-    return () => cancelAnimationFrame(frameId);
+    void notifyReady();
+    return () => { cancelled = true; };
   }, [bill, receiptAccessToken, receiptToken, sessionToken]);
   const labels = {
     en: {
@@ -609,7 +624,6 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false, 
   const isPaid = bill.status === "paid";
   const canPrintOfficially = ["issued", "payment_pending", "paid"].includes(bill.status);
   const documentTitle = bill.document_title;
-  const qrToken = receiptAccessToken || bill.receipt_token;
   const downloadBill = () => {
     const previousTitle = document.title;
     document.title = `${bill.bill_number || "OMLU-bill"}`;
@@ -618,27 +632,27 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false, 
   };
 
   return (
-    <div className="min-h-screen bg-[var(--omlu-page-background)] px-4 py-4 text-[var(--omlu-text-primary)] sm:px-6 sm:py-6 print:bg-white print:px-0 print:py-0 print:text-black">
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 print:max-w-none print:gap-0">
+    <div className="min-h-screen bg-[var(--omlu-page-background)] px-4 py-5 text-[var(--omlu-text-primary)] sm:px-6 sm:py-6 print:bg-white print:px-0 print:py-0 print:text-black">
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 print:max-w-none print:gap-0">
         {draftWaiting && (
           <section className="print-hidden rounded-3xl border border-orange-200 bg-orange-50 p-5 text-orange-950 dark:border-orange-900/60 dark:bg-orange-950/30 dark:text-orange-50" aria-live="polite">
             <h1 className="text-xl font-black">Bill requested · Staff reviewing</h1>
             <p className="mt-2 text-sm font-medium">Final amount may change until the bill is issued.</p>
           </section>
         )}
-        <div className="print-hidden flex flex-wrap items-center justify-end gap-3">
+        <div className="print-hidden flex flex-wrap items-center justify-end gap-2">
           <PublicThemeControl />
           {!isPaid && !isDetached && (
             <button
               onClick={() => router.replace(`/session/${bill.session_token}`)}
-              className="min-h-11 rounded-2xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-4 py-2 text-sm font-bold text-[var(--omlu-text-primary)] shadow-2xs dark:border-[var(--omlu-border)] dark:bg-[var(--omlu-primary-surface)] dark:text-[var(--omlu-text-secondary)]"
+              className="min-h-11 rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] px-4 py-2 text-sm font-semibold text-[var(--omlu-text-primary)]"
             >
               {t.back}
             </button>
           )}
           <button
             onClick={() => setLanguage(language === "en" ? "ml" : "en")}
-            className="min-h-11 rounded-2xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] px-4 py-2 text-sm font-bold text-orange-700 shadow-2xs dark:border-[var(--omlu-border)] dark:bg-[var(--omlu-primary-surface)] dark:text-orange-500"
+            className="min-h-11 rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] px-4 py-2 text-sm font-semibold text-orange-700 dark:text-orange-400"
           >
             {language === "en" ? "മലയാളം" : "English"}
           </button>
@@ -671,7 +685,7 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false, 
               </div>
               {/* Heading — deliberately h1 so it is the dominant landmark on the page */}
               <div className="space-y-1">
-                <h1 id="payment-success-heading" className="text-3xl font-black tracking-tight sm:text-4xl">
+                <h1 id="payment-success-heading" className="text-3xl font-bold tracking-tight sm:text-4xl">
                   {t.paymentReceived}
                 </h1>
                 <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200">
@@ -679,7 +693,7 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false, 
                 </p>
               </div>
               {/* Key payment facts */}
-              <dl className="grid w-full max-w-xs grid-cols-2 gap-3 rounded-2xl bg-emerald-100/60 p-4 text-left text-sm dark:bg-emerald-900/30">
+              <dl className="grid w-full max-w-sm grid-cols-2 gap-4 border-y border-emerald-200 py-4 text-left text-sm dark:border-emerald-800">
                 <div>
                   <dt className="font-bold text-emerald-700 dark:text-emerald-300">{t.paidAmount}</dt>
                   <dd className="mt-0.5 text-base font-black">{formatBillTotal(bill)}</dd>
@@ -723,7 +737,7 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false, 
         )}
 
         {isDetached && bill.payment_code && (
-          <section className="print-hidden rounded-3xl border border-orange-200 bg-orange-50 p-5 text-center shadow-sm dark:border-orange-900/60 dark:bg-orange-950/25 sm:p-7" aria-labelledby="bill-ready-title">
+          <section className="print-hidden rounded-3xl border border-orange-200 bg-orange-50 p-5 text-center dark:border-orange-900/60 dark:bg-orange-950/25 sm:p-7" aria-labelledby="bill-ready-title">
             <p className="text-sm font-black uppercase tracking-wide text-orange-700 dark:text-orange-400">{t.awaitingPayment}</p>
             <h1 id="bill-ready-title" className="mt-2 text-3xl font-black text-[var(--omlu-text-primary)]">{t.billReadyTitle}</h1>
             <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-[var(--omlu-text-secondary)]">{t.billReadyMessage}</p>
@@ -735,7 +749,7 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false, 
                 {codeCopied ? t.copied : t.copyCode}
               </button>
             </div>
-            <dl className="mx-auto mt-6 grid max-w-xl grid-cols-2 gap-3 text-left text-sm sm:grid-cols-5">
+            <dl className="mx-auto mt-6 grid max-w-xl grid-cols-2 gap-x-4 gap-y-5 text-left text-sm sm:grid-cols-3">
               <div><dt className="text-[var(--omlu-text-secondary)]">{t.amountDue}</dt><dd className="font-black">{formatBillTotal(bill)}</dd></div>
               <div><dt className="text-[var(--omlu-text-secondary)]">{t.billNumber}</dt><dd className="break-all font-black">{bill.bill_number}</dd></div>
               <div><dt className="text-[var(--omlu-text-secondary)]">{t.table}</dt><dd className="font-black">{bill.table_number}</dd></div>
@@ -746,8 +760,8 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false, 
           </section>
         )}
 
-        <article className="print-bill-sheet print-thermal-80 rounded-3xl bg-[var(--omlu-primary-surface)] p-5 shadow-sm sm:p-7 print:rounded-none print:border-0 print:bg-white print:text-black print:shadow-none">
-          <header className="border-b border-[var(--omlu-border-strong)] pb-5 dark:border-[var(--omlu-border)] print:border-black">
+        <article className="print-bill-sheet print-thermal-80 rounded-2xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-5 sm:p-7 print:rounded-none print:border-0 print:bg-white print:text-black print:shadow-none">
+          <header className="receipt-header border-b border-[var(--omlu-border-strong)] pb-5 dark:border-[var(--omlu-border)] print:border-black">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-sm font-black text-[var(--omlu-text-primary)] print:text-black">
@@ -775,7 +789,7 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false, 
               </div>
             </div>
 
-            <div className="mt-5 grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+            <div className="receipt-metadata mt-5 grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
               <p>
                 <span className="font-bold">{bill.gst_enabled ? "Invoice number" : t.billNumber}:</span>{" "}
                 {bill.invoice_number || bill.bill_number}
@@ -786,7 +800,7 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false, 
               </p>
             </div>
             {bill.payment_method && (
-              <div className="mt-3 grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+              <div className="receipt-metadata mt-3 grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
                 <p>
                   <span className="font-bold">{t.paymentMethod}:</span>{" "}
                   {t.paymentLabels[bill.payment_method] || bill.payment_method}
@@ -812,17 +826,17 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false, 
             )}
           </header>
 
-          <main className="py-5">
-            <h2 className="mb-4 text-sm font-black uppercase tracking-wide text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)] print:text-black">
+          <main className="receipt-items py-5">
+            <h2 className="receipt-items-heading mb-4 text-sm font-black uppercase tracking-wide text-[var(--omlu-text-secondary)] dark:text-[var(--omlu-text-secondary)] print:text-black">
               {t.orders}
             </h2>
-            <div className="flex flex-col gap-5">
+            <div className="receipt-orders flex flex-col gap-5">
               {bill.orders.map((order, orderIndex) => (
                 <section
                   key={order.order_number}
-                  className="border-b border-[var(--omlu-border)] py-4 last:border-b-0 print:border-black"
+                  className="receipt-order border-b border-[var(--omlu-border)] py-4 last:border-b-0 print:border-black"
                 >
-                  <div className="mb-3 flex items-center justify-between gap-3 border-b border-[var(--omlu-border-strong)] pb-2 dark:border-[var(--omlu-border)] print:border-black">
+                  <div className="receipt-order-heading mb-3 flex items-center justify-between gap-3 border-b border-[var(--omlu-border-strong)] pb-2 dark:border-[var(--omlu-border)] print:border-black">
                     <h3 className="font-black">
                       Order {orderIndex + 1}: {order.order_number}
                     </h3>
@@ -833,11 +847,11 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false, 
                       {isPaid ? t.receiptOrderStatus : (t.statusLabels[order.status] || t.statusLabels.pending)}
                     </p>
                   </div>
-                  <div className="flex flex-col gap-2">
+                  <div className="receipt-item-list flex flex-col gap-2">
                     {order.items.map((item, itemIndex) => (
                       <div
                         key={`${order.order_number}-${itemIndex}`}
-                        className="grid grid-cols-[1fr_auto] gap-3 text-sm"
+                        className="receipt-item grid grid-cols-[1fr_auto] gap-3 text-sm"
                       >
                         <div>
                           <p className="font-bold">{item.item_name}</p>
@@ -846,7 +860,7 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false, 
                             {Number(item.unit_price).toFixed(2)}
                           </p>
                           {item.selected_options?.map((option, optionIndex) => (
-                            <p key={`${option.option_name}-${optionIndex}`} className="text-xs leading-relaxed text-[var(--omlu-text-secondary)] print:text-black">
+                            <p key={`${option.option_name}-${optionIndex}`} className="receipt-option text-xs leading-relaxed text-[var(--omlu-text-secondary)] print:text-black">
                               {option.group_name}: {option.option_name}{option.quantity > 1 ? ` × ${option.quantity}` : ""}
                             </p>
                           ))}
@@ -868,8 +882,8 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false, 
             </div>
           </main>
 
-          <footer className="border-t border-[var(--omlu-border-strong)] pt-5 dark:border-[var(--omlu-border)] print:border-black">
-            <div className="ml-auto flex max-w-sm flex-col gap-2 text-sm">
+          <footer className="receipt-footer border-t border-[var(--omlu-border-strong)] pt-5 dark:border-[var(--omlu-border)] print:border-black">
+            <div className="receipt-totals ml-auto flex max-w-sm flex-col gap-2 text-sm">
               <div className="flex justify-between">
                 <span>{bill.gst_enabled ? "Menu subtotal" : t.subtotal}</span>
                 <span className="font-bold">
@@ -897,23 +911,13 @@ function ActiveBillClient({ sessionToken, receiptToken = "", quickSale = false, 
                   <span className="font-bold">{bill.currency} {Number(bill.tax_amount).toFixed(2)}</span>
                 </div>
               )}
-              <div className="mt-2 flex justify-between border-t border-[var(--omlu-border-strong)] pt-3 text-xl font-black dark:border-[var(--omlu-border)] print:border-black">
+              <div className="receipt-grand-total mt-2 flex justify-between border-t border-[var(--omlu-border-strong)] pt-3 text-xl font-black dark:border-[var(--omlu-border)] print:border-black">
                 <span>{t.total}</span>
                 <span>
                   {bill.currency} {Number(bill.total_amount).toFixed(2)}
                 </span>
               </div>
             </div>
-            {canPrintOfficially && qrToken && (
-              <section className="mt-6 border-t border-[var(--omlu-border-strong)] pt-5 text-center print:border-black" aria-label="Digital bill QR code">
-                <h2 className="text-sm font-black tracking-wide">VIEW YOUR DIGITAL BILL</h2>
-                <p className="mt-1 text-xs text-[var(--omlu-text-secondary)] print:text-black">Scan for complete bill details</p>
-                {/* Dynamic receipt QR is intentionally served by the backend. */}
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img className="mx-auto mt-3 h-36 w-36 bg-white object-contain p-1 print:h-32 print:w-32" src={getPublicReceiptQrUrl(qrToken, quickSale)} alt={`QR code for bill ${bill.bill_number}`} />
-                <p className="mt-2 text-xs font-bold">Bill No. {bill.bill_number}</p>
-              </section>
-            )}
           </footer>
         </article>
 

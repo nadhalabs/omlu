@@ -276,8 +276,10 @@ void main() {
       expect(text, contains('SGST:'));
       expect(text, contains('TOTAL:'));
       expect(bytes.indexOf(0x1D), greaterThanOrEqualTo(0));
-      expect(_containsSequence(bytes, [0x1D, 0x76, 0x30, 0x00]), isTrue);
+      expect(_containsSequence(bytes, [0x1D, 0x76, 0x30, 0x00]), isFalse);
       expect(_containsSequence(bytes, [0x1D, 0x28, 0x6B]), isFalse);
+      expect(text, isNot(contains('VIEW DIGITAL BILL')));
+      expect(text, isNot(contains('Scan for bill details')));
       expect(encoder.maxColumns, width == PaperWidth.mm58 ? 32 : 48);
       expect(
         text,

@@ -60,8 +60,8 @@ test('Golden receipt fixture encoding - 58 mm layout', () => {
   assert.match(outputText, /SGST:/);
   assert.match(outputText, /TOTAL:/);
   assert.match(outputText, /378\.00/);
-  assert.match(outputText, /VIEW DIGITAL BILL/);
-  assert.ok(buffer.indexOf(Buffer.from([0x1D, 0x76, 0x30, 0x00])) > 0, 'raster QR image command must be present');
+  assert.doesNotMatch(outputText, /VIEW DIGITAL BILL|Scan for bill details/);
+  assert.equal(buffer.indexOf(Buffer.from([0x1D, 0x76, 0x30, 0x00])), -1, 'receipt must not contain a raster QR image');
   assert.equal(buffer.indexOf(Buffer.from([0x1D, 0x28, 0x6B])), -1, 'generic profile must not depend on native QR support');
   assert.doesNotMatch(outputText, /Payment Method:|Paid at:|Generated:|Bill No\./);
 
@@ -111,11 +111,11 @@ test('simple paid receipt stays within compact physical line budget', () => {
     subtotal: '450.00', taxable_amount: '0.00', cgst_amount: '0.00', sgst_amount: '0.00', grand_total: '450.00',
   };
   const buffer = new DesktopEscPosEncoder('58', true, 3).encodeReceipt(receipt);
-  const printable = buffer.subarray(0, buffer.indexOf(Buffer.from([0x1D, 0x76, 0x30, 0x00]))).toString('ascii');
-  const textLinesBeforeQr = (printable.match(/\n/g) || []).length;
-  const textAfterQr = buffer.subarray(buffer.lastIndexOf(Buffer.from('Scan for bill details'))).toString('ascii');
-  const totalTextLines = textLinesBeforeQr + (textAfterQr.match(/\n/g) || []).length;
+  const printable = buffer.toString('ascii');
+  const totalTextLines = (printable.match(/\n/g) || []).length;
   assert.ok(totalTextLines <= 20, `expected <=20 text lines, got ${totalTextLines}`);
+  assert.doesNotMatch(printable, /VIEW DIGITAL BILL|Scan for bill details/);
+  assert.equal(buffer.indexOf(Buffer.from([0x1D, 0x76, 0x30, 0x00])), -1);
 });
 
 test('tax variants, takeaway, quick sale and customer identity remain compact', () => {
