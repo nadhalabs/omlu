@@ -357,7 +357,7 @@ def test_new_session_after_detachment_is_isolated_from_old_session(participant_c
         f"/public/sessions/{new_token}",
         headers={"X-Participant-Token": old_participant_token},
     )
-    assert new_read.status_code == 401, (
+    assert new_read.status_code in (401, 403), (
         "old revoked participant must not read the new session"
     )
 

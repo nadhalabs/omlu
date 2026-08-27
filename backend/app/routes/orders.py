@@ -801,7 +801,12 @@ def get_public_session(
             detail={"code": "SESSION_NOT_FOUND", "message": "Dining session not found"}
         )
 
-    load_participant(db, participant_token, session_token=session_token)
+    load_participant(
+        db,
+        participant_token,
+        session_token=session_token,
+        allow_revoked_for_detached_bill=True,
+    )
     return build_session_response(db, dining_session)
 
 

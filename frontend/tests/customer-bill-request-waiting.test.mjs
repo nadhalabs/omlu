@@ -4,6 +4,7 @@ import test from "node:test";
 
 const read = (path) => fs.readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const bill = read("app/bill/[sessionToken]/BillClient.tsx");
+const api = read("lib/api.ts");
 
 test("payment-requested session without an issued bill retains a recovery-only waiting state", () => {
   assert.match(bill, /getPublicDiningSession\(sessionToken, authority\)/);
@@ -21,6 +22,21 @@ test("normal customer transition routes directly to the bill-ready receipt", () 
   assert.match(bill, /billReadyMessage: "Your ordering session has ended\."/);
   assert.match(bill, /showCodeAtCounter: "Show this payment code at the counter:"/);
   assert.match(bill, /paymentStatus: "Payment status"/);
+});
+
+test("session refresh preserves structured authority errors and the detached redirect contract", () => {
+  const getSession = api.slice(
+    api.indexOf("export async function getPublicDiningSession"),
+    api.indexOf("export async function cancelPublicOrderItem"),
+  );
+  assert.match(getSession, /parseApiError\(/);
+  assert.match(getSession, /parsed\.message, parsed\.code, parsed\.field/);
+
+  const session = read("app/session/[sessionToken]/SessionClient.tsx");
+  assert.match(session, /\["issued", "payment_pending", "paid"\]\.includes\(session\.bill\.status\)/);
+  assert.match(session, /session\.bill\.receipt_token/);
+  assert.match(session, /markDetachedSession/);
+  assert.match(session, /router\.replace\(detachedBillPath/);
 });
 
 test("draft requested bills render the provisional bill rather than the recovery-only waiting screen", () => {

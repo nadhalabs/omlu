@@ -23,6 +23,7 @@ from app.models.restaurant import Restaurant
 from app.models.restaurant_table import RestaurantTable
 from app.models.service_request import ServiceRequest
 from app.models.staff_user import AuditLog, StaffUser
+from app.models.table_session_participant import TableSessionParticipant
 from app.schemas.bill import ReceiptPayloadResponse
 from app.services.bills import (
     calculate_gst_totals,
@@ -480,6 +481,63 @@ def test_issue_bill(bill_context):
     assert session.payment_requested_at is not None
     assert find_current_open_session_for_table(db, bill_context["table_id"]) is None
     db.close()
+
+
+def test_detached_customer_can_refresh_bill_but_cannot_mutate(bill_context):
+    participant_token = bill_context["participant_token"]
+    participant_auth = participant_headers(participant_token)
+    session_path = f"/public/sessions/{bill_context['session_token']}"
+
+    active = client.get(session_path, headers=participant_auth)
+    assert active.status_code == 200
+    assert active.json()["status"] == "open"
+
+    order_token = add_order(bill_context)
+    db = SessionLocal()
+    order_item_id = db.query(OrderItem).join(Order).filter(Order.public_token == order_token).one().id
+    db.close()
+    draft = create_bill(bill_context).json()
+    issued = client.post(
+        f"/staff/bills/{draft['bill_number']}/issue",
+        headers={"Authorization": f"Bearer {bill_context['owner_token']}"},
+    )
+    assert issued.status_code == 200
+    assert issued.json()["status"] == "payment_pending"
+
+    db = SessionLocal()
+    participant = db.query(TableSessionParticipant).filter(
+        TableSessionParticipant.session_id == bill_context["session_id"],
+    ).one()
+    assert participant.revoked_at is not None
+    db.close()
+
+    detached = client.get(session_path, headers=participant_auth)
+    assert detached.status_code == 200
+    body = detached.json()
+    assert body["status"] == "detached_awaiting_payment"
+    assert body["bill"]["status"] == "payment_pending"
+    assert body["bill"]["receipt_token"] == issued.json()["receipt_token"]
+
+    create_order_response = client.post(
+        f"{session_path}/orders",
+        headers={**participant_auth, "Idempotency-Key": uuid.uuid4().hex},
+        json={"items": [{"menu_item_id": bill_context["item_id"], "quantity": 1}]},
+    )
+    assert create_order_response.status_code in (401, 409)
+
+    cancel_response = client.post(
+        f"{session_path}/orders/{order_token}/items/{order_item_id}/cancel",
+        headers=participant_auth,
+        json={"reason": "changed mind"},
+    )
+    assert cancel_response.status_code == 401
+
+    service_response = client.post(
+        f"/public/restaurants/{bill_context['restaurant_slug']}/tables/{bill_context['table_code']}/service-requests",
+        headers=participant_auth,
+        json={"request_type": "water"},
+    )
+    assert service_response.status_code == 401
 
 
 def test_issue_rejects_mismatched_authoritative_line_totals(bill_context):

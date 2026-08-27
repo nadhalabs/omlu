@@ -254,14 +254,12 @@ export async function getPublicDiningSession(
     });
 
     if (!response.ok) {
-      let message = "An error occurred while fetching the table session.";
-      try {
-        const errorData = await response.json();
-        if (errorData && typeof errorData.detail === "string") {
-          message = errorData.detail;
-        }
-      } catch {}
-      throw new ApiError(response.status, message);
+      const errorData = await response.json().catch(() => null);
+      const parsed = parseApiError(
+        errorData,
+        "An error occurred while fetching the table session.",
+      );
+      throw new ApiError(response.status, parsed.message, parsed.code, parsed.field);
     }
 
     return await response.json();
