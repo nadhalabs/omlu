@@ -5,6 +5,7 @@ import '../../design_system/colors.dart';
 import '../../design_system/spacing.dart';
 import '../../design_system/typography.dart';
 import '../auth_provider.dart';
+import 'export_download.dart';
 
 final performanceProvider = FutureProvider.family<Map<String, Object?>, String>(
   (ref, preset) {
@@ -65,6 +66,43 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
               onSelectionChanged: (v) => setState(() => _preset = v.first),
             ),
             const SizedBox(height: 16),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: () => downloadAdminExport(
+                    context,
+                    ref,
+                    path: '/admin/history/performance/export.pdf',
+                    query: {'preset': _preset},
+                  ),
+                  icon: const Icon(Icons.picture_as_pdf),
+                  label: const Text('PDF'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => downloadAdminExport(
+                    context,
+                    ref,
+                    path: '/admin/history/performance/export.xlsx',
+                    query: {'preset': _preset},
+                  ),
+                  icon: const Icon(Icons.table_view),
+                  label: const Text('XLSX'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => downloadAdminExport(
+                    context,
+                    ref,
+                    path: '/admin/history/performance/export',
+                    query: {'preset': _preset},
+                  ),
+                  icon: const Icon(Icons.download),
+                  label: const Text('CSV'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
             report.when(
               loading: () => const LinearProgressIndicator(),
               error: (e, _) => Text(userFacingError(e)),

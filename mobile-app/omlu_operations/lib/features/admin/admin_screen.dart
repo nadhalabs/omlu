@@ -28,6 +28,7 @@ import 'history_explorer_screen.dart';
 import 'gst_registers_screen.dart';
 import 'operational_controls_screen.dart';
 import 'print_bridge_admin_screen.dart';
+import 'quick_sale_screen.dart';
 
 final adminTabProvider = StateProvider<int>((ref) {
   ref.watch(authProvider).valueOrNull?.tenantScope;
@@ -477,6 +478,12 @@ class ManagementHubScreen extends StatelessWidget {
     body: ListView(
       padding: const EdgeInsets.all(OmluSpacing.md),
       children: [
+        const _MoreTile(
+          icon: Icons.point_of_sale_rounded,
+          title: 'Quick sale',
+          subtitle: 'Counter sales, takeaways, payment and receipt printing',
+          page: QuickSaleScreen(),
+        ),
         const _MoreTile(
           icon: Icons.restaurant_menu_rounded,
           title: 'Menu management',

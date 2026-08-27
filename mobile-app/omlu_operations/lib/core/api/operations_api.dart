@@ -3,6 +3,13 @@ import 'api_exceptions.dart';
 import '../models/operations_models.dart';
 import '../storage/operations_data_cache.dart';
 import '../printing/receipt_data.dart';
+import 'dart:typed_data';
+
+class AuthenticatedDownload {
+  const AuthenticatedDownload({required this.bytes, required this.fileName});
+  final Uint8List bytes;
+  final String fileName;
+}
 
 class OperationsApi {
   OperationsApi(this._client, {OperationsDataCache? cache}) : _cache = cache;
@@ -150,6 +157,65 @@ class OperationsApi {
 
   Future<Map<String, Object?>> fetchDashboardSummary() {
     return _client.getJson('/admin/dashboard/summary');
+  }
+
+  Future<Map<String, Object?>> fetchQuickSales() =>
+      _client.getJson('/admin/quick-sales');
+
+  Future<Map<String, Object?>> previewQuickSale(Map<String, Object?> body) =>
+      _client.postJson('/admin/quick-sales/preview', body: body);
+
+  Future<Map<String, Object?>> createQuickSale({
+    required Map<String, Object?> body,
+    required String idempotencyKey,
+  }) => _client.postJson(
+    '/admin/quick-sales',
+    body: body,
+    idempotencyKey: idempotencyKey,
+  );
+
+  Future<Map<String, Object?>> payQuickSale({
+    required String publicToken,
+    required String method,
+    required String idempotencyKey,
+  }) => _client.postJson(
+    '/admin/quick-sales/$publicToken/payment',
+    body: {'method': method},
+    idempotencyKey: idempotencyKey,
+  );
+
+  Future<ReceiptData> fetchQuickSaleReceipt(String publicToken) async =>
+      ReceiptData.fromJson(
+        Map<String, dynamic>.from(
+          await _client.getJson(
+            '/admin/quick-sales/$publicToken/receipt-payload',
+          ),
+        ),
+      );
+
+  Future<AuthenticatedDownload> downloadAdminExport(
+    String path, {
+    Map<String, String> query = const {},
+  }) async {
+    if (!path.startsWith('/admin/history/') &&
+        !path.startsWith('/admin/gst/')) {
+      throw ArgumentError.value(path, 'path', 'Unsupported export endpoint');
+    }
+    final response = await _client.getBinary(path, query: query);
+    final disposition = response.headers['content-disposition'] ?? '';
+    final match = RegExp(
+      r'''filename\*?=(?:UTF-8''|["'])?([^"';]+)''',
+      caseSensitive: false,
+    ).firstMatch(disposition);
+    final fallback = '${path.split('/').where((e) => e.isNotEmpty).last}.bin';
+    final raw = match?.group(1)?.trim() ?? fallback;
+    final safe = Uri.decodeComponent(
+      raw,
+    ).replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+    return AuthenticatedDownload(
+      bytes: response.body! as Uint8List,
+      fileName: safe,
+    );
   }
 
   Future<List<Object?>> fetchStaffAccounts() {

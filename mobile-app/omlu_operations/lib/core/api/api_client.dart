@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'api_exceptions.dart';
 import 'backend_selection_manager.dart';
@@ -69,6 +70,12 @@ class ApiClient {
     Map<String, String> query = const {},
   }) async {
     final response = await _send('GET', path, query: query);
+    if (response.body is Uint8List) {
+      throw ApiException(
+        'Non-JSON response received. Status: ${response.statusCode}, URL: ${baseUrl.resolve(path)}, Content-Type: ${response.headers['content-type'] ?? ''}',
+        statusCode: response.statusCode,
+      );
+    }
     return _expectObject(response.body);
   }
 
@@ -77,7 +84,24 @@ class ApiClient {
     Map<String, String> query = const {},
   }) async {
     final response = await _send('GET', path, query: query);
+    if (response.body is Uint8List) {
+      throw ApiException(
+        'Non-JSON response received. Status: ${response.statusCode}, URL: ${baseUrl.resolve(path)}, Content-Type: ${response.headers['content-type'] ?? ''}',
+        statusCode: response.statusCode,
+      );
+    }
     return _expectList(response.body);
+  }
+
+  Future<ApiResponse> getBinary(
+    String path, {
+    Map<String, String> query = const {},
+  }) async {
+    final response = await _send('GET', path, query: query);
+    if (response.body is! Uint8List) {
+      throw const ApiException('Expected a binary download response.');
+    }
+    return response;
   }
 
   Future<Map<String, Object?>> postJson(
@@ -375,17 +399,19 @@ class ApiClient {
         httpRequest.write(jsonEncode(request.body));
       }
       final httpResponse = await httpRequest.close();
-      final text = await utf8.decoder.bind(httpResponse).join();
+      final bytes = Uint8List.fromList(
+        await httpResponse.fold<List<int>>(
+          <int>[],
+          (all, part) => all..addAll(part),
+        ),
+      );
       final contentType = httpResponse.headers.contentType?.value ?? '';
-
-      if (text.isNotEmpty && !contentType.contains('application/json')) {
-        throw ApiException(
-          'Non-JSON response received. Status: ${httpResponse.statusCode}, URL: ${request.uri}, Content-Type: $contentType',
-          statusCode: httpResponse.statusCode,
-        );
-      }
-
-      final decoded = text.isEmpty ? null : jsonDecode(text);
+      final isJson = contentType.contains('application/json');
+      final decoded = bytes.isEmpty
+          ? null
+          : isJson
+          ? jsonDecode(utf8.decode(bytes))
+          : bytes;
       return ApiResponse(
         statusCode: httpResponse.statusCode,
         body: decoded,

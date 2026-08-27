@@ -4,6 +4,7 @@ import '../../core/errors/user_facing_error.dart';
 import '../../design_system/spacing.dart';
 import '../../design_system/typography.dart';
 import '../auth_provider.dart';
+import 'export_download.dart';
 
 const _gstResources = <String, String>{
   'sales-register': 'Sales register',
@@ -71,6 +72,20 @@ class _GstRegistersScreenState extends ConsumerState<GstRegistersScreen> {
                     _resource = v!;
                     _page = 1;
                   }),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => downloadAdminExport(
+                      context,
+                      ref,
+                      path: '/admin/gst/export/$_resource',
+                      query: {'preset': _preset, 'format': 'xlsx'},
+                    ),
+                    icon: const Icon(Icons.download),
+                    label: const Text('Download register'),
+                  ),
                 ),
                 const SizedBox(height: 8),
                 SegmentedButton<String>(
