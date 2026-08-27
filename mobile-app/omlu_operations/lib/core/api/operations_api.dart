@@ -257,8 +257,96 @@ class OperationsApi {
   Future<Map<String, Object?>> fetchGstSummary({String preset = 'today'}) =>
       _client.getJson('/admin/gst/summary', query: {'preset': preset});
 
-  Future<List<Object?>> fetchPrintBridgeInstallations() =>
-      _client.getList('/print-bridge/installations');
+  Future<List<Object?>> fetchPrintBridgeInstallations() async {
+    final response = await _client.getJson('/print-bridge/installations');
+    return response['installations'] as List<Object?>? ?? const [];
+  }
+
+  Future<Map<String, Object?>> fetchHistory({
+    required String resource,
+    String preset = 'today',
+    DateTime? startDate,
+    DateTime? endDate,
+    String? status,
+    String? search,
+    String? paymentMethod,
+    int page = 1,
+    int pageSize = 25,
+  }) => _client.getJson(
+    '/admin/history/$resource',
+    query: {
+      'preset': startDate == null ? preset : 'custom',
+      if (startDate != null)
+        'start_date': startDate.toIso8601String().substring(0, 10),
+      if (endDate != null)
+        'end_date': endDate.toIso8601String().substring(0, 10),
+      if (status != null && status.isNotEmpty) 'status_filter': status,
+      if (resource == 'orders' && search != null && search.trim().isNotEmpty)
+        'order_number': search.trim(),
+      if (resource == 'bills' &&
+          paymentMethod != null &&
+          paymentMethod.isNotEmpty)
+        'payment_method': paymentMethod,
+      'page': '$page',
+      'page_size': '$pageSize',
+    },
+  );
+
+  Future<Map<String, Object?>> fetchHistoryOrderDetail(int id) =>
+      _client.getJson('/admin/history/orders/$id');
+
+  Future<Map<String, Object?>> fetchGstRegister({
+    required String resource,
+    String preset = 'today',
+    int page = 1,
+  }) => _client.getJson(
+    '/admin/gst/$resource',
+    query: {
+      'preset': preset,
+      if (resource == 'sales-register') 'page': '$page',
+      if (resource == 'sales-register') 'limit': '25',
+    },
+  );
+
+  Future<Map<String, Object?>> fetchStaffOperations() =>
+      _client.getJson('/admin/staff/operations');
+
+  Future<Map<String, Object?>> updateRestaurantOperatingStatus(String status) =>
+      _client.postJson(
+        '/admin/staff/operations/status',
+        body: {'status': status},
+      );
+
+  Future<Map<String, Object?>> setAllStaffLocked({
+    required bool locked,
+    String? reason,
+    bool confirmActiveOperations = false,
+  }) => _client.postJson(
+    '/admin/staff/operations/${locked ? 'lock' : 'unlock'}',
+    body: locked
+        ? {
+            'reason': reason,
+            'confirm_active_operations': confirmActiveOperations,
+          }
+        : null,
+  );
+
+  Future<List<Object?>> fetchKitchenPrintJobs({String? status}) async {
+    final response = await _client.getJson(
+      '/print-bridge/kitchen-jobs',
+      query: {if (status != null && status.isNotEmpty) 'job_status': status},
+    );
+    return response['jobs'] as List<Object?>? ?? const [];
+  }
+
+  Future<Map<String, Object?>> retryKitchenPrintJob(int id) =>
+      _client.postJson('/print-bridge/kitchen-jobs/$id/retry');
+
+  Future<Map<String, Object?>> revokePrintBridgeInstallation(String id) =>
+      _client.postJson(
+        '/print-bridge/revoke-installation',
+        body: {'installation_id': id},
+      );
 
   Future<List<Object?>> fetchActiveSessions() {
     return _client.getList('/staff/sessions');

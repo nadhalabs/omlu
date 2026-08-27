@@ -101,30 +101,80 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                   ),
                 ];
                 return LayoutBuilder(
-                  builder: (_, c) => GridView.count(
-                    crossAxisCount: c.maxWidth >= 900 ? 3 : 2,
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    childAspectRatio: c.maxWidth < 600 ? 1.35 : 2.2,
-                    mainAxisSpacing: 10,
-                    crossAxisSpacing: 10,
-                    children: [
-                      for (final card in cards)
-                        Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
+                  builder: (_, c) {
+                    final revenue = _maps(data['revenue_by_day']);
+                    final topItems = _maps(data['top_selling_items']);
+                    final salesMix = _maps(data['sales_mix']);
+                    final tables = _maps(data['table_usage']);
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        GridView.count(
+                          crossAxisCount: c.maxWidth >= 900 ? 3 : 2,
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          childAspectRatio: c.maxWidth < 600 ? 1.35 : 2.2,
+                          mainAxisSpacing: 10,
+                          crossAxisSpacing: 10,
+                          children: [
+                            for (final card in cards)
+                              Card(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(12),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(card.$3, color: OmluColors.accent),
+                                      Text(card.$2, style: OmluTypography.h2),
+                                      Text(
+                                        card.$1,
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                        if (revenue.isNotEmpty) ...[
+                          const SizedBox(height: 20),
+                          Text('Revenue trend', style: OmluTypography.h2),
+                          _BarSeries(
+                            items: revenue,
+                            labelKeys: const ['date', 'day'],
+                            valueKeys: const ['revenue', 'total_revenue'],
+                          ),
+                        ],
+                        if (topItems.isNotEmpty || salesMix.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 20),
+                            child: Wrap(
+                              spacing: 12,
+                              runSpacing: 12,
                               children: [
-                                Icon(card.$3, color: OmluColors.accent),
-                                Text(card.$2, style: OmluTypography.h2),
-                                Text(card.$1, textAlign: TextAlign.center),
+                                if (topItems.isNotEmpty)
+                                  _ReportTable(
+                                    title: 'Top items',
+                                    items: topItems,
+                                  ),
+                                if (salesMix.isNotEmpty)
+                                  _ReportTable(
+                                    title: 'Payment / sales mix',
+                                    items: salesMix,
+                                  ),
                               ],
                             ),
                           ),
-                        ),
-                    ],
-                  ),
+                        if (tables.isNotEmpty) ...[
+                          const SizedBox(height: 20),
+                          _ReportTable(
+                            title: 'Table performance',
+                            items: tables,
+                          ),
+                        ],
+                      ],
+                    );
+                  },
                 );
               },
             ),
@@ -168,4 +218,124 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
       ),
     );
   }
+}
+
+List<Map<String, Object?>> _maps(Object? value) => value is List
+    ? [
+        for (final item in value)
+          if (item is Map) Map<String, Object?>.from(item),
+      ]
+    : const [];
+
+class _BarSeries extends StatelessWidget {
+  const _BarSeries({
+    required this.items,
+    required this.labelKeys,
+    required this.valueKeys,
+  });
+  final List<Map<String, Object?>> items;
+  final List<String> labelKeys;
+  final List<String> valueKeys;
+  @override
+  Widget build(BuildContext context) {
+    double number(Map<String, Object?> item) {
+      for (final key in valueKeys) {
+        final value = double.tryParse('${item[key] ?? ''}');
+        if (value != null) return value;
+      }
+      return 0;
+    }
+
+    String label(Map<String, Object?> item) {
+      for (final key in labelKeys) {
+        if (item[key] != null) return '${item[key]}';
+      }
+      return '';
+    }
+
+    final maxValue = items.fold<double>(
+      0,
+      (max, item) => number(item) > max ? number(item) : max,
+    );
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: SizedBox(
+          height: 180,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              for (final item in items.take(14))
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Text(
+                          '₹${number(item).toStringAsFixed(0)}',
+                          style: OmluTypography.bodySmall,
+                          overflow: TextOverflow.fade,
+                        ),
+                        const SizedBox(height: 4),
+                        Container(
+                          height: maxValue == 0
+                              ? 2
+                              : 110 * number(item) / maxValue,
+                          decoration: BoxDecoration(
+                            color: OmluColors.accent,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          label(item),
+                          style: OmluTypography.bodySmall,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ReportTable extends StatelessWidget {
+  const _ReportTable({required this.title, required this.items});
+  final String title;
+  final List<Map<String, Object?>> items;
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: MediaQuery.sizeOf(context).width >= 800 ? 380 : double.infinity,
+    child: Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: OmluTypography.h3),
+            const Divider(),
+            for (final item in items.take(8))
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 5),
+                child: Row(
+                  children: [
+                    Expanded(child: Text('${item.values.firstOrNull ?? '—'}')),
+                    Text(
+                      '${item.values.skip(1).firstOrNull ?? ''}',
+                      style: OmluTypography.bodyMedium,
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    ),
+  );
 }

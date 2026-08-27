@@ -24,6 +24,10 @@ import 'menu_management_screen.dart';
 import 'staff_management_screen.dart';
 import 'settings_management_screen.dart';
 import 'reports_screen.dart';
+import 'history_explorer_screen.dart';
+import 'gst_registers_screen.dart';
+import 'operational_controls_screen.dart';
+import 'print_bridge_admin_screen.dart';
 
 final adminTabProvider = StateProvider<int>((ref) {
   ref.watch(authProvider).valueOrNull?.tenantScope;
@@ -496,6 +500,30 @@ class ManagementHubScreen extends StatelessWidget {
           title: 'Reports & performance',
           subtitle: 'Revenue, orders, sessions and GST summaries',
           page: ReportsScreen(),
+        ),
+        const _MoreTile(
+          icon: Icons.history_rounded,
+          title: 'Historical operations',
+          subtitle: 'Orders, bills, payments and dining sessions',
+          page: HistoryExplorerScreen(),
+        ),
+        const _MoreTile(
+          icon: Icons.account_balance_rounded,
+          title: 'GST registers',
+          subtitle: 'Sales, HSN, rate, B2B/B2C and document registers',
+          page: GstRegistersScreen(),
+        ),
+        const _MoreTile(
+          icon: Icons.power_settings_new_rounded,
+          title: 'Operational controls',
+          subtitle: 'Restaurant status, closing and staff locks',
+          page: OperationalControlsScreen(),
+        ),
+        const _MoreTile(
+          icon: Icons.print_rounded,
+          title: 'Print Bridge administration',
+          subtitle: 'Installations, connectivity and failed kitchen jobs',
+          page: PrintBridgeAdminScreen(),
         ),
         const _MoreTile(
           icon: Icons.notifications_rounded,

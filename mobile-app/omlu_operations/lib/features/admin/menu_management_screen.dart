@@ -371,6 +371,9 @@ class _CategoryFormState extends ConsumerState<_CategoryForm> {
   late final TextEditingController _nameMl = TextEditingController(
     text: widget.category?['name_ml']?.toString(),
   );
+  late final TextEditingController _order = TextEditingController(
+    text: '${widget.category?['display_order'] ?? 0}',
+  );
   late bool _active = widget.category?['is_active'] != false;
   bool _busy = false;
 
@@ -386,6 +389,7 @@ class _CategoryFormState extends ConsumerState<_CategoryForm> {
               'name_en': _name.text.trim(),
               'name_ml': _nameMl.text.trim(),
               'is_active': _active,
+              'display_order': int.parse(_order.text),
             },
           );
       if (mounted) Navigator.pop(context, true);
@@ -467,6 +471,14 @@ class _CategoryFormState extends ConsumerState<_CategoryForm> {
               labelText: 'Malayalam name (optional)',
             ),
           ),
+          TextFormField(
+            controller: _order,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(labelText: 'Display order'),
+            validator: (value) => (int.tryParse(value ?? '') ?? -1) < 0
+                ? 'Enter zero or a positive number.'
+                : null,
+          ),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('Active'),
@@ -527,6 +539,9 @@ class _MenuItemFormState extends ConsumerState<_MenuItemForm> {
   late final _image = TextEditingController(
     text: widget.item?['image_url']?.toString(),
   );
+  late final _order = TextEditingController(
+    text: '${widget.item?['display_order'] ?? 0}',
+  );
   late int? _categoryId =
       widget.item?['category_id'] as int? ??
       widget.initialCategoryId ??
@@ -550,6 +565,7 @@ class _MenuItemFormState extends ConsumerState<_MenuItemForm> {
               'hsn_sac_code': _hsn.text.trim(),
               'image_url': _image.text.trim(),
               'is_available': _available,
+              'display_order': int.parse(_order.text),
             },
           );
       if (mounted) Navigator.pop(context, true);
@@ -679,6 +695,14 @@ class _MenuItemFormState extends ConsumerState<_MenuItemForm> {
                   ? null
                   : 'Enter an HTTP or HTTPS URL.';
             },
+          ),
+          TextFormField(
+            controller: _order,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(labelText: 'Display order'),
+            validator: (value) => (int.tryParse(value ?? '') ?? -1) < 0
+                ? 'Enter zero or a positive number.'
+                : null,
           ),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
@@ -880,6 +904,9 @@ class _GroupFormState extends ConsumerState<_GroupForm> {
     text: widget.group?['name']?.toString(),
   );
   late String _type = widget.group?['type']?.toString() ?? 'variant';
+  late final _order = TextEditingController(
+    text: '${widget.group?['display_order'] ?? 0}',
+  );
   late bool _active = widget.group?['active'] != false;
   bool _busy = false;
   Future<void> _save() async {
@@ -897,6 +924,7 @@ class _GroupFormState extends ConsumerState<_GroupForm> {
               'minimum_selections': _type == 'variant' ? 1 : 0,
               'maximum_selections': 1,
               'active': _active,
+              'display_order': int.tryParse(_order.text) ?? 0,
             },
           );
       if (mounted) Navigator.pop(context, true);
@@ -943,6 +971,11 @@ class _GroupFormState extends ConsumerState<_GroupForm> {
           value: _active,
           onChanged: _busy ? null : (value) => setState(() => _active = value),
         ),
+        TextField(
+          controller: _order,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(labelText: 'Display order'),
+        ),
         const SizedBox(height: 16),
         FilledButton(
           onPressed: _busy ? null : _save,
@@ -968,6 +1001,9 @@ class _OptionFormState extends ConsumerState<_OptionForm> {
   late final _price = TextEditingController(
     text: widget.option?['price_delta']?.toString() ?? '0',
   );
+  late final _order = TextEditingController(
+    text: '${widget.option?['display_order'] ?? 0}',
+  );
   late bool _available = widget.option?['available'] != false;
   bool _busy = false;
   Future<void> _save() async {
@@ -986,6 +1022,7 @@ class _OptionFormState extends ConsumerState<_OptionForm> {
               'name': _name.text.trim(),
               'price_delta': amount,
               'available': _available,
+              'display_order': int.tryParse(_order.text) ?? 0,
             },
           );
       if (mounted) Navigator.pop(context, true);
@@ -1072,6 +1109,11 @@ class _OptionFormState extends ConsumerState<_OptionForm> {
           onChanged: _busy
               ? null
               : (value) => setState(() => _available = value),
+        ),
+        TextField(
+          controller: _order,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(labelText: 'Display order'),
         ),
         const SizedBox(height: 16),
         Row(
