@@ -83,3 +83,18 @@ test("Global CSS includes restrained omlu-scan-line keyframe animation", () => {
   assert.ok(css.includes("@keyframes omlu-scan-line"), "Defines scan line keyframes");
   assert.ok(css.includes(".omlu-scan-line"), "Defines omlu-scan-line class");
 });
+
+test("Menu import category review distinguishes existing, new, and unresolved categories", () => {
+  const code = read("app/admin/menu/MenuImportFlow.tsx");
+  const api = read("lib/api.ts");
+  const types = read("lib/types.ts");
+
+  assert.ok(code.includes("Existing category"));
+  assert.ok(code.includes("New category"));
+  assert.ok(code.includes("Needs selection"));
+  assert.ok(code.includes("+ Create new category"));
+  assert.ok(code.includes("Create “{item.extracted_category_name}”"));
+  assert.ok(code.includes("...categoryPatch(bulkCategory)"), "Bulk assignment uses explicit category intent");
+  assert.ok(api.includes('create_new_category: item.category_source === "new"'));
+  assert.ok(types.includes('category_source: "existing" | "new" | "unresolved"'));
+});

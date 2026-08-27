@@ -544,6 +544,9 @@ export interface MenuOptionGroupDraft {
 export interface MenuImportDraftItem {
   id: string;
   category_name: string | null;
+  extracted_category_name: string | null;
+  category_id: number | null;
+  category_source: "existing" | "new" | "unresolved";
   item_name: string;
   description: string | null;
   price: number | null;

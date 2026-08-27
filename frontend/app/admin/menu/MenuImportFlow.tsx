@@ -22,6 +22,8 @@ const confidenceThreshold = 0.75;
 const MAX_FILES = 5;
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 
+const normalizeCategoryName = (value: string) => value.trim().replace(/\s+/g, " ").toLocaleLowerCase();
+
 const SCAN_MESSAGES = [
   "Preparing your photos…",
   "Reading visible menu text…",
@@ -52,6 +54,7 @@ export default function MenuImportFlow({ categories, onClose, onImported }: Prop
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   const [bulkCategory, setBulkCategory] = useState("");
+  const [newCategoryName, setNewCategoryName] = useState("");
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
 
   // Derive object URLs synchronously using useMemo
@@ -156,6 +159,25 @@ export default function MenuImportFlow({ categories, onClose, onImported }: Prop
           }
         : current
     );
+  };
+
+  const categoryPatch = (value: string): Partial<MenuImportDraftItem> => {
+    if (!value) {
+      return { category_name: null, category_id: null, category_source: "unresolved", category_confidence: 0 };
+    }
+    if (value.startsWith("existing:")) {
+      const category = categories.find((candidate) => candidate.id === Number(value.slice(9)));
+      return category
+        ? { category_name: category.name_en, category_id: category.id, category_source: "existing", category_confidence: 1 }
+        : { category_name: null, category_id: null, category_source: "unresolved", category_confidence: 0 };
+    }
+    const name = value.slice(4).trim().replace(/\s+/g, " ");
+    const existing = categories.find(
+      (category) => normalizeCategoryName(category.name_en) === normalizeCategoryName(name)
+    );
+    return existing
+      ? { category_name: existing.name_en, category_id: existing.id, category_source: "existing", category_confidence: 1 }
+      : { category_name: name, category_id: null, category_source: "new", category_confidence: 1 };
   };
 
   const scan = async () => {
@@ -397,6 +419,21 @@ export default function MenuImportFlow({ categories, onClose, onImported }: Prop
   const categoryCount = new Set(
     result?.items.map((item) => item.category_name).filter(Boolean)
   ).size;
+
+  const newCategoryDrafts = Array.from(
+    new Map(
+      (result?.items || [])
+        .filter((item) => item.category_source === "new" && item.category_name?.trim())
+        .map((item) => [normalizeCategoryName(item.category_name!), item.category_name!.trim()])
+    ).values()
+  );
+
+  const addNewCategoryDraft = () => {
+    const name = newCategoryName.trim().replace(/\s+/g, " ");
+    if (!name) return;
+    setBulkCategory(`new:${name}`);
+    setNewCategoryName("");
+  };
 
   return (
     <div
@@ -744,8 +781,13 @@ export default function MenuImportFlow({ categories, onClose, onImported }: Prop
               >
                 <option value="">Bulk category…</option>
                 {categories.map((category) => (
-                  <option key={category.id} value={category.name_en}>
-                    {category.name_en}
+                  <option key={category.id} value={`existing:${category.id}`}>
+                    {category.name_en} — Existing
+                  </option>
+                ))}
+                {newCategoryDrafts.map((name) => (
+                  <option key={normalizeCategoryName(name)} value={`new:${name}`}>
+                    {name} — New
                   </option>
                 ))}
               </select>
@@ -756,7 +798,7 @@ export default function MenuImportFlow({ categories, onClose, onImported }: Prop
                     ...result,
                     items: result.items.map((item) =>
                       item.selected
-                        ? { ...item, category_name: bulkCategory, category_confidence: 1 }
+                        ? { ...item, ...categoryPatch(bulkCategory) }
                         : item
                     ),
                   });
@@ -764,6 +806,20 @@ export default function MenuImportFlow({ categories, onClose, onImported }: Prop
                 className="rounded-xl bg-[var(--omlu-muted-surface)] px-3 py-2 text-xs font-bold text-[var(--omlu-text-primary)] hover:bg-[var(--omlu-hover-background)]"
               >
                 Assign to selected
+              </button>
+              <input
+                value={newCategoryName}
+                onChange={(event) => setNewCategoryName(event.target.value)}
+                placeholder="New category name"
+                className="rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] px-3 py-2 text-xs text-[var(--omlu-text-primary)] outline-none"
+              />
+              <button
+                type="button"
+                onClick={addNewCategoryDraft}
+                disabled={!newCategoryName.trim()}
+                className="rounded-xl bg-[var(--omlu-muted-surface)] px-3 py-2 text-xs font-bold text-[var(--omlu-text-primary)] disabled:opacity-50"
+              >
+                + Create new category
               </button>
             </div>
 
@@ -827,13 +883,43 @@ export default function MenuImportFlow({ categories, onClose, onImported }: Prop
                             />
                           </td>
                           <td className="p-2">
-                            <input
-                              list="menu-import-categories"
-                              value={item.category_name || ""}
-                              onChange={(e) => update(item.id, { category_name: e.target.value })}
-                              placeholder="Select category"
+                            <select
+                              value={
+                                item.category_source === "existing" && item.category_id
+                                  ? `existing:${item.category_id}`
+                                  : item.category_source === "new" && item.category_name
+                                  ? `new:${item.category_name}`
+                                  : ""
+                              }
+                              onChange={(event) => update(item.id, categoryPatch(event.target.value))}
                               className="w-36 rounded-lg border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-2 text-[var(--omlu-text-primary)] outline-none"
-                            />
+                            >
+                              <option value="">Choose category</option>
+                              {categories.map((category) => (
+                                <option key={category.id} value={`existing:${category.id}`}>
+                                  {category.name_en}
+                                </option>
+                              ))}
+                              {newCategoryDrafts.map((name) => (
+                                <option key={normalizeCategoryName(name)} value={`new:${name}`}>
+                                  {name} (New)
+                                </option>
+                              ))}
+                              {item.category_source === "unresolved" && item.extracted_category_name && (
+                                <option value={`new:${item.extracted_category_name}`}>
+                                  Create “{item.extracted_category_name}”
+                                </option>
+                              )}
+                            </select>
+                            <span className={`mt-1 block text-[10px] font-bold ${
+                              item.category_source === "unresolved" ? "text-amber-400" : "text-[var(--omlu-text-secondary)]"
+                            }`}>
+                              {item.category_source === "existing"
+                                ? "Existing category"
+                                : item.category_source === "new"
+                                ? "New category"
+                                : "Needs selection"}
+                            </span>
                           </td>
                           <td className="p-2">
                             <div className="flex flex-col gap-1.5 min-w-[200px]">
@@ -1238,11 +1324,6 @@ export default function MenuImportFlow({ categories, onClose, onImported }: Prop
                   })}
                 </tbody>
               </table>
-              <datalist id="menu-import-categories">
-                {categories.map((category) => (
-                  <option key={category.id} value={category.name_en} />
-                ))}
-              </datalist>
             </div>
 
             <div className="mt-5 flex justify-end">

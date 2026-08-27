@@ -1202,6 +1202,8 @@ export async function confirmAdminMenuImport(
         draft_item_id: item.id,
         selected: item.selected,
         category_name: item.category_name,
+        category_id: item.category_id,
+        create_new_category: item.category_source === "new",
         item_name: item.item_name,
         description: item.description,
         price: item.price,
