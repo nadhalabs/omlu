@@ -20,7 +20,7 @@ import { AdminCategoryResponse, AdminMenuItemResponse } from "@/lib/types";
 import { invalidateQueries, queryKeys } from "@/lib/queryCache";
 import { useModalScrollLock } from "@/components/useModalScrollLock";
 import MenuImportFlow from "./MenuImportFlow";
-import MenuOptionEditor from "./MenuOptionEditor";
+import MenuOptionEditor, { DraftMenuOptionGroup, persistDraftOptionGroups, validatePriceDefiningDraft } from "./MenuOptionEditor";
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
@@ -70,6 +70,9 @@ export default function AdminMenuPage() {
   const [itemDescriptionEn, setItemDescriptionEn] = useState("");
   const [itemDescriptionMl, setItemDescriptionMl] = useState("");
   const [itemPrice, setItemPrice] = useState("");
+  const [itemPricing, setItemPricing] = useState<"fixed" | "options">("fixed");
+  const [itemOptionDrafts, setItemOptionDrafts] = useState<DraftMenuOptionGroup[]>([]);
+  const [createdItemId, setCreatedItemId] = useState<number | null>(null);
   const [itemImageUrl, setItemImageUrl] = useState("");
   const [itemIsAvailable, setItemIsAvailable] = useState(true);
   const [itemDisplayOrder, setItemDisplayOrder] = useState(0);
@@ -87,6 +90,7 @@ export default function AdminMenuPage() {
 
   useModalScrollLock(categoryModal.open || itemModal.open || importMenuOpen || Boolean(categoryDeleteModal), () => {
     if (catSaving || itemSaving || categoryDeleting) return;
+    if (createdItemId !== null) return;
     setCategoryModal({ open: false, mode: "create" });
     setItemModal({ open: false, mode: "create" });
     setImportMenuOpen(false);
@@ -290,8 +294,12 @@ export default function AdminMenuPage() {
       return;
     }
 
-    const priceNum = Number(itemPrice);
-    if (isNaN(priceNum) || priceNum < 0) {
+    const variablePriceError = itemModal.mode === "create" && itemPricing === "options" ? validatePriceDefiningDraft(itemOptionDrafts) : null;
+    if (variablePriceError) { setItemFormError(variablePriceError); return; }
+    const priceNum = itemModal.mode === "create" && itemPricing === "options"
+      ? Math.min(...itemOptionDrafts.filter((group) => group.type === "variant" && group.required).flatMap((group) => group.options.map((option) => Number(option.price_delta))))
+      : Number(itemPrice);
+    if (!Number.isFinite(priceNum) || priceNum < 0) {
       setItemFormError("Price must be a valid number greater than or equal to 0.");
       return;
     }
@@ -326,7 +334,21 @@ export default function AdminMenuPage() {
 
     try {
       if (itemModal.mode === "create") {
-        await createAdminMenuItem(payload);
+        let itemId = createdItemId;
+        if (itemId === null) {
+          const created = await createAdminMenuItem(payload);
+          itemId = created.id;
+          setCreatedItemId(itemId);
+        }
+        if (itemOptionDrafts.length > 0) {
+          try {
+            await persistDraftOptionGroups(itemId, itemOptionDrafts, setItemOptionDrafts);
+          } catch (error) {
+            setItemFormError(`The menu item was created, but some Options could not be saved. Your remaining option drafts are still here. Try Save Menu Item again to continue without creating a duplicate. ${getErrorMessage(error, "")}`.trim());
+            const itemsData = await getAdminMenuItems(); setItems(itemsData);
+            return;
+          }
+        }
       } else {
         const itemId = itemModal.item!.id;
         // If image URL is cleared, send empty string to proxy to remove it in the backend
@@ -338,6 +360,7 @@ export default function AdminMenuPage() {
       }
 
       setItemModal({ open: false, mode: "create" });
+      setCreatedItemId(null); setItemOptionDrafts([]);
       // Reload items & categories list from server to get accurate count/relationships
       const itemsData = await getAdminMenuItems();
       setItems(itemsData);
@@ -362,6 +385,11 @@ export default function AdminMenuPage() {
       setItemDescriptionEn(item.description_en || "");
       setItemDescriptionMl(item.description_ml || "");
       setItemPrice(item.price);
+      setItemPricing("fixed");
+      void fetch(`/api/staff/availability?search=${encodeURIComponent(item.name_en)}`).then((response) => response.ok ? response.json() : null).then((body) => {
+        const loaded = body?.items?.find((candidate: { id: number }) => candidate.id === item.id);
+        if (loaded?.option_groups?.some((group: { type: string; required: boolean; minimum_selections: number; maximum_selections: number }) => group.type === "variant" && group.required && group.minimum_selections === 1 && group.maximum_selections === 1)) setItemPricing("options");
+      }).catch(() => undefined);
       setItemImageUrl(item.image_url || "");
       setItemIsAvailable(item.is_available);
       setItemDisplayOrder(item.display_order);
@@ -377,6 +405,9 @@ export default function AdminMenuPage() {
       setItemDescriptionEn("");
       setItemDescriptionMl("");
       setItemPrice("");
+      setItemPricing("fixed");
+      setItemOptionDrafts([]);
+      setCreatedItemId(null);
       setItemImageUrl("");
       setItemIsAvailable(true);
       setItemDisplayOrder(0);
@@ -764,7 +795,7 @@ export default function AdminMenuPage() {
             )}
 
             <form onSubmit={handleItemSubmit} className="flex flex-col gap-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="flex flex-col gap-1.5">
                   <label className="text-[10px] font-black text-[var(--omlu-text-secondary)] uppercase tracking-wider">
                     English Name *
@@ -810,19 +841,14 @@ export default function AdminMenuPage() {
                   </select>
                 </div>
 
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-[10px] font-black text-[var(--omlu-text-secondary)] uppercase tracking-wider">
-                    Price (INR) *
-                  </label>
-                  <input
-                    type="text"
-                    value={itemPrice}
-                    onChange={(e) => setItemPrice(e.target.value)}
-                    placeholder="0.00"
-                    className="w-full px-4 py-2.5 bg-[var(--omlu-primary-surface)] border border-[var(--omlu-border)] focus:border-orange-600 rounded-xl text-xs outline-none transition text-[var(--omlu-text-primary)]"
-                  />
-                </div>
               </div>
+
+              <section className="rounded-2xl border border-[var(--omlu-border)] p-4">
+                <h4 className="text-base font-bold text-[var(--omlu-text-primary)]">Pricing</h4>
+                <fieldset className="mt-3"><legend className="text-sm font-semibold text-[var(--omlu-text-primary)]">How is this item priced?</legend><div className="mt-2 grid grid-cols-2 rounded-xl bg-[var(--omlu-muted-surface)] p-1">{([['fixed', 'One price'], ['options', 'Price varies by option']] as const).map(([value, label]) => <label key={value} className={`flex min-h-11 cursor-pointer items-center justify-center rounded-lg px-2 text-center text-sm font-semibold ${itemPricing === value ? 'bg-[var(--omlu-primary-surface)] text-orange-700 shadow-sm dark:text-orange-400' : 'text-[var(--omlu-text-secondary)]'}`}><input type="radio" name="item-pricing" className="sr-only" checked={itemPricing === value} onChange={() => setItemPricing(value)} />{label}</label>)}</div></fieldset>
+                {itemPricing === "fixed" && <label className="mt-4 block text-xs font-bold text-[var(--omlu-text-secondary)]">Price ₹ *<input type="number" min="0" step="0.01" value={itemPrice} onChange={(e) => setItemPrice(e.target.value)} placeholder="0.00" className="mt-1.5 w-full rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] px-4 py-2.5 text-sm text-[var(--omlu-text-primary)] outline-none focus:border-orange-600" /></label>}
+                {itemPricing === "options" && <p className="mt-3 text-xs text-[var(--omlu-text-secondary)]">Add a required Choose one option below, then select Each choice has a price.</p>}
+              </section>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
@@ -894,10 +920,12 @@ export default function AdminMenuPage() {
                 </label>
               </div>
 
+              {itemModal.mode === "create" && <MenuOptionEditor key={itemOptionDrafts.map((group) => group.id).join(",")} itemName={itemNameEn || "New menu item"} draftGroups={itemOptionDrafts} onDraftGroupsChange={setItemOptionDrafts} forcePriceDefining={itemPricing === "options"} />}
+
               <div className="flex items-center gap-3 mt-4">
                 <button
                   type="button"
-                  onClick={() => setItemModal({ open: false, mode: "create" })}
+                  onClick={() => { setItemModal({ open: false, mode: "create" }); setItemOptionDrafts([]); setCreatedItemId(null); }}
                   className="flex-1 py-2.5 bg-[var(--omlu-muted-surface)] hover:bg-[var(--omlu-muted-surface)] text-[var(--omlu-text-secondary)] font-bold rounded-xl cursor-pointer text-xs"
                 >
                   Cancel

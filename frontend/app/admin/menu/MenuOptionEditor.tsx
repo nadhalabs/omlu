@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { MenuOptionGroup } from "@/lib/types";
 
-type Props = { itemId: number; itemName: string };
+export type DraftMenuOptionGroup = MenuOptionGroup & { pricing: PricingBehavior };
+type Props = { itemId?: number; itemName: string; draftGroups?: DraftMenuOptionGroup[]; onDraftGroupsChange?: (groups: DraftMenuOptionGroup[]) => void; forcePriceDefining?: boolean };
 type PricingBehavior = "different" | "extra" | "none";
 type DraftOption = { name: string; kitchen_display_name: string; amount: string; available: boolean; display_order: number };
 
@@ -156,8 +157,31 @@ function ExistingChoiceRows({
   </div>;
 }
 
-export default function MenuOptionEditor({ itemId, itemName }: Props) {
-  const [groups, setGroups] = useState<MenuOptionGroup[]>([]);
+export async function persistDraftOptionGroups(itemId: number, drafts: DraftMenuOptionGroup[], onProgress?: (remaining: DraftMenuOptionGroup[]) => void) {
+  for (let draftIndex = 0; draftIndex < drafts.length; draftIndex += 1) {
+    const draft = drafts[draftIndex];
+    const group = await jsonRequest<MenuOptionGroup>("/api/admin/menu/option-groups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: draft.name, type: draft.type, required: draft.required, minimum_selections: draft.minimum_selections, maximum_selections: draft.maximum_selections, display_order: draftIndex, active: draft.active }) });
+    try {
+      for (const [index, option] of draft.options.entries()) await jsonRequest("/api/admin/menu/options", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ group_id: group.id, name: option.name, kitchen_display_name: option.kitchen_display_name || null, price_delta: option.price_delta, available: option.available, display_order: index }) });
+      await jsonRequest(`/api/admin/menu/items/${itemId}/option-groups`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ option_group_id: group.id, display_order: draftIndex, active: true }) });
+    } catch (error) {
+      await fetch(`/api/admin/menu/option-groups/${group.id}`, { method: "DELETE" }).catch(() => undefined);
+      throw error;
+    }
+    onProgress?.(drafts.slice(draftIndex + 1));
+  }
+}
+
+export function validatePriceDefiningDraft(groups: DraftMenuOptionGroup[]) {
+  const group = groups.find((candidate) => candidate.type === "variant" && candidate.required && candidate.minimum_selections === 1 && candidate.maximum_selections === 1);
+  if (!group) return "Add a required ‘Choose one’ option where each choice has a price.";
+  if (group.options.length < 1 || group.options.some((option) => !option.name.trim() || !Number.isFinite(Number(option.price_delta)) || Number(option.price_delta) < 0)) return "Add valid choice names and prices.";
+  return null;
+}
+
+export default function MenuOptionEditor({ itemId, itemName, draftGroups, onDraftGroupsChange, forcePriceDefining = false }: Props) {
+  const draftMode = itemId === undefined;
+  const [groups, setGroupsState] = useState<MenuOptionGroup[]>(draftGroups || []);
   const [pricing, setPricing] = useState<Record<number, PricingBehavior>>({});
   const [removed, setRemoved] = useState<Record<number, number[]>>({});
   const [name, setName] = useState("");
@@ -171,13 +195,19 @@ export default function MenuOptionEditor({ itemId, itemName }: Props) {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
+  const setGroups = (next: MenuOptionGroup[] | ((current: MenuOptionGroup[]) => MenuOptionGroup[])) => {
+    const resolved = typeof next === "function" ? next(groups) : next;
+    setGroupsState(resolved);
+    if (draftMode) onDraftGroupsChange?.(resolved.map((group) => ({ ...group, pricing: pricing[group.id] || pricingFor(group) })));
+  };
   const load = useCallback(async () => {
+    if (draftMode) return;
     const response = await jsonRequest<{ items: { id: number; option_groups: MenuOptionGroup[] }[] }>(`/api/staff/availability?search=${encodeURIComponent(itemName)}`);
     const loaded = response.items.find((item) => item.id === itemId)?.option_groups || [];
-    setGroups(loaded);
+    setGroupsState(loaded);
     setPricing(Object.fromEntries(loaded.map((group) => [group.id, pricingFor(group)])));
     setRemoved({});
-  }, [itemId, itemName]);
+  }, [draftMode, itemId, itemName]);
 
   useEffect(() => { const timeout = window.setTimeout(() => void load().catch((error) => setMessage(error.message)), 0); return () => window.clearTimeout(timeout); }, [load]);
 
@@ -199,6 +229,7 @@ export default function MenuOptionEditor({ itemId, itemName }: Props) {
   };
   const startNewOption = () => {
     resetNewOptionDraft();
+    if (forcePriceDefining && !groups.some((group) => group.type === "variant")) setNewPricing("different");
     setMessage(null);
     setIsCreating(true);
   };
@@ -220,6 +251,15 @@ export default function MenuOptionEditor({ itemId, itemName }: Props) {
   const createGroup = async () => {
     const error = validate(name, options, required ? Math.max(1, minimum) : 0, normalizedNewMaximum, required);
     if (error) return setMessage(error);
+    if (draftMode) {
+      const id = -Date.now();
+      const behavior = newPricing;
+      const draft: DraftMenuOptionGroup = { id, restaurant_id: 0, name: name.trim(), type: behavior === "different" ? "variant" : "addon", required, minimum_selections: selection === "one" ? (required ? 1 : 0) : (required ? Math.max(1, minimum) : 0), maximum_selections: normalizedNewMaximum, display_order: groups.length, active: true, options: options.map((option, index) => ({ id: id - index - 1, group_id: id, name: option.name.trim(), kitchen_display_name: option.kitchen_display_name.trim() || null, price_delta: behavior === "none" ? "0.00" : Number(option.amount).toFixed(2), available: option.available, display_order: index })), pricing: behavior };
+      setPricing((current) => ({ ...current, [id]: behavior }));
+      const next: DraftMenuOptionGroup[] = [...groups.map((group) => ({ ...group, pricing: pricing[group.id] || pricingFor(group) })), draft];
+      setGroupsState(next); onDraftGroupsChange?.(next);
+      resetNewOptionDraft(); setIsCreating(false); setMessage("Option added to this menu item."); return;
+    }
     setSaving(true); setMessage(null);
     try {
       const group = await jsonRequest<MenuOptionGroup>("/api/admin/menu/option-groups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: name.trim(), type: newPricing === "different" ? "variant" : "addon", required, minimum_selections: selection === "one" ? (required ? 1 : 0) : (required ? Math.max(1, minimum) : 0), maximum_selections: normalizedNewMaximum, display_order: groups.length, active: true }) });
@@ -238,6 +278,7 @@ export default function MenuOptionEditor({ itemId, itemName }: Props) {
     const max = one ? 1 : group.maximum_selections;
     const error = validate(group.name, group.options.map((option) => ({ name: option.name, amount: behavior === "none" ? "0" : option.price_delta })), min, max, group.required);
     if (error) return setMessage(error);
+    if (draftMode) { onDraftGroupsChange?.(groups.map((entry) => ({ ...entry, pricing: pricing[entry.id] || pricingFor(entry) }))); setMessage("Option draft updated."); return; }
     setSaving(true); setMessage(null);
     try {
       await jsonRequest(`/api/admin/menu/option-groups/${group.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: group.name.trim(), type: behavior === "different" ? "variant" : "addon", required: group.required, minimum_selections: min, maximum_selections: max, display_order: group.display_order, active: group.active }) });
@@ -285,7 +326,7 @@ export default function MenuOptionEditor({ itemId, itemName }: Props) {
         </div>
         <CustomerPreview name={group.name} selection={groupSelection} required={group.required} pricing={behavior} options={groupOptions} />
         <details className="mt-4 rounded-xl bg-[var(--omlu-muted-surface)] p-3"><summary className="cursor-pointer text-sm font-black text-[var(--omlu-text-primary)]">Advanced settings</summary><div className="mt-3 grid gap-3 sm:grid-cols-2"><label className="text-xs font-bold text-[var(--omlu-text-secondary)]">Minimum choices<input type="number" min="0" value={groupSelection === "one" ? (group.required ? 1 : 0) : group.minimum_selections} disabled={groupSelection === "one"} onChange={(event) => updateGroup(group.id, { minimum_selections: Number(event.target.value) })} className={`${inputClass} mt-1 disabled:opacity-60`} /></label><label className="text-xs font-bold text-[var(--omlu-text-secondary)]">Maximum choices<input type="number" min="1" value={groupSelection === "one" ? 1 : group.maximum_selections} disabled={groupSelection === "one"} onChange={(event) => updateGroup(group.id, { maximum_selections: Number(event.target.value) })} className={`${inputClass} mt-1 disabled:opacity-60`} /></label></div></details>
-        <button type="button" disabled={saving} onClick={() => void saveExisting(group)} className="mt-4 rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-black text-[var(--omlu-primary-action-text)] disabled:opacity-50">{saving ? "Saving…" : "Save changes"}</button>
+        <div className="mt-4 flex flex-wrap gap-2"><button type="button" disabled={saving} onClick={() => void saveExisting(group)} className="rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-black text-[var(--omlu-primary-action-text)] disabled:opacity-50">{saving ? "Saving…" : draftMode ? "Update draft" : "Save changes"}</button>{draftMode && <button type="button" onClick={() => { const next = groups.filter((entry) => entry.id !== group.id); setGroupsState(next); onDraftGroupsChange?.(next.map((entry) => ({ ...entry, pricing: pricing[entry.id] || pricingFor(entry) }))); }} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-red-700 dark:text-red-300">Remove</button>}</div>
       </article>;
     })}</div>
 
@@ -300,7 +341,7 @@ export default function MenuOptionEditor({ itemId, itemName }: Props) {
       <details className="mt-4 rounded-xl bg-[var(--omlu-muted-surface)] p-3"><summary className="cursor-pointer text-sm font-black text-[var(--omlu-text-primary)]">Advanced settings</summary><p className="mt-2 text-xs text-[var(--omlu-text-secondary)]">Choice order is maintained automatically from the order shown above.</p>{selection === "multiple" && <div className="mt-3 grid gap-3 sm:grid-cols-2"><label className="text-xs font-bold text-[var(--omlu-text-secondary)]">Minimum choices<input type="number" min={required ? 1 : 0} value={minimum} onChange={(event) => setMinimum(Number(event.target.value))} className={`${inputClass} mt-1`} /></label><label className="text-xs font-bold text-[var(--omlu-text-secondary)]">Maximum choices<input type="number" min="1" value={maximum} onChange={(event) => setMaximum(Number(event.target.value))} className={`${inputClass} mt-1`} /></label></div>}</details>
       <div className="mt-5 flex items-center justify-between gap-3 border-t border-[var(--omlu-border)] pt-4">
         <button type="button" disabled={saving} onClick={cancelNewOption} className="min-h-11 rounded-xl px-4 py-2.5 text-sm font-semibold text-[var(--omlu-text-secondary)] hover:bg-[var(--omlu-muted-surface)] disabled:opacity-50">Cancel</button>
-        <button type="button" disabled={saving} onClick={() => void createGroup()} className="min-h-11 rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-bold text-[var(--omlu-primary-action-text)] disabled:opacity-50">{saving ? "Saving…" : "Create option"}</button>
+        <button type="button" disabled={saving} onClick={() => void createGroup()} className="min-h-11 rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-bold text-[var(--omlu-primary-action-text)] disabled:opacity-50">{saving ? "Saving…" : draftMode ? "Add option" : "Create option"}</button>
       </div>
     </article>}
   </section>;
