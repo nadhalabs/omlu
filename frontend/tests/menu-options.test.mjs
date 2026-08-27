@@ -12,18 +12,20 @@ test("Admin menu editor presents an owner-friendly guided specification flow", (
     "Options",
     "Let customers choose variations, preferences or extras.",
     "Option name",
-    "Selection",
-    "Single choice",
-    "Multiple choices",
+    "How can customers choose?",
+    "Choose one",
+    "Choose any",
     "Required",
+    "Customer must choose before adding the item",
     "Pricing",
-    "Set choice prices",
-    "Add to item price",
-    "No price change",
+    "Each choice has a price",
+    "Add extra cost",
+    "No extra cost",
     "Add option",
     "+ Add choice",
     "Save changes",
     "Create option",
+    "Cancel",
   ]) {
     assert.ok(editor.includes(copy), copy);
   }
@@ -32,8 +34,9 @@ test("Admin menu editor presents an owner-friendly guided specification flow", (
 
 test("choice cards use plain pricing, progressive kitchen help, and ordering actions", () => {
   const editor = read("app/admin/menu/MenuOptionEditor.tsx");
-  for (const copy of ["Choice name", "Kitchen label", "Short text shown to kitchen staff.", "Item price ₹", "Extra price ₹", "Move up", "Move down", "Remove", "+ Add choice"]) assert.ok(editor.includes(copy), copy);
-  assert.match(editor, /behavior !== "none"/);
+  for (const copy of ["Choice name", "Kitchen label", "Price ₹", "Extra +₹", "More", "Move up", "Move down", "Remove", "+ Add choice"]) assert.ok(editor.includes(copy), copy);
+  assert.match(editor, /pricing !== "none"/);
+  assert.doesNotMatch(editor, /pricing === "none" && <p[^>]*>No price change/);
   assert.match(editor, /price_delta: behavior === "none" \? 0/);
   assert.match(editor, /display_order: index/);
   assert.match(editor, /function move</);
@@ -69,7 +72,7 @@ test("customer preview reflects selection, requirement, and existing pricing sem
 test("advanced constraints and validation use owner-friendly language", () => {
   const editor = read("app/admin/menu/MenuOptionEditor.tsx");
   assert.match(editor, /<details[\s\S]*Advanced settings/);
-  assert.match(editor, /<details[^>]*>[\s\S]*Advanced settings[\s\S]*Kitchen label/);
+  assert.match(editor, /<summary[^>]*>More<\/summary>[\s\S]*Kitchen label/);
   for (const copy of [
     "Minimum choices",
     "Maximum choices",
