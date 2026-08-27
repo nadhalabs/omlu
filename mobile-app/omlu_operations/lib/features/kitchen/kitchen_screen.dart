@@ -15,7 +15,9 @@ import '../onboarding/role_guide.dart';
 import '../../core/models/role_session.dart';
 
 class KitchenScreen extends ConsumerStatefulWidget {
-  const KitchenScreen({super.key});
+  const KitchenScreen({this.embedded = false, super.key});
+
+  final bool embedded;
 
   @override
   ConsumerState<KitchenScreen> createState() => _KitchenScreenState();
@@ -121,6 +123,7 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
         ),
       ),
     );
+    if (widget.embedded) return board;
     return LayoutBuilder(
       builder: (context, constraints) {
         if (constraints.maxWidth < 600) return board;

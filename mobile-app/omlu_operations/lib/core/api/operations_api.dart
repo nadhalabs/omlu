@@ -156,6 +156,139 @@ class OperationsApi {
     return _client.getList('/admin/staff');
   }
 
+  Future<List<Object?>> fetchAdminCategories() =>
+      _client.getList('/admin/categories');
+
+  Future<Map<String, Object?>> saveAdminCategory({
+    int? id,
+    required Map<String, Object?> values,
+  }) => id == null
+      ? _client.postJson('/admin/categories', body: values)
+      : _client.patchJson('/admin/categories/$id', body: values);
+
+  Future<void> deleteAdminCategory(int id) =>
+      _client.delete('/admin/categories/$id');
+
+  Future<List<Object?>> fetchAdminMenuItems({
+    int? categoryId,
+    String? search,
+  }) => _client.getList(
+    '/admin/menu-items',
+    query: {
+      if (categoryId != null) 'category_id': '$categoryId',
+      if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+    },
+  );
+
+  Future<Map<String, Object?>> saveAdminMenuItem({
+    int? id,
+    required Map<String, Object?> values,
+  }) => id == null
+      ? _client.postJson('/admin/menu-items', body: values)
+      : _client.patchJson('/admin/menu-items/$id', body: values);
+
+  Future<void> deleteAdminMenuItem(int id) =>
+      _client.delete('/admin/menu-items/$id');
+
+  Future<Map<String, Object?>> setMenuItemAvailability(int id, bool value) =>
+      _client.patchJson(
+        '/staff/availability/items/$id',
+        body: {'is_available': value},
+      );
+
+  Future<List<Object?>> fetchOptionGroups() =>
+      _client.getList('/admin/menu/option-groups');
+
+  Future<Map<String, Object?>> saveOptionGroup({
+    int? id,
+    required Map<String, Object?> values,
+  }) => id == null
+      ? _client.postJson('/admin/menu/option-groups', body: values)
+      : _client.patchJson('/admin/menu/option-groups/$id', body: values);
+
+  Future<Map<String, Object?>> saveMenuOption({
+    int? id,
+    required Map<String, Object?> values,
+  }) => id == null
+      ? _client.postJson('/admin/menu/options', body: values)
+      : _client.patchJson('/admin/menu/options/$id', body: values);
+
+  Future<void> deleteMenuOption(int id) =>
+      _client.delete('/admin/menu/options/$id');
+
+  Future<Map<String, Object?>> attachOptionGroup(int itemId, int groupId) =>
+      _client.postJson(
+        '/admin/menu/items/$itemId/option-groups',
+        body: {'option_group_id': groupId, 'display_order': 0, 'active': true},
+      );
+
+  Future<Map<String, Object?>> createStaffAccount(
+    Map<String, Object?> values,
+  ) => _client.postJson('/admin/staff', body: values);
+
+  Future<Map<String, Object?>> updateStaffAccount(
+    int id,
+    Map<String, Object?> values,
+  ) => _client.patchJson('/admin/staff/$id', body: values);
+
+  Future<void> deleteStaffAccount(int id) => _client.delete('/admin/staff/$id');
+
+  Future<Map<String, Object?>> revokeStaffSessions(int id) =>
+      _client.postJson('/admin/staff/$id/sessions/revoke');
+
+  Future<Map<String, Object?>> resetStaffPassword(int id, String password) =>
+      _client.postJson(
+        '/admin/staff/$id/reset-password',
+        body: {'temporary_password': password},
+      );
+
+  Future<Map<String, Object?>> fetchRestaurantSettings() =>
+      _client.getJson('/admin/settings');
+
+  Future<Map<String, Object?>> updateRestaurantSettings(
+    Map<String, Object?> values,
+  ) => _client.patchJson('/admin/settings', body: values);
+
+  Future<Map<String, Object?>> fetchPerformanceSummary({
+    String preset = 'today',
+  }) =>
+      _client.getJson('/admin/history/performance', query: {'preset': preset});
+
+  Future<Map<String, Object?>> fetchGstSummary({String preset = 'today'}) =>
+      _client.getJson('/admin/gst/summary', query: {'preset': preset});
+
+  Future<List<Object?>> fetchPrintBridgeInstallations() =>
+      _client.getList('/print-bridge/installations');
+
+  Future<List<Object?>> fetchActiveSessions() {
+    return _client.getList('/staff/sessions');
+  }
+
+  Future<Map<String, Object?>> fetchSessionParticipants(String sessionToken) {
+    return _client.getJson('/staff/table-sessions/$sessionToken/participants');
+  }
+
+  Future<Map<String, Object?>> rotateSessionJoinCode(String sessionToken) {
+    return _client.postJson(
+      '/staff/table-sessions/$sessionToken/rotate-join-code',
+    );
+  }
+
+  Future<Map<String, Object?>> revokeSessionParticipant({
+    required String sessionToken,
+    required String participantId,
+    required String reason,
+  }) {
+    return _client.postJson(
+      '/staff/table-sessions/$sessionToken/participants/$participantId/revoke',
+      body: {'reason': reason},
+    );
+  }
+
+  Future<Map<String, Object?>> closeEmptySession(String sessionToken) {
+    return _client.postJson('/staff/sessions/$sessionToken/close-empty');
+  }
+
   Future<Map<String, Object?>> generateTableBill(int tableId) {
     return _client.postJson('/staff/tables/$tableId/bill');
   }

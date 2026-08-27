@@ -17,6 +17,7 @@ import '../realtime_connection_provider.dart';
 import '../staff/tables_provider.dart';
 import '../staff/service_requests_provider.dart';
 import '../staff/staff_bill_screen.dart';
+import '../admin/admin_screen.dart' show ManagementHubScreen;
 
 final ownerTabProvider = StateProvider<int>((ref) {
   ref.watch(authProvider).valueOrNull?.tenantScope;
@@ -74,7 +75,7 @@ class OwnerScreen extends ConsumerWidget {
       _OwnerDashboardTab(),
       _OwnerTablesTab(),
       BillingCounterScreen(actorRole: StaffRole.owner),
-      _OwnerRequestsTab(),
+      ManagementHubScreen(),
     ];
 
     return Scaffold(
@@ -102,11 +103,12 @@ class OwnerScreen extends ConsumerWidget {
                   ),
                   BottomNavigationBarItem(
                     icon: _PaymentBadge(count: pendingCount),
-                    label: 'Billing${pendingCount > 0 ? '  $pendingCount' : ''}',
+                    label:
+                        'Billing${pendingCount > 0 ? '  $pendingCount' : ''}',
                   ),
                   const BottomNavigationBarItem(
-                    icon: Icon(Icons.notifications_rounded),
-                    label: 'Requests',
+                    icon: Icon(Icons.more_horiz_rounded),
+                    label: 'More',
                   ),
                 ],
               ),
@@ -138,8 +140,8 @@ class OwnerScreen extends ConsumerWidget {
                       ),
                     ),
                     NavigationRailDestination(
-                      icon: Icon(Icons.notifications_rounded),
-                      label: Text('Requests'),
+                      icon: Icon(Icons.more_horiz_rounded),
+                      label: Text('Management'),
                     ),
                   ],
                   trailing: Expanded(
@@ -275,8 +277,7 @@ class _OwnerDashboardTab extends ConsumerWidget {
               OmluSkeletonLoader(width: double.infinity, height: 120),
             ],
           ),
-          error: (err, st) =>
-              Center(child: Text(userFacingError(err))),
+          error: (err, st) => Center(child: Text(userFacingError(err))),
         ),
       ),
     );
@@ -381,6 +382,8 @@ class _OwnerTablesTab extends ConsumerWidget {
   }
 }
 
+// Retained for compatibility with older widget tests and deep links.
+// ignore: unused_element
 class _OwnerRequestsTab extends ConsumerWidget {
   const _OwnerRequestsTab();
 

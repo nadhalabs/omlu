@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/models/role_session.dart';
 import '../../core/errors/user_facing_error.dart';
+import '../../core/layout/responsive_layout.dart';
 import '../../design_system/colors.dart';
 import '../../design_system/spacing.dart';
 import '../../design_system/typography.dart';
@@ -16,6 +17,13 @@ import '../printing/printer_settings_screen.dart';
 import '../realtime_connection_provider.dart';
 import '../staff/tables_provider.dart';
 import '../staff/staff_bill_screen.dart';
+import '../staff/requests_screen.dart';
+import '../kitchen/kitchen_screen.dart';
+import 'session_controls_screen.dart';
+import 'menu_management_screen.dart';
+import 'staff_management_screen.dart';
+import 'settings_management_screen.dart';
+import 'reports_screen.dart';
 
 final adminTabProvider = StateProvider<int>((ref) {
   ref.watch(authProvider).valueOrNull?.tenantScope;
@@ -26,6 +34,13 @@ final staffAccountsProvider = FutureProvider<List<dynamic>>((ref) async {
   ref.watch(authProvider).valueOrNull?.tenantScope;
   final api = ref.watch(operationsApiProvider);
   return api.fetchStaffAccounts();
+});
+
+final adminDashboardProvider = FutureProvider<Map<String, Object?>>((
+  ref,
+) async {
+  ref.watch(authProvider).valueOrNull?.tenantScope;
+  return ref.watch(operationsApiProvider).fetchDashboardSummary();
 });
 
 class AdminScreen extends ConsumerWidget {
@@ -70,15 +85,16 @@ class AdminScreen extends ConsumerWidget {
 
     final List<Widget> screens = const [
       _AdminOverviewTab(),
+      KitchenScreen(embedded: true),
       _AdminTablesTab(),
       BillingCounterScreen(actorRole: StaffRole.admin),
-      _AdminStaffTab(),
+      ManagementHubScreen(),
     ];
 
     return Scaffold(
       body: LayoutBuilder(
         builder: (context, constraints) {
-          final isPhone = constraints.maxWidth < 600;
+          final isPhone = !usePersistentNavigation(constraints.maxWidth);
 
           if (isPhone) {
             return Scaffold(
@@ -95,16 +111,21 @@ class AdminScreen extends ConsumerWidget {
                     label: 'Overview',
                   ),
                   const BottomNavigationBarItem(
+                    icon: Icon(Icons.receipt_long_rounded),
+                    label: 'Orders',
+                  ),
+                  const BottomNavigationBarItem(
                     icon: Icon(Icons.grid_view_rounded),
                     label: 'Tables',
                   ),
                   BottomNavigationBarItem(
                     icon: _PaymentBadge(count: pendingCount),
-                    label: 'Billing${pendingCount > 0 ? '  $pendingCount' : ''}',
+                    label:
+                        'Billing${pendingCount > 0 ? '  $pendingCount' : ''}',
                   ),
                   const BottomNavigationBarItem(
-                    icon: Icon(Icons.people_rounded),
-                    label: 'Staff',
+                    icon: Icon(Icons.more_horiz_rounded),
+                    label: 'More',
                   ),
                 ],
               ),
@@ -126,6 +147,10 @@ class AdminScreen extends ConsumerWidget {
                       label: Text('Overview'),
                     ),
                     NavigationRailDestination(
+                      icon: Icon(Icons.receipt_long_rounded),
+                      label: Text('Live Orders'),
+                    ),
+                    NavigationRailDestination(
                       icon: Icon(Icons.grid_view_rounded),
                       label: Text('Tables'),
                     ),
@@ -136,8 +161,8 @@ class AdminScreen extends ConsumerWidget {
                       ),
                     ),
                     NavigationRailDestination(
-                      icon: Icon(Icons.people_rounded),
-                      label: Text('Staff'),
+                      icon: Icon(Icons.more_horiz_rounded),
+                      label: Text('More'),
                     ),
                   ],
                   trailing: Expanded(
@@ -191,6 +216,7 @@ class _AdminOverviewTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(authProvider).value;
+    final dashboard = ref.watch(adminDashboardProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -212,48 +238,146 @@ class _AdminOverviewTab extends ConsumerWidget {
               ),
             ),
           ),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(OmluSpacing.md),
-        children: [
-          OmluCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Admin Profile', style: OmluTypography.h2),
-                const SizedBox(height: OmluSpacing.md),
-                Text(
-                  'Name: ${session?.profile.name ?? ''}',
-                  style: OmluTypography.bodyLarge,
-                ),
-                const SizedBox(height: OmluSpacing.xs),
-                Text(
-                  'Role: Administrator',
-                  style: OmluTypography.bodyMedium.copyWith(
-                    color: OmluColors.accent,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: OmluSpacing.xs),
-                Text(
-                  'Restaurant: ${session?.profile.restaurantName ?? ''}',
-                  style: OmluTypography.bodyMedium,
-                ),
-              ],
-            ),
+          IconButton(
+            tooltip: 'Refresh dashboard',
+            onPressed: () => ref.invalidate(adminDashboardProvider),
+            icon: const Icon(Icons.refresh_rounded),
           ),
         ],
+      ),
+      body: RefreshIndicator(
+        onRefresh: () async => ref.refresh(adminDashboardProvider.future),
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(OmluSpacing.md),
+          children: [
+            dashboard.when(
+              loading: () => const LinearProgressIndicator(),
+              error: (error, _) => OmluCard(
+                child: Column(
+                  children: [
+                    Text(userFacingError(error), textAlign: TextAlign.center),
+                    TextButton(
+                      onPressed: () => ref.invalidate(adminDashboardProvider),
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              ),
+              data: (data) => LayoutBuilder(
+                builder: (context, constraints) {
+                  final metrics = <(String, String, IconData)>[
+                    (
+                      'Revenue',
+                      '₹${data['collected_revenue'] ?? data['today_revenue'] ?? '0.00'}',
+                      Icons.currency_rupee_rounded,
+                    ),
+                    (
+                      'Orders today',
+                      '${data['today_order_count'] ?? 0}',
+                      Icons.receipt_long_rounded,
+                    ),
+                    (
+                      'Live orders',
+                      '${data['pending_order_count'] ?? 0}',
+                      Icons.local_fire_department_rounded,
+                    ),
+                    (
+                      'Open sessions',
+                      '${data['open_session_count'] ?? 0}',
+                      Icons.table_restaurant_rounded,
+                    ),
+                    (
+                      'Payments due',
+                      '${data['payment_pending_count'] ?? 0}',
+                      Icons.payments_rounded,
+                    ),
+                    (
+                      'Requests',
+                      '${data['active_service_request_count'] ?? 0}',
+                      Icons.notifications_active_rounded,
+                    ),
+                  ];
+                  final columns = constraints.maxWidth >= 1000
+                      ? 3
+                      : constraints.maxWidth >= 600
+                      ? 2
+                      : 2;
+                  return GridView.count(
+                    crossAxisCount: columns,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    mainAxisSpacing: OmluSpacing.sm,
+                    crossAxisSpacing: OmluSpacing.sm,
+                    childAspectRatio: constraints.maxWidth < 600 ? 1.45 : 2.2,
+                    children: [
+                      for (final metric in metrics)
+                        OmluCard(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(metric.$3, color: OmluColors.accent),
+                              const SizedBox(height: 6),
+                              Text(metric.$2, style: OmluTypography.h2),
+                              Text(
+                                metric.$1,
+                                textAlign: TextAlign.center,
+                                style: OmluTypography.bodySmall,
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: OmluSpacing.md),
+            OmluCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Admin Profile', style: OmluTypography.h2),
+                  const SizedBox(height: OmluSpacing.md),
+                  Text(
+                    'Name: ${session?.profile.name ?? ''}',
+                    style: OmluTypography.bodyLarge,
+                  ),
+                  const SizedBox(height: OmluSpacing.xs),
+                  Text(
+                    'Role: Administrator',
+                    style: OmluTypography.bodyMedium.copyWith(
+                      color: OmluColors.accent,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: OmluSpacing.xs),
+                  Text(
+                    'Restaurant: ${session?.profile.restaurantName ?? ''}',
+                    style: OmluTypography.bodyMedium,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _AdminTablesTab extends ConsumerWidget {
+class _AdminTablesTab extends ConsumerStatefulWidget {
   const _AdminTablesTab();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_AdminTablesTab> createState() => _AdminTablesTabState();
+}
+
+class _AdminTablesTabState extends ConsumerState<_AdminTablesTab> {
+  int? _selectedTableId;
+
+  @override
+  Widget build(BuildContext context) {
     final tablesState = ref.watch(tablesProvider);
 
     return Scaffold(
@@ -264,24 +388,34 @@ class _AdminTablesTab extends ConsumerWidget {
       ),
       body: tablesState.when(
         data: (tables) {
-          return ListView.separated(
+          if (tables.isEmpty) {
+            return const Center(child: Text('No tables configured.'));
+          }
+          final wide = useSplitView(MediaQuery.sizeOf(context).width);
+          final grid = GridView.builder(
             padding: const EdgeInsets.all(OmluSpacing.md),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: wide ? 2 : 1,
+              childAspectRatio: wide ? 1.75 : 3.1,
+              mainAxisSpacing: OmluSpacing.sm,
+              crossAxisSpacing: OmluSpacing.sm,
+            ),
             itemCount: tables.length,
-            separatorBuilder: (context, index) =>
-                const SizedBox(height: OmluSpacing.sm),
             itemBuilder: (context, index) {
               final t = tables[index];
               final hasSession = t.hasOpenSession || t.state == 'occupied';
               return OmluCard(
                 onTap: hasSession
-                    ? () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => StaffBillScreen(
-                            tableId: t.id,
-                            actorRole: StaffRole.admin,
-                          ),
-                        ),
-                      )
+                    ? () => wide
+                          ? setState(() => _selectedTableId = t.id)
+                          : Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => StaffBillScreen(
+                                  tableId: t.id,
+                                  actorRole: StaffRole.admin,
+                                ),
+                              ),
+                            )
                     : null,
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -301,6 +435,25 @@ class _AdminTablesTab extends ConsumerWidget {
               );
             },
           );
+          if (!wide) return grid;
+          return Row(
+            children: [
+              SizedBox(width: 400, child: grid),
+              const VerticalDivider(width: 1),
+              Expanded(
+                child: _selectedTableId == null
+                    ? const Center(
+                        child: Text(
+                          'Select an occupied table for session and billing details.',
+                        ),
+                      )
+                    : StaffBillScreen(
+                        tableId: _selectedTableId!,
+                        actorRole: StaffRole.admin,
+                      ),
+              ),
+            ],
+          );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (err, st) => Center(child: Text('Error: $err')),
@@ -309,6 +462,92 @@ class _AdminTablesTab extends ConsumerWidget {
   }
 }
 
+class ManagementHubScreen extends StatelessWidget {
+  const ManagementHubScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(
+      title: const Text('Administration', style: OmluTypography.h2),
+    ),
+    body: ListView(
+      padding: const EdgeInsets.all(OmluSpacing.md),
+      children: [
+        const _MoreTile(
+          icon: Icons.restaurant_menu_rounded,
+          title: 'Menu management',
+          subtitle: 'Categories, items, variants, add-ons and availability',
+          page: MenuManagementScreen(),
+        ),
+        const _MoreTile(
+          icon: Icons.manage_accounts_rounded,
+          title: 'Staff & permissions',
+          subtitle: 'Accounts, roles, access and active sessions',
+          page: StaffManagementScreen(),
+        ),
+        const _MoreTile(
+          icon: Icons.settings_rounded,
+          title: 'Restaurant settings',
+          subtitle: 'Operations, GST, reviews and printer destinations',
+          page: SettingsManagementScreen(),
+        ),
+        const _MoreTile(
+          icon: Icons.insights_rounded,
+          title: 'Reports & performance',
+          subtitle: 'Revenue, orders, sessions and GST summaries',
+          page: ReportsScreen(),
+        ),
+        const _MoreTile(
+          icon: Icons.notifications_rounded,
+          title: 'Notifications & requests',
+          subtitle: 'Live customer calls and resolved activity',
+          page: RequestsScreen(),
+        ),
+        const _MoreTile(
+          icon: Icons.devices_rounded,
+          title: 'Customer sessions',
+          subtitle: 'Join codes, devices and empty sessions',
+          page: SessionControlsScreen(),
+        ),
+        const _MoreTile(
+          icon: Icons.print_rounded,
+          title: 'Printer status & setup',
+          subtitle: 'Connection, configuration and test print',
+          page: PrinterSettingsScreen(),
+        ),
+      ],
+    ),
+  );
+}
+
+class _MoreTile extends StatelessWidget {
+  const _MoreTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.page,
+  });
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Widget page;
+  @override
+  Widget build(BuildContext context) => Card(
+    child: ListTile(
+      minVerticalPadding: 16,
+      leading: Icon(icon, color: OmluColors.accent),
+      title: Text(title, style: OmluTypography.h3),
+      subtitle: Text(subtitle),
+      trailing: const Icon(Icons.chevron_right_rounded),
+      onTap: () => Navigator.of(
+        context,
+      ).push(MaterialPageRoute<void>(builder: (_) => page)),
+    ),
+  );
+}
+
+// Retained for compatibility with older widget tests and deep links.
+// ignore: unused_element
 class _AdminStaffTab extends ConsumerWidget {
   const _AdminStaffTab();
 
@@ -386,8 +625,7 @@ class _AdminStaffTab extends ConsumerWidget {
             );
           },
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (err, st) =>
-              Center(child: Text(userFacingError(err))),
+          error: (err, st) => Center(child: Text(userFacingError(err))),
         ),
       ),
     );

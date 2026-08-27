@@ -42,12 +42,12 @@ class ApiClient {
     ApiTransport? transport,
     NativeAuthRuntime? authRuntime,
     BackendSelectionManager? backendSelectionManager,
-  })  : _baseUrl = baseUrl,
-        _accessToken = accessToken,
-        _timeout = timeout,
-        _transport = transport ?? _dartIoTransport,
-        _authRuntime = authRuntime,
-        _backendSelectionManager = backendSelectionManager;
+  }) : _baseUrl = baseUrl,
+       _accessToken = accessToken,
+       _timeout = timeout,
+       _transport = transport ?? _dartIoTransport,
+       _authRuntime = authRuntime,
+       _backendSelectionManager = backendSelectionManager;
 
   final Uri _baseUrl;
   final Duration _timeout;
@@ -59,8 +59,7 @@ class ApiClient {
 
   set accessToken(String? value) => _accessToken = value;
 
-  Uri get baseUrl =>
-      _backendSelectionManager?.activeBackendUrl ?? _baseUrl;
+  Uri get baseUrl => _backendSelectionManager?.activeBackendUrl ?? _baseUrl;
 
   BackendSelectionManager? get backendSelectionManager =>
       _backendSelectionManager;
@@ -98,6 +97,10 @@ class ApiClient {
   Future<Map<String, Object?>> patchJson(String path, {Object? body}) async {
     final response = await _send('PATCH', path, body: body);
     return _expectObject(response.body);
+  }
+
+  Future<void> delete(String path) async {
+    await _send('DELETE', path);
   }
 
   Future<ApiResponse> _send(
@@ -172,7 +175,10 @@ class ApiClient {
         lease: lease,
         isWrite: isWrite,
         error: error,
-        exceptionToThrow: ApiException('Network request failed.', details: error.message),
+        exceptionToThrow: ApiException(
+          'Network request failed.',
+          details: error.message,
+        ),
       );
     } on HttpException catch (error) {
       return _handleTransportError(
@@ -184,7 +190,10 @@ class ApiClient {
         lease: lease,
         isWrite: isWrite,
         error: error,
-        exceptionToThrow: ApiException('HTTP connection error.', details: error.message),
+        exceptionToThrow: ApiException(
+          'HTTP connection error.',
+          details: error.message,
+        ),
       );
     } on HandshakeException catch (error) {
       return _handleTransportError(
@@ -196,7 +205,10 @@ class ApiClient {
         lease: lease,
         isWrite: isWrite,
         error: error,
-        exceptionToThrow: ApiException('TLS handshake failed.', details: error.message),
+        exceptionToThrow: ApiException(
+          'TLS handshake failed.',
+          details: error.message,
+        ),
       );
     } catch (error) {
       if (error is ApiException) {
@@ -211,7 +223,9 @@ class ApiClient {
         lease: lease,
         isWrite: isWrite,
         error: error,
-        exceptionToThrow: error is Exception ? error : ApiException(error.toString()),
+        exceptionToThrow: error is Exception
+            ? error
+            : ApiException(error.toString()),
       );
     }
   }
@@ -231,7 +245,10 @@ class ApiClient {
 
     // Activate fallback target for future requests if primary transport failed
     final targetChanged = manager != null && manager.isPrimary
-        ? manager.activateFallback(error: error, reason: 'Transport failure on $method $path')
+        ? manager.activateFallback(
+            error: error,
+            reason: 'Transport failure on $method $path',
+          )
         : false;
 
     // REQUIREMENT 4: Mutating write requests are NEVER automatically retried on fallback to prevent duplicate execution.
@@ -252,7 +269,9 @@ class ApiClient {
         ...?(_accessToken == null
             ? null
             : {'Authorization': 'Bearer $_accessToken'}),
-        ...?(idempotencyKey == null ? null : {'Idempotency-Key': idempotencyKey}),
+        ...?(idempotencyKey == null
+            ? null
+            : {'Idempotency-Key': idempotencyKey}),
       };
       try {
         final response = await _transport(
@@ -294,7 +313,13 @@ class ApiClient {
     final detail = response.body is Map
         ? (response.body as Map)['detail']
         : null;
-    final message = detail is String ? detail : 'Request failed.';
+    final message = switch (detail) {
+      String value => value,
+      Map value => value['message']?.toString() ?? 'Request failed.',
+      List value when value.isNotEmpty && value.first is Map =>
+        '${((value.first as Map)['loc'] as List?)?.last ?? 'Field'}: ${(value.first as Map)['msg'] ?? 'Invalid value'}',
+      _ => 'Request failed.',
+    };
     switch (response.statusCode) {
       case 401:
         throw AuthenticationException(
