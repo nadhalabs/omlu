@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
+import 'dart:typed_data';
 import 'package:qr/qr.dart';
 import 'receipt_data.dart';
 
@@ -122,21 +122,6 @@ class EscPosEncoder {
         '$status${receipt.paymentMethod == null ? '' : ' - ${receipt.paymentMethod!.toUpperCase()}'}\n',
       ),
     );
-    if (receipt.digitalBillUrl.isNotEmpty) {
-      bytes.addAll(utf8.encode('VIEW DIGITAL BILL\n'));
-      try {
-        bytes.addAll(
-          qrMode == QrPrintMode.native
-              ? _nativeQrCode(receipt.digitalBillUrl)
-              : _rasterQrCode(receipt.digitalBillUrl),
-        );
-      } catch (error) {
-        debugPrint(
-          'OMLU receipt QR encoding failed; printing receipt without QR: $error',
-        );
-      }
-      bytes.addAll(utf8.encode('Scan for bill details\n'));
-    }
     bytes.addAll(utf8.encode('Thank you\n'));
 
     // Cut paper command GS V A 0
@@ -198,6 +183,8 @@ class EscPosEncoder {
   List<int> _boldOn() => [0x1B, 0x45, 0x01];
   List<int> _boldOff() => [0x1B, 0x45, 0x00];
 
+  // Retained for non-receipt printer diagnostics; bill receipts never call it.
+  // ignore: unused_element
   List<int> _nativeQrCode(String value) {
     final data = ascii.encode(value);
     final length = data.length + 3;

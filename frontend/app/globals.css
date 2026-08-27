@@ -422,6 +422,67 @@ a.text-white[aria-disabled="true"] {
     min-height: auto !important;
   }
 
+  /* Thermal receipts use dense, line-oriented spacing instead of screen-card rhythm. */
+  :is(.print-thermal-58, .print-thermal-80) .receipt-header {
+    padding-bottom: 2mm !important;
+  }
+
+  :is(.print-thermal-58, .print-thermal-80) .receipt-header h1,
+  :is(.print-thermal-58, .print-thermal-80) .receipt-header p,
+  :is(.print-thermal-58, .print-thermal-80) .receipt-header div {
+    margin-top: 0 !important;
+  }
+
+  :is(.print-thermal-58, .print-thermal-80) .receipt-metadata {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 0 !important;
+    margin-top: 1.5mm !important;
+  }
+
+  :is(.print-thermal-58, .print-thermal-80) .receipt-items {
+    padding: 2mm 0 !important;
+  }
+
+  :is(.print-thermal-58, .print-thermal-80) .receipt-items-heading {
+    margin-bottom: 1mm !important;
+  }
+
+  :is(.print-thermal-58, .print-thermal-80) .receipt-orders,
+  :is(.print-thermal-58, .print-thermal-80) .receipt-item-list,
+  :is(.print-thermal-58, .print-thermal-80) .receipt-totals {
+    gap: 1mm !important;
+  }
+
+  :is(.print-thermal-58, .print-thermal-80) .receipt-order {
+    padding: 1mm 0 !important;
+  }
+
+  :is(.print-thermal-58, .print-thermal-80) .receipt-order-heading {
+    margin-bottom: 1mm !important;
+    padding-bottom: 0.5mm !important;
+  }
+
+  :is(.print-thermal-58, .print-thermal-80) .receipt-item {
+    gap: 1.5mm !important;
+    line-height: 1.15 !important;
+  }
+
+  :is(.print-thermal-58, .print-thermal-80) .receipt-option {
+    padding-left: 1.5mm !important;
+    line-height: 1.1 !important;
+  }
+
+  :is(.print-thermal-58, .print-thermal-80) .receipt-footer {
+    padding-top: 2mm !important;
+  }
+
+  :is(.print-thermal-58, .print-thermal-80) .receipt-grand-total {
+    margin-top: 1mm !important;
+    padding-top: 1.5mm !important;
+    font-size: 1.2em !important;
+  }
+
   .legal-page {
     background: #fff !important;
     color: #000 !important;

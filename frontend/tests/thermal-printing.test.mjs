@@ -39,6 +39,14 @@ test("receipt print layout includes long options, GST totals, and hides navigati
   assert.match(billClient, /<div className="print-hidden grid grid-cols-1 gap-3/);
 });
 
+test("printed receipt omits the digital bill QR while preserving compact thermal styles", () => {
+  assert.doesNotMatch(billClient, /getPublicReceiptQrUrl|Digital bill QR code|VIEW YOUR DIGITAL BILL|Scan for complete bill details/);
+  for (const compactClass of ["receipt-header", "receipt-metadata", "receipt-item", "receipt-option", "receipt-totals", "receipt-grand-total"]) {
+    assert.ok(billClient.includes(compactClass), compactClass);
+    assert.ok(css.includes(compactClass), compactClass);
+  }
+});
+
 test("B2B GST invoice prints the complete recipient snapshot while B2C remains unchanged", () => {
   assert.match(billClient, /bill\.customer_tax_type === "b2b"/);
   assert.match(billClient, />Billed To</);
