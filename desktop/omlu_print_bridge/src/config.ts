@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 
-export type TransportType = 'windows_raw_spooler' | 'windows_driver_spooler' | 'tcp_lan' | 'bluetooth_com';
+export type TransportType = 'windows_raw_spooler' | 'windows_driver_spooler' | 'macos_spooler' | 'tcp_lan' | 'bluetooth_com';
 
 export interface PrinterProfile {
   id: string;
@@ -17,6 +17,7 @@ export interface PrinterProfile {
   is_default: boolean;
   createdAt: string;
   updatedAt: string;
+  lastSuccessfulTestAt?: string;
 }
 
 export interface PrinterConfig {

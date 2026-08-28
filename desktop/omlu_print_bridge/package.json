@@ -1,7 +1,7 @@
 {
   "name": "omlu-print-bridge",
   "version": "1.0.0",
-  "description": "Production OMLU Desktop Print Bridge for Windows and macOS Direct Thermal Printing",
+  "description": "OMLU Print for Windows and macOS direct thermal printing",
   "main": "dist/app.js",
   "type": "commonjs",
   "scripts": {
@@ -15,7 +15,7 @@
   },
   "build": {
     "appId": "in.omlu.printerbridge",
-    "productName": "OMLU Printer Bridge",
+    "productName": "OMLU Print",
     "directories": {
       "output": "dist/installer"
     },

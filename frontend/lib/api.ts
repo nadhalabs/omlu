@@ -1871,7 +1871,15 @@ export async function getPrintBridgePublicKey(): Promise<{ public_key_pem: strin
 }
 
 export async function listBridgeInstallations(): Promise<{
-  installations: Array<{
+  installations: PrintBridgeInstallation[];
+}> {
+  const res = await fetch("/api/admin/print-bridge/installations", { cache: "no-store" });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError(res.status, body.detail || "Could not list OMLU Print installations.");
+  return body;
+}
+
+export interface PrintBridgeInstallation {
     id: string;
     installation_id: string;
     tenant_id: string;
@@ -1888,10 +1896,4 @@ export async function listBridgeInstallations(): Promise<{
     billing_printer_label: string | null;
     billing_printer_last_success_at: string | null;
     revoked_at: string | null;
-  }>;
-}> {
-  const res = await fetch("/api/admin/print-bridge/installations");
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new ApiError(res.status, body.detail || "Could not list bridge installations.");
-  return body;
 }

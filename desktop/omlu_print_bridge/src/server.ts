@@ -8,8 +8,10 @@ import { WindowsRawSpoolerTransport } from './transports/raw_spooler_transport';
 import { WindowsDriverSpoolerTransport } from './transports/driver_spooler_transport';
 import { TcpPrinterTransport } from './transports/tcp_transport';
 import { SerialComPrinterTransport } from './transports/serial_com_transport';
+import { MacOSSpoolerTransport } from './transports/macos_spooler_transport';
 import { PrinterTransport } from './transports/transport';
 import { KitchenPrintConsumer } from './kitchen_consumer';
+import { discoverSystemPrinters, isSafePrivatePrinterHost, isSafePrinterQueueName } from './printer_discovery';
 
 const PORT = 24242;
 const HOST = '0.0.0.0';
@@ -19,6 +21,8 @@ export class PrintBridgeServer {
   private configManager: ConfigManager;
   private coordinator: PrintJobCoordinator;
   private activePairingCode: string | null = null;
+  private activePairingExpiresAt = 0;
+  private activePairingAttempts = 0;
   private kitchenConsumer: KitchenPrintConsumer;
   private startTime: number = Date.now();
 
@@ -53,6 +57,8 @@ export class PrintBridgeServer {
           config.chunkSize,
           config.interChunkDelayMs
         );
+      case 'macos_spooler':
+        return new MacOSSpoolerTransport(config.queueName);
       default:
         return new WindowsRawSpoolerTransport(config.queueName);
     }
@@ -74,6 +80,9 @@ export class PrintBridgeServer {
     }
     if (profile.transport === 'windows_driver_spooler' && profile.queueName) {
       return new WindowsDriverSpoolerTransport(profile.queueName);
+    }
+    if (profile.transport === 'macos_spooler' && profile.queueName) {
+      return new MacOSSpoolerTransport(profile.queueName);
     }
     return this.getTransport(config);
   }
@@ -132,11 +141,13 @@ export class PrintBridgeServer {
         const defaultBilling = this.getDefaultPrinterProfile('billing', config);
         const defaultKitchen = this.getDefaultPrinterProfile('kitchen', config);
 
-        let isOnline = false;
-        if (defaultBilling) {
-          const transport = this.getTransportForProfile(defaultBilling, config);
-          isOnline = await transport.testConnection();
-        } else {
+        const printerReadiness = Object.fromEntries(await Promise.all((config.printers || []).map(async (profile) => {
+          if (!profile.enabled) return [profile.id, false] as const;
+          const transport = this.getTransportForProfile(profile, config);
+          return [profile.id, await transport.testConnection()] as const;
+        })));
+        let isOnline = defaultBilling ? Boolean(printerReadiness[defaultBilling.id]) : false;
+        if (!defaultBilling) {
           const transport = this.getTransport(config);
           isOnline = await transport.testConnection();
         }
@@ -147,9 +158,10 @@ export class PrintBridgeServer {
           readiness: 'ready',
           configured_printer: defaultBilling?.name || config.printerName,
           active_transport: defaultBilling?.transport || config.transport,
-          supported_transports: ['windows_raw_spooler', 'windows_driver_spooler', 'tcp_lan', 'bluetooth_com'],
+          supported_transports: ['windows_raw_spooler', 'windows_driver_spooler', 'macos_spooler', 'tcp_lan', 'bluetooth_com'],
           active_job_id: this.coordinator.getActiveJobId(),
           printer_online: isOnline,
+          printer_readiness: printerReadiness,
           installation_id: config.installationId || null,
           tenant_id: config.tenantId || null,
           paired: isPersistedPairingComplete(config),
@@ -184,23 +196,34 @@ export class PrintBridgeServer {
       }
 
       if ((method === 'POST' || method === 'GET') && (path === '/v1/printers/discover' || path === '/v1/printer-discovery')) {
-        const config = this.configManager.getConfig();
-        const transport = this.getTransport(config);
-        const discovered = await transport.discover();
-        return this.json(res, 200, { printers: discovered });
+        const auth = this.authorizeLocalAction(req, 'printer:configure');
+        if (!auth.valid) return this.json(res, 401, { error: 'UNAUTHORIZED', message: auth.reason });
+        const discovered = await discoverSystemPrinters();
+        return this.json(res, 200, { printers: discovered, bounded: true });
       }
 
       if (method === 'POST' && path === '/v1/pairing/code') {
-        this.activePairingCode = `${Math.floor(100000 + Math.random() * 900000)}`;
+        this.activePairingCode = `${crypto.randomInt(100000, 1000000)}`;
+        this.activePairingExpiresAt = Date.now() + 300_000;
+        this.activePairingAttempts = 0;
         return this.json(res, 200, { pairing_code: this.activePairingCode, expires_in_seconds: 300 });
       }
 
       if (method === 'POST' && path === '/v1/pairing/confirm') {
         const body = await this.readJson(req);
-        if (!body.pairing_code || body.pairing_code !== this.activePairingCode) {
+        const expired = Date.now() >= this.activePairingExpiresAt;
+        const exhausted = this.activePairingAttempts >= 3;
+        if (!body.pairing_code || expired || exhausted || body.pairing_code !== this.activePairingCode) {
+          this.activePairingAttempts += 1;
+          if (expired || this.activePairingAttempts >= 3) {
+            this.activePairingCode = null;
+            this.activePairingExpiresAt = 0;
+          }
           return this.json(res, 400, { error: 'INVALID_PAIRING_CODE', message: 'Invalid or expired pairing code.' });
         }
         this.activePairingCode = null;
+        this.activePairingExpiresAt = 0;
+        this.activePairingAttempts = 0;
         if (!body.backend_public_key_pem || !body.backend_url || !body.credential_secret || !body.tenant_id) {
           return this.json(res, 422, { error: 'INCOMPLETE_PAIRING', message: 'Pairing details are incomplete.' });
         }
@@ -245,6 +268,8 @@ export class PrintBridgeServer {
       }
 
       if (method === 'POST' && path === '/v1/printer-profiles') {
+        const auth = this.authorizeLocalAction(req, 'printer:configure');
+        if (!auth.valid) return this.json(res, 401, { error: 'UNAUTHORIZED', message: auth.reason });
         const body = await this.readJson(req);
         if (!body.name || !body.purpose) {
           return this.json(res, 422, { error: 'INVALID_PROFILE', message: 'Printer name and purpose are required.' });
@@ -261,13 +286,25 @@ export class PrintBridgeServer {
           return p;
         });
 
+        const transport = body.transport === 'macos_spooler' ? 'macos_spooler'
+          : body.transport === 'windows_raw_spooler' ? 'windows_raw_spooler'
+          : body.transport === 'windows_driver_spooler' ? 'windows_driver_spooler'
+          : body.transport === 'bluetooth_com' ? 'bluetooth_com' : 'tcp_lan';
+        const port = body.port === undefined ? undefined : Number(body.port);
+        const host = body.host ? String(body.host).trim() : undefined;
+        if (transport === 'tcp_lan' && (!host || !isSafePrivatePrinterHost(host) || !Number.isInteger(port) || port! < 1 || port! > 65535)) {
+          return this.json(res, 422, { error: 'INVALID_NETWORK_TARGET', message: 'Use a private local-network IPv4 address and a valid printer port.' });
+        }
+        if ((transport === 'windows_raw_spooler' || transport === 'windows_driver_spooler' || transport === 'macos_spooler') && (!body.queueName || !isSafePrinterQueueName(String(body.queueName)))) {
+          return this.json(res, 422, { error: 'INVALID_QUEUE', message: 'Choose an installed printer queue.' });
+        }
         const newProfile: PrinterProfile = {
           id: `profile_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
           name: String(body.name).trim().slice(0, 100),
           purpose: body.purpose === 'kitchen' ? 'kitchen' : 'billing',
-          transport: body.transport || 'tcp_lan',
-          host: body.host ? String(body.host).trim() : undefined,
-          port: body.port ? Number(body.port) : 9100,
+          transport,
+          host,
+          port,
           queueName: body.queueName ? String(body.queueName).trim() : undefined,
           paperWidth: body.paperWidth === '58' ? '58' : '80',
           enabled: body.enabled !== false,
@@ -300,6 +337,8 @@ export class PrintBridgeServer {
       if ((method === 'PUT' || method === 'POST') && path.startsWith('/v1/printer-profiles/')) {
         const id = path.replace('/v1/printer-profiles/', '').split('/')[0];
         const subAction = path.endsWith('/set-default') ? 'set-default' : path.endsWith('/test') ? 'test' : 'update';
+        const auth = this.authorizeLocalAction(req, subAction === 'test' ? 'printer:test' : 'printer:configure');
+        if (!auth.valid) return this.json(res, 401, { error: 'UNAUTHORIZED', message: auth.reason });
         const config = this.configManager.getConfig();
         const currentProfiles = config.printers || [];
         const target = currentProfiles.find((p) => p.id === id);
@@ -345,11 +384,25 @@ export class PrintBridgeServer {
             created_at: new Date().toISOString(), expires_at: new Date(Date.now() + 60000).toISOString(), retry_count: 0, signed_token: '',
           };
           const result = await this.coordinator.executePrintJob(testJob, config, transport);
-          return this.json(res, result.state === 'completed' ? 200 : 503, { success: result.state === 'completed', message: result.state === 'completed' ? 'Printer test completed.' : (result.error || 'Printer unavailable.') });
+          if (result.state === 'completed') {
+            const testedAt = new Date().toISOString();
+            this.configManager.saveConfig({ printers: currentProfiles.map((profile) => profile.id === target.id ? { ...profile, lastSuccessfulTestAt: testedAt, updatedAt: testedAt } : profile) });
+          }
+          return this.json(res, result.state === 'completed' ? 200 : 503, { success: result.state === 'completed', message: result.state === 'completed' ? 'Test job was accepted by the printer connection.' : (result.error || 'Printer unavailable.') });
         }
 
         // Standard profile update
         const body = await this.readJson(req);
+        const nextTransport = body.transport || target.transport;
+        const nextHost = body.host !== undefined ? String(body.host).trim() : target.host;
+        const nextPort = body.port !== undefined ? Number(body.port) : target.port;
+        if (nextTransport === 'tcp_lan' && (!nextHost || !isSafePrivatePrinterHost(nextHost) || !Number.isInteger(nextPort) || nextPort! < 1 || nextPort! > 65535)) {
+          return this.json(res, 422, { error: 'INVALID_NETWORK_TARGET', message: 'Use a private local-network IPv4 address and a valid printer port.' });
+        }
+        const nextQueue = body.queueName !== undefined ? String(body.queueName).trim() : target.queueName;
+        if ((nextTransport === 'windows_raw_spooler' || nextTransport === 'windows_driver_spooler' || nextTransport === 'macos_spooler') && (!nextQueue || !isSafePrinterQueueName(nextQueue))) {
+          return this.json(res, 422, { error: 'INVALID_QUEUE', message: 'Choose a valid installed printer name.' });
+        }
         const updatedProfiles = currentProfiles.map((p) => {
           if (p.id === id) {
             return {
@@ -375,6 +428,8 @@ export class PrintBridgeServer {
       }
 
       if (method === 'DELETE' && path.startsWith('/v1/printer-profiles/')) {
+        const auth = this.authorizeLocalAction(req, 'printer:configure');
+        if (!auth.valid) return this.json(res, 401, { error: 'UNAUTHORIZED', message: auth.reason });
         const id = path.replace('/v1/printer-profiles/', '').trim();
         const config = this.configManager.getConfig();
         const currentProfiles = config.printers || [];
@@ -396,7 +451,7 @@ export class PrintBridgeServer {
           paired: isPersistedPairingComplete(config),
           uptime_seconds: Math.floor((Date.now() - this.startTime) / 1000),
           active_job_id: this.coordinator.getActiveJobId(),
-          supported_transports: ['windows_raw_spooler', 'windows_driver_spooler', 'tcp_lan', 'bluetooth_com'],
+          supported_transports: ['windows_raw_spooler', 'windows_driver_spooler', 'macos_spooler', 'tcp_lan', 'bluetooth_com'],
           printers: (config.printers || []).map((p) => ({
             id: p.id,
             name: p.name,
@@ -565,6 +620,18 @@ export class PrintBridgeServer {
       });
       req.on('error', reject);
     });
+  }
+
+  private authorizeLocalAction(req: http.IncomingMessage, action: string): { valid: boolean; reason?: string } {
+    const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+    const verified = verifySignedToken(token, action);
+    if (!verified.valid) return verified;
+    const config = this.configManager.getConfig();
+    if (!isPersistedPairingComplete(config)) return { valid: false, reason: 'INCOMPLETE_PAIRING' };
+    if (verified.payload?.installation_id !== config.installationId || String(verified.payload?.tenant_id) !== String(config.tenantId)) {
+      return { valid: false, reason: 'INSTALLATION_OR_TENANT_MISMATCH' };
+    }
+    return { valid: true };
   }
 
   private json(res: http.ServerResponse, statusCode: number, data: any): void {

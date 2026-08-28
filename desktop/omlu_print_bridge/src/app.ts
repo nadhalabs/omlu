@@ -28,7 +28,7 @@ if (!gotTheLock) {
     try {
       server = new PrintBridgeServer();
       await server.listen(PORT, '0.0.0.0');
-      console.log(`OMLU Printer Bridge running on http://127.0.0.1:${PORT}`);
+      console.log(`OMLU Print running on http://127.0.0.1:${PORT}`);
     } catch (err) {
       console.error('Failed to start PrintBridgeServer:', err);
     }
@@ -60,7 +60,7 @@ function setupTray() {
   }
 
   tray = new Tray(trayIcon);
-  tray.setToolTip('OMLU Printer Bridge');
+  tray.setToolTip('OMLU Print');
 
   updateTrayMenu();
 }
@@ -80,8 +80,8 @@ function updateTrayMenu() {
   const isAutoStart = app.getLoginItemSettings().openAtLogin;
 
   const menuTemplate: Array<Electron.MenuItemConstructorOptions> = [
-    { label: 'OMLU Printer Bridge v1.0.0', enabled: false },
-    { label: '● Connected to OMLU', enabled: false },
+    { label: 'OMLU Print v1.0.0', enabled: false },
+    { label: '● Running', enabled: false },
     { type: 'separator' },
     {
       label: 'Open OMLU Printing Dashboard',
@@ -111,13 +111,13 @@ function updateTrayMenu() {
           server = new PrintBridgeServer();
           await server.listen(PORT, '0.0.0.0');
           if (Notification.isSupported()) {
-            new Notification({ title: 'OMLU Printer Bridge', body: 'Bridge restarted successfully.' }).show();
+            new Notification({ title: 'OMLU Print', body: 'OMLU Print restarted successfully.' }).show();
           }
         })();
       },
     },
     {
-      label: 'Quit OMLU Printer Bridge',
+      label: 'Quit OMLU Print',
       click: () => {
         void (async () => {
           if (server) {

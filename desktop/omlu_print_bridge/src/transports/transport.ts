@@ -4,6 +4,12 @@ export interface DeviceInfo {
   transport: string;
   description?: string;
   available: boolean;
+  connectionType?: 'usb' | 'network' | 'bluetooth' | 'system' | 'unknown';
+  confidence?: 'confirmed' | 'possible';
+  queueName?: string;
+  host?: string;
+  port?: number;
+  isDefault?: boolean;
 }
 
 export interface TransportCapabilities {

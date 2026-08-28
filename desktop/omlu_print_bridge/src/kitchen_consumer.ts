@@ -29,8 +29,7 @@ export class KitchenPrintConsumer {
   }
 
   private ready(config: PrinterConfig): boolean {
-    return Boolean(config.backendUrl && config.credentialSecret && config.tenantId &&
-      config.kitchenPrinterEnabled && config.kitchenPrinterHost && config.kitchenPrinterPort);
+    return Boolean(config.backendUrl && config.credentialSecret && config.tenantId && config.installationId);
   }
 
   private async request(url: string, options: RequestInit): Promise<Response> {
@@ -44,15 +43,20 @@ export class KitchenPrintConsumer {
     this.busy = true;
     const base = config.backendUrl.replace(/\/$/, '');
     try {
+      const billingProfile = config.printers.find((profile) => profile.purpose === 'billing' && profile.enabled && profile.is_default);
+      const kitchenProfile = config.printers.find((profile) => profile.purpose === 'kitchen' && profile.enabled && profile.is_default);
       await this.request(`${base}/api/admin/print-bridge/consumer/heartbeat`, {
         method: 'POST', headers: this.headers(config),
         body: JSON.stringify({
-          kitchen_printer_configured: true,
-          kitchen_printer_label: config.kitchenPrinterName,
-          billing_printer_configured: Boolean(config.billingPrinterEnabled && config.billingPrinterHost),
-          billing_printer_label: config.billingPrinterName || null,
+          kitchen_printer_configured: Boolean(kitchenProfile || (config.kitchenPrinterEnabled && config.kitchenPrinterHost)),
+          kitchen_printer_label: kitchenProfile?.name || config.kitchenPrinterName || null,
+          billing_printer_configured: Boolean(billingProfile || (config.billingPrinterEnabled && config.billingPrinterHost)),
+          billing_printer_label: billingProfile?.name || config.billingPrinterName || null,
+          kitchen_printer_last_success_at: kitchenProfile?.lastSuccessfulTestAt || null,
+          billing_printer_last_success_at: billingProfile?.lastSuccessfulTestAt || null,
         }),
       });
+      if (!kitchenProfile && !(config.kitchenPrinterEnabled && config.kitchenPrinterHost && config.kitchenPrinterPort)) return;
       const claimResponse = await this.request(`${base}/api/admin/print-bridge/consumer/claim`, {
         method: 'POST', headers: this.headers(config), body: '{}',
       });

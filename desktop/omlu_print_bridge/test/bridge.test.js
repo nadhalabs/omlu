@@ -8,6 +8,7 @@ const { PrintBridgeServer } = require('../dist/server');
 const { verifySignedToken, sanitizeErrorMessage, setPublicKeyPem } = require('../dist/security');
 const { getBleCapability } = require('../dist/capabilities/ble_capability');
 const { defaultConfig, isPersistedPairingComplete } = require('../dist/config');
+const { classifyConnection, parseMacPrinters, parseWindowsPrinters, isSafePrivatePrinterHost, DISCOVERY_TIMEOUT_MS } = require('../dist/printer_discovery');
 
 // Generate test Ed25519 key pair for unit tests
 const { privateKey, publicKey } = crypto.generateKeyPairSync('ed25519');
@@ -91,6 +92,30 @@ test('Persisted pairing health requires the complete security configuration', ()
   assert.equal(isPersistedPairingComplete({ ...defaultConfig,
     installationId: 'inst-1', kitchenPrinterEnabled: true, kitchenPrinterHost: '192.168.1.20',
   }), false);
+});
+
+test('discovery classification is bounded and uses OS evidence', () => {
+  assert.equal(DISCOVERY_TIMEOUT_MS, 5000);
+  assert.equal(classifyConnection('USB001'), 'usb');
+  assert.equal(classifyConnection('ipps://epson.local/ipp/print'), 'network');
+  const windows = parseWindowsPrinters(JSON.stringify({ Name: 'EPSON TM-T82', PortName: 'USB001', PrinterStatus: 3, Default: true }));
+  assert.equal(windows[0].name, 'EPSON TM-T82');
+  assert.equal(windows[0].connectionType, 'usb');
+  assert.equal(windows[0].confidence, 'confirmed');
+  const mac = parseMacPrinters('printer XP_80C is idle. enabled since today', 'device for XP_80C: dnssd://XP._printer._tcp.local/', 'system default destination: XP_80C');
+  assert.equal(mac[0].name, 'XP 80C');
+  assert.equal(mac[0].connectionType, 'network');
+  assert.equal(mac[0].isDefault, true);
+});
+
+test('manual network targets are restricted to private IPv4 addresses', () => {
+  assert.equal(isSafePrivatePrinterHost('192.168.1.50'), true);
+  assert.equal(isSafePrivatePrinterHost('10.0.0.20'), true);
+  assert.equal(isSafePrivatePrinterHost('172.20.1.9'), true);
+  assert.equal(isSafePrivatePrinterHost('127.0.0.1'), false);
+  assert.equal(isSafePrivatePrinterHost('169.254.1.2'), false);
+  assert.equal(isSafePrivatePrinterHost('8.8.8.8'), false);
+  assert.equal(isSafePrivatePrinterHost('example.com'), false);
 });
 
 test('HTTP API Server health and capabilities endpoints', async () => {
@@ -178,6 +203,38 @@ test('HTTP API Server health and capabilities endpoints', async () => {
     assert.equal(pairedHealth.tenant_id, 'tenant-1');
     assert.equal(pairedHealth.billing_printer_configured, false);
 
+    const unauthorizedDiscovery = await fetch('http://127.0.0.1:24299/v1/printers/discover', { method: 'POST' });
+    assert.equal(unauthorizedDiscovery.status, 401);
+
+    const discoveryToken = makeEd25519Token('printer:configure', null, 300, { installation_id: 'inst_test_1' });
+    const discoveryRes = await fetch('http://127.0.0.1:24299/v1/printers/discover', {
+      method: 'POST', headers: { Authorization: `Bearer ${discoveryToken}` },
+    });
+    assert.equal(discoveryRes.status, 200);
+    assert.equal((await discoveryRes.json()).bounded, true);
+
+    const crossTenantToken = makeEd25519Token('printer:configure', null, 300, { installation_id: 'inst_test_1', tenant_id: 'tenant-other' });
+    const crossTenantProfile = await fetch('http://127.0.0.1:24299/v1/printer-profiles', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${crossTenantToken}` },
+      body: JSON.stringify({ name: 'Forbidden', purpose: 'billing', transport: 'tcp_lan', host: '192.168.1.44', port: 9100 }),
+    });
+    assert.equal(crossTenantProfile.status, 401);
+
+    const unsafeToken = makeEd25519Token('printer:configure', null, 300, { installation_id: 'inst_test_1' });
+    const unsafeProfile = await fetch('http://127.0.0.1:24299/v1/printer-profiles', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${unsafeToken}` },
+      body: JSON.stringify({ name: 'Public target', purpose: 'billing', transport: 'tcp_lan', host: '8.8.8.8', port: 9100 }),
+    });
+    assert.equal(unsafeProfile.status, 422);
+
+    const assignmentToken = makeEd25519Token('printer:configure', null, 300, { installation_id: 'inst_test_1' });
+    const assignmentRes = await fetch('http://127.0.0.1:24299/v1/printer-profiles', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${assignmentToken}` },
+      body: JSON.stringify({ name: 'EPSON TM-T82', purpose: 'billing', transport: 'tcp_lan', host: '192.168.1.44', port: 9100, is_default: true }),
+    });
+    assert.equal(assignmentRes.status, 200);
+    assert.equal((await assignmentRes.json()).profile.purpose, 'billing');
+
     // POST /v1/billing-printer/setup
     const token = makeEd25519Token('printer:configure');
     const billingSetupRes = await fetch('http://127.0.0.1:24299/v1/billing-printer/setup', {
@@ -190,8 +247,9 @@ test('HTTP API Server health and capabilities endpoints', async () => {
     const postBillingHealthRes = await fetch('http://127.0.0.1:24299/v1/health');
     const postBillingHealth = await postBillingHealthRes.json();
     assert.equal(postBillingHealth.billing_printer_configured, true);
-    assert.equal(postBillingHealth.billing_printer_name, 'Front Billing Printer');
-    assert.equal(postBillingHealth.billing_printer_host, '192.168.1.101');
+    // The profile assignment remains authoritative over legacy setup fields.
+    assert.equal(postBillingHealth.billing_printer_name, 'EPSON TM-T82');
+    assert.equal(postBillingHealth.billing_printer_host, '192.168.1.44');
     assert.equal(postBillingHealth.billing_printer_port, 9100);
 
     const persistedPairing = fs.readFileSync(tmpConfig, 'utf8');

@@ -4,7 +4,7 @@ export interface PrinterProfile {
   id: string;
   name: string;
   purpose: "billing" | "kitchen";
-  transport: "windows_raw_spooler" | "windows_driver_spooler" | "tcp_lan" | "bluetooth_com";
+  transport: "windows_raw_spooler" | "windows_driver_spooler" | "macos_spooler" | "tcp_lan" | "bluetooth_com";
   host?: string;
   port?: number;
   queueName?: string;
@@ -13,6 +13,7 @@ export interface PrinterProfile {
   is_default: boolean;
   createdAt: string;
   updatedAt: string;
+  lastSuccessfulTestAt?: string;
 }
 
 export interface BridgeHealth {
@@ -24,6 +25,7 @@ export interface BridgeHealth {
   supported_transports: string[];
   active_job_id: string | null;
   printer_online: boolean;
+  printer_readiness?: Record<string, boolean>;
   installation_id: string | null;
   tenant_id: string | null;
   paired: boolean;
@@ -190,11 +192,11 @@ export async function fetchPrinterProfiles(): Promise<PrinterProfile[]> {
   return [];
 }
 
-export async function addPrinterProfile(profile: Partial<PrinterProfile>): Promise<{ success: boolean; profile?: PrinterProfile; error?: string }> {
+export async function addPrinterProfile(token: string, profile: Partial<PrinterProfile>): Promise<{ success: boolean; profile?: PrinterProfile; error?: string }> {
   try {
     const res = await fetch(`${BRIDGE_BASE}/printer-profiles`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify(profile),
       signal: AbortSignal.timeout(5000),
     });
@@ -208,11 +210,11 @@ export async function addPrinterProfile(profile: Partial<PrinterProfile>): Promi
   }
 }
 
-export async function updatePrinterProfile(id: string, profile: Partial<PrinterProfile>): Promise<{ success: boolean; profile?: PrinterProfile; error?: string }> {
+export async function updatePrinterProfile(token: string, id: string, profile: Partial<PrinterProfile>): Promise<{ success: boolean; profile?: PrinterProfile; error?: string }> {
   try {
     const res = await fetch(`${BRIDGE_BASE}/printer-profiles/${encodeURIComponent(id)}`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify(profile),
       signal: AbortSignal.timeout(5000),
     });
@@ -226,11 +228,11 @@ export async function updatePrinterProfile(id: string, profile: Partial<PrinterP
   }
 }
 
-export async function deletePrinterProfile(id: string): Promise<{ success: boolean; error?: string }> {
+export async function deletePrinterProfile(token: string, id: string): Promise<{ success: boolean; error?: string }> {
   try {
     const res = await fetch(`${BRIDGE_BASE}/printer-profiles/${encodeURIComponent(id)}`, {
       method: "DELETE",
-      signal: AbortSignal.timeout(5000),
+      headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(5000),
     });
     const data = await res.json();
     if (res.ok) {
@@ -242,11 +244,11 @@ export async function deletePrinterProfile(id: string): Promise<{ success: boole
   }
 }
 
-export async function setDefaultPrinterProfile(id: string): Promise<{ success: boolean; profile?: PrinterProfile; error?: string }> {
+export async function setDefaultPrinterProfile(token: string, id: string): Promise<{ success: boolean; profile?: PrinterProfile; error?: string }> {
   try {
     const res = await fetch(`${BRIDGE_BASE}/printer-profiles/${encodeURIComponent(id)}/set-default`, {
       method: "POST",
-      signal: AbortSignal.timeout(5000),
+      headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(5000),
     });
     const data = await res.json();
     if (res.ok) {
@@ -258,11 +260,11 @@ export async function setDefaultPrinterProfile(id: string): Promise<{ success: b
   }
 }
 
-export async function testPrinterProfile(id: string): Promise<{ success: boolean; error?: string }> {
+export async function testPrinterProfile(token: string, id: string): Promise<{ success: boolean; error?: string }> {
   try {
     const res = await fetch(`${BRIDGE_BASE}/printer-profiles/${encodeURIComponent(id)}/test`, {
       method: "POST",
-      signal: AbortSignal.timeout(12000),
+      headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(12000),
     });
     const data = await res.json();
     if (res.ok && data.success) {
@@ -274,11 +276,18 @@ export async function testPrinterProfile(id: string): Promise<{ success: boolean
   }
 }
 
-export async function discoverPrinters(): Promise<Array<{ id: string; name: string; transport: string; host?: string; port?: number; description?: string }>> {
+export interface DiscoveredPrinter {
+  id: string; name: string; transport: PrinterProfile["transport"]; host?: string; port?: number;
+  queueName?: string; description?: string; connectionType?: "usb" | "network" | "bluetooth" | "system" | "unknown";
+  confidence?: "confirmed" | "possible"; isDefault?: boolean;
+}
+
+export async function discoverPrinters(token: string, signal?: AbortSignal): Promise<DiscoveredPrinter[]> {
   try {
     const res = await fetch(`${BRIDGE_BASE}/printers/discover`, {
       method: "POST",
-      signal: AbortSignal.timeout(5000),
+      headers: { Authorization: `Bearer ${token}` },
+      signal: signal || AbortSignal.timeout(7000),
     });
     if (res.ok) {
       const data = await res.json();

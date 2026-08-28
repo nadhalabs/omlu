@@ -411,6 +411,7 @@ def test_billing_printer_heartbeat_and_installation_reporting(db_session, setup_
     )
     db_session.add(installation); db_session.commit()
     headers = {"X-Bridge-Installation": installation_id, "X-Bridge-Credential": secret}
+    successful_test_at = datetime.now(timezone.utc) - timedelta(seconds=2)
 
     heartbeat = client.post(
         "/api/admin/print-bridge/consumer/heartbeat",
@@ -420,6 +421,7 @@ def test_billing_printer_heartbeat_and_installation_reporting(db_session, setup_
             "kitchen_printer_label": "Kitchen LAN",
             "billing_printer_configured": True,
             "billing_printer_label": "Billing Front",
+            "billing_printer_last_success_at": successful_test_at.isoformat(),
         },
     )
     assert heartbeat.status_code == 200
@@ -427,6 +429,7 @@ def test_billing_printer_heartbeat_and_installation_reporting(db_session, setup_
     db_session.refresh(installation)
     assert installation.billing_printer_configured is True
     assert installation.billing_printer_label == "Billing Front"
+    assert installation.billing_printer_last_success_at is not None
     d = installation.to_dict()
     assert d["billing_printer_configured"] is True
     assert d["billing_printer_label"] == "Billing Front"
@@ -440,4 +443,15 @@ def test_billing_printer_heartbeat_and_installation_reporting(db_session, setup_
     assert target is not None
     assert target["billing_printer_configured"] is True
     assert target["billing_printer_label"] == "Billing Front"
+    assert target["billing_printer_last_success_at"] is not None
 
+    future = client.post(
+        "/api/admin/print-bridge/consumer/heartbeat", headers=headers,
+        json={
+            "kitchen_printer_configured": True, "billing_printer_configured": True,
+            "billing_printer_last_success_at": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(),
+        },
+    )
+    assert future.status_code == 200
+    db_session.refresh(installation)
+    assert installation.billing_printer_last_success_at < datetime.now(timezone.utc) + timedelta(minutes=5)

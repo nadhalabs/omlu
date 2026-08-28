@@ -69,6 +69,8 @@ class ConsumerHeartbeatRequest(BaseModel):
     kitchen_printer_label: Optional[str] = Field(None, max_length=100)
     billing_printer_configured: bool = False
     billing_printer_label: Optional[str] = Field(None, max_length=100)
+    kitchen_printer_last_success_at: Optional[datetime] = None
+    billing_printer_last_success_at: Optional[datetime] = None
 
 
 class ConsumerJobResultRequest(BaseModel):
@@ -472,6 +474,17 @@ def consumer_heartbeat(
     installation.kitchen_printer_label = req.kitchen_printer_label
     installation.billing_printer_configured = req.billing_printer_configured
     installation.billing_printer_label = req.billing_printer_label
+    for field, value in (
+        ("kitchen_printer_last_success_at", req.kitchen_printer_last_success_at),
+        ("billing_printer_last_success_at", req.billing_printer_last_success_at),
+    ):
+        if value is not None:
+            normalized = value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+            if normalized <= datetime.now(timezone.utc) + timedelta(minutes=5):
+                current = getattr(installation, field)
+                current_normalized = current if not current or current.tzinfo else current.replace(tzinfo=timezone.utc)
+                if current_normalized is None or normalized > current_normalized:
+                    setattr(installation, field, normalized)
     db.commit()
     return {"status": "online", "server_time": datetime.now(timezone.utc)}
 
