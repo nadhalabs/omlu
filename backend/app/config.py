@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     jwt_secret_key: str   # Required secret key for staff JWT token authentication
     jwt_algorithm: str = "HS256"
     jwt_access_token_minutes: int = 480
+    staff_session_lifetime_days: int = 30
+    staff_session_renewal_threshold_days: int = 15
     participant_hmac_secret: str | None = None
     redis_url: str | None = None
     vapid_public_key: str | None = None
@@ -47,6 +49,12 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_production(self):
+        if self.staff_session_lifetime_days <= 0:
+            raise ValueError("STAFF_SESSION_LIFETIME_DAYS must be positive")
+        if not 0 < self.staff_session_renewal_threshold_days < self.staff_session_lifetime_days:
+            raise ValueError(
+                "STAFF_SESSION_RENEWAL_THRESHOLD_DAYS must be positive and shorter than STAFF_SESSION_LIFETIME_DAYS"
+            )
         if self.app_environment == "production":
             if not self.database_url.startswith(("postgresql://", "postgresql+psycopg2://")):
                 raise ValueError("DATABASE_URL must use PostgreSQL in production")

@@ -7,8 +7,8 @@ from app.main import app
 from app.database import SessionLocal
 from app.config import settings
 from app.models.restaurant import Restaurant
-from app.models.staff_user import StaffUser
-from app.utils.auth import hash_password
+from app.models.staff_user import StaffSession, StaffUser
+from app.utils.auth import decode_access_token, hash_password
 from tests.auth_helpers import create_session_access_token as create_access_token
 
 client = TestClient(app)
@@ -150,6 +150,106 @@ def test_valid_login(setup_auth_test_data):
     assert res_data["staff"]["name"] == "Test Owner"
     assert res_data["staff"]["role"] == "owner"
     assert res_data["staff"]["status"] == "active"
+
+
+def test_login_creates_thirty_day_server_session(setup_auth_test_data):
+    data = setup_auth_test_data
+    response = client.post(
+        "/auth/staff/login",
+        json={
+            "login": data["owner_email"],
+            "password": "owner123",
+            "restaurant_slug": data["restaurant_slug"],
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["expires_in"] == 30 * 24 * 60 * 60
+    payload = decode_access_token(response.json()["access_token"])
+    db = SessionLocal()
+    try:
+        session = db.query(StaffSession).filter(StaffSession.token_jti == payload["jti"]).one()
+        remaining = session.expires_at.replace(tzinfo=datetime.timezone.utc) - datetime.datetime.now(datetime.timezone.utc) if session.expires_at.tzinfo is None else session.expires_at - datetime.datetime.now(datetime.timezone.utc)
+        assert datetime.timedelta(days=29, hours=23) < remaining <= datetime.timedelta(days=30)
+    finally:
+        db.close()
+
+
+def test_healthy_session_renews_only_inside_threshold(setup_auth_test_data):
+    data = setup_auth_test_data
+    response = client.post(
+        "/auth/staff/login",
+        json={
+            "login": data["owner_email"],
+            "password": "owner123",
+            "restaurant_slug": data["restaurant_slug"],
+        },
+    )
+    token = response.json()["access_token"]
+    payload = decode_access_token(token)
+    db = SessionLocal()
+    try:
+        session = db.query(StaffSession).filter(StaffSession.token_jti == payload["jti"]).one()
+        original_expiry = session.expires_at
+    finally:
+        db.close()
+
+    not_due = client.get("/auth/staff/me", headers={"Authorization": f"Bearer {token}"})
+    assert not_due.status_code == 200
+    assert not_due.json()["access_token"] is None
+    db = SessionLocal()
+    try:
+        session = db.query(StaffSession).filter(StaffSession.token_jti == payload["jti"]).one()
+        assert session.expires_at == original_expiry
+        session.expires_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=14)
+        db.commit()
+        expiring_at = session.expires_at
+    finally:
+        db.close()
+
+    renewed = client.get("/auth/staff/me", headers={"Authorization": f"Bearer {token}"})
+    assert renewed.status_code == 200
+    renewed_body = renewed.json()
+    assert renewed_body["expires_in"] == 30 * 24 * 60 * 60
+    assert decode_access_token(renewed_body["access_token"])["jti"] == payload["jti"]
+    db = SessionLocal()
+    try:
+        session = db.query(StaffSession).filter(StaffSession.token_jti == payload["jti"]).one()
+        assert session.expires_at > expiring_at
+    finally:
+        db.close()
+
+
+def test_legacy_session_upgrade_keeps_old_and_rotated_tokens_consistent(setup_auth_test_data):
+    data = setup_auth_test_data
+    response = client.post(
+        "/auth/staff/login",
+        json={
+            "login": data["owner_email"],
+            "password": "owner123",
+            "restaurant_slug": data["restaurant_slug"],
+        },
+    )
+    old_token = response.json()["access_token"]
+    payload = decode_access_token(old_token)
+    db = SessionLocal()
+    try:
+        session = db.query(StaffSession).filter(StaffSession.token_jti == payload["jti"]).one()
+        # Model a still-valid legacy deployment session nearing its old 8-hour limit.
+        session.expires_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=7)
+        db.commit()
+    finally:
+        db.close()
+
+    upgraded = client.get("/auth/staff/me", headers={"Authorization": f"Bearer {old_token}"})
+    assert upgraded.status_code == 200
+    rotated_token = upgraded.json()["access_token"]
+    assert rotated_token
+    assert decode_access_token(rotated_token)["jti"] == payload["jti"]
+
+    # Near-simultaneous callers can finish with either token. Both remain tied
+    # to the same authoritative JTI and neither invalidates the other.
+    assert client.get("/auth/staff/me", headers={"Authorization": f"Bearer {old_token}"}).status_code == 200
+    assert client.get("/auth/staff/me", headers={"Authorization": f"Bearer {rotated_token}"}).status_code == 200
 
 
 def test_valid_username_login_is_case_insensitive_for_restaurant(setup_auth_test_data):

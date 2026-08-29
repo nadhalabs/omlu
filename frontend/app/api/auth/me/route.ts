@@ -44,7 +44,23 @@ export async function GET(request: NextRequest) {
     }
 
     const data = await res.json();
-    return NextResponse.json(data);
+    const renewedToken = data.access_token;
+    const renewedExpiresIn = data.expires_in;
+    delete data.access_token;
+    delete data.expires_in;
+    const response = NextResponse.json(data);
+    if (typeof renewedToken === "string" && typeof renewedExpiresIn === "number") {
+      response.cookies.set({
+        name: "staff_token",
+        value: renewedToken,
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        maxAge: renewedExpiresIn,
+      });
+    }
+    return response;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown connection error";
     return NextResponse.json(

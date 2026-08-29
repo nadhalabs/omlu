@@ -48,3 +48,5 @@ class CurrentStaffResponse(BaseModel):
     restaurant_name: str
     restaurant_slug: str
     scope: WebTenantScopeResponse
+    access_token: str | None = None
+    expires_in: int | None = None

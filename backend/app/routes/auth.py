@@ -21,6 +21,7 @@ from app.utils.auth import (
     hash_password,
     verify_password,
     create_access_token,
+    as_utc,
     external_authority_epoch,
     get_authenticated_context_for_password_change,
     get_current_staff_user_for_password_change,
@@ -85,7 +86,7 @@ def _staff_payload(staff: StaffUser, restaurant: Restaurant) -> dict:
 
 def _issue_session_token(staff: StaffUser, request: Request, db: Session) -> tuple[str, int]:
     now = datetime.datetime.now(datetime.timezone.utc)
-    expires_in_seconds = settings.jwt_access_token_minutes * 60
+    expires_in_seconds = settings.staff_session_lifetime_days * 24 * 60 * 60
     expires_at = now + datetime.timedelta(seconds=expires_in_seconds)
     staff.last_login_at = now
     token_jti = secrets.token_urlsafe(24)
@@ -108,8 +109,33 @@ def _issue_session_token(staff: StaffUser, request: Request, db: Session) -> tup
         "security_version": staff.security_version or 0,
         "session_required": True,
     }
-    expires_in_seconds = settings.jwt_access_token_minutes * 60
-    return create_access_token(data=token_claims), expires_in_seconds
+    return create_access_token(
+        data=token_claims,
+        expires_delta=datetime.timedelta(seconds=expires_in_seconds),
+    ), expires_in_seconds
+
+
+def _renew_session_if_due(context, db: Session) -> tuple[str, int] | None:
+    """Extend only a validated, healthy session and rotate its signed token."""
+    now = datetime.datetime.now(datetime.timezone.utc)
+    threshold = datetime.timedelta(days=settings.staff_session_renewal_threshold_days)
+    if as_utc(context.session.expires_at) - now >= threshold:
+        return None
+
+    lifetime = datetime.timedelta(days=settings.staff_session_lifetime_days)
+    context.session.expires_at = now + lifetime
+    context.session.last_active_at = now
+    claims = {
+        "sub": str(context.actor.id),
+        "restaurant_id": context.actor.restaurant_id,
+        "role": context.actor.role,
+        "jti": context.session.token_jti,
+        "security_version": context.actor.security_version or 0,
+        "session_required": True,
+    }
+    db.commit()
+    expires_in = int(lifetime.total_seconds())
+    return create_access_token(claims, expires_delta=lifetime), expires_in
 
 
 def _revoke_sessions_for_staff(
@@ -211,9 +237,10 @@ def staff_login(
 @router.get("/me", response_model=CurrentStaffResponse)
 def get_me(
     context=Depends(get_authenticated_context_for_password_change),
+    db: Session = Depends(get_db),
 ):
     current_user = context.actor
-    return {
+    response = {
         **_staff_payload(current_user, current_user.restaurant),
         "scope": {
             "restaurant_id": context.scope.restaurant_id,
@@ -222,6 +249,10 @@ def get_me(
             "authority_epoch": external_authority_epoch(context.scope),
         },
     }
+    renewed = _renew_session_if_due(context, db)
+    if renewed:
+        response["access_token"], response["expires_in"] = renewed
+    return response
 
 
 @router.post("/change-password", response_model=StaffPasswordChangeResponse)

@@ -107,6 +107,89 @@ void main() {
       expect(await auth.restore(), isNull);
       expect(await storage.read(), isNull);
     });
+
+    test('persists a renewed server session during app restart', () async {
+      final client = ApiClient(
+        baseUrl: Uri.parse('https://api.example'),
+        transport: (_) async => const ApiResponse(
+          statusCode: 200,
+          body: {
+            'name': 'Kai',
+            'username': 'kai',
+            'email': 'kai@example.com',
+            'role': 'staff',
+            'status': 'active',
+            'must_change_password': false,
+            'restaurant_name': 'Demo',
+            'restaurant_slug': 'demo',
+            'access_token': 'renewed-token',
+            'expires_in': 2592000,
+            'scope': {
+              'restaurant_id': 1,
+              'actor_id': 10,
+              'role': 'staff',
+              'authority_epoch': 'v1.test-opaque-epoch',
+            },
+          },
+        ),
+      );
+      final storage = MemoryTokenStorage();
+      await storage.save(
+        RoleSession(
+          accessToken: 'old-token',
+          expiresAt: DateTime.now().add(const Duration(days: 14)),
+          profile: const StaffProfile(
+            name: 'Kai',
+            email: 'kai@example.com',
+            role: StaffRole.staff,
+            status: 'active',
+            mustChangePassword: false,
+            restaurantName: 'Demo',
+            restaurantSlug: 'demo',
+          ),
+          tenantScope: testTenantScope,
+        ),
+      );
+
+      final restored = await testAuthRepository(client, storage).restore();
+
+      expect(restored?.accessToken, 'renewed-token');
+      expect((await storage.read())?.accessToken, 'renewed-token');
+      expect(restored!.expiresAt.difference(DateTime.now()).inDays, 29);
+    });
+
+    test('temporary restore failure preserves the stored session', () async {
+      final storage = MemoryTokenStorage();
+      final stored = RoleSession(
+        accessToken: 'still-valid-token',
+        expiresAt: DateTime.now().add(const Duration(days: 10)),
+        profile: const StaffProfile(
+          name: 'Kai',
+          email: 'kai@example.com',
+          role: StaffRole.staff,
+          status: 'active',
+          mustChangePassword: false,
+          restaurantName: 'Demo',
+          restaurantSlug: 'demo',
+        ),
+        tenantScope: testTenantScope,
+      );
+      await storage.save(stored);
+      final auth = testAuthRepository(
+        ApiClient(
+          baseUrl: Uri.parse('https://api.example'),
+          transport: (_) async => const ApiResponse(
+            statusCode: 503,
+            body: {'detail': 'Temporarily unavailable'},
+          ),
+        ),
+        storage,
+      );
+
+      await expectLater(auth.restore(), throwsA(isA<ApiException>()));
+
+      expect((await storage.read())?.accessToken, 'still-valid-token');
+    });
   });
 
   group('ApiClient and OperationsApi', () {

@@ -9,9 +9,16 @@ import 'native_auth_runtime.dart';
 import '../storage/secure_token_storage.dart';
 
 class AuthenticatedProfile {
-  const AuthenticatedProfile(this.profile, this.scope);
+  const AuthenticatedProfile(
+    this.profile,
+    this.scope, {
+    this.renewedAccessToken,
+    this.renewedExpiresIn,
+  });
   final StaffProfile profile;
   final FlutterTenantScope scope;
+  final String? renewedAccessToken;
+  final int? renewedExpiresIn;
 }
 
 class AuthRepository {
@@ -124,9 +131,16 @@ class AuthRepository {
     _apiClient.accessToken = stored.accessToken;
     try {
       final authenticated = await currentUser();
+      final accessToken = authenticated.renewedAccessToken ?? stored.accessToken;
+      final expiresAt = authenticated.renewedExpiresIn == null
+          ? stored.expiresAt
+          : _now().toUtc().add(
+              Duration(seconds: authenticated.renewedExpiresIn!),
+            );
+      _apiClient.accessToken = accessToken;
       final refreshed = RoleSession(
-        accessToken: stored.accessToken,
-        expiresAt: stored.expiresAt,
+        accessToken: accessToken,
+        expiresAt: expiresAt,
         profile: authenticated.profile,
         tenantScope: authenticated.scope,
         entryMode: stored.entryMode,
@@ -145,7 +159,9 @@ class AuthRepository {
       await terminate(reason: 'restore_unauthorized', revokeServer: false);
       return null;
     } catch (_) {
-      await terminate(reason: 'restore_me_failed', revokeServer: false);
+      // A timeout, offline state, or server error is not evidence that the
+      // authoritative session ended. Keep the secure-storage record so a
+      // later foreground refresh or app restart can validate it again.
       rethrow;
     }
   }
@@ -161,6 +177,8 @@ class AuthRepository {
     return AuthenticatedProfile(
       StaffProfile.fromJson(json),
       FlutterTenantScope.fromJson(Map<String, Object?>.from(scopeJson)),
+      renewedAccessToken: json['access_token'] as String?,
+      renewedExpiresIn: json['expires_in'] as int?,
     );
   }
 

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/api/api_client.dart';
 import '../core/api/backend_selection_manager.dart';
@@ -63,9 +65,25 @@ class AuthStateNotifier extends StateNotifier<AsyncValue<RoleSession?>> {
       await _terminate('http_401', revokeServer: false);
     };
     restoreSession();
+    _renewalTimer = Timer.periodic(
+      const Duration(hours: 12),
+      (_) => _refreshActiveSession(),
+    );
   }
 
   final AuthRepository _repository;
+  Timer? _renewalTimer;
+
+  Future<void> _refreshActiveSession() async {
+    if (state.valueOrNull == null) return;
+    try {
+      final session = await _repository.restore();
+      if (mounted && session != null) state = AsyncValue.data(session);
+    } catch (_) {
+      // Connectivity and 5xx failures preserve the last valid local session.
+      // A genuine 401 is handled by onAuthenticationInvalid above.
+    }
+  }
 
   Future<void> restoreSession() async {
     state = const AsyncValue.loading();
@@ -116,6 +134,12 @@ class AuthStateNotifier extends StateNotifier<AsyncValue<RoleSession?>> {
     } finally {
       state = const AsyncData<RoleSession?>(null);
     }
+  }
+
+  @override
+  void dispose() {
+    _renewalTimer?.cancel();
+    super.dispose();
   }
 }
 
