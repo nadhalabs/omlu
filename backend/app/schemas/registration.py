@@ -17,6 +17,7 @@ from app.schemas.settings import RestaurantSettingsUpdate
 
 
 class RestaurantRegistrationRequest(BaseModel):
+    venue_type: Literal["restaurant", "cinema"] = "restaurant"
     restaurant_name: str = Field(..., min_length=1, max_length=255)
     restaurant_slug: str = Field(..., min_length=1, max_length=255)
     contact_email: str = Field(..., min_length=1, max_length=255)
@@ -68,4 +69,5 @@ class RestaurantRegistrationRequest(BaseModel):
 class RestaurantRegistrationResponse(BaseModel):
     success: bool
     restaurant_slug: str
-    next_path: str = "/admin/setup"
+    venue_type: Literal["restaurant", "cinema"]
+    next_path: str

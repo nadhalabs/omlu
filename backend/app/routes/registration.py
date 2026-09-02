@@ -78,6 +78,7 @@ def register_restaurant(
         restaurant = Restaurant(
             name=body.restaurant_name,
             slug=restaurant_slug,
+            venue_type=body.venue_type,
             contact_email=contact_email,
             phone_number=body.phone_number,
             city=body.city,
@@ -132,9 +133,10 @@ def register_restaurant(
             actor_role="owner",
             target_type="restaurant",
             target_id=str(restaurant.id),
-            action="restaurant_self_registered",
+            action=f"{body.venue_type}_self_registered",
             new_value=json.dumps({
                 "slug": restaurant.slug,
+                "venue_type": restaurant.venue_type,
                 "plan": restaurant.plan,
                 "subscription_status": restaurant.subscription_status,
                 "city": body.city,
@@ -154,7 +156,8 @@ def register_restaurant(
         return {
             "success": True,
             "restaurant_slug": restaurant.slug,
-            "next_path": "/admin/setup",
+            "venue_type": restaurant.venue_type,
+            "next_path": "/cinema-admin" if restaurant.venue_type == "cinema" else "/admin",
         }
     except HTTPException:
         db.rollback()

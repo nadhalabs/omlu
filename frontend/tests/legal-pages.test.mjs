@@ -38,24 +38,26 @@ test("LegalLayout component provides accessible navigation, TOC, print CSS, and 
 });
 
 test("registration consent checkbox in register/page.tsx contains accessible links to terms and privacy", () => {
-  const register = read("app/register/page.tsx");
+  const register = read("app/register/RegisterClient.tsx");
   assert.match(register, /name="accept_terms"/);
   assert.match(register, /type="checkbox"/);
   assert.match(register, /href="\/terms"/);
   assert.match(register, /href="\/privacy"/);
-  assert.match(register, /I confirm that I’m authorized to create this restaurant account/);
+  assert.match(register, /I confirm that I’m authorized to create this \{venueLabel\.toLowerCase\(\)\} account/);
 });
 
-test("login footer in LoginClient.tsx and landing page in page.tsx contain legal links", () => {
+test("login and shared public footer contain legal links", () => {
   const login = read("app/login/LoginClient.tsx");
   const landing = read("app/page.tsx");
+  const publicFooter = read("components/PublicFooter.tsx");
   const adminSettings = read("app/admin/settings/AdminSettingsClient.tsx");
 
   for (const path of ["/terms", "/privacy", "/refunds", "/acceptable-use", "/service-policy"]) {
     assert.ok(login.includes(path), `LoginClient should link to ${path}`);
-    assert.ok(landing.includes(path), `Landing page should link to ${path}`);
+    assert.ok(publicFooter.includes(path), `PublicFooter should link to ${path}`);
     assert.ok(adminSettings.includes(path), `AdminSettingsClient should link to ${path}`);
   }
+  assert.match(landing, /<PublicFooter/);
 });
 
 test("legalConfig placeholder guard checks required fields and throws in strict mode if placeholders remain", () => {

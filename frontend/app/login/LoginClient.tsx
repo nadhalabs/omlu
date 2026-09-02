@@ -113,14 +113,15 @@ export default function LoginClient() {
           <Link href="/" className="text-sm font-black uppercase tracking-widest text-orange-700">
             OMLU
           </Link>
-          <h1 className="mt-3 text-2xl font-black tracking-tight">Restaurant Login</h1>
+          <h1 className="mt-3 text-2xl font-black tracking-tight">Sign in to OMLU</h1>
+          <p className="mt-2 text-sm text-[var(--omlu-text-secondary)]">Continue to your venue workspace.</p>
         </div>
 
         {error && <AuthErrorAlert error={error} loading={loading} onRetry={() => void submitLogin()} />}
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-5">
           <label className="flex flex-col gap-1.5 text-sm font-bold">
-            Restaurant username
+            Venue username
             <input
               type="text"
               name="restaurant_slug"
@@ -185,8 +186,8 @@ export default function LoginClient() {
 
         <p className="mt-7 text-center text-sm text-[var(--omlu-text-secondary)]">
           New to OMLU?{" "}
-          <Link href="/register" className="font-bold text-[var(--omlu-text-primary)] underline underline-offset-4">
-            Create Restaurant
+          <Link href="/get-started" className="font-bold text-[var(--omlu-text-primary)] underline underline-offset-4">
+            Get started
           </Link>
         </p>
         <footer className="mt-6 border-t border-[var(--omlu-border)] pt-4 text-center text-xs text-[var(--omlu-text-secondary)]">

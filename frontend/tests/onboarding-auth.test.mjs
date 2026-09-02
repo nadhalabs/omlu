@@ -1,0 +1,33 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import test from "node:test";
+
+const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+
+test("public onboarding offers both venue types and typed registration routes", () => {
+  const source = read("app/get-started/page.tsx");
+  assert.match(source, /Restaurant/);
+  assert.match(source, /Cinema/);
+  assert.match(source, /register\?type=\$\{venue\.type\}/);
+  assert.match(source, /Already have an account\?/);
+});
+
+test("registration validates the route type and submits it to shared registration", () => {
+  const page = read("app/register/page.tsx");
+  const client = read("app/register/RegisterClient.tsx");
+  assert.match(page, /requestedType !== "restaurant" && requestedType !== "cinema"/);
+  assert.match(page, /redirect\("\/get-started"\)/);
+  assert.match(client, /venue_type: venueType/);
+  assert.match(client, /registerRestaurant/);
+  assert.match(client, /staffLogin/);
+  assert.match(client, /router\.replace\(registration\.next_path\)/);
+});
+
+test("authoritative venue type controls login and reciprocal workspace routing", () => {
+  const routes = read("lib/roleRoutes.ts");
+  const admin = read("app/admin/layout.tsx");
+  const cinema = read("app/cinema-admin/[[...section]]/page.tsx");
+  assert.match(routes, /staff\.venue_type === "cinema"[\s\S]*"\/cinema-admin"/);
+  assert.match(admin, /staffInfo\.venue_type === "cinema"[\s\S]*redirect\("\/cinema-admin"\)/);
+  assert.match(cinema, /staff\.venue_type !== "cinema"/);
+});

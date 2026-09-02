@@ -4,6 +4,7 @@ import { test } from "node:test";
 
 const loginPage = readFileSync(new URL("../app/login/page.tsx", import.meta.url), "utf8");
 const loginClient = readFileSync(new URL("../app/login/LoginClient.tsx", import.meta.url), "utf8");
+const publicAuth = readFileSync(new URL("../lib/publicAuth.ts", import.meta.url), "utf8");
 const logoutButton = readFileSync(new URL("../app/admin/AdminLogoutButton.tsx", import.meta.url), "utf8");
 const confirmedSignOut = readFileSync(new URL("../components/useConfirmedSignOut.ts", import.meta.url), "utf8");
 const authRuntime = readFileSync(new URL("../lib/authRuntime.mjs", import.meta.url), "utf8");
@@ -22,8 +23,9 @@ const adminDashboard = readFileSync(new URL("../app/admin/dashboard/AdminDashboa
 const staffBottomNav = readFileSync(new URL("../components/staff/StaffBottomNav.tsx", import.meta.url), "utf8");
 
 test("authenticated users are redirected away from /login before the client form renders", () => {
-  assert.match(loginPage, /cookies\(\)/);
-  assert.match(loginPage, /\/auth\/staff\/me/);
+  assert.match(loginPage, /authenticatedHomePath\(\)/);
+  assert.match(publicAuth, /cookies\(\)/);
+  assert.match(publicAuth, /\/auth\/staff\/me/);
   assert.match(loginPage, /redirect\(destination\)/);
 });
 

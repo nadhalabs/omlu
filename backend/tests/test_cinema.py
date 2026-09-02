@@ -46,6 +46,7 @@ def auth(token): return {"Authorization": f"Bearer {token}"}
 def test_screen_layout_public_authority_and_order_flow(cinema_data):
     d = cinema_data
     assert client.get("/api/cinema/screens", headers=auth(d["restaurant_token"])).status_code == 403
+    assert client.get("/admin/categories", headers=auth(d["cinema_token"])).status_code == 403
     created = client.post("/api/cinema/screens", headers=auth(d["cinema_token"]), json={"name":"Screen 1","code":"s1","rows":2,"seats_per_row":3,"aisles_after":[2]})
     assert created.status_code == 201, created.text
     screen = created.json(); assert len(screen["seats"]) == 6

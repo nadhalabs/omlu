@@ -48,7 +48,8 @@ def test_restaurant_registration_creates_active_owner_and_defaults():
     assert response.json() == {
         "success": True,
         "restaurant_slug": slug,
-        "next_path": "/admin/setup",
+        "venue_type": "restaurant",
+        "next_path": "/admin",
     }
     assert "id" not in response.text.lower()
 
@@ -62,6 +63,7 @@ def test_restaurant_registration_creates_active_owner_and_defaults():
         ).one()
 
         assert restaurant.is_active is True
+        assert restaurant.venue_type == "restaurant"
         assert restaurant.contact_email == "contact@registration.test"
         assert restaurant.phone_number == "+919999999999"
         assert restaurant.city == "Kochi"
@@ -157,8 +159,43 @@ def test_registration_ignores_frontend_role_values_and_owner_can_login():
     assert login_response.status_code == 200
     assert login_response.json()["staff"]["role"] == "owner"
     assert login_response.json()["staff"]["must_change_password"] is False
+    assert login_response.json()["staff"]["venue_type"] == "restaurant"
 
     _delete_restaurant(slug)
+
+
+def test_cinema_registration_sets_authoritative_type_and_login_payload():
+    slug = "registration-test-cinema"
+    _delete_restaurant(slug)
+    payload = {**_payload(slug=slug), "venue_type": "cinema"}
+
+    response = client.post("/public/restaurants/register", json=payload)
+    assert response.status_code == 201, response.text
+    assert response.json()["venue_type"] == "cinema"
+    assert response.json()["next_path"] == "/cinema-admin"
+
+    login_response = client.post("/auth/staff/login", json={
+        "restaurant_slug": slug,
+        "login": payload["owner_username"],
+        "password": payload["password"],
+    })
+    assert login_response.status_code == 200
+    assert login_response.json()["staff"]["venue_type"] == "cinema"
+
+    db = SessionLocal()
+    try:
+        assert db.query(Restaurant).filter(Restaurant.slug == slug).one().venue_type == "cinema"
+    finally:
+        db.close()
+        _delete_restaurant(slug)
+
+
+def test_registration_rejects_invalid_venue_type():
+    response = client.post(
+        "/public/restaurants/register",
+        json={**_payload(slug="registration-invalid-type"), "venue_type": "hotel"},
+    )
+    assert response.status_code == 422
 
 
 def test_registration_validation_rejects_bad_username_password_and_terms():

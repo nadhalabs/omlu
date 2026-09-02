@@ -65,6 +65,10 @@ export default async function AdminLayout({
     redirect("/staff/change-password");
   }
 
+  if (staffInfo.venue_type === "cinema") {
+    redirect("/cinema-admin");
+  }
+
   // Only owner and admin roles are permitted to access administrative tools.
   const allowedRoles = ["owner", "admin"];
   if (!allowedRoles.includes(staffInfo.role)) {

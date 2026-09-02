@@ -31,7 +31,7 @@ from app.schemas.admin import (
     TableResponse,
 )
 
-router = APIRouter(prefix="/admin")
+router = APIRouter(prefix="/admin", dependencies=[Depends(get_current_restaurant_staff_user)])
 logger = logging.getLogger(__name__)
 
 # Protect all admin routes for owners and admins only

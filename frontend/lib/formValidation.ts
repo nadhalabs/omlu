@@ -91,7 +91,7 @@ export function validateRegistration(form: RestaurantRegistrationRequest) {
     errors.confirm_password = "Passwords do not match.";
   }
   if (!form.accept_terms) {
-    errors.accept_terms = "You must accept the terms to create the restaurant.";
+    errors.accept_terms = "You must accept the terms to create the venue.";
   }
 
   return {

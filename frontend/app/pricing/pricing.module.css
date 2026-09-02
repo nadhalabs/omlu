@@ -43,6 +43,11 @@
 .hero h1 { max-width: 720px; margin: 0 auto; font-size: clamp(36px, 3.25vw, 52px); line-height: .98; font-weight: 580; letter-spacing: -.055em; }
 .hero h1 span { color: #f06432; }
 
+.venueToggle { display: flex; width: fit-content; margin: 0 auto 24px; padding: 3px; border: 1px solid #eadfd5; border-radius: 999px; background: #f8f5f1; box-shadow: 0 5px 14px rgba(42, 28, 18, .06); }
+.venueToggle a { display: inline-flex; min-width: 122px; min-height: 44px; align-items: center; justify-content: center; border-radius: 999px; color: var(--omlu-text-secondary); font-size: 12px; font-weight: 800; }
+.venueToggle a:hover { color: #c2410c; }
+.venueToggle a[aria-current="page"] { background: #2f2925; color: #fff; box-shadow: 0 4px 10px rgba(42, 28, 18, .16); }
+
 .billingRegion { max-width: 1190px; margin: 0 auto; }
 .billingControls { position: relative; width: 220px; min-height: 50px; margin: 0 auto 36px; }
 .billingToggle { display: flex; width: fit-content; min-width: 220px; height: 48px; align-items: stretch; gap: 2px; margin: 0; padding: 2px; border: 1px solid #eadfd5; border-radius: 999px; background: #f8f5f1; box-shadow: 0 5px 14px rgba(42, 28, 18, .06); }
@@ -93,6 +98,8 @@
 :global(.dark) .surface { background: color-mix(in srgb, var(--omlu-primary-surface) 96%, transparent); border-color: rgba(255,255,255,.12); }
 :global(.dark) .nav span { background: #431407; color: #fdba74; }
 :global(.dark) .billingToggle { border-color: var(--omlu-border); background: #201e1c; }
+:global(.dark) .venueToggle { border-color: var(--omlu-border); background: #201e1c; }
+:global(.dark) .venueToggle a[aria-current="page"] { background: #f86831; }
 :global(.dark) .offerBadge { border-color: #9a3412; background: #431407; color: #fdba74; }
 :global(.dark) .card { background: #201e1c; border-color: var(--omlu-border); }
 :global(.dark) .cta { background: #2b2927; border-color: var(--omlu-border); color: #fb923c; }
@@ -121,6 +128,8 @@
   .nav { width: 100%; justify-content: space-between; gap: 3px; overflow-x: auto; }
   .nav a, .nav span { min-height: 40px; padding-inline: 12px; }
   .hero { padding: 32px 4px 24px; }
+  .venueToggle { width: 100%; max-width: 300px; }
+  .venueToggle a { min-width: 0; flex: 1; }
   .billingControls { margin-bottom: 30px; }
   .offerBadge { top: calc(100% + 7px); left: 50%; transform: translateX(-50%); }
   .billingRegion:has(:global(#billing-yearly):checked) .billingControls { margin-bottom: 60px; }

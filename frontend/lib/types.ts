@@ -449,6 +449,7 @@ export interface StaffLoginRequest {
 }
 
 export interface RestaurantRegistrationRequest {
+  venue_type: "restaurant" | "cinema";
   restaurant_name: string;
   restaurant_slug: string;
   contact_email: string;
@@ -466,6 +467,7 @@ export interface RestaurantRegistrationRequest {
 export interface RestaurantRegistrationResponse {
   success: boolean;
   restaurant_slug: string;
+  venue_type: "restaurant" | "cinema";
   next_path: string;
 }
 
@@ -478,6 +480,7 @@ export interface StaffSummaryResponse {
   must_change_password: boolean;
   restaurant_name: string;
   restaurant_slug: string;
+  venue_type: "restaurant" | "cinema";
 }
 
 export interface CurrentStaffResponse {
