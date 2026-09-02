@@ -40,7 +40,20 @@ test("Cinema mock screen generation preserves seat identity",()=>{
 
 test("Seat designer persists creation, resizing, disabling, editing and QR identity",()=>{
   const source=read("app/cinema-admin/CinemaAdminClient.tsx");
-  for(const behavior of [/No screens yet/,/Create first screen/,/saveLayout/,/Disable seat/,/Public seat code/,/qrDestination/,/activeSeats\(screen\)/]) assert.match(source,behavior);
+  for(const behavior of [/No screens yet/,/Create first screen/,/Save Changes/,/Disable seat/,/Public code/,/qrDestination/,/activeSeats\(value\)/]) assert.match(source,behavior);
+});
+
+test("flexible editor supports uneven rows, manual seats, gaps, selection and persisted dragging",()=>{
+  const admin=read("app/cinema-admin/CinemaAdminClient.tsx");
+  const api=read("lib/cinema/api.ts");
+  const types=read("lib/cinema/types.ts");
+  const migration=read("../backend/alembic/versions/20260903_cinema_flexible_seat_layout.py");
+  for(const behavior of [/\+ Add Row/,/\+ Add Seat/,/onPointerMove/,/setPointerCapture/,/layout_x: value\.layoutX/,/display_order: value\.displayOrder/,/data-status=\{value\.status\}/,/aria-label=\{`Seat \$\{value\.code\}`\}/]) assert.match(admin,behavior);
+  assert.match(api,/screens\/\$\{screenId\}\/rows/);
+  assert.match(api,/screens\/\$\{screenId\}\/seats/);
+  for(const field of [/layoutX: number/,/layoutY: number/,/displayOrder: number/]) assert.match(types,field);
+  assert.match(migration,/position_index \* 64/);
+  assert.match(migration,/dense_rank\(\)/);
 });
 
 test("KDS, orders and customer tracking use authoritative Cinema services",()=>{

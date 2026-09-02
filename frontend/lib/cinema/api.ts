@@ -16,6 +16,8 @@ type ApiSeat = {
   seat_number: number;
   public_code: string;
   position_index: number;
+  layout_x: number;
+  layout_y: number;
   aisle_after: boolean;
   is_active: boolean;
   is_accessible: boolean;
@@ -81,6 +83,9 @@ const seat = (value: ApiSeat): CinemaSeat => ({
   row: value.row_label,
   number: value.seat_number,
   code: value.public_code,
+  layoutX: value.layout_x,
+  layoutY: value.layout_y,
+  displayOrder: value.position_index,
   status: !value.is_active
     ? "disabled"
     : value.is_accessible
@@ -186,7 +191,7 @@ export async function saveLayout(
 export async function saveSeat(
   screenId: string,
   seatId: string,
-  body: { public_code?: string; is_active?: boolean; is_accessible?: boolean },
+  body: { public_code?: string; row_label?: string; seat_number?: number; layout_x?: number; layout_y?: number; display_order?: number; is_active?: boolean; is_accessible?: boolean },
 ) {
   return seat(
     await admin(`screens/${screenId}/seats/${seatId}`, {
@@ -194,6 +199,12 @@ export async function saveSeat(
       body: JSON.stringify(body),
     }),
   );
+}
+export async function addSeat(screenId: string, body: { row_label: string; seat_number: number; public_code: string; layout_x?: number; layout_y?: number; display_order?: number; is_accessible?: boolean }) {
+  return seat(await admin(`screens/${screenId}/seats`, { method: "POST", body: JSON.stringify(body) }));
+}
+export async function addSeatRow(screenId: string, body: { row_label: string; number_of_seats: number; starting_number: number }) {
+  return screen(await admin(`screens/${screenId}/rows`, { method: "POST", body: JSON.stringify(body) }));
 }
 export async function loadOrders() {
   return ((await admin("orders")) as ApiOrder[]).map(order);

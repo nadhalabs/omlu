@@ -131,3 +131,47 @@ def test_cinema_menu_is_tenant_scoped_and_persistent(cinema_data):
     db = SessionLocal()
     assert db.get(MenuItem, d["item"].id).is_available is False
     db.close()
+
+
+def test_flexible_seat_layout_persists_identity_and_uneven_rows(cinema_data):
+    d = cinema_data
+    screen = client.get("/api/cinema/screens", headers=auth(d["cinema_token"])).json()[0]
+    screen_id = screen["id"]
+    assert client.post(
+        f"/api/cinema/screens/{screen_id}/rows",
+        headers=auth(d["restaurant_token"]),
+        json={"row_label": "Z", "number_of_seats": 3, "starting_number": 1},
+    ).status_code == 403
+    row = client.post(
+        f"/api/cinema/screens/{screen_id}/rows",
+        headers=auth(d["cinema_token"]),
+        json={"row_label": "Z", "number_of_seats": 3, "starting_number": 4},
+    )
+    assert row.status_code == 201, row.text
+    z_seats = [seat for seat in row.json()["seats"] if seat["row_label"] == "Z"]
+    assert [seat["public_code"] for seat in z_seats] == ["Z4", "Z5", "Z6"]
+    assert len({seat["layout_y"] for seat in z_seats}) == 1
+
+    manual = client.post(
+        f"/api/cinema/screens/{screen_id}/seats",
+        headers=auth(d["cinema_token"]),
+        json={"row_label": "G", "seat_number": 14, "public_code": "G14", "layout_x": 416, "layout_y": 224, "display_order": 99, "is_accessible": True},
+    )
+    assert manual.status_code == 201, manual.text
+    created = manual.json()
+    seat_id, public_code = created["id"], created["public_code"]
+    moved = client.patch(
+        f"/api/cinema/screens/{screen_id}/seats/{seat_id}",
+        headers=auth(d["cinema_token"]),
+        json={"layout_x": 608, "layout_y": 280, "display_order": 7},
+    )
+    assert moved.status_code == 200, moved.text
+    assert moved.json()["id"] == seat_id
+    assert moved.json()["public_code"] == public_code
+    assert (moved.json()["layout_x"], moved.json()["layout_y"], moved.json()["position_index"]) == (608, 280, 7)
+    duplicate = client.post(
+        f"/api/cinema/screens/{screen_id}/seats",
+        headers=auth(d["cinema_token"]),
+        json={"row_label": "G", "seat_number": 15, "public_code": "G14"},
+    )
+    assert duplicate.status_code == 409

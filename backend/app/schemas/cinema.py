@@ -30,9 +30,30 @@ class LayoutUpdate(BaseModel):
 
 class SeatUpdate(BaseModel):
     public_code: Optional[str] = Field(None, min_length=1, max_length=30)
+    row_label: Optional[str] = Field(None, min_length=1, max_length=10)
+    seat_number: Optional[int] = Field(None, ge=1)
+    layout_x: Optional[int] = Field(None, ge=0, le=10000)
+    layout_y: Optional[int] = Field(None, ge=0, le=10000)
+    display_order: Optional[int] = Field(None, ge=0)
     is_active: Optional[bool] = None
     is_accessible: Optional[bool] = None
     aisle_after: Optional[bool] = None
+
+
+class SeatCreate(BaseModel):
+    row_label: str = Field(min_length=1, max_length=10)
+    seat_number: int = Field(ge=1)
+    public_code: str = Field(min_length=1, max_length=30)
+    layout_x: Optional[int] = Field(None, ge=0, le=10000)
+    layout_y: Optional[int] = Field(None, ge=0, le=10000)
+    display_order: Optional[int] = Field(None, ge=0)
+    is_accessible: bool = False
+
+
+class RowCreate(BaseModel):
+    row_label: str = Field(min_length=1, max_length=10)
+    number_of_seats: int = Field(ge=1, le=50)
+    starting_number: int = Field(default=1, ge=1)
 
 
 class SeatResponse(BaseModel):
@@ -41,6 +62,8 @@ class SeatResponse(BaseModel):
     seat_number: int
     public_code: str
     position_index: int
+    layout_x: int
+    layout_y: int
     aisle_after: bool
     is_active: bool
     is_accessible: bool
@@ -88,4 +111,3 @@ class CinemaOrderResponse(BaseModel):
 
 class StatusUpdate(BaseModel):
     status: str
-

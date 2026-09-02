@@ -1,11 +1,13 @@
 "use client";
 /* eslint-disable react-hooks/set-state-in-effect -- async server refreshes reconcile controlled UI state */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import {
+  addSeat,
+  addSeatRow,
   addScreen,
   advanceOrder,
   loadDashboard,
@@ -243,250 +245,64 @@ function AddScreen({
   );
 }
 
-function Screens({
-  screens,
-  setScreens,
-}: {
-  screens: CinemaScreen[];
-  setScreens: React.Dispatch<React.SetStateAction<CinemaScreen[]>>;
-}) {
-  const [adding, setAdding] = useState(false),
-    [selectedScreen, setSelectedScreen] = useState(screens[0]?.id || ""),
-    [selectedSeat, setSelectedSeat] = useState(""),
-    [error, setError] = useState("");
-  if (!screens.length)
-    return (
-      <div className={s.page}>
-        <Header
-          title="No screens yet"
-          subtitle="Create the first auditorium to generate durable physical seat identities."
-          action={
-            <button className={s.button} onClick={() => setAdding(true)}>
-              + Create first screen
-            </button>
-          }
-        />
-        <div className={s.card}>
-          Screens and seats are saved in PostgreSQL. Nothing is generated until
-          you create a screen.
-        </div>
-        {adding && (
-          <AddScreen
-            onClose={() => setAdding(false)}
-            onAdd={(value) => {
-              setScreens([value]);
-              setSelectedScreen(value.id);
-              setAdding(false);
-            }}
-          />
-        )}
-      </div>
-    );
-  const screen = screenFor(screens, selectedScreen) || screens[0],
-    seat = screen.seats.find((x) => x.id === selectedSeat);
-  const replace = (value: CinemaScreen) =>
-    setScreens((old) => old.map((x) => (x.id === value.id ? value : x)));
-  const resize = async (rows: number, seatsPerRow: number) => {
-    try {
-      replace(
-        await saveLayout(screen.id, rows, seatsPerRow, screen.aislesAfter),
-      );
-      setSelectedSeat("");
-    } catch (value) {
-      setError(
-        value instanceof Error ? value.message : "Unable to resize layout",
-      );
-    }
+function Screens({ screens, setScreens }: { screens: CinemaScreen[]; setScreens: React.Dispatch<React.SetStateAction<CinemaScreen[]>> }) {
+  const [addingScreen, setAddingScreen] = useState(false), [addingRow, setAddingRow] = useState(false), [addingSeat, setAddingSeat] = useState(false),
+    [selectedScreen, setSelectedScreen] = useState(screens[0]?.id || ""), [selectedSeat, setSelectedSeat] = useState(""),
+    [dirty, setDirty] = useState<Set<string>>(new Set()), [saving, setSaving] = useState(false), [error, setError] = useState("");
+  const canvasRef = useRef<HTMLDivElement>(null), drag = useRef<{ id: string; dx: number; dy: number } | null>(null);
+  const screen = screenFor(screens, selectedScreen) || screens[0];
+  const replace = (value: CinemaScreen) => setScreens((old) => old.map((x) => x.id === value.id ? value : x));
+  if (!screen) return <div className={s.page}><Header title="No screens yet" subtitle="Create the first auditorium, then adapt every row and seat independently." action={<button className={s.button} onClick={() => setAddingScreen(true)}>+ Create first screen</button>} />{addingScreen && <AddScreen onClose={() => setAddingScreen(false)} onAdd={(value) => { setScreens([value]); setSelectedScreen(value.id); setAddingScreen(false); }} />}</div>;
+  const seat = screen.seats.find((value) => value.id === selectedSeat);
+  const patchSeat = async (value: CinemaSeat, patch: Parameters<typeof saveSeat>[2]) => {
+    setError("");
+    try { const saved = await saveSeat(screen.id, value.id, patch); replace({ ...screen, seats: screen.seats.map((item) => item.id === saved.id ? saved : item) }); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "Unable to save seat"); }
   };
-  const patchSeat = async (
-    value: CinemaSeat,
-    patch: {
-      public_code?: string;
-      is_active?: boolean;
-      is_accessible?: boolean;
-    },
-  ) => {
+  const savePositions = async () => {
+    setSaving(true); setError("");
     try {
-      const saved = await saveSeat(screen.id, value.id, patch);
-      replace({
-        ...screen,
-        seats: screen.seats.map((x) => (x.id === saved.id ? saved : x)),
-      });
-    } catch (reason) {
-      setError(
-        reason instanceof Error ? reason.message : "Unable to save seat",
-      );
-    }
+      const saved = await Promise.all(screen.seats.filter((value) => dirty.has(value.id)).map((value) => saveSeat(screen.id, value.id, { layout_x: value.layoutX, layout_y: value.layoutY, display_order: value.displayOrder })));
+      const byId = new Map(saved.map((value) => [value.id, value])); replace({ ...screen, seats: screen.seats.map((value) => byId.get(value.id) || value) }); setDirty(new Set());
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Unable to save layout"); }
+    finally { setSaving(false); }
   };
-  return (
-    <div className={s.page}>
-      <Header
-        title="Screens & Seats"
-        subtitle="Every physical chair has one durable database identity and canonical QR destination."
-        action={
-          <button className={s.button} onClick={() => setAdding(true)}>
-            + Add screen
-          </button>
-        }
-      />
-      {error && <div className={s.notice}>{error}</div>}
-      <div className={s.toolbar}>
-        <div className={s.screenTabs}>
-          {screens.map((value) => (
-            <button
-              key={value.id}
-              data-active={value.id === screen.id}
-              className={s.screenTab}
-              onClick={() => {
-                setSelectedScreen(value.id);
-                setSelectedSeat("");
-              }}
-            >
-              {value.name}
-              <br />
-              <small>{activeSeats(value).length} active seats</small>
-            </button>
-          ))}
-        </div>
-        <label className={s.field}>
-          Rows
-          <input
-            aria-label="Rows"
-            className={s.input}
-            type="number"
-            min="1"
-            max="30"
-            value={screen.rows.length}
-            onChange={(e) => void resize(+e.target.value, screen.seatsPerRow)}
-          />
-        </label>
-        <label className={s.field}>
-          Seats / row
-          <input
-            aria-label="Seats per row"
-            className={s.input}
-            type="number"
-            min="1"
-            max="50"
-            value={screen.seatsPerRow}
-            onChange={(e) => void resize(screen.rows.length, +e.target.value)}
-          />
-        </label>
-      </div>
-      <div className={s.designer}>
-        <div className={s.auditoriumCard}>
-          <div className={s.screenName}>
-            {screen.name.toUpperCase()} · SCREEN
-          </div>
-          <div className={s.screenArc} />
-          <div className={s.seatMap}>
-            {screen.rows.map((row) => (
-              <div className={s.seatRow} key={row}>
-                <span className={s.rowLabel}>{row}</span>
-                {screen.seats
-                  .filter((x) => x.row === row)
-                  .map((value) => (
-                    <button
-                      aria-label={`Seat ${value.code}`}
-                      key={value.id}
-                      className={s.seat}
-                      data-selected={value.id === selectedSeat}
-                      data-status={value.status}
-                      onClick={() => setSelectedSeat(value.id)}
-                    >
-                      <span>{value.code}</span>
-                    </button>
-                  ))}
-              </div>
-            ))}
-          </div>
-        </div>
-        <aside className={`${s.card} ${s.inspector}`}>
-          {seat ? (
-            <>
-              <div className={s.inspectorHero}>
-                <strong>Seat {seat.code}</strong>
-                <span>{screen.name}</span>
-              </div>
-              <label className={s.field}>
-                Public seat code
-                <input
-                  className={s.input}
-                  defaultValue={seat.code}
-                  onBlur={(e) =>
-                    void patchSeat(seat, {
-                      public_code: e.target.value.toUpperCase(),
-                    })
-                  }
-                />
-              </label>
-              <div className={s.inspectorActions}>
-                <button
-                  className={s.buttonSecondary}
-                  onClick={() =>
-                    void patchSeat(seat, {
-                      is_accessible: seat.status !== "accessible",
-                    })
-                  }
-                >
-                  {seat.status === "accessible"
-                    ? "Remove accessibility"
-                    : "Mark accessible"}
-                </button>
-                <button
-                  className={s.buttonDanger}
-                  onClick={() =>
-                    void patchSeat(seat, {
-                      is_active: seat.status === "disabled",
-                    })
-                  }
-                >
-                  {seat.status === "disabled" ? "Enable seat" : "Disable seat"}
-                </button>
-              </div>
-            </>
-          ) : (
-            <p>
-              Select a seat to edit its code, accessibility, or availability.
-            </p>
-          )}
-        </aside>
-      </div>
-      <div className={s.rowActions}>
-        <label className={s.field}>
-          Screen name
-          <input
-            className={s.input}
-            defaultValue={screen.name}
-            onBlur={async (event) =>
-              replace(
-                await updateScreen(screen.id, { name: event.target.value }),
-              )
-            }
-          />
-        </label>
-        <button
-          className={s.buttonDanger}
-          onClick={async () => {
-            await removeScreen(screen.id);
-            setScreens(await loadScreens());
-          }}
-        >
-          Deactivate or delete screen
-        </button>
-      </div>
-      {adding && (
-        <AddScreen
-          onClose={() => setAdding(false)}
-          onAdd={(value) => {
-            setScreens((old) => [...old, value]);
-            setSelectedScreen(value.id);
-            setAdding(false);
-          }}
-        />
-      )}
+  const move = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!drag.current || !canvasRef.current) return;
+    const bounds = canvasRef.current.getBoundingClientRect(), x = Math.max(0, Math.round((event.clientX - bounds.left + canvasRef.current.scrollLeft - drag.current.dx) / 8) * 8), y = Math.max(0, Math.round((event.clientY - bounds.top + canvasRef.current.scrollTop - drag.current.dy) / 8) * 8);
+    const id = drag.current.id; replace({ ...screen, seats: screen.seats.map((value) => value.id === id ? { ...value, layoutX: x, layoutY: y } : value) }); setDirty((old) => new Set(old).add(id));
+  };
+  const width = Math.max(760, ...screen.seats.map((value) => value.layoutX + 100)), height = Math.max(460, ...screen.seats.map((value) => value.layoutY + 150));
+  return <div className={s.page}>
+    <Header title="Screens & Seats" subtitle="Configure the physical seating layout without changing durable seat or QR identity." action={<button className={s.button} disabled={!dirty.size || saving} onClick={() => void savePositions()}>{saving ? "Saving…" : `Save Changes${dirty.size ? ` (${dirty.size})` : ""}`}</button>} />
+    {error && <div className={s.notice}>{error}</div>}
+    <div className={s.toolbar}>
+      <label className={s.field}>Screen<select className={s.select} value={screen.id} onChange={(event) => { setSelectedScreen(event.target.value); setSelectedSeat(""); setDirty(new Set()); }}>{screens.map((value) => <option key={value.id} value={value.id}>{value.name} · {activeSeats(value).length} seats</option>)}</select></label>
+      <button className={s.buttonSecondary} onClick={() => setAddingRow(true)}>+ Add Row</button><button className={s.buttonSecondary} onClick={() => setAddingSeat(true)}>+ Add Seat</button><button className={s.buttonSecondary} onClick={() => setAddingScreen(true)}>+ Add Screen</button>
     </div>
-  );
+    <div className={s.designer}>
+      <div className={s.auditoriumViewport}>
+        <div ref={canvasRef} className={s.flexibleCanvas} style={{ width, height }} onPointerMove={move} onPointerUp={() => { drag.current = null; }} onPointerCancel={() => { drag.current = null; }}>
+          <div className={s.screenName}>{screen.name.toUpperCase()} · SCREEN</div><div className={s.screenArc} />
+          {screen.seats.slice().sort((a, b) => a.displayOrder - b.displayOrder).map((value) => <button key={value.id} aria-label={`Seat ${value.code}`} className={s.positionedSeat} data-selected={value.id === selectedSeat} data-status={value.status} style={{ left: value.layoutX + 42, top: value.layoutY + 100 }} onPointerDown={(event) => { const bounds = event.currentTarget.getBoundingClientRect(); event.currentTarget.setPointerCapture(event.pointerId); drag.current = { id: value.id, dx: event.clientX - bounds.left, dy: event.clientY - bounds.top }; setSelectedSeat(value.id); }}><span>{value.code}</span>{value.status === "accessible" && <i aria-hidden>♿</i>}</button>)}
+        </div>
+      </div>
+      <aside className={`${s.card} ${s.inspector}`}>{seat ? <><div className={s.inspectorHero}><strong>Seat {seat.code}</strong><span>Durable ID {seat.id}</span></div>
+        <label className={s.field}>Public code<input key={`${seat.id}-code`} className={s.input} defaultValue={seat.code} onBlur={(event) => void patchSeat(seat, { public_code: event.target.value.toUpperCase() })} /></label>
+        <div className={s.formGrid}><label className={s.field}>Row<input key={`${seat.id}-row`} className={s.input} defaultValue={seat.row} onBlur={(event) => void patchSeat(seat, { row_label: event.target.value.toUpperCase() })} /></label><label className={s.field}>Seat number<input key={`${seat.id}-number`} className={s.input} type="number" min="1" defaultValue={seat.number} onBlur={(event) => void patchSeat(seat, { seat_number: +event.target.value })} /></label><label className={s.field}>Display order<input key={`${seat.id}-order`} className={s.input} type="number" min="0" defaultValue={seat.displayOrder} onBlur={(event) => void patchSeat(seat, { display_order: +event.target.value })} /></label></div>
+        <div className={s.inspectorActions}><button className={s.buttonSecondary} onClick={() => void patchSeat(seat, { is_accessible: seat.status !== "accessible" })}>{seat.status === "accessible" ? "Remove accessibility" : "Mark accessible"}</button><button className={s.buttonDanger} onClick={() => void patchSeat(seat, { is_active: seat.status === "disabled" })}>{seat.status === "disabled" ? "Enable seat" : "Disable seat"}</button></div>
+      </> : <p>Select and drag a seat to position it, or select it to edit details.</p>}</aside>
+    </div>
+    <div className={s.rowActions}><label className={s.field}>Screen name<input className={s.input} defaultValue={screen.name} onBlur={async (event) => replace(await updateScreen(screen.id, { name: event.target.value }))} /></label><button className={s.buttonDanger} onClick={async () => { await removeScreen(screen.id); setScreens(await loadScreens()); }}>Deactivate or delete screen</button></div>
+    {addingScreen && <AddScreen onClose={() => setAddingScreen(false)} onAdd={(value) => { setScreens((old) => [...old, value]); setSelectedScreen(value.id); setAddingScreen(false); }} />}
+    {addingRow && <SeatBuilderModal title="Add Row" fields={["Row label", "Number of seats", "Starting number"]} defaults={["G", "12", "1"]} onClose={() => setAddingRow(false)} onSubmit={async ([row_label, number_of_seats, starting_number]) => { replace(await addSeatRow(screen.id, { row_label, number_of_seats: +number_of_seats, starting_number: +starting_number })); setAddingRow(false); }} />}
+    {addingSeat && <SeatBuilderModal title="Add Seat" fields={["Row", "Seat code", "Seat number"]} defaults={["G", "G14", "14"]} accessible onClose={() => setAddingSeat(false)} onSubmit={async ([row_label, public_code, seat_number], isAccessible) => { const saved = await addSeat(screen.id, { row_label, public_code, seat_number: +seat_number, is_accessible: isAccessible }); replace({ ...screen, seats: [...screen.seats, saved] }); setSelectedSeat(saved.id); setAddingSeat(false); }} />}
+  </div>;
+}
+
+function SeatBuilderModal({ title, fields, defaults, accessible = false, onClose, onSubmit }: { title: string; fields: string[]; defaults: string[]; accessible?: boolean; onClose: () => void; onSubmit: (values: string[], accessible: boolean) => Promise<void> }) {
+  const [values, setValues] = useState(defaults), [isAccessible, setAccessible] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState("");
+  return <div className={s.modalBackdrop}><form className={s.modal} onSubmit={async (event) => { event.preventDefault(); setBusy(true); setError(""); try { await onSubmit(values, isAccessible); } catch (reason) { setError(reason instanceof Error ? reason.message : "Unable to add seats"); } finally { setBusy(false); } }}><div className={s.modalHead}><h2>{title}</h2><button type="button" className={s.iconButton} onClick={onClose}>×</button></div><div className={s.formGrid}>{fields.map((field, index) => <label className={s.field} key={field}>{field}<input className={s.input} type={field.toLowerCase().includes("number") || field.includes("seats") ? "number" : "text"} min="1" value={values[index]} onChange={(event) => setValues((old) => old.map((value, item) => item === index ? event.target.value : value))} required /></label>)}{accessible && <label className={s.checkField}><input type="checkbox" checked={isAccessible} onChange={(event) => setAccessible(event.target.checked)} /> Accessible seat</label>}</div>{error && <div className={s.notice}>{error}</div>}<div className={s.modalActions}><button type="button" className={s.buttonSecondary} onClick={onClose}>Cancel</button><button className={s.button} disabled={busy}>{busy ? "Adding…" : title}</button></div></form></div>;
 }
 
 function TransitionButton({

@@ -10,7 +10,7 @@ from app.models.menu import MenuCategory, MenuItem, MenuItemOptionGroup, MenuOpt
 from app.models.order import Order, OrderItem, OrderItemSelectedOption, OrderStatusHistory, RestaurantDailySequence
 from app.models.restaurant import Restaurant
 from app.models.staff_user import StaffUser
-from app.schemas.cinema import CinemaOrderCreate, LayoutUpdate, ScreenCreate, ScreenResponse, ScreenUpdate, SeatUpdate, StatusUpdate
+from app.schemas.cinema import CinemaOrderCreate, LayoutUpdate, RowCreate, ScreenCreate, ScreenResponse, ScreenUpdate, SeatCreate, SeatResponse, SeatUpdate, StatusUpdate
 from app.services.cinema import apply_layout, create_seat_session, load_authority, normalize_code, require_cinema, resolve_public_seat
 from app.services.idempotency import ensure_same_request, request_hash
 from app.services.menu_options import serialize_item_option_groups
@@ -125,12 +125,59 @@ def update_seat(screen_id: int, seat_id: int, body: SeatUpdate, db: Session = De
     if not seat:
         raise HTTPException(404, "Cinema seat not found")
     for field, value in body.model_dump(exclude_unset=True).items():
-        setattr(seat, field, normalize_code(value, "seat code") if field == "public_code" else value)
+        if field in {"public_code", "row_label"}:
+            value = normalize_code(value, "seat code" if field == "public_code" else "row label")
+        setattr(seat, "position_index" if field == "display_order" else field, value)
     try:
         db.commit(); db.refresh(seat)
     except IntegrityError:
         db.rollback(); raise HTTPException(409, "Seat code already exists")
     return seat
+
+
+@router.post("/api/cinema/screens/{screen_id}/seats", response_model=SeatResponse, status_code=201)
+def create_seat(screen_id: int, body: SeatCreate, db: Session = Depends(get_db), staff: StaffUser = Depends(cinema_staff)):
+    screen = get_screen(db, staff, screen_id)
+    next_order = body.display_order if body.display_order is not None else max((seat.position_index for seat in screen.seats), default=-1) + 1
+    seat = CinemaSeat(
+        restaurant_id=staff.restaurant_id,
+        cinema_screen_id=screen.id,
+        row_label=normalize_code(body.row_label, "row label"),
+        seat_number=body.seat_number,
+        public_code=normalize_code(body.public_code, "seat code"),
+        position_index=next_order,
+        layout_x=body.layout_x if body.layout_x is not None else (next_order % 12) * 64,
+        layout_y=body.layout_y if body.layout_y is not None else (next_order // 12) * 56,
+        is_accessible=body.is_accessible,
+    )
+    db.add(seat)
+    try:
+        db.commit(); db.refresh(seat)
+    except IntegrityError:
+        db.rollback(); raise HTTPException(409, "Seat number or public code already exists on this screen")
+    return seat
+
+
+@router.post("/api/cinema/screens/{screen_id}/rows", response_model=ScreenResponse, status_code=201)
+def create_row(screen_id: int, body: RowCreate, db: Session = Depends(get_db), staff: StaffUser = Depends(cinema_staff)):
+    screen = get_screen(db, staff, screen_id)
+    label = normalize_code(body.row_label, "row label")
+    if any(seat.row_label == label for seat in screen.seats):
+        raise HTTPException(409, "Row label already exists on this screen")
+    y = max((seat.layout_y for seat in screen.seats), default=-56) + 56
+    next_order = max((seat.position_index for seat in screen.seats), default=-1) + 1
+    for offset in range(body.number_of_seats):
+        number = body.starting_number + offset
+        db.add(CinemaSeat(
+            restaurant_id=staff.restaurant_id, cinema_screen_id=screen.id,
+            row_label=label, seat_number=number, public_code=f"{label}{number}",
+            position_index=next_order + offset, layout_x=offset * 64, layout_y=y,
+        ))
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback(); raise HTTPException(409, "Generated row conflicts with an existing seat code")
+    return get_screen(db, staff, screen.id)
 
 
 def public_payload(restaurant, screen, seat, token=None, expires_at=None):

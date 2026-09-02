@@ -13,6 +13,9 @@ export interface CinemaSeat {
   row: string;
   number: number;
   code: string;
+  layoutX: number;
+  layoutY: number;
+  displayOrder: number;
   status: CinemaSeatStatus;
 }
 

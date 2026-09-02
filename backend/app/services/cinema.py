@@ -48,9 +48,12 @@ def apply_layout(db: Session, screen: CinemaScreen, rows: int, seats_per_row: in
                     restaurant_id=screen.restaurant_id, cinema_screen_id=screen.id,
                     row_label=label, seat_number=seat_number, public_code=f"{label}{seat_number}",
                     position_index=seat_number - 1,
+                    layout_x=(seat_number - 1) * 64,
+                    layout_y=row_index * 56,
                 )
                 db.add(seat)
-            seat.position_index = seat_number - 1
+            if seat.id is None:
+                seat.position_index = seat_number - 1
             seat.aisle_after = seat_number in aisles_after
     # Historical identities survive reductions; only deactivate seats outside the shape.
     for key, seat in existing.items():

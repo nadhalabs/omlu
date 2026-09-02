@@ -36,6 +36,8 @@ class CinemaSeat(Base):
     seat_number: Mapped[int] = mapped_column(Integer)
     public_code: Mapped[str] = mapped_column(String(30))
     position_index: Mapped[int] = mapped_column(Integer)
+    layout_x: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    layout_y: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     aisle_after: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     is_accessible: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
@@ -49,7 +51,7 @@ class CinemaSeat(Base):
         UniqueConstraint("cinema_screen_id", "row_label", "seat_number", name="uq_cinema_seat_position"),
         Index("uq_cinema_seat_public_code_lower", "cinema_screen_id", func.lower(public_code), unique=True),
         ForeignKeyConstraint(["restaurant_id", "cinema_screen_id"], ["cinema_screens.restaurant_id", "cinema_screens.id"], name="fk_cinema_seat_tenant_screen", ondelete="RESTRICT"),
-        CheckConstraint("seat_number > 0 AND position_index >= 0", name="chk_cinema_seat_position"),
+        CheckConstraint("seat_number > 0 AND position_index >= 0 AND layout_x >= 0 AND layout_y >= 0", name="chk_cinema_seat_position"),
     )
 
 
