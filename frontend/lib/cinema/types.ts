@@ -22,6 +22,8 @@ export interface CinemaScreen {
 export interface CinemaOrderItem { name: string; quantity: number; price: number; note?: string }
 export interface CinemaOrder {
   id: string;
+  backendId?: string;
+  publicToken?: string;
   screenId: string;
   seatCode: string;
   items: CinemaOrderItem[];

@@ -23,6 +23,7 @@ from app.routes.platform import router as platform_router
 from app.routes.print_bridge import router as print_bridge_router
 from app.routes.gst import router as gst_router
 from app.routes.sales_leads import router as sales_leads_router
+from app.routes.cinema import router as cinema_router
 
 __all__ = [
     "public_menu_router",
@@ -50,4 +51,5 @@ __all__ = [
     "print_bridge_router",
     "gst_router",
     "sales_leads_router",
+    "cinema_router",
 ]

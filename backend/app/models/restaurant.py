@@ -17,6 +17,7 @@ class Restaurant(Base):
     phone_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     city: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    venue_type: Mapped[str] = mapped_column(String(20), default="restaurant", server_default="restaurant", nullable=False, index=True)
     # Restaurant settings
     timezone: Mapped[str] = mapped_column(String(100), default="Asia/Kolkata", server_default="Asia/Kolkata")
     currency: Mapped[str] = mapped_column(String(10), default="INR", server_default="INR")
@@ -92,4 +93,5 @@ class Restaurant(Base):
         CheckConstraint("tax_mode IN ('inclusive', 'exclusive')", name="chk_restaurants_tax_mode"),
         CheckConstraint("default_gst_rate >= 0 AND default_gst_rate <= 100", name="chk_restaurants_gst_rate"),
         CheckConstraint("kitchen_mode IN ('kds', 'direct_print')", name="chk_restaurants_kitchen_mode"),
+        CheckConstraint("venue_type IN ('restaurant', 'cinema')", name="chk_restaurants_venue_type"),
     )

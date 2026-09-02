@@ -29,10 +29,14 @@ class Order(Base):
         ForeignKey("restaurants.id", ondelete="CASCADE"),
         index=True
     )
-    table_id: Mapped[int] = mapped_column(
+    table_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("restaurant_tables.id", ondelete="CASCADE"),
         index=True,
+        nullable=True,
     )
+    cinema_seat_id: Mapped[Optional[int]] = mapped_column(ForeignKey("cinema_seats.id", ondelete="RESTRICT"), nullable=True, index=True)
+    cinema_seat_session_id: Mapped[Optional[int]] = mapped_column(ForeignKey("cinema_seat_sessions.id", ondelete="SET NULL"), nullable=True, index=True)
+    order_context_type: Mapped[str] = mapped_column(String(20), default="restaurant", server_default="restaurant", nullable=False, index=True)
     dining_session_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("dining_sessions.id", ondelete="SET NULL"),
         nullable=True,
@@ -43,7 +47,7 @@ class Order(Base):
     status: Mapped[str] = mapped_column(
         String(50),
         CheckConstraint(
-            "status IN ('pending', 'accepted', 'preparing', 'ready', 'served', 'rejected')",
+            "status IN ('pending', 'accepted', 'preparing', 'ready', 'served', 'rejected', 'out_for_delivery', 'delivered')",
             name="chk_order_status_valid"
         ),
         index=True
@@ -81,6 +85,9 @@ class Order(Base):
             name="fk_orders_restaurant_table",
             ondelete="CASCADE",
         ),
+        ForeignKeyConstraint(["restaurant_id", "cinema_seat_id"], ["cinema_seats.restaurant_id", "cinema_seats.id"], name="fk_orders_tenant_cinema_seat"),
+        ForeignKeyConstraint(["restaurant_id", "cinema_seat_id", "cinema_seat_session_id"], ["cinema_seat_sessions.restaurant_id", "cinema_seat_sessions.cinema_seat_id", "cinema_seat_sessions.id"], name="fk_orders_cinema_authority_binding"),
+        CheckConstraint("(order_context_type = 'restaurant' AND table_id IS NOT NULL AND cinema_seat_id IS NULL AND cinema_seat_session_id IS NULL) OR (order_context_type = 'cinema' AND table_id IS NULL AND dining_session_id IS NULL AND cinema_seat_id IS NOT NULL AND cinema_seat_session_id IS NOT NULL)", name="chk_orders_context_xor"),
         Index("ix_orders_restaurant_created_at", "restaurant_id", "created_at"),
         Index("ix_orders_restaurant_status", "restaurant_id", "status"),
         Index("ix_orders_restaurant_status_created_at", "restaurant_id", "status", "created_at"),
@@ -97,12 +104,14 @@ class Order(Base):
         back_populates="orders",
         overlaps="orders",
     )
-    table: Mapped["RestaurantTable"] = relationship(
+    table: Mapped[Optional["RestaurantTable"]] = relationship(
         "RestaurantTable",
         back_populates="orders",
         foreign_keys=[table_id],
         overlaps="orders,restaurant",
     )
+    cinema_seat: Mapped[Optional["CinemaSeat"]] = relationship("CinemaSeat", foreign_keys=[cinema_seat_id])
+    cinema_seat_session: Mapped[Optional["CinemaSeatSession"]] = relationship("CinemaSeatSession", foreign_keys=[cinema_seat_session_id])
     dining_session: Mapped[Optional["DiningSession"]] = relationship(
         "DiningSession",
         back_populates="orders",
