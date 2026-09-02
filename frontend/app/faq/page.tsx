@@ -50,7 +50,7 @@ export default function FaqPage() {
             <Link href="/login" className="hidden text-sm font-bold text-[var(--omlu-text-secondary)] hover:text-[var(--omlu-text-primary)] sm:inline-flex">
               Sign In
             </Link>
-            <Link href="/register" className="inline-flex min-h-11 items-center rounded-xl bg-[var(--omlu-primary-action)] px-4 text-sm font-black text-[var(--omlu-primary-action-text)] hover:brightness-95">
+            <Link href="/get-started" className="inline-flex min-h-11 items-center rounded-xl bg-[var(--omlu-primary-action)] px-4 text-sm font-black text-[var(--omlu-primary-action-text)] hover:brightness-95">
               Create Restaurant
             </Link>
             <LandingThemeToggle />
@@ -95,7 +95,7 @@ export default function FaqPage() {
             <h2 id="faq-start-title" className="text-xl font-black sm:text-2xl">Ready to set up your restaurant?</h2>
             <p className="mt-2 text-sm leading-6 text-[var(--omlu-text-secondary)]">Create your restaurant account and continue through OMLU’s guided setup.</p>
           </div>
-          <Link href="/register" className="mt-5 inline-flex min-h-12 w-full shrink-0 items-center justify-center rounded-xl bg-[var(--omlu-primary-action)] px-6 text-sm font-black text-[var(--omlu-primary-action-text)] hover:brightness-95 sm:mt-0 sm:w-auto">
+          <Link href="/get-started" className="mt-5 inline-flex min-h-12 w-full shrink-0 items-center justify-center rounded-xl bg-[var(--omlu-primary-action)] px-6 text-sm font-black text-[var(--omlu-primary-action-text)] hover:brightness-95 sm:mt-0 sm:w-auto">
             Create Restaurant
           </Link>
         </section>

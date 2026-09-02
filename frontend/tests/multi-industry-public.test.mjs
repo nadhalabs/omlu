@@ -36,6 +36,7 @@ test("restaurant product page has focused workflows and registration", () => {
   assert.match(restaurants, /Staff access/);
   assert.match(restaurants, /Reports & oversight/);
   assert.match(restaurants, /\/register\?type=restaurant/);
+  assert.match(restaurants, /\/pricing\?type=restaurant/);
 });
 
 test("cinema product page has focused workflows and registration", () => {
@@ -46,6 +47,7 @@ test("cinema product page has focused workflows and registration", () => {
   assert.match(cinemas, /Customer tracking/);
   assert.match(cinemas, /Cinema oversight/);
   assert.match(cinemas, /\/register\?type=cinema/);
+  assert.match(cinemas, /\/pricing\?type=cinema/);
 });
 
 test("both product pages share pricing, login and interface-preview structure", () => {

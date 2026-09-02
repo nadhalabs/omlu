@@ -8,6 +8,7 @@ const product: VenueProduct = {
   title: "Keep every part of restaurant service connected.",
   description: "Bring guest ordering, tables, kitchen activity, billing, staff and reporting into one operational workspace.",
   registrationHref: "/register?type=restaurant",
+  pricingHref: "/pricing?type=restaurant",
   workflows: [
     { title: "Ordering & tables", description: "Support QR, dine-in, takeaway and staff-assisted orders with a clear view of every table." },
     { title: "Kitchen operations", description: "Move orders into a focused kitchen queue and keep preparation status visible to the team." },

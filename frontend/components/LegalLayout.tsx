@@ -61,7 +61,7 @@ export default function LegalLayout({ title, subtitle, effectiveDate = legalConf
     <header className="legal-screen-only sticky top-0 z-40 border-b border-[var(--omlu-border)] bg-[color:var(--omlu-primary-surface)]/95 px-4 backdrop-blur sm:px-8">
       <div className="mx-auto flex min-h-16 max-w-7xl items-center justify-between gap-4">
         <Link href="/" aria-label="OMLU home" className="flex items-center gap-2.5 font-black tracking-tight"><span className="flex size-8 items-center justify-center rounded-lg bg-orange-600 text-sm text-white">O</span><span>OMLU <span className="font-semibold text-[var(--omlu-text-muted)]">Legal</span></span></Link>
-        <div className="flex items-center gap-2 sm:gap-4"><Link href="/login" className="px-2 text-sm font-bold text-[var(--omlu-text-secondary)] hover:text-orange-600">Sign In</Link><Link href="/register" className="rounded-lg border border-[var(--omlu-border-strong)] px-3 py-2 text-sm font-bold hover:border-orange-500 hover:text-orange-600">Register</Link><PublicThemeControl /></div>
+        <div className="flex items-center gap-2 sm:gap-4"><Link href="/login" className="px-2 text-sm font-bold text-[var(--omlu-text-secondary)] hover:text-orange-600">Sign In</Link><Link href="/get-started" className="rounded-lg border border-[var(--omlu-border-strong)] px-3 py-2 text-sm font-bold hover:border-orange-500 hover:text-orange-600">Get Started</Link><PublicThemeControl /></div>
       </div>
     </header>
 

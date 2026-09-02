@@ -8,6 +8,7 @@ const product: VenueProduct = {
   title: "Concession service that knows every screen and seat.",
   description: "Connect seat-based ordering, screen and seat setup, concession preparation, customer tracking and day-to-day cinema operations.",
   registrationHref: "/register?type=cinema",
+  pricingHref: "/pricing?type=cinema",
   workflows: [
     { title: "Seat-based ordering", description: "Associate concession orders with the right screen, row and seat for a clear fulfilment path." },
     { title: "Screens & seats", description: "Organize the venue around its real screens and seating layout." },

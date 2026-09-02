@@ -8,6 +8,7 @@ export type VenueProduct = {
   title: string;
   description: string;
   registrationHref: string;
+  pricingHref: string;
   workflows: { title: string; description: string }[];
   audiences: string[];
   previewTitle: string;
@@ -43,7 +44,7 @@ export function VenueProductPage({ product }: { product: VenueProduct }) {
         </section>
 
         <section id="pricing" className="scroll-mt-24 text-center" aria-labelledby="venue-pricing-title">
-          <p className="text-xs font-black uppercase tracking-[0.2em] text-orange-700">Pricing</p><h2 id="venue-pricing-title" className="mt-2 text-3xl font-black tracking-tight">{product.pricingTitle}</h2><p className="mx-auto mt-4 max-w-2xl leading-7 text-[var(--omlu-text-secondary)]">{product.pricingDescription}</p><div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row"><Link href={product.registrationHref} className="inline-flex min-h-12 items-center justify-center rounded-lg bg-[var(--omlu-primary-action)] px-6 text-sm font-bold text-[var(--omlu-primary-action-text)] hover:brightness-95">Register</Link><Link href="/pricing" className="inline-flex min-h-12 items-center justify-center rounded-lg border border-[var(--omlu-border-strong)] px-6 text-sm font-bold hover:bg-[var(--omlu-hover-background)]">View Pricing</Link></div>
+          <p className="text-xs font-black uppercase tracking-[0.2em] text-orange-700">Pricing</p><h2 id="venue-pricing-title" className="mt-2 text-3xl font-black tracking-tight">{product.pricingTitle}</h2><p className="mx-auto mt-4 max-w-2xl leading-7 text-[var(--omlu-text-secondary)]">{product.pricingDescription}</p><div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row"><Link href={product.registrationHref} className="inline-flex min-h-12 items-center justify-center rounded-lg bg-[var(--omlu-primary-action)] px-6 text-sm font-bold text-[var(--omlu-primary-action-text)] hover:brightness-95">Register</Link><Link href={product.pricingHref} className="inline-flex min-h-12 items-center justify-center rounded-lg border border-[var(--omlu-border-strong)] px-6 text-sm font-bold hover:bg-[var(--omlu-hover-background)]">View Pricing</Link></div>
         </section>
       </main>
       <PublicFooter />

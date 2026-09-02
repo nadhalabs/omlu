@@ -17,6 +17,7 @@ import {
   validateRegistration,
 } from "@/lib/formValidation";
 import { RestaurantRegistrationRequest } from "@/lib/types";
+import { roleHomePath } from "@/lib/roleRoutes";
 
 const initialForm: RestaurantRegistrationRequest = {
   venue_type: "restaurant",
@@ -92,12 +93,12 @@ export default function RegisterClient({ venueType }: { venueType: "restaurant" 
 
     try {
       const registration = await registerRestaurant(validation.normalized);
-      await staffLogin({
+      const authenticated = await staffLogin({
         restaurant_slug: registration.restaurant_slug,
         login: validation.normalized.owner_username,
         password: validation.normalized.password,
       });
-      router.replace(registration.next_path);
+      router.replace(roleHomePath(authenticated.staff));
     } catch (err) {
       if (err instanceof ApiError) {
         const field = backendFieldName(err.field) as RegistrationField | undefined;
