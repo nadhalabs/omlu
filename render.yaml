@@ -29,6 +29,8 @@ services:
         generateValue: true
       - key: KITCHEN_API_KEY
         generateValue: true
+      - key: PARTICIPANT_HMAC_SECRET
+        generateValue: true
       - key: FRONTEND_URLS
         sync: false
       - key: PUBLIC_FRONTEND_URL

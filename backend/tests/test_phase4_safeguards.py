@@ -1,4 +1,5 @@
 import pytest
+from pathlib import Path
 from pydantic import ValidationError
 
 from app.config import Settings
@@ -31,6 +32,12 @@ def test_production_settings_accept_explicit_safe_infrastructure():
     assert settings.app_environment == "production"
     assert settings.database_url.startswith("postgresql://")
     assert settings.redis_url.startswith("rediss://")
+
+
+def test_render_blueprint_provisions_required_participant_secret():
+    blueprint = (Path(__file__).resolve().parents[2] / "render.yaml").read_text()
+
+    assert "- key: PARTICIPANT_HMAC_SECRET\n        generateValue: true" in blueprint
 
 
 @pytest.mark.parametrize(
