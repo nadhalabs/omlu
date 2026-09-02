@@ -8,6 +8,8 @@ import type {
   CinemaOrderStatus,
   CinemaScreen,
   CinemaSeat,
+  CinemaMenuItemCreate,
+  CinemaMenuItemUpdate,
 } from "./types";
 
 type ApiSeat = {
@@ -27,6 +29,7 @@ type ApiScreen = {
   name: string;
   code: string;
   is_active: boolean;
+  sort_order: number;
   seats: ApiSeat[];
 };
 type ApiOrder = {
@@ -37,6 +40,7 @@ type ApiOrder = {
   screen_id: number;
   seat_code: string;
   created_at: string;
+  customer_note?: string;
   items: Array<{
     name: string;
     quantity: number;
@@ -78,7 +82,7 @@ type ApiMenu = {
   }>;
 };
 
-const seat = (value: ApiSeat): CinemaSeat => ({
+export const seat = (value: ApiSeat): CinemaSeat => ({
   id: String(value.id),
   row: value.row_label,
   number: value.seat_number,
@@ -88,6 +92,7 @@ const seat = (value: ApiSeat): CinemaSeat => ({
   displayOrder: value.position_index,
   isActive: value.is_active,
   isAccessible: value.is_accessible,
+  aisleAfter: value.aisle_after,
   status: !value.is_active
     ? "disabled"
     : value.is_accessible
@@ -102,6 +107,8 @@ export const screen = (value: ApiScreen): CinemaScreen => {
     id: String(value.id),
     name: value.name,
     code: value.code,
+    isActive: value.is_active,
+    sortOrder: value.sort_order,
     rows,
     seatsPerRow: Math.max(0, ...active.map((x) => x.number)),
     aislesAfter: [
@@ -112,17 +119,15 @@ export const screen = (value: ApiScreen): CinemaScreen => {
     seats,
   };
 };
-const order = (value: ApiOrder): CinemaOrder => ({
+export const order = (value: ApiOrder): CinemaOrder => ({
   id: value.order_number,
   backendId: String(value.id),
   publicToken: value.public_token,
   screenId: String(value.screen_id),
   seatCode: value.seat_code,
   status: value.status,
-  placedMinutesAgo: Math.max(
-    0,
-    Math.floor((Date.now() - Date.parse(value.created_at)) / 60000),
-  ),
+  createdAt: value.created_at,
+  customerNote: value.customer_note,
   items: value.items.map((x) => ({
     name: x.name,
     quantity: x.quantity,
@@ -321,4 +326,23 @@ export async function trackOrder(token: string, publicToken: string) {
   );
   if (!response.ok) throw new Error("Order tracking unavailable");
   return response.json();
+}
+
+export async function createCategory(body: { name: string }) {
+  return admin("menu/categories", { method: "POST", body: JSON.stringify(body) });
+}
+export async function updateCategory(id: number, body: { name?: string; is_active?: boolean; display_order?: number }) {
+  return admin(`menu/categories/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+}
+export async function createMenuItem(body: CinemaMenuItemCreate) {
+  return admin("menu/items", { method: "POST", body: JSON.stringify(body) });
+}
+export async function updateMenuItem(id: string, body: CinemaMenuItemUpdate) {
+  return admin(`menu/items/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+}
+export async function deleteMenuItem(id: string) {
+  await admin(`menu/items/${id}`, { method: "DELETE" });
+}
+export async function deleteCategory(id: number) {
+  await admin(`menu/categories/${id}`, { method: "DELETE" });
 }

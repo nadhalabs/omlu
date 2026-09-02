@@ -18,6 +18,7 @@ export interface CinemaSeat {
   displayOrder: number;
   isActive: boolean;
   isAccessible: boolean;
+  aisleAfter: boolean;
   status: CinemaSeatStatus;
 }
 
@@ -25,6 +26,8 @@ export interface CinemaScreen {
   id: string;
   name: string;
   code: string;
+  isActive: boolean;
+  sortOrder: number;
   rows: string[];
   seatsPerRow: number;
   aislesAfter: number[];
@@ -40,8 +43,9 @@ export interface CinemaOrder {
   seatCode: string;
   items: CinemaOrderItem[];
   status: CinemaOrderStatus;
-  placedMinutesAgo: number;
+  createdAt: string;
   bagCount?: number;
+  customerNote?: string;
 }
 
 export interface CinemaMenuItem {
@@ -74,3 +78,24 @@ export interface CinemaDashboard {
 }
 
 export interface CinemaMenuCategory { id:number;name:string;isActive:boolean;items:CinemaMenuItem[] }
+
+export interface CinemaMenuItemCreate {
+  category_id: number;
+  name: string;
+  description?: string;
+  price: string;
+  is_available?: boolean;
+}
+
+export interface CinemaMenuItemUpdate {
+  name?: string;
+  description?: string;
+  price?: string;
+  category_id?: number;
+  is_available?: boolean;
+  display_order?: number;
+}
+
+export interface CinemaCategoryCreate {
+  name: string;
+}

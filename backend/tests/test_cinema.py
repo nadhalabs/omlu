@@ -175,3 +175,49 @@ def test_flexible_seat_layout_persists_identity_and_uneven_rows(cinema_data):
         json={"row_label": "G", "seat_number": 15, "public_code": "G14"},
     )
     assert duplicate.status_code == 409
+
+def test_cinema_menu_crud(cinema_data):
+    d = cinema_data
+
+    # 1. Create a category
+    category_res = client.post("/api/cinema/menu/categories", headers=auth(d["cinema_token"]), json={"name": "Drinks"})
+    assert category_res.status_code == 201
+    category_id = category_res.json()["id"]
+
+    # 2. Create an item in that category
+    item_res = client.post("/api/cinema/menu/items", headers=auth(d["cinema_token"]), json={
+        "category_id": category_id,
+        "name": "Coke",
+        "price": "50.00"
+    })
+    assert item_res.status_code == 201
+    item_id = item_res.json()["id"]
+
+    # 3. Edit the item (rename, reprice)
+    edit_res = client.patch(f"/api/cinema/menu/items/{item_id}", headers=auth(d["cinema_token"]), json={
+        "name": "Diet Coke",
+        "price": "60.00"
+    })
+    assert edit_res.status_code == 200
+    assert edit_res.json()["name"] == "Diet Coke"
+    assert edit_res.json()["price"] == "60.00"
+
+    # 4. Deactivate the item
+    del_res = client.delete(f"/api/cinema/menu/items/{item_id}", headers=auth(d["cinema_token"]))
+    assert del_res.status_code == 204
+
+    # Verify deactivated
+    menu = client.get("/api/cinema/menu", headers=auth(d["cinema_token"]))
+    drinks_cat = next(c for c in menu.json()["categories"] if c["id"] == category_id)
+    diet_coke = next(i for i in drinks_cat["items"] if i["id"] == item_id)
+    assert diet_coke["is_available"] is False
+
+    # 5. Verify tenant isolation (other tenant can't access)
+    other_cat_res = client.post("/api/cinema/menu/categories", headers=auth(d["restaurant_token"]), json={"name": "Other Drinks"})
+    assert other_cat_res.status_code == 403
+
+    other_cinema_cat_res = client.post("/api/cinema/menu/categories", headers=auth(d["other_token"]), json={"name": "Other Drinks"})
+    assert other_cinema_cat_res.status_code == 201
+
+    edit_other_cat = client.patch(f"/api/cinema/menu/categories/{category_id}", headers=auth(d["other_token"]), json={"name": "Hacked"})
+    assert edit_other_cat.status_code == 404

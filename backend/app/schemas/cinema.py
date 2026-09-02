@@ -7,6 +7,30 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.schemas.order import PublicOrderCreateRequest
 
 
+class MenuCategoryCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+
+class MenuCategoryUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=255)
+    is_active: Optional[bool] = None
+    display_order: Optional[int] = None
+
+class MenuItemCreate(BaseModel):
+    category_id: int
+    name: str = Field(min_length=1, max_length=255)
+    description: Optional[str] = None
+    price: str
+    is_available: bool = True
+
+class MenuItemUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=255)
+    description: Optional[str] = None
+    price: Optional[str] = None
+    category_id: Optional[int] = None
+    is_available: Optional[bool] = None
+    display_order: Optional[int] = None
+
+
 class ScreenCreate(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     code: str = Field(min_length=1, max_length=30)

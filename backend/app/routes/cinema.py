@@ -1,4 +1,5 @@
 import secrets
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy.exc import IntegrityError
@@ -10,7 +11,7 @@ from app.models.menu import MenuCategory, MenuItem, MenuItemOptionGroup, MenuOpt
 from app.models.order import Order, OrderItem, OrderItemSelectedOption, OrderStatusHistory, RestaurantDailySequence
 from app.models.restaurant import Restaurant
 from app.models.staff_user import StaffUser
-from app.schemas.cinema import CinemaOrderCreate, LayoutUpdate, RowCreate, ScreenCreate, ScreenResponse, ScreenUpdate, SeatCreate, SeatResponse, SeatUpdate, StatusUpdate
+from app.schemas.cinema import CinemaOrderCreate, LayoutUpdate, MenuCategoryCreate, MenuCategoryUpdate, MenuItemCreate, MenuItemUpdate, RowCreate, ScreenCreate, ScreenResponse, ScreenUpdate, SeatCreate, SeatResponse, SeatUpdate, StatusUpdate
 from app.services.cinema import apply_layout, create_seat_session, load_authority, normalize_code, require_cinema, resolve_public_seat
 from app.services.idempotency import ensure_same_request, request_hash
 from app.services.menu_options import serialize_item_option_groups
@@ -233,6 +234,146 @@ def update_cinema_item_availability(item_id: int, body: dict, db: Session = Depe
     item.is_available = body["is_available"]
     db.commit()
     return {"id": item.id, "is_available": item.is_available}
+
+
+@router.post("/api/cinema/menu/categories", status_code=201)
+def create_cinema_category(body: MenuCategoryCreate, db: Session = Depends(get_db), staff: StaffUser = Depends(cinema_staff)):
+    next_order = db.query(MenuCategory).filter(MenuCategory.restaurant_id == staff.restaurant_id).count()
+    category = MenuCategory(
+        restaurant_id=staff.restaurant_id,
+        name_en=body.name.strip(),
+        display_order=next_order,
+        is_active=True
+    )
+    db.add(category)
+    try:
+        db.commit()
+        db.refresh(category)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, "Category already exists")
+    return {"id": category.id, "name": category.name_en, "is_active": category.is_active}
+
+
+@router.patch("/api/cinema/menu/categories/{category_id}")
+def update_cinema_category(category_id: int, body: MenuCategoryUpdate, db: Session = Depends(get_db), staff: StaffUser = Depends(cinema_staff)):
+    category = db.query(MenuCategory).filter(MenuCategory.id == category_id, MenuCategory.restaurant_id == staff.restaurant_id).first()
+    if not category:
+        raise HTTPException(404, "Cinema menu category not found")
+
+    if body.name is not None:
+        category.name_en = body.name.strip()
+    if body.is_active is not None:
+        category.is_active = body.is_active
+    if body.display_order is not None:
+        category.display_order = body.display_order
+
+    try:
+        db.commit()
+        db.refresh(category)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, "Category already exists")
+
+    return {"id": category.id, "name": category.name_en, "is_active": category.is_active}
+
+
+@router.post("/api/cinema/menu/items", status_code=201)
+def create_cinema_item(body: MenuItemCreate, db: Session = Depends(get_db), staff: StaffUser = Depends(cinema_staff)):
+    category = db.query(MenuCategory).filter(MenuCategory.id == body.category_id, MenuCategory.restaurant_id == staff.restaurant_id).first()
+    if not category:
+        raise HTTPException(404, "Cinema menu category not found")
+
+    next_order = db.query(MenuItem).filter(MenuItem.category_id == body.category_id).count()
+    item = MenuItem(
+        restaurant_id=staff.restaurant_id,
+        category_id=body.category_id,
+        name_en=body.name.strip(),
+        description_en=body.description.strip() if body.description else None,
+        price=Decimal(body.price),
+        is_available=body.is_available,
+        display_order=next_order
+    )
+    db.add(item)
+    try:
+        db.commit()
+        db.refresh(item)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, "Item already exists")
+
+    return {
+        "id": item.id,
+        "name": item.name_en,
+        "description": item.description_en,
+        "price": str(item.price),
+        "is_available": item.is_available,
+        "category_id": item.category_id,
+        "display_order": item.display_order
+    }
+
+
+@router.patch("/api/cinema/menu/items/{item_id}")
+def update_cinema_item(item_id: int, body: MenuItemUpdate, db: Session = Depends(get_db), staff: StaffUser = Depends(cinema_staff)):
+    item = db.query(MenuItem).filter(MenuItem.id == item_id, MenuItem.restaurant_id == staff.restaurant_id).first()
+    if not item:
+        raise HTTPException(404, "Cinema menu item not found")
+
+    if body.category_id is not None:
+        category = db.query(MenuCategory).filter(MenuCategory.id == body.category_id, MenuCategory.restaurant_id == staff.restaurant_id).first()
+        if not category:
+            raise HTTPException(404, "Cinema menu category not found")
+        item.category_id = body.category_id
+
+    if body.name is not None:
+        item.name_en = body.name.strip()
+    if body.description is not None:
+        item.description_en = body.description.strip() if body.description else None
+    if body.price is not None:
+        item.price = Decimal(body.price)
+    if body.is_available is not None:
+        item.is_available = body.is_available
+    if body.display_order is not None:
+        item.display_order = body.display_order
+
+    try:
+        db.commit()
+        db.refresh(item)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, "Item conflict")
+
+    return {
+        "id": item.id,
+        "name": item.name_en,
+        "description": item.description_en,
+        "price": str(item.price),
+        "is_available": item.is_available,
+        "category_id": item.category_id,
+        "display_order": item.display_order
+    }
+
+
+@router.delete("/api/cinema/menu/categories/{category_id}", status_code=204)
+def delete_cinema_category(category_id: int, db: Session = Depends(get_db), staff: StaffUser = Depends(cinema_staff)):
+    category = db.query(MenuCategory).filter(MenuCategory.id == category_id, MenuCategory.restaurant_id == staff.restaurant_id).first()
+    if not category:
+        raise HTTPException(404, "Cinema menu category not found")
+
+    category.is_active = False
+    db.commit()
+    return None
+
+
+@router.delete("/api/cinema/menu/items/{item_id}", status_code=204)
+def delete_cinema_item(item_id: int, db: Session = Depends(get_db), staff: StaffUser = Depends(cinema_staff)):
+    item = db.query(MenuItem).filter(MenuItem.id == item_id, MenuItem.restaurant_id == staff.restaurant_id).first()
+    if not item:
+        raise HTTPException(404, "Cinema menu item not found")
+
+    item.is_available = False
+    db.commit()
+    return None
 
 
 def serialize_order(order: Order):

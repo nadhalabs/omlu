@@ -3,18 +3,19 @@ import type { CinemaMenuItem, CinemaOrder, CinemaOrderStatus, CinemaScreen, Cine
 
 const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
-export function generateSeats(screenId: string, rowLabels: string[], seatsPerRow: number, existing: CinemaSeat[] = []): CinemaSeat[] {
+export function generateSeats(screenId: string, rowLabels: string[], seatsPerRow: number, existing: CinemaSeat[] = [], aislesAfter: number[] = []): CinemaSeat[] {
   const byPosition = new Map(existing.map((seat) => [`${seat.row}:${seat.number}`, seat]));
   return rowLabels.flatMap((row) => Array.from({ length: seatsPerRow }, (_, index) => {
     const number = index + 1;
     const previous = byPosition.get(`${row}:${number}`);
-    return previous ?? { id: `${screenId}-${row}-${number}`, row, number, code: `${row}${number}`, layoutX: index * 64, layoutY: rowLabels.indexOf(row) * 56, displayOrder: rowLabels.indexOf(row) * seatsPerRow + index, isActive: true, isAccessible: false, status: "active" as const };
+    return previous ?? { id: `${screenId}-${row}-${number}`, row, number, code: `${row}${number}`, layoutX: index * 64, layoutY: rowLabels.indexOf(row) * 56, displayOrder: rowLabels.indexOf(row) * seatsPerRow + index, isActive: true, isAccessible: false, aisleAfter: aislesAfter.includes(number), status: "active" as const };
   }));
 }
 
 export function createScreen(id: string, name: string, code: string, rowCount: number, seatsPerRow: number, aislesAfter: number[] = [4, 10]): CinemaScreen {
   const rows = Array.from({ length: rowCount }, (_, index) => letters[index]);
-  return { id, name, code, rows, seatsPerRow, aislesAfter: aislesAfter.filter((n) => n < seatsPerRow), seats: generateSeats(id, rows, seatsPerRow) };
+  const filteredAisles = aislesAfter.filter((n) => n < seatsPerRow);
+  return { id, name, code, isActive: true, sortOrder: 0, rows, seatsPerRow, aislesAfter: filteredAisles, seats: generateSeats(id, rows, seatsPerRow, [], filteredAisles) };
 }
 
 const s1 = createScreen("screen-1", "Screen 1", "S1", 8, 12, [4, 8]);
@@ -40,11 +41,11 @@ export const menuItems: CinemaMenuItem[] = [
 ];
 
 export const initialOrders: CinemaOrder[] = [
-  { id: "C1048", screenId: "screen-2", seatCode: "G12", status: "preparing", placedMinutesAgo: 2, bagCount: 1, items: [{ name: "Large Popcorn", quantity: 2, price: 220 }, { name: "Pepsi", quantity: 1, price: 110, note: "No ice" }] },
-  { id: "C1047", screenId: "screen-1", seatCode: "D06", status: "pending", placedMinutesAgo: 1, items: [{ name: "Popcorn + Pepsi Combo", quantity: 1, price: 390 }] },
-  { id: "C1046", screenId: "screen-3", seatCode: "B04", status: "ready", placedMinutesAgo: 6, bagCount: 2, items: [{ name: "Loaded Nachos", quantity: 2, price: 210 }, { name: "Mineral Water", quantity: 2, price: 50 }] },
-  { id: "C1045", screenId: "screen-2", seatCode: "H08", status: "out_for_delivery", placedMinutesAgo: 9, bagCount: 1, items: [{ name: "Family Movie Combo", quantity: 1, price: 799 }] },
-  { id: "C1044", screenId: "screen-1", seatCode: "F11", status: "delivered", placedMinutesAgo: 18, items: [{ name: "Regular Popcorn", quantity: 1, price: 160 }, { name: "Pepsi", quantity: 2, price: 110 }] },
+  { id: "C1048", screenId: "screen-2", seatCode: "G12", status: "preparing", createdAt: new Date(Date.now() - 2 * 60000).toISOString(), bagCount: 1, items: [{ name: "Large Popcorn", quantity: 2, price: 220 }, { name: "Pepsi", quantity: 1, price: 110, note: "No ice" }] },
+  { id: "C1047", screenId: "screen-1", seatCode: "D06", status: "pending", createdAt: new Date(Date.now() - 1 * 60000).toISOString(), items: [{ name: "Popcorn + Pepsi Combo", quantity: 1, price: 390 }] },
+  { id: "C1046", screenId: "screen-3", seatCode: "B04", status: "ready", createdAt: new Date(Date.now() - 6 * 60000).toISOString(), bagCount: 2, items: [{ name: "Loaded Nachos", quantity: 2, price: 210 }, { name: "Mineral Water", quantity: 2, price: 50 }] },
+  { id: "C1045", screenId: "screen-2", seatCode: "H08", status: "out_for_delivery", createdAt: new Date(Date.now() - 9 * 60000).toISOString(), bagCount: 1, items: [{ name: "Family Movie Combo", quantity: 1, price: 799 }] },
+  { id: "C1044", screenId: "screen-1", seatCode: "F11", status: "delivered", createdAt: new Date(Date.now() - 18 * 60000).toISOString(), items: [{ name: "Regular Popcorn", quantity: 1, price: 160 }, { name: "Pepsi", quantity: 2, price: 110 }] },
 ];
 
 export const initialSettings: CinemaSettings = {

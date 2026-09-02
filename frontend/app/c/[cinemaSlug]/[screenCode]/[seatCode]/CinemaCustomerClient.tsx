@@ -18,7 +18,9 @@ type SeatData = {
   screen: { name: string };
   seat: { public_code: string };
 };
+type RawOrderResponse = { order_number: string; public_token: string; status: CinemaOrderStatus };
 type OrderData = { order_number: string; public_token: string; status: CinemaOrderStatus };
+const mapOrder = (raw: RawOrderResponse): OrderData => ({ order_number: raw.order_number, public_token: raw.public_token, status: raw.status });
 const trackingSteps: Array<{ status: CinemaOperationalStatus; label: string }> = [
   { status: "pending", label: "Order received" },
   { status: "ready", label: "Ready" },
@@ -57,7 +59,7 @@ export default function CinemaCustomerClient({
     const timer = setInterval(
       () =>
         trackOrder(data.authority_token, trackedToken)
-          .then(setOrder)
+          .then((raw) => setOrder(mapOrder(raw)))
           .catch(() => {}),
       5000,
     );
@@ -111,7 +113,7 @@ export default function CinemaCustomerClient({
             selected_options: Object.entries(selections[Number(id)] || {}).map(([groupId, optionId]) => ({ group_id: Number(groupId), option_id: optionId, quantity: 1 })),
           })),
       );
-      setOrder(next);
+      setOrder(mapOrder(next));
       setView("tracking");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Order failed");

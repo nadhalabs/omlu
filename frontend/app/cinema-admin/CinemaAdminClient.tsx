@@ -10,20 +10,25 @@ import {
   addSeatRow,
   addScreen,
   advanceOrder,
+  createCategory,
+  createMenuItem,
+  deleteCategory,
+  deleteMenuItem,
   loadDashboard,
   loadMenu,
   loadOrders,
   loadScreens,
   qrDestination,
   removeScreen,
-  saveLayout,
   saveSeat,
   setMenuAvailability,
+  updateMenuItem,
   updateScreen,
 } from "@/lib/cinema/api";
 import type {
   CinemaDashboard,
   CinemaMenuCategory,
+  CinemaMenuItem,
   CinemaOperationalStatus,
   CinemaOrder,
   CinemaOrderStatus,
@@ -78,6 +83,13 @@ const screenFor = (screens: CinemaScreen[], id: string) =>
   screens.find((value) => value.id === id);
 const activeSeats = (screen: CinemaScreen) =>
   screen.seats.filter((seat) => seat.status !== "disabled");
+const elapsed = (iso: string) => Math.max(0, Math.floor((Date.now() - Date.parse(iso)) / 60000));
+
+import {
+  mergeScreensWithDrafts,
+  DRAG_THRESHOLD,
+  type ScreenDrafts,
+} from "@/lib/cinema/drafts";
 
 function Header({
   title,
@@ -245,46 +257,128 @@ function AddScreen({
   );
 }
 
-function Screens({ screens, setScreens }: { screens: CinemaScreen[]; setScreens: React.Dispatch<React.SetStateAction<CinemaScreen[]>> }) {
+function Screens({ screens, setScreens, drafts, setDrafts }: { screens: CinemaScreen[]; setScreens: React.Dispatch<React.SetStateAction<CinemaScreen[]>>; drafts: ScreenDrafts; setDrafts: React.Dispatch<React.SetStateAction<ScreenDrafts>> }) {
   const [addingScreen, setAddingScreen] = useState(false), [addingRow, setAddingRow] = useState(false), [addingSeat, setAddingSeat] = useState(false),
     [selectedScreen, setSelectedScreen] = useState(screens[0]?.id || ""), [selectedSeat, setSelectedSeat] = useState(""),
-    [dirty, setDirty] = useState<Set<string>>(new Set()), [saving, setSaving] = useState(false), [error, setError] = useState("");
-  const canvasRef = useRef<HTMLDivElement>(null), drag = useRef<{ id: string; dx: number; dy: number } | null>(null);
+    [saving, setSaving] = useState(false), [error, setError] = useState("");
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const drag = useRef<{ id: string; dx: number; dy: number; startX: number; startY: number; moved: boolean } | null>(null);
+
   const screen = screenFor(screens, selectedScreen) || screens[0];
+  const dirty = drafts.get(screen?.id || "") || new Map<string, { layoutX: number; layoutY: number }>();
+
   const replace = (value: CinemaScreen) => setScreens((old) => old.map((x) => x.id === value.id ? value : x));
+
   if (!screen) return <div className={s.page}><Header title="No screens yet" subtitle="Create the first auditorium, then adapt every row and seat independently." action={<button className={s.button} onClick={() => setAddingScreen(true)}>+ Create first screen</button>} />{addingScreen && <AddScreen onClose={() => setAddingScreen(false)} onAdd={(value) => { setScreens([value]); setSelectedScreen(value.id); setAddingScreen(false); }} />}</div>;
+
   const seat = screen.seats.find((value) => value.id === selectedSeat);
+
   const patchSeat = async (value: CinemaSeat, patch: Parameters<typeof saveSeat>[2]) => {
     setError("");
-    try { const saved = await saveSeat(screen.id, value.id, patch); replace({ ...screen, seats: screen.seats.map((item) => item.id === saved.id ? saved : item) }); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : "Unable to save seat"); }
+    try {
+      const saved = await saveSeat(screen.id, value.id, patch);
+      const draftPos = dirty.get(saved.id);
+      const updatedSeat = draftPos ? { ...saved, layoutX: draftPos.layoutX, layoutY: draftPos.layoutY } : saved;
+      replace({ ...screen, seats: screen.seats.map((item) => item.id === saved.id ? updatedSeat : item) });
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to save seat");
+    }
   };
+
   const savePositions = async () => {
     setSaving(true); setError("");
     try {
-      const saved = await Promise.all(screen.seats.filter((value) => dirty.has(value.id)).map((value) => saveSeat(screen.id, value.id, { layout_x: value.layoutX, layout_y: value.layoutY, display_order: value.displayOrder })));
-      const byId = new Map(saved.map((value) => [value.id, value])); replace({ ...screen, seats: screen.seats.map((value) => byId.get(value.id) || value) }); setDirty(new Set());
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Unable to save layout"); }
-    finally { setSaving(false); }
+      const dirtySeats = screen.seats.filter((value) => dirty.has(value.id));
+      const results = await Promise.allSettled(
+        dirtySeats.map((value) =>
+          saveSeat(screen.id, value.id, {
+            layout_x: value.layoutX,
+            layout_y: value.layoutY,
+            display_order: value.displayOrder,
+          })
+        )
+      );
+
+      const savedSeats: CinemaSeat[] = [];
+      const failedIds = new Set<string>();
+
+      results.forEach((res, index) => {
+        const seatId = dirtySeats[index].id;
+        if (res.status === "fulfilled") {
+          savedSeats.push(res.value);
+        } else {
+          failedIds.add(seatId);
+        }
+      });
+
+      if (savedSeats.length > 0) {
+        const byId = new Map(savedSeats.map((value) => [value.id, value]));
+        replace({
+          ...screen,
+          seats: screen.seats.map((value) => byId.get(value.id) || value),
+        });
+        setDrafts((old) => {
+          const next = new Map(old);
+          const screenDraft = new Map(next.get(screen.id) || []);
+          for (const s of savedSeats) {
+            screenDraft.delete(s.id);
+          }
+          if (screenDraft.size === 0) {
+            next.delete(screen.id);
+          } else {
+            next.set(screen.id, screenDraft);
+          }
+          return next;
+        });
+      }
+
+      if (failedIds.size > 0) {
+        setError(`Failed to save ${failedIds.size} seat position(s). Unsaved positions have been preserved.`);
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to save layout");
+    } finally {
+      setSaving(false);
+    }
   };
+
   const move = (event: React.PointerEvent<HTMLDivElement>) => {
     if (!drag.current || !canvasRef.current) return;
-    const bounds = canvasRef.current.getBoundingClientRect(), x = Math.max(0, Math.round((event.clientX - bounds.left + canvasRef.current.scrollLeft - drag.current.dx) / 8) * 8), y = Math.max(0, Math.round((event.clientY - bounds.top + canvasRef.current.scrollTop - drag.current.dy) / 8) * 8);
-    const id = drag.current.id; replace({ ...screen, seats: screen.seats.map((value) => value.id === id ? { ...value, layoutX: x, layoutY: y } : value) }); setDirty((old) => new Set(old).add(id));
+    const { startX, startY, id, dx, dy } = drag.current;
+    const movedX = event.clientX - startX, movedY = event.clientY - startY;
+    // Only start dragging after threshold
+    if (!drag.current.moved && movedX * movedX + movedY * movedY < DRAG_THRESHOLD) return;
+    drag.current.moved = true;
+    const bounds = canvasRef.current.getBoundingClientRect();
+    const x = Math.max(0, Math.round((event.clientX - bounds.left + canvasRef.current.scrollLeft - dx - 42) / 8) * 8);
+    const y = Math.max(0, Math.round((event.clientY - bounds.top + canvasRef.current.scrollTop - dy - 100) / 8) * 8);
+    if (isNaN(x) || isNaN(y)) return;
+    replace({ ...screen, seats: screen.seats.map((value) => value.id === id ? { ...value, layoutX: x, layoutY: y } : value) });
+    setDrafts((old) => {
+      const next = new Map(old);
+      const screenDraft = new Map(next.get(screen.id) || []);
+      screenDraft.set(id, { layoutX: x, layoutY: y });
+      next.set(screen.id, screenDraft);
+      return next;
+    });
   };
+
+  const endDrag = () => { drag.current = null; };
+
   const width = Math.max(760, ...screen.seats.map((value) => value.layoutX + 100)), height = Math.max(460, ...screen.seats.map((value) => value.layoutY + 150));
+
   return <div className={s.page}>
     <Header title="Screens & Seats" subtitle="Configure the physical seating layout without changing durable seat or QR identity." action={<button className={s.button} disabled={!dirty.size || saving} onClick={() => void savePositions()}>{saving ? "Saving…" : `Save Changes${dirty.size ? ` (${dirty.size})` : ""}`}</button>} />
     {error && <div className={s.notice}>{error}</div>}
     <div className={s.editorToolbar}>
-      <label className={s.screenPicker}><span>Screen</span><select className={s.select} value={screen.id} onChange={(event) => { setSelectedScreen(event.target.value); setSelectedSeat(""); setDirty(new Set()); }}>{screens.map((value) => <option key={value.id} value={value.id}>{value.name} · {activeSeats(value).length} seats</option>)}</select></label>
+      <label className={s.screenPicker}><span>Screen</span><select className={s.select} value={screen.id} onChange={(event) => { setSelectedScreen(event.target.value); setSelectedSeat(""); }}>{screens.map((value) => <option key={value.id} value={value.id}>{value.name} · {activeSeats(value).length} seats{(drafts.get(value.id)?.size || 0) > 0 ? " ●" : ""}</option>)}</select></label>
       <div className={s.editorActions}><button className={s.buttonSecondary} onClick={() => setAddingRow(true)}>+ Add Row</button><button className={s.buttonSecondary} onClick={() => setAddingSeat(true)}>+ Add Seat</button><button className={s.buttonSecondary} onClick={() => setAddingScreen(true)}>+ Add Screen</button></div>
     </div>
     <div className={s.designer}>
       <div className={s.auditoriumViewport}>
-        <div ref={canvasRef} className={s.flexibleCanvas} style={{ width, height }} onPointerMove={move} onPointerUp={() => { drag.current = null; }} onPointerCancel={() => { drag.current = null; }}>
+        <div ref={canvasRef} className={s.flexibleCanvas} style={{ width, height }} onPointerMove={move} onPointerUp={endDrag} onPointerCancel={endDrag}>
           <div className={s.screenName}>{screen.name.toUpperCase()} · SCREEN</div><div className={s.screenArc} />
-          {screen.seats.slice().sort((a, b) => a.displayOrder - b.displayOrder).map((value) => <button key={value.id} aria-label={`Seat ${value.code}`} className={s.positionedSeat} data-selected={value.id === selectedSeat} data-status={value.status} style={{ left: value.layoutX + 42, top: value.layoutY + 100 }} onPointerDown={(event) => { const bounds = event.currentTarget.getBoundingClientRect(); event.currentTarget.setPointerCapture(event.pointerId); drag.current = { id: value.id, dx: event.clientX - bounds.left, dy: event.clientY - bounds.top }; setSelectedSeat(value.id); }}><span>{value.code}</span>{value.status === "accessible" && <i aria-hidden>♿</i>}</button>)}
+          {screen.seats.slice().sort((a, b) => a.displayOrder - b.displayOrder).map((value) => <button key={value.id} aria-label={`Seat ${value.code}`} className={s.positionedSeat} data-selected={value.id === selectedSeat} data-status={value.status} style={{ left: value.layoutX + 42, top: value.layoutY + 100 }} onPointerDown={(event) => { const bounds = event.currentTarget.getBoundingClientRect(); event.currentTarget.setPointerCapture(event.pointerId); drag.current = { id: value.id, dx: event.clientX - bounds.left, dy: event.clientY - bounds.top, startX: event.clientX, startY: event.clientY, moved: false }; setSelectedSeat(value.id); }}><span>{value.code}</span>{value.status === "accessible" && <i aria-hidden>♿</i>}</button>)}
         </div>
       </div>
       <aside className={`${s.card} ${s.inspector}`}>{seat ? <><div className={s.inspectorHero}><strong>Edit seat {seat.code}</strong><span>Drag the seat to change its position</span></div>
@@ -293,9 +387,9 @@ function Screens({ screens, setScreens }: { screens: CinemaScreen[]; setScreens:
         <div className={s.seatStatusList}><div className={s.seatStatusRow}><span><strong>Availability</strong><small>{seat.isActive ? "Available" : "Disabled"}</small></span><button className={seat.isActive ? s.buttonDanger : s.buttonSecondary} onClick={() => void patchSeat(seat, { is_active: !seat.isActive })}>{seat.isActive ? "Disable" : "Make available"}</button></div><div className={s.seatStatusRow}><span><strong>Accessibility</strong><small>{seat.isAccessible ? "Accessible seat" : "Standard seat"}</small></span><button className={s.buttonSecondary} onClick={() => void patchSeat(seat, { is_accessible: !seat.isAccessible })}>{seat.isAccessible ? "Remove" : "Mark accessible"}</button></div></div>
       </> : <p>Select and drag a seat to position it, or select it to edit details.</p>}</aside>
     </div>
-    <div className={s.screenSettings}><label className={s.field}>Screen name<input className={s.input} defaultValue={screen.name} onBlur={async (event) => replace(await updateScreen(screen.id, { name: event.target.value }))} /></label><button className={s.secondaryDanger} onClick={async () => { await removeScreen(screen.id); setScreens(await loadScreens()); }}>Deactivate or delete screen</button></div>
+    <div className={s.screenSettings}><label className={s.field}>Screen name<input key={`screen-name-${screen.id}`} className={s.input} defaultValue={screen.name} onBlur={async (event) => { try { replace(await updateScreen(screen.id, { name: event.target.value })); } catch (reason) { setError(reason instanceof Error ? reason.message : "Unable to rename screen"); } }} /></label><button className={s.secondaryDanger} onClick={async () => { if (!window.confirm(`Deactivate or delete "${screen.name}"? This cannot be easily undone if the screen has historical orders.`)) return; try { await removeScreen(screen.id); const fresh = await loadScreens(); setScreens(fresh); setDrafts((old) => { const next = new Map(old); next.delete(screen.id); return next; }); if (fresh.length) setSelectedScreen(fresh[0].id); } catch (reason) { setError(reason instanceof Error ? reason.message : "Unable to remove screen"); } }}>Deactivate or delete screen</button></div>
     {addingScreen && <AddScreen onClose={() => setAddingScreen(false)} onAdd={(value) => { setScreens((old) => [...old, value]); setSelectedScreen(value.id); setAddingScreen(false); }} />}
-    {addingRow && <SeatBuilderModal title="Add Row" fields={["Row label", "Number of seats", "Starting number"]} defaults={["G", "12", "1"]} onClose={() => setAddingRow(false)} onSubmit={async ([row_label, number_of_seats, starting_number]) => { replace(await addSeatRow(screen.id, { row_label, number_of_seats: +number_of_seats, starting_number: +starting_number })); setAddingRow(false); }} />}
+    {addingRow && <SeatBuilderModal title="Add Row" fields={["Row label", "Number of seats", "Starting number"]} defaults={["G", "12", "1"]} onClose={() => setAddingRow(false)} onSubmit={async ([row_label, number_of_seats, starting_number]) => { const updated = await addSeatRow(screen.id, { row_label, number_of_seats: +number_of_seats, starting_number: +starting_number }); const screenDraft = drafts.get(screen.id); const merged = screenDraft ? { ...updated, seats: updated.seats.map((st) => { const d = screenDraft.get(st.id); return d ? { ...st, layoutX: d.layoutX, layoutY: d.layoutY } : st; }) } : updated; replace(merged); setAddingRow(false); }} />}
     {addingSeat && <SeatBuilderModal title="Add Seat" fields={["Row", "Seat code", "Seat number"]} defaults={["G", "G14", "14"]} accessible onClose={() => setAddingSeat(false)} onSubmit={async ([row_label, public_code, seat_number], isAccessible) => { const saved = await addSeat(screen.id, { row_label, public_code, seat_number: +seat_number, is_accessible: isAccessible }); replace({ ...screen, seats: [...screen.seats, saved] }); setSelectedSeat(saved.id); setAddingSeat(false); }} />}
   </div>;
 }
@@ -384,19 +478,21 @@ function Orders({
                 <small>Seat {order.seatCode}</small>
               </div>
               <div className={s.orderMeta}>
-                {order.items.map((item) => (
-                  <span key={item.name}>
+                {order.items.map((item, idx) => (
+                  <span key={idx}>
                     {item.quantity}× {item.name}
                     {item.options?.map(
                       (option) => ` · ${option.quantity}× ${option.name}`,
                     )}
                   </span>
                 ))}
+                {order.customerNote && <em>Note: {order.customerNote}</em>}
               </div>
               <div className={s.money}>{money(total(order))}</div>
               <span className={s.pill} data-status={order.status}>
                 {labels[order.status]}
               </span>
+              <small>{elapsed(order.createdAt)} min ago</small>
               <TransitionButton order={order} onSaved={save} />
             </div>
           ))
@@ -448,11 +544,11 @@ function Kds({
                     </strong>
                   </div>
                   <div className={s.ticketItems}>
-                    {order.items.map((item) => (
-                      <div key={item.name}>
+                    {order.items.map((item, idx) => (
+                      <div key={idx}>
                         {item.quantity} × {item.name}
-                        {item.options?.map((option) => (
-                          <small key={option.name}>
+                        {item.options?.map((option, oidx) => (
+                          <small key={oidx}>
                             {" "}
                             · {option.quantity}× {option.name}
                           </small>
@@ -460,14 +556,19 @@ function Kds({
                       </div>
                     ))}
                   </div>
-                  {order.items.some((x) => x.note) && (
+                  {order.customerNote && (
+                    <div className={s.ticketNote}>
+                      Note: {order.customerNote}
+                    </div>
+                  )}
+                  {order.items.some((x) => x.note) && !order.customerNote && (
                     <div className={s.ticketNote}>
                       Note: {order.items.find((x) => x.note)?.note}
                     </div>
                   )}
                   <div className={s.ticketTop}>
                     <b>Order #{order.id}</b>
-                    <span>Placed {order.placedMinutesAgo} min ago</span>
+                    <span>Placed {elapsed(order.createdAt)} min ago</span>
                   </div>
                   <TransitionButton order={order} onSaved={save} />
                 </div>
@@ -605,19 +706,140 @@ function Reports({ data }: { data: CinemaDashboard }) {
     </div>
   );
 }
+
+/* ─────────────────── Concession Menu (full CRUD) ─────────────────── */
+
+function MenuItemModal({ categories, initial, onClose, onSaved }: { categories: CinemaMenuCategory[]; initial?: CinemaMenuItem; onClose: () => void; onSaved: () => void }) {
+  const [name, setName] = useState(initial?.name || "");
+  const [description, setDescription] = useState(initial?.description || "");
+  const [price, setPrice] = useState(initial ? String(initial.price) : "");
+  const [categoryId, setCategoryId] = useState(initial ? String(categories.find((c) => c.items.some((i) => i.id === initial.id))?.id || categories[0]?.id || "") : String(categories[0]?.id || ""));
+  const [available, setAvailable] = useState(initial?.available ?? true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const isEdit = !!initial;
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true); setError("");
+    try {
+      if (isEdit) {
+        await updateMenuItem(initial.id, { name, description, price, category_id: Number(categoryId), is_available: available });
+      } else {
+        await createMenuItem({ category_id: Number(categoryId), name, description, price, is_available: available });
+      }
+      onSaved();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to save item");
+    } finally { setBusy(false); }
+  };
+  return <div className={s.modalBackdrop}><form className={s.modal} onSubmit={submit}><div className={s.modalHead}><h2>{isEdit ? "Edit item" : "Add item"}</h2><button type="button" className={s.iconButton} onClick={onClose}>×</button></div>
+    <div className={s.formGrid}>
+      <label className={s.field}>Name<input className={s.input} value={name} onChange={(e) => setName(e.target.value)} required /></label>
+      <label className={s.field}>Price<input className={s.input} type="number" step="0.01" min="0" value={price} onChange={(e) => setPrice(e.target.value)} required /></label>
+      <label className={s.field}>Category<select className={s.select} value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>{categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
+      <label className={s.field}>Description<input className={s.input} value={description} onChange={(e) => setDescription(e.target.value)} /></label>
+      <label className={s.checkField}><input type="checkbox" checked={available} onChange={(e) => setAvailable(e.target.checked)} /> Available</label>
+    </div>
+    {error && <div className={s.notice}>{error}</div>}
+    <div className={s.modalActions}><button type="button" className={s.buttonSecondary} onClick={onClose}>Cancel</button><button className={s.button} disabled={busy}>{busy ? "Saving…" : isEdit ? "Save item" : "Create item"}</button></div>
+  </form></div>;
+}
+
+function CategoryModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  return <div className={s.modalBackdrop}><form className={s.modal} onSubmit={async (e) => { e.preventDefault(); setBusy(true); setError(""); try { await createCategory({ name }); onSaved(); } catch (reason) { setError(reason instanceof Error ? reason.message : "Unable to create category"); } finally { setBusy(false); } }}><div className={s.modalHead}><h2>Add category</h2><button type="button" className={s.iconButton} onClick={onClose}>×</button></div>
+    <div className={s.formGrid}><label className={s.field}>Name<input className={s.input} value={name} onChange={(e) => setName(e.target.value)} required /></label></div>
+    {error && <div className={s.notice}>{error}</div>}
+    <div className={s.modalActions}><button type="button" className={s.buttonSecondary} onClick={onClose}>Cancel</button><button className={s.button} disabled={busy}>{busy ? "Creating…" : "Create category"}</button></div>
+  </form></div>;
+}
+
 function Menu({
   categories,
-  setCategories,
+  onRefresh,
 }: {
   categories: CinemaMenuCategory[];
-  setCategories: React.Dispatch<React.SetStateAction<CinemaMenuCategory[]>>;
+  onRefresh: () => void;
 }) {
+  const [addingItem, setAddingItem] = useState(false);
+  const [editingItem, setEditingItem] = useState<CinemaMenuItem | null>(null);
+  const [addingCategory, setAddingCategory] = useState(false);
+  const [error, setError] = useState("");
+  const [togglingId, setTogglingId] = useState("");
+
+  const toggleAvailability = async (item: CinemaMenuItem) => {
+    setTogglingId(item.id);
+    setError("");
+    try {
+      await setMenuAvailability(item, !item.available);
+      onRefresh();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to change availability");
+    } finally {
+      setTogglingId("");
+    }
+  };
+
+  const handleDelete = async (item: CinemaMenuItem) => {
+    if (!window.confirm(`Deactivate "${item.name}"? It will be marked unavailable.`)) return;
+    setError("");
+    try {
+      await deleteMenuItem(item.id);
+      onRefresh();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to deactivate item");
+    }
+  };
+
   return (
     <div className={s.page}>
       <Header
         title="Concession Menu"
-        subtitle="This is the tenant's canonical menu catalog; availability changes are persisted and immediately affect customers."
+        subtitle="Manage concession items. Changes are persisted and immediately affect customers."
+        action={<div className={s.editorActions}><button className={s.buttonSecondary} onClick={() => setAddingCategory(true)}>+ Category</button><button className={s.button} onClick={() => setAddingItem(true)}>+ Add item</button></div>}
       />
+      {error && <div className={s.notice}>{error}</div>}
+      {categories.length > 0 && (
+        <div className={s.toolbar} style={{ flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+          {categories.map((c) => (
+            <span
+              key={c.id}
+              className={s.screenTab}
+              style={{ cursor: "default", display: "inline-flex", alignItems: "center", gap: 6 }}
+            >
+              {c.name} ({c.items.length})
+              {c.items.length === 0 && (
+                <button
+                  type="button"
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: "var(--omlu-destructive-text, #e53e3e)",
+                    cursor: "pointer",
+                    fontWeight: "bold",
+                    padding: "0 2px",
+                  }}
+                  title={`Delete empty category "${c.name}"`}
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    if (!window.confirm(`Delete empty category "${c.name}"?`)) return;
+                    try {
+                      await deleteCategory(c.id);
+                      onRefresh();
+                    } catch (err) {
+                      setError(err instanceof Error ? err.message : "Unable to delete category");
+                    }
+                  }}
+                >
+                  ×
+                </button>
+              )}
+            </span>
+          ))}
+        </div>
+      )}
       <div className={s.menuGrid}>
         {categories
           .flatMap((category) => category.items)
@@ -632,34 +854,34 @@ function Menu({
               </p>
               <div className={s.menuPrice}>
                 <span>{money(item.price)}</span>
-                <button
-                  aria-label={`Toggle ${item.name}`}
-                  className={s.toggle}
-                  data-on={item.available}
-                  onClick={async () => {
-                    await setMenuAvailability(item, !item.available);
-                    setCategories((old) =>
-                      old.map((category) => ({
-                        ...category,
-                        items: category.items.map((value) =>
-                          value.id === item.id
-                            ? { ...value, available: !value.available }
-                            : value,
-                        ),
-                      })),
-                    );
-                  }}
-                />
+                <div className={s.editorActions}>
+                  <button className={s.buttonSecondary} onClick={() => setEditingItem(item)}>Edit</button>
+                  <button
+                    aria-label={`Toggle ${item.name}`}
+                    className={s.toggle}
+                    data-on={item.available}
+                    disabled={togglingId === item.id}
+                    onClick={() => void toggleAvailability(item)}
+                  />
+                  <button className={s.secondaryDanger} onClick={() => void handleDelete(item)}>×</button>
+                </div>
               </div>
             </div>
           ))}
       </div>
       {!categories.length && (
         <div className={s.card}>
-          No menu categories are configured. Use the canonical menu-management
-          workflow to create the catalog.
+          No menu categories yet. Create a category first, then add concession items.
         </div>
       )}
+      {categories.length > 0 && !categories.flatMap((c) => c.items).length && (
+        <div className={s.card}>
+          No concession items yet. Click &ldquo;+ Add item&rdquo; to create your first concession.
+        </div>
+      )}
+      {addingItem && categories.length > 0 && <MenuItemModal categories={categories} onClose={() => setAddingItem(false)} onSaved={() => { setAddingItem(false); onRefresh(); }} />}
+      {editingItem && <MenuItemModal categories={categories} initial={editingItem} onClose={() => setEditingItem(null)} onSaved={() => { setEditingItem(null); onRefresh(); }} />}
+      {addingCategory && <CategoryModal onClose={() => setAddingCategory(false)} onSaved={() => { setAddingCategory(false); onRefresh(); }} />}
     </div>
   );
 }
@@ -718,7 +940,14 @@ export default function CinemaAdminClient({ children, staffName }: { children: R
     [menu, setMenu] = useState<CinemaMenuCategory[]>([]),
     [loading, setLoading] = useState(true),
     [error, setError] = useState("");
-  const refresh = useCallback(async () => {
+
+  // Per-screen drafts: Map<screenId, Map<seatId, {layoutX, layoutY}>>
+  const [drafts, setDrafts] = useState<ScreenDrafts>(new Map());
+
+  // When server screens update, merge with drafts
+  const [serverScreens, setServerScreens] = useState<CinemaScreen[]>([]);
+  // Override: replace the simple refresh with draft-aware version
+  const refreshWithDraftMerge = useCallback(async () => {
     try {
       const [nextScreens, nextOrders, nextDashboard, nextMenu] =
         await Promise.all([
@@ -727,7 +956,7 @@ export default function CinemaAdminClient({ children, staffName }: { children: R
           loadDashboard(),
           loadMenu(),
         ]);
-      setScreens(nextScreens);
+      setServerScreens(nextScreens);
       setOrders(nextOrders);
       setDashboard(nextDashboard);
       setMenu(nextMenu);
@@ -740,18 +969,39 @@ export default function CinemaAdminClient({ children, staffName }: { children: R
       setLoading(false);
     }
   }, []);
+
+  // Whenever serverScreens or drafts change, compute merged screens
   useEffect(() => {
-    void refresh();
+    if (serverScreens.length) {
+      setScreens(mergeScreensWithDrafts(serverScreens, drafts));
+    }
+  }, [serverScreens, drafts]);
+
+  useEffect(() => {
+    void refreshWithDraftMerge();
     const timer = window.setInterval(() => {
-      if (document.visibilityState === "visible") void refresh();
+      if (document.visibilityState === "visible") void refreshWithDraftMerge();
     }, 15000);
     return () => window.clearInterval(timer);
-  }, [refresh]);
+  }, [refreshWithDraftMerge]);
   const realtimeStatus = useRealtime({
     target: { kind: "staff", channel: "cinema" },
-    onEvent: () => void refresh(),
-    onReconnect: () => void refresh(),
+    onEvent: () => void refreshWithDraftMerge(),
+    onReconnect: () => void refreshWithDraftMerge(),
   });
+
+  // When screens are locally mutated (e.g., seat edits), also update serverScreens baseline
+  const setScreensWithBaseline = useCallback((updater: React.SetStateAction<CinemaScreen[]>) => {
+    setScreens(updater);
+    setServerScreens(updater);
+  }, []);
+
+  const refreshMenu = useCallback(async () => {
+    try {
+      setMenu(await loadMenu());
+    } catch { /* error already visible on next full refresh */ }
+  }, []);
+
   let content: React.ReactNode;
   if (loading) {
     content = (
@@ -762,11 +1012,11 @@ export default function CinemaAdminClient({ children, staffName }: { children: R
     );
   } else if (error || !dashboard) {
     content = (
-      <div className="flex flex-1 items-center justify-center py-20"><div className="max-w-md rounded-2xl border border-[var(--omlu-destructive-border)] bg-[var(--omlu-destructive-background)] p-8 text-center"><h1 className="text-lg font-black">Cinema data unavailable</h1><p className="mt-2 text-sm text-[var(--omlu-destructive-text)]">{error}</p><button className="mt-6 rounded-xl bg-orange-600 px-6 py-2.5 text-sm font-bold text-white" onClick={() => void refresh()}>Retry</button></div></div>
+      <div className="flex flex-1 items-center justify-center py-20"><div className="max-w-md rounded-2xl border border-[var(--omlu-destructive-border)] bg-[var(--omlu-destructive-background)] p-8 text-center"><h1 className="text-lg font-black">Cinema data unavailable</h1><p className="mt-2 text-sm text-[var(--omlu-destructive-text)]">{error}</p><button className="mt-6 rounded-xl bg-orange-600 px-6 py-2.5 text-sm font-bold text-white" onClick={() => void refreshWithDraftMerge()}>Retry</button></div></div>
     );
   } else switch (valid) {
     case "screens":
-      content = <Screens screens={screens} setScreens={setScreens} />;
+      content = <Screens screens={screens} setScreens={setScreensWithBaseline} drafts={drafts} setDrafts={setDrafts} />;
       break;
     case "qr-codes":
       content = <QrCodes slug={dashboard.cinemaSlug} screens={screens} />;
@@ -780,7 +1030,7 @@ export default function CinemaAdminClient({ children, staffName }: { children: R
       content = <Kds orders={orders} setOrders={setOrders} screens={screens} />;
       break;
     case "menu":
-      content = <Menu categories={menu} setCategories={setMenu} />;
+      content = <Menu categories={menu} onRefresh={refreshMenu} />;
       break;
     case "reports":
       content = <Reports data={dashboard} />;
