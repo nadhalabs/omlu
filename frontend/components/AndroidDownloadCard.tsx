@@ -85,75 +85,25 @@ export function AndroidDownloadCard({ variant = "landing", dismissible = false, 
   }
 
   return (
-    <section className={`overflow-hidden rounded-2xl border border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] text-[var(--omlu-text-primary)] p-6 sm:p-10 ${className}`} aria-labelledby="android-download-title">
-      <div className="grid items-center gap-8 lg:grid-cols-[1.35fr_0.65fr]">
+    <section className={`overflow-hidden rounded-3xl border border-[var(--omlu-border)] bg-[var(--omlu-elevated-surface)] text-[var(--omlu-text-primary)] shadow-2xl ${className}`} aria-labelledby="android-download-title">
+      <div className="grid items-center gap-8 p-6 sm:p-9 lg:grid-cols-[1.35fr_0.65fr] lg:p-12">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-orange-600">Available on Android</p>
-          <h2 id="android-download-title" className="mt-2 text-2xl font-black tracking-tight text-[var(--omlu-text-primary)] sm:text-3xl">OMLU for Android</h2>
-          <p className="mt-3 text-base font-bold text-[var(--omlu-text-primary)]">Run your restaurant from anywhere.</p>
-          <p className="mt-2 text-sm leading-6 text-[var(--omlu-text-secondary)] max-w-xl">Manage tables, orders, kitchen activity, staff, billing, and restaurant status from the OMLU Android app.</p>
-          
-          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
-            <DownloadLink />
-          </div>
-          
-          <p className="mt-3 text-xs font-semibold text-[var(--omlu-text-secondary)]">Direct APK download • Android only • Android 7.0 or later</p>
-          <p className="mt-1 text-xs leading-5 text-[var(--omlu-text-secondary)] opacity-80">Your browser may ask permission to install apps from this source.</p>
-
+          <p className="text-xs font-black uppercase tracking-[0.2em] text-orange-400">Available on Android</p>
+          <h2 id="android-download-title" className="mt-3 text-3xl font-black tracking-tight sm:text-4xl">OMLU for Android</h2>
+          <p className="mt-4 max-w-2xl text-lg font-bold text-[var(--omlu-text-primary)]">Run your restaurant from anywhere.</p>
+          <p className="mt-2 max-w-2xl text-sm leading-7 text-[var(--omlu-text-secondary)]">Manage tables, orders, kitchen activity, staff, billing, and restaurant status from the OMLU Android app.</p>
+          <div className="mt-6"><DownloadLink /></div>
+          <p className="mt-3 text-xs font-semibold text-[var(--omlu-text-muted)]">Direct APK download • Android only • Android 7.0 or later</p>
+          <p className="mt-2 text-xs leading-5 text-[var(--omlu-text-secondary)]">Your browser may ask permission to install apps from this source.</p>
           <div className="mt-5 max-w-xl text-sm text-[var(--omlu-text-secondary)]">
-            <button
-              type="button"
-              aria-expanded={helpOpen}
-              aria-controls="omlu-apk-install-help"
-              onClick={() => setHelpOpen((open) => !open)}
-              className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold text-orange-600 transition hover:bg-orange-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500"
-            >
-              <span>How to install the APK</span>
-              <span className={`inline-block text-sm font-black transition-transform duration-200 ${helpOpen ? "rotate-45" : ""}`} aria-hidden="true">+</span>
-            </button>
-            <div
-              id="omlu-apk-install-help"
-              className={`grid transition-all duration-300 ease-in-out ${helpOpen ? "grid-rows-[1fr] opacity-100 mt-3" : "grid-rows-[0fr] opacity-0 overflow-hidden"}`}
-            >
-              <div className="overflow-hidden">
-                <ol className="list-decimal space-y-1.5 pl-5 text-xs leading-6 text-[var(--omlu-text-secondary)]">
-                  <li>Download the OMLU APK.</li>
-                  <li>Open the downloaded file on your Android device.</li>
-                  <li>Allow installation from this source if Android prompts for permission.</li>
-                  <li>Tap Install.</li>
-                  <li>Open OMLU and sign in to access your restaurant workspace.</li>
-                </ol>
-              </div>
-            </div>
+            <button type="button" aria-expanded={helpOpen} aria-controls="omlu-apk-install-help" onClick={() => setHelpOpen((open) => !open)} className="rounded-md font-bold text-orange-500 outline-none focus-visible:ring-2 focus-visible:ring-orange-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--omlu-page-background)]">How to install the APK <span aria-hidden="true">{helpOpen ? "−" : "+"}</span></button>
+            {helpOpen && <ol id="omlu-apk-install-help" className="mt-3 list-decimal space-y-1.5 pl-5 leading-6 text-[var(--omlu-text-secondary)]"><li>Download the OMLU APK.</li><li>Open the downloaded file.</li><li>Allow installation from the browser if Android asks.</li><li>Tap Install.</li><li>Open OMLU and sign in.</li></ol>}
           </div>
         </div>
-
-        {/* Clean, Factual Android Platform Summary Card */}
         <div className="hidden justify-center lg:flex" aria-hidden="true">
-          <div className="flex flex-col gap-4 rounded-xl border border-[var(--omlu-border)] bg-[var(--omlu-muted-surface)] p-6 text-left shadow-xs">
-            <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-600 text-white">
-                <AndroidIcon className="h-6 w-6" />
-              </span>
-              <div>
-                <h3 className="text-sm font-black text-[var(--omlu-text-primary)]">OMLU Operations</h3>
-                <p className="text-xs font-semibold text-[var(--omlu-text-secondary)]">Native Android Build</p>
-              </div>
-            </div>
-            <div className="space-y-2 border-t border-[var(--omlu-border)] pt-4 text-xs font-semibold text-[var(--omlu-text-secondary)]">
-              <div className="flex items-center gap-2">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                <span>Full Kitchen KDS & Table Management</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                <span>Quick Sale POS & Counter Billing</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                <span>Role-Based Staff Access Controls</span>
-              </div>
-            </div>
+          <div className="relative h-64 w-40 rotate-2 rounded-[2.25rem] border-[6px] border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-3 shadow-2xl motion-safe:transition-transform motion-safe:hover:-translate-y-1">
+            <div className="mx-auto h-1.5 w-12 rounded-full bg-[var(--omlu-border-strong)]" />
+            <div className="mt-12 flex flex-col items-center text-center"><span className="rounded-2xl bg-orange-600 p-4 text-[var(--omlu-primary-action-text)]"><AndroidIcon className="h-9 w-9" /></span><span className="mt-4 text-xl font-black">OMLU</span><span className="mt-1 text-[10px] font-bold uppercase tracking-widest text-[var(--omlu-text-muted)]">Restaurant operations</span></div>
           </div>
         </div>
       </div>
