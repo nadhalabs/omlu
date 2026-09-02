@@ -80,7 +80,8 @@ def _staff_payload(staff: StaffUser, restaurant: Restaurant) -> dict:
         "status": staff.status,
         "must_change_password": staff.must_change_password,
         "restaurant_name": restaurant.name,
-        "restaurant_slug": restaurant.slug
+        "restaurant_slug": restaurant.slug,
+        "venue_type": restaurant.venue_type,
     }
 
 

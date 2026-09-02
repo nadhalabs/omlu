@@ -14,7 +14,7 @@ from app.config import settings
 from app.models.staff_user import AuditLog, StaffUser
 from app.models.menu import MenuCategory, MenuItem, MenuItemOptionGroup, MenuOptionGroup
 from app.models.restaurant_table import RestaurantTable
-from app.utils.auth import get_current_staff_user, RoleChecker
+from app.utils.auth import get_current_restaurant_staff_user, get_current_staff_user, RoleChecker
 from app.services.realtime import EVENT_AVAILABILITY_UPDATED, publish_event, public_menu_channel, restaurant_channel
 from app.schemas.admin import (
     CategoryCreate,
@@ -621,7 +621,7 @@ def update_item_availability(
     dependencies=[admin_access_dependency]
 )
 def list_tables(
-    current_user: StaffUser = Depends(get_current_staff_user),
+    current_user: StaffUser = Depends(get_current_restaurant_staff_user),
     db: Session = Depends(get_db)
 ):
     tables = db.query(RestaurantTable).filter(
@@ -654,7 +654,7 @@ def list_tables(
 )
 def create_table(
     table_req: TableCreate,
-    current_user: StaffUser = Depends(get_current_staff_user),
+    current_user: StaffUser = Depends(get_current_restaurant_staff_user),
     db: Session = Depends(get_db)
 ):
     table_num = table_req.table_number.strip()
@@ -727,7 +727,7 @@ def create_table(
 def update_table(
     table_id: int,
     table_req: TableUpdate,
-    current_user: StaffUser = Depends(get_current_staff_user),
+    current_user: StaffUser = Depends(get_current_restaurant_staff_user),
     db: Session = Depends(get_db)
 ):
     table = db.query(RestaurantTable).filter(
@@ -805,7 +805,7 @@ def update_table(
 )
 def regenerate_table_code(
     table_id: int,
-    current_user: StaffUser = Depends(get_current_staff_user),
+    current_user: StaffUser = Depends(get_current_restaurant_staff_user),
     db: Session = Depends(get_db)
 ):
     try:
@@ -874,7 +874,7 @@ def regenerate_table_code(
 )
 def get_table_qr(
     table_id: int,
-    current_user: StaffUser = Depends(get_current_staff_user),
+    current_user: StaffUser = Depends(get_current_restaurant_staff_user),
     db: Session = Depends(get_db)
 ):
     # Enforce restaurant isolation

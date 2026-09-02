@@ -308,6 +308,18 @@ def get_current_staff_user(
     return context.actor
 
 
+def get_current_restaurant_staff_user(
+    current_user: StaffUser = Depends(get_current_staff_user),
+) -> StaffUser:
+    """Reject cinema tenants from restaurant table and dining-session flows."""
+    if current_user.restaurant.venue_type != "restaurant":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This operation is only available to restaurant venues",
+        )
+    return current_user
+
+
 def get_current_staff_user_for_password_change(
     context: AuthenticatedContext = Depends(get_authenticated_context_for_password_change),
 ) -> StaffUser:

@@ -1,77 +1,1065 @@
 "use client";
+/* eslint-disable react-hooks/set-state-in-effect -- async server refreshes reconcile controlled UI state */
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
-import { activeSeats, initialScreens, initialSettings, menuItems, orderTotal, qrDestination, screenFor, statusLabels } from "@/lib/cinema/mockService";
-import type { CinemaOrder, CinemaOrderStatus, CinemaScreen, CinemaSeat } from "@/lib/cinema/types";
+import {
+  addScreen,
+  advanceOrder,
+  loadDashboard,
+  loadMenu,
+  loadOrders,
+  loadScreens,
+  qrDestination,
+  removeScreen,
+  saveLayout,
+  saveSeat,
+  setMenuAvailability,
+  updateScreen,
+} from "@/lib/cinema/api";
+import type {
+  CinemaDashboard,
+  CinemaMenuCategory,
+  CinemaOrder,
+  CinemaOrderStatus,
+  CinemaScreen,
+  CinemaSeat,
+} from "@/lib/cinema/types";
+import { useRealtime } from "@/lib/realtime";
 import s from "./cinema.module.css";
-import { addScreen, loadOrders, loadScreens, saveLayout, saveSeat } from "@/lib/cinema/api";
 
 const pages = [
-  ["dashboard", "Dashboard", "⌁"], ["orders", "Orders", "▤"], ["kds", "Concession KDS", "▦"], ["screens", "Screens & Seats", "◫"], ["qr-codes", "QR Codes", "▥"], ["menu", "Menu", "≡"], ["staff", "Staff", "♙"], ["reports", "Reports", "⌇"], ["printing", "Printing", "▣"], ["settings", "Settings", "⚙"],
+  ["dashboard", "Dashboard", "⌁"],
+  ["orders", "Orders", "▤"],
+  ["kds", "Concession KDS", "▦"],
+  ["screens", "Screens & Seats", "◫"],
+  ["qr-codes", "QR Codes", "▥"],
+  ["menu", "Menu", "≡"],
+  ["staff", "Staff", "♙"],
+  ["reports", "Reports", "⌇"],
+  ["printing", "Printing", "▣"],
+  ["settings", "Settings", "⚙"],
 ] as const;
-
+const labels: Record<CinemaOrderStatus, string> = {
+  pending: "New",
+  accepted: "Accepted",
+  preparing: "Preparing",
+  ready: "Ready",
+  out_for_delivery: "Out for delivery",
+  delivered: "Delivered",
+};
+const nextStatus: Partial<Record<CinemaOrderStatus, CinemaOrderStatus>> = {
+  pending: "accepted",
+  accepted: "preparing",
+  preparing: "ready",
+  ready: "out_for_delivery",
+  out_for_delivery: "delivered",
+};
+const nextLabel: Partial<Record<CinemaOrderStatus, string>> = {
+  pending: "Accept",
+  accepted: "Start preparing",
+  preparing: "Mark ready",
+  ready: "Send for delivery",
+  out_for_delivery: "Mark delivered",
+};
 const money = (value: number) => `₹${value.toLocaleString("en-IN")}`;
+const total = (order: CinemaOrder) =>
+  order.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+const screenFor = (screens: CinemaScreen[], id: string) =>
+  screens.find((value) => value.id === id);
+const activeSeats = (screen: CinemaScreen) =>
+  screen.seats.filter((seat) => seat.status !== "disabled");
 
+function Header({
+  title,
+  subtitle,
+  action,
+}: {
+  title: string;
+  subtitle: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <div className={s.pageHead}>
+      <div>
+        <h1>{title}</h1>
+        <p className={s.subtitle}>{subtitle}</p>
+      </div>
+      {action}
+    </div>
+  );
+}
+function Notice({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={s.page}>
+      <Header
+        title={title}
+        subtitle="This area is intentionally unavailable until a later Cinema phase."
+      />
+      <div className={s.card}>
+        <p>{children}</p>
+      </div>
+    </div>
+  );
+}
 function QrGraphic({ value }: { value: string }) {
-  return <div className={s.qr} aria-label={`QR for ${value}`}><QRCodeSVG value={value} size={190} level="M" marginSize={2} title={`Order from ${value}`}/></div>;
+  return (
+    <div className={s.qr} aria-label={`QR for ${value}`}>
+      <QRCodeSVG value={value} size={190} level="M" marginSize={2} />
+    </div>
+  );
+}
+function QrCard({
+  slug,
+  screen,
+  seat,
+}: {
+  slug: string;
+  screen: CinemaScreen;
+  seat: CinemaSeat;
+}) {
+  return (
+    <div className={s.qrCard}>
+      <div className={s.qrLogo}>OMLU</div>
+      <div className={s.qrTitle}>ORDER FROM YOUR SEAT</div>
+      <QrGraphic value={qrDestination(slug, screen, seat)} />
+      <div className={s.qrSeat}>{seat.code}</div>
+      <div className={s.qrScreen}>{screen.name}</div>
+      <div className={s.qrHelp}>Scan to order snacks &amp; drinks</div>
+    </div>
+  );
 }
 
-function QrCard({ screen, seat }: { screen: CinemaScreen; seat: CinemaSeat }) {
-  return <div className={s.qrCard}><div className={s.qrLogo}>OMLU</div><div className={s.qrTitle}>ORDER FROM YOUR SEAT</div><QrGraphic value={qrDestination(screen, seat)}/><div className={s.qrSeat}>{seat.code}</div><div className={s.qrScreen}>{screen.name}</div><div className={s.qrHelp}>Scan to order snacks &amp; drinks</div><div className={s.qrPowered}>Powered by OMLU</div></div>;
+function AddScreen({
+  onAdd,
+  onClose,
+}: {
+  onAdd: (screen: CinemaScreen) => void;
+  onClose: () => void;
+}) {
+  const [name, setName] = useState("Screen 1"),
+    [code, setCode] = useState("S1"),
+    [rows, setRows] = useState(10),
+    [seats, setSeats] = useState(14),
+    [busy, setBusy] = useState(false),
+    [error, setError] = useState("");
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      onAdd(
+        await addScreen({
+          name,
+          code,
+          rows,
+          seats_per_row: seats,
+          aisles_after: [4, 10],
+        }),
+      );
+    } catch (value) {
+      setError(
+        value instanceof Error ? value.message : "Unable to create screen",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className={s.modalBackdrop}>
+      <form className={s.modal} onSubmit={submit}>
+        <div className={s.modalHead}>
+          <h2>Add a screen</h2>
+          <button type="button" className={s.iconButton} onClick={onClose}>
+            ×
+          </button>
+        </div>
+        <div className={s.formGrid}>
+          <label className={s.field}>
+            Name
+            <input
+              className={s.input}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
+          </label>
+          <label className={s.field}>
+            Code
+            <input
+              className={s.input}
+              value={code}
+              onChange={(e) => setCode(e.target.value.toUpperCase())}
+              required
+            />
+          </label>
+          <label className={s.field}>
+            Rows
+            <input
+              className={s.input}
+              type="number"
+              min="1"
+              max="30"
+              value={rows}
+              onChange={(e) => setRows(+e.target.value)}
+            />
+          </label>
+          <label className={s.field}>
+            Seats per row
+            <input
+              className={s.input}
+              type="number"
+              min="1"
+              max="50"
+              value={seats}
+              onChange={(e) => setSeats(+e.target.value)}
+            />
+          </label>
+        </div>
+        {error && <div className={s.notice}>{error}</div>}
+        <div className={s.modalActions}>
+          <button type="button" className={s.buttonSecondary} onClick={onClose}>
+            Cancel
+          </button>
+          <button disabled={busy} className={s.button}>
+            {busy ? "Creating…" : "Create screen"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
 }
 
-function Header({ eyebrow, title, subtitle, action }: { eyebrow?: string; title: string; subtitle: string; action?: React.ReactNode }) {
-  return <div className={s.pageHead}><div>{eyebrow&&<p className={s.eyebrow}>{eyebrow}</p>}<h1>{title}</h1><p className={s.subtitle}>{subtitle}</p></div>{action}</div>;
+function Screens({
+  screens,
+  setScreens,
+}: {
+  screens: CinemaScreen[];
+  setScreens: React.Dispatch<React.SetStateAction<CinemaScreen[]>>;
+}) {
+  const [adding, setAdding] = useState(false),
+    [selectedScreen, setSelectedScreen] = useState(screens[0]?.id || ""),
+    [selectedSeat, setSelectedSeat] = useState(""),
+    [error, setError] = useState("");
+  if (!screens.length)
+    return (
+      <div className={s.page}>
+        <Header
+          title="No screens yet"
+          subtitle="Create the first auditorium to generate durable physical seat identities."
+          action={
+            <button className={s.button} onClick={() => setAdding(true)}>
+              + Create first screen
+            </button>
+          }
+        />
+        <div className={s.card}>
+          Screens and seats are saved in PostgreSQL. Nothing is generated until
+          you create a screen.
+        </div>
+        {adding && (
+          <AddScreen
+            onClose={() => setAdding(false)}
+            onAdd={(value) => {
+              setScreens([value]);
+              setSelectedScreen(value.id);
+              setAdding(false);
+            }}
+          />
+        )}
+      </div>
+    );
+  const screen = screenFor(screens, selectedScreen) || screens[0],
+    seat = screen.seats.find((x) => x.id === selectedSeat);
+  const replace = (value: CinemaScreen) =>
+    setScreens((old) => old.map((x) => (x.id === value.id ? value : x)));
+  const resize = async (rows: number, seatsPerRow: number) => {
+    try {
+      replace(
+        await saveLayout(screen.id, rows, seatsPerRow, screen.aislesAfter),
+      );
+      setSelectedSeat("");
+    } catch (value) {
+      setError(
+        value instanceof Error ? value.message : "Unable to resize layout",
+      );
+    }
+  };
+  const patchSeat = async (
+    value: CinemaSeat,
+    patch: {
+      public_code?: string;
+      is_active?: boolean;
+      is_accessible?: boolean;
+    },
+  ) => {
+    try {
+      const saved = await saveSeat(screen.id, value.id, patch);
+      replace({
+        ...screen,
+        seats: screen.seats.map((x) => (x.id === saved.id ? saved : x)),
+      });
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : "Unable to save seat",
+      );
+    }
+  };
+  return (
+    <div className={s.page}>
+      <Header
+        title="Screens & Seats"
+        subtitle="Every physical chair has one durable database identity and canonical QR destination."
+        action={
+          <button className={s.button} onClick={() => setAdding(true)}>
+            + Add screen
+          </button>
+        }
+      />
+      {error && <div className={s.notice}>{error}</div>}
+      <div className={s.toolbar}>
+        <div className={s.screenTabs}>
+          {screens.map((value) => (
+            <button
+              key={value.id}
+              data-active={value.id === screen.id}
+              className={s.screenTab}
+              onClick={() => {
+                setSelectedScreen(value.id);
+                setSelectedSeat("");
+              }}
+            >
+              {value.name}
+              <br />
+              <small>{activeSeats(value).length} active seats</small>
+            </button>
+          ))}
+        </div>
+        <label className={s.field}>
+          Rows
+          <input
+            aria-label="Rows"
+            className={s.input}
+            type="number"
+            min="1"
+            max="30"
+            value={screen.rows.length}
+            onChange={(e) => void resize(+e.target.value, screen.seatsPerRow)}
+          />
+        </label>
+        <label className={s.field}>
+          Seats / row
+          <input
+            aria-label="Seats per row"
+            className={s.input}
+            type="number"
+            min="1"
+            max="50"
+            value={screen.seatsPerRow}
+            onChange={(e) => void resize(screen.rows.length, +e.target.value)}
+          />
+        </label>
+      </div>
+      <div className={s.designer}>
+        <div className={s.auditoriumCard}>
+          <div className={s.screenName}>
+            {screen.name.toUpperCase()} · SCREEN
+          </div>
+          <div className={s.screenArc} />
+          <div className={s.seatMap}>
+            {screen.rows.map((row) => (
+              <div className={s.seatRow} key={row}>
+                <span className={s.rowLabel}>{row}</span>
+                {screen.seats
+                  .filter((x) => x.row === row)
+                  .map((value) => (
+                    <button
+                      aria-label={`Seat ${value.code}`}
+                      key={value.id}
+                      className={s.seat}
+                      data-selected={value.id === selectedSeat}
+                      data-status={value.status}
+                      onClick={() => setSelectedSeat(value.id)}
+                    >
+                      <span>{value.code}</span>
+                    </button>
+                  ))}
+              </div>
+            ))}
+          </div>
+        </div>
+        <aside className={`${s.card} ${s.inspector}`}>
+          {seat ? (
+            <>
+              <div className={s.inspectorHero}>
+                <strong>Seat {seat.code}</strong>
+                <span>{screen.name}</span>
+              </div>
+              <label className={s.field}>
+                Public seat code
+                <input
+                  className={s.input}
+                  defaultValue={seat.code}
+                  onBlur={(e) =>
+                    void patchSeat(seat, {
+                      public_code: e.target.value.toUpperCase(),
+                    })
+                  }
+                />
+              </label>
+              <div className={s.inspectorActions}>
+                <button
+                  className={s.buttonSecondary}
+                  onClick={() =>
+                    void patchSeat(seat, {
+                      is_accessible: seat.status !== "accessible",
+                    })
+                  }
+                >
+                  {seat.status === "accessible"
+                    ? "Remove accessibility"
+                    : "Mark accessible"}
+                </button>
+                <button
+                  className={s.buttonDanger}
+                  onClick={() =>
+                    void patchSeat(seat, {
+                      is_active: seat.status === "disabled",
+                    })
+                  }
+                >
+                  {seat.status === "disabled" ? "Enable seat" : "Disable seat"}
+                </button>
+              </div>
+            </>
+          ) : (
+            <p>
+              Select a seat to edit its code, accessibility, or availability.
+            </p>
+          )}
+        </aside>
+      </div>
+      <div className={s.rowActions}>
+        <label className={s.field}>
+          Screen name
+          <input
+            className={s.input}
+            defaultValue={screen.name}
+            onBlur={async (event) =>
+              replace(
+                await updateScreen(screen.id, { name: event.target.value }),
+              )
+            }
+          />
+        </label>
+        <button
+          className={s.buttonDanger}
+          onClick={async () => {
+            await removeScreen(screen.id);
+            setScreens(await loadScreens());
+          }}
+        >
+          Deactivate or delete screen
+        </button>
+      </div>
+      {adding && (
+        <AddScreen
+          onClose={() => setAdding(false)}
+          onAdd={(value) => {
+            setScreens((old) => [...old, value]);
+            setSelectedScreen(value.id);
+            setAdding(false);
+          }}
+        />
+      )}
+    </div>
+  );
 }
 
-function Dashboard({ orders, screens }: { orders: CinemaOrder[]; screens: CinemaScreen[] }) {
-  const live = orders.filter(o=>o.status!=="delivered");
-  const statusCount=(status:CinemaOrderStatus)=>orders.filter(o=>o.status===status).length;
-  return <div className={s.page}><Header eyebrow="Tuesday, 2 September" title="Good evening, Nadha Cinemas" subtitle="Here’s the live picture across concessions and seat delivery." action={<button className={s.buttonSecondary}>Download day report</button>}/>
-    <div className={s.metricGrid}>{[["Today’s F&B Revenue","₹27,580","↑ 12.4% from last Tuesday"],["Orders Today","84","↑ 8 orders"],["Average Order Value","₹328","↑ ₹18 today"],["Active Screens",String(screens.length),"All accepting orders"]].map(m=><div className={s.metric} key={m[0]}><div className={s.metricLabel}>{m[0]}</div><div className={s.metricValue}>{m[1]}</div><div className={s.metricHint}>{m[2]}</div></div>)}</div>
-    <div className={s.card} style={{marginBottom:16}}><div className={s.cardHead}><h2>Current fulfilment</h2><span className={s.pill}>Live</span></div><div className={s.statusStrip}>{(["new","accepted","preparing","ready","out-for-delivery"] as CinemaOrderStatus[]).map(st=><div className={s.statusStat} key={st}><strong>{statusCount(st)}</strong><span>{statusLabels[st]}</span></div>)}</div></div>
-    <div className={s.grid2}><div className={s.card}><div className={s.cardHead}><h2>Live order activity</h2><Link href="/cinema-admin/orders">View all orders</Link></div><div className={s.activity}>{live.map(o=><div className={s.activityRow} key={o.id}><div className={s.orderId}>#{o.id}</div><div className={s.location}>{screenFor(screens,o.screenId).name}<small>Seat {o.seatCode} · {o.placedMinutesAgo} min</small></div><span className={s.pill} data-status={o.status}>{statusLabels[o.status]}</span><div className={s.money}>{money(orderTotal(o))}</div></div>)}</div></div>
-      <div className={s.card}><div className={s.cardHead}><h2>Revenue by screen</h2><span className={s.orderMeta}>Today</span></div><div className={s.bars}>{[["Screen 1",8450,66],["Screen 2",12810,100],["Screen 3",6320,49]].map(x=><div key={x[0] as string}><div className={s.barLabel}><span>{x[0]}</span><span>{money(x[1] as number)}</span></div><div className={s.bar}><i style={{width:`${x[2]}%`}}/></div></div>)}</div></div></div>
-    <div className={s.grid2}><div className={s.card}><div className={s.cardHead}><h2>Top selling concessions</h2><span className={s.orderMeta}>84 orders</span></div><div className={s.topList}>{["Large Popcorn","Pepsi","Loaded Nachos","Popcorn + Pepsi Combo","Mineral Water"].map((name,i)=><div className={s.topItem} key={name}><span className={s.rank}>{i+1}</span><span>{name}</span><strong>{[46,41,29,24,22][i]}</strong></div>)}</div></div><div className={s.card}><div className={s.cardHead}><h2>Service pulse</h2></div><div className={s.metricValue}>6m 17s</div><div className={s.metricLabel}>Average order-to-seat time</div><div className={s.notice} style={{marginTop:18}}>Screen 2 is busiest right now. Two runners are active and all ready orders are assigned.</div></div></div>
-  </div>;
+function TransitionButton({
+  order,
+  onSaved,
+}: {
+  order: CinemaOrder;
+  onSaved: (order: CinemaOrder) => void;
+}) {
+  const [busy, setBusy] = useState(false),
+    [error, setError] = useState("");
+  const next = nextStatus[order.status];
+  if (!next) return null;
+  return (
+    <>
+      <button
+        disabled={busy}
+        className={s.button}
+        onClick={async () => {
+          setBusy(true);
+          setError("");
+          try {
+            onSaved(await advanceOrder(order, next));
+          } catch (value) {
+            setError(
+              value instanceof Error ? value.message : "Transition failed",
+            );
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        {busy ? "Saving…" : nextLabel[order.status]}
+      </button>
+      {error && <small>{error}</small>}
+    </>
+  );
+}
+function Orders({
+  orders,
+  setOrders,
+  screens,
+}: {
+  orders: CinemaOrder[];
+  setOrders: React.Dispatch<React.SetStateAction<CinemaOrder[]>>;
+  screens: CinemaScreen[];
+}) {
+  const [filter, setFilter] = useState<"all" | CinemaOrderStatus>("all");
+  const visible = orders.filter((x) => filter === "all" || x.status === filter),
+    save = (value: CinemaOrder) =>
+      setOrders((old) =>
+        old.map((x) => (x.backendId === value.backendId ? value : x)),
+      );
+  return (
+    <div className={s.page}>
+      <Header
+        title="Cinema Orders"
+        subtitle="Server-authoritative concession orders. Every transition is persisted before the UI changes."
+      />
+      <div className={s.toolbar}>
+        {(
+          [
+            "all",
+            "pending",
+            "accepted",
+            "preparing",
+            "ready",
+            "out_for_delivery",
+            "delivered",
+          ] as const
+        ).map((value) => (
+          <button
+            className={s.screenTab}
+            data-active={filter === value}
+            key={value}
+            onClick={() => setFilter(value)}
+          >
+            {value === "all" ? "All" : labels[value]}
+          </button>
+        ))}
+      </div>
+      <div className={s.tableCard}>
+        {visible.length ? (
+          visible.map((order) => (
+            <div className={s.orderRow} key={order.backendId}>
+              <strong>#{order.id}</strong>
+              <div className={s.location}>
+                {screenFor(screens, order.screenId)?.name || "Screen"}
+                <small>Seat {order.seatCode}</small>
+              </div>
+              <div className={s.orderMeta}>
+                {order.items.map((item) => (
+                  <span key={item.name}>
+                    {item.quantity}× {item.name}
+                    {item.options?.map(
+                      (option) => ` · ${option.quantity}× ${option.name}`,
+                    )}
+                  </span>
+                ))}
+              </div>
+              <div className={s.money}>{money(total(order))}</div>
+              <span className={s.pill} data-status={order.status}>
+                {labels[order.status]}
+              </span>
+              <TransitionButton order={order} onSaved={save} />
+            </div>
+          ))
+        ) : (
+          <div className={s.emptyInspector}>
+            No Cinema orders match this status.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+function Kds({
+  orders,
+  setOrders,
+  screens,
+}: {
+  orders: CinemaOrder[];
+  setOrders: React.Dispatch<React.SetStateAction<CinemaOrder[]>>;
+  screens: CinemaScreen[];
+}) {
+  const active = orders.filter((x) => x.status !== "delivered"),
+    save = (value: CinemaOrder) =>
+      setOrders((old) =>
+        old.map((x) => (x.backendId === value.backendId ? value : x)),
+      );
+  const lanes: CinemaOrderStatus[] = [
+    "pending",
+    "accepted",
+    "preparing",
+    "ready",
+    "out_for_delivery",
+  ];
+  return (
+    <div className={s.kds}>
+      <div className={s.kdsHead}>
+        <div>
+          <h1>Concession KDS</h1>
+          <p>Persistent screen-and-seat fulfilment</p>
+        </div>
+        <span className={s.pill}>Backend live</span>
+      </div>
+      <div className={s.kdsLanes}>
+        {lanes.map((status) => (
+          <div className={s.lane} key={status}>
+            <div className={s.laneHead}>
+              {labels[status]}
+              <span>{active.filter((x) => x.status === status).length}</span>
+            </div>
+            {active
+              .filter((x) => x.status === status)
+              .map((order) => (
+                <div className={s.ticket} key={order.backendId}>
+                  <div className={s.ticketTop}>
+                    <b className={s.ticketId}>#{order.id}</b>
+                    <span>{order.placedMinutesAgo} min</span>
+                  </div>
+                  <div className={s.ticketLocation}>
+                    <strong>
+                      {screenFor(screens, order.screenId)?.name.toUpperCase()}
+                    </strong>
+                    <b>{order.seatCode}</b>
+                  </div>
+                  <div className={s.ticketItems}>
+                    {order.items.map((item) => (
+                      <div key={item.name}>
+                        {item.quantity} × {item.name}
+                        {item.options?.map((option) => (
+                          <small key={option.name}>
+                            {" "}
+                            · {option.quantity}× {option.name}
+                          </small>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                  {order.items.some((x) => x.note) && (
+                    <div className={s.ticketNote}>
+                      Note: {order.items.find((x) => x.note)?.note}
+                    </div>
+                  )}
+                  <TransitionButton order={order} onSaved={save} />
+                </div>
+              ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
-function ScreenDesigner({ screens, setScreens }: { screens:CinemaScreen[];setScreens:React.Dispatch<React.SetStateAction<CinemaScreen[]>> }) {
-  const [screenId,setScreenId]=useState("screen-2"), [seatId,setSeatId]=useState<string|null>("screen-2-G-12"), [qrSeat,setQrSeat]=useState<CinemaSeat|null>(null), [adding,setAdding]=useState(false), [pendingResize,setPendingResize]=useState<[number,number]|null>(null);
-  const screen=screenFor(screens,screenId), seat=screen.seats.find(x=>x.id===seatId)??null;
-  const updateSeat=(patch:Partial<CinemaSeat>)=>{setScreens(old=>old.map(sc=>sc.id===screen.id?{...sc,seats:sc.seats.map(x=>x.id===seatId?{...x,...patch}:x)}:sc));if(seatId)saveSeat(screen.id,seatId,{public_code:patch.code,is_active:patch.status?patch.status!=="disabled":undefined,is_accessible:patch.status?patch.status==="accessible":undefined}).then(saved=>setScreens(old=>old.map(sc=>sc.id===screen.id?{...sc,seats:sc.seats.map(x=>x.id===seatId?saved:x)}:sc))).catch(()=>loadScreens().then(setScreens))};
-  const applyResize=async(rowCount:number,seatsPerRow:number)=>{ const next=await saveLayout(screen.id,rowCount,seatsPerRow,screen.aislesAfter); setScreens(old=>old.map(x=>x.id===screen.id?next:x)); setSeatId(null); setPendingResize(null); };
-  const resize=(rowCount:number,seatsPerRow:number)=>{ if (rowCount<screen.rows.length||seatsPerRow<screen.seatsPerRow) setPendingResize([rowCount,seatsPerRow]); else applyResize(rowCount,seatsPerRow); };
-  return <div className={s.page}><Header eyebrow="Auditorium configuration" title="Screens & Seats" subtitle="Design each auditorium and keep every physical chair connected to one unique seat QR." action={<button className={s.button} onClick={()=>setAdding(true)}>+ Add Screen</button>}/>
-    <div className={s.toolbar}><div className={s.screenTabs}>{screens.map(x=><button key={x.id} data-active={x.id===screen.id} className={s.screenTab} onClick={()=>{setScreenId(x.id);setSeatId(null)}}>{x.name}<br/><small>{activeSeats(x).length} active seats</small></button>)}</div><span className={s.spacer}/><label className={s.field}>Rows<input aria-label="Rows" className={s.input} type="number" min="1" max="20" value={screen.rows.length} onChange={e=>resize(Number(e.target.value),screen.seatsPerRow)}/></label><label className={s.field}>Seats / row<input aria-label="Seats per row" className={s.input} type="number" min="1" max="24" value={screen.seatsPerRow} onChange={e=>resize(screen.rows.length,Number(e.target.value))}/></label></div>
-    <div className={s.designer}><div className={s.auditoriumCard}><div className={s.screenName}>{screen.name.toUpperCase()} · SCREEN</div><div className={s.screenArc}/><div className={s.seatMap}>{screen.rows.map(row=><div className={s.seatRow} key={row}><span className={s.rowLabel}>{row}</span>{screen.seats.filter(x=>x.row===row).map(x=><button aria-label={`Seat ${x.code}`} title={`Seat ${x.code}`} key={x.id} className={`${s.seat} ${screen.aislesAfter.includes(x.number)?s.aisle:""}`} data-selected={x.id===seatId} data-status={x.status} onClick={()=>setSeatId(x.id)}><span>{x.code}</span></button>)}</div>)}</div><div className={s.legend}><span><i/>Active</span><span><i data-type="selected"/>Selected</span><span><i data-type="disabled"/>Disabled</span><span><i data-type="accessible"/>Accessible</span></div></div>
-      <aside className={`${s.card} ${s.inspector}`}>{seat?<><div className={s.inspectorHero}><strong>Seat {seat.code}</strong><span>{screen.name} · One chair, one unique QR</span></div><div className={s.detailList}><div className={s.detail}><span>Status</span><b>{seat.status[0].toUpperCase()+seat.status.slice(1)}</b></div><div className={s.detail}><span>QR</span><b>{seat.status==="disabled"?"Excluded":"Available"}</b></div><label className={s.field} style={{paddingTop:10}}>Public seat code<input aria-label="Public seat code" className={s.input} value={seat.code} onChange={e=>updateSeat({code:e.target.value.toUpperCase()})}/></label></div><div className={s.inspectorActions}><button className={s.button} disabled={seat.status==="disabled"} onClick={()=>setQrSeat(seat)}>View QR</button><button className={s.buttonSecondary} onClick={()=>window.print()}>Print QR</button><button className={s.buttonDanger} onClick={()=>updateSeat({status:seat.status==="disabled"?"active":"disabled"})}>{seat.status==="disabled"?"Enable seat":"Disable seat"}</button></div></>:<div className={s.emptyInspector}><div className={s.miniSeat}>A1</div>Select a chair to inspect its identity, status and QR.</div>}</aside></div>
-    {qrSeat&&<div className={s.modalBackdrop} onMouseDown={()=>setQrSeat(null)}><div className={s.modal} onMouseDown={e=>e.stopPropagation()}><div className={s.modalHead}><div><h2>Seat QR preview</h2><p>{screen.name} · Seat {qrSeat.code}</p></div><button aria-label="Close QR preview" className={s.iconButton} onClick={()=>setQrSeat(null)}>×</button></div><QrCard screen={screen} seat={qrSeat}/><div className={s.modalActions}><button className={s.buttonSecondary} onClick={()=>setQrSeat(null)}>Close</button><button className={s.button} onClick={()=>window.print()}>Print card</button></div></div></div>}
-    {adding&&<AddScreen onClose={()=>setAdding(false)} onAdd={next=>{setScreens(old=>[...old,next]);setScreenId(next.id);setAdding(false)}}/>}
-    {pendingResize&&<div className={s.modalBackdrop}><div className={s.modal}><div className={s.modalHead}><div><h2>Reduce this seat layout?</h2><p>Seats outside the new dimensions will be removed from this local screen design.</p></div></div><div className={s.notice}>Existing edits on retained seats will be preserved. Removed seat identities and QR cards will no longer appear.</div><div className={s.modalActions}><button className={s.buttonSecondary} onClick={()=>setPendingResize(null)}>Keep current layout</button><button className={s.buttonDanger} onClick={()=>applyResize(...pendingResize)}>Reduce layout</button></div></div></div>}
-  </div>;
+function Dashboard({
+  data,
+  orders,
+}: {
+  data: CinemaDashboard;
+  orders: CinemaOrder[];
+}) {
+  return (
+    <div className={s.page}>
+      <Header
+        title={`Good evening, ${data.cinemaName}`}
+        subtitle="Today's live concession operations from PostgreSQL."
+      />
+      <div className={s.metricGrid}>
+        {[
+          ["Today's revenue", money(data.revenue)],
+          ["Orders today", String(data.orderCount)],
+          ["Average order value", money(data.averageOrderValue)],
+          ["Active orders", String(data.activeOrderCount)],
+          ["Active screens", String(data.activeScreens)],
+          ["Active seats", String(data.activeSeats)],
+          ["Disabled seats", String(data.disabledSeats)],
+        ].map((value) => (
+          <div className={s.metric} key={value[0]}>
+            <div className={s.metricLabel}>{value[0]}</div>
+            <div className={s.metricValue}>{value[1]}</div>
+          </div>
+        ))}
+      </div>
+      <div className={s.card}>
+        <div className={s.cardHead}>
+          <h2>Current fulfilment</h2>
+        </div>
+        <div className={s.statusStrip}>
+          {(
+            [
+              "pending",
+              "accepted",
+              "preparing",
+              "ready",
+              "out_for_delivery",
+              "delivered",
+            ] as CinemaOrderStatus[]
+          ).map((status) => (
+            <div className={s.statusStat} key={status}>
+              <strong>{data.statusCounts[status] || 0}</strong>
+              <span>{labels[status]}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className={s.grid2}>
+        <div className={s.card}>
+          <h2>Revenue by screen</h2>
+          {data.revenueByScreen.length ? (
+            data.revenueByScreen.map((value) => (
+              <div className={s.barLabel} key={value.screen}>
+                <span>{value.screen}</span>
+                <strong>{money(value.revenue)}</strong>
+              </div>
+            ))
+          ) : (
+            <p>No Cinema revenue today.</p>
+          )}
+        </div>
+        <div className={s.card}>
+          <h2>Top concessions</h2>
+          {data.topItems.length ? (
+            data.topItems.map((value) => (
+              <div className={s.barLabel} key={value.name}>
+                <span>{value.name}</span>
+                <strong>{value.quantity}</strong>
+              </div>
+            ))
+          ) : (
+            <p>No items sold today.</p>
+          )}
+        </div>
+      </div>
+      <p className={s.orderMeta}>
+        {orders.length} persisted order records loaded.
+      </p>
+    </div>
+  );
+}
+function Reports({ data }: { data: CinemaDashboard }) {
+  return (
+    <div className={s.page}>
+      <Header
+        title="Cinema Reports"
+        subtitle="Accurate current-business-day results only; unsupported historical analytics are not fabricated."
+      />
+      <div className={s.metricGrid}>
+        {[
+          ["Revenue today", money(data.revenue)],
+          ["Orders today", String(data.orderCount)],
+          ["Average order value", money(data.averageOrderValue)],
+        ].map((value) => (
+          <div className={s.metric} key={value[0]}>
+            <div className={s.metricLabel}>{value[0]}</div>
+            <div className={s.metricValue}>{value[1]}</div>
+          </div>
+        ))}
+      </div>
+      <div className={s.grid2}>
+        <div className={s.card}>
+          <h2>Orders by screen</h2>
+          {data.ordersByScreen.length ? (
+            data.ordersByScreen.map((value) => (
+              <div className={s.barLabel} key={value.screen}>
+                <span>{value.screen}</span>
+                <strong>{value.orders}</strong>
+              </div>
+            ))
+          ) : (
+            <p>No orders today.</p>
+          )}
+        </div>
+        <div className={s.card}>
+          <h2>Orders by seat</h2>
+          {data.ordersBySeat.length ? (
+            data.ordersBySeat.map((value) => (
+              <div className={s.barLabel} key={value.seat}>
+                <span>{value.seat}</span>
+                <strong>{value.orders}</strong>
+              </div>
+            ))
+          ) : (
+            <p>No seat activity today.</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+function Menu({
+  categories,
+  setCategories,
+}: {
+  categories: CinemaMenuCategory[];
+  setCategories: React.Dispatch<React.SetStateAction<CinemaMenuCategory[]>>;
+}) {
+  return (
+    <div className={s.page}>
+      <Header
+        title="Concession Menu"
+        subtitle="This is the tenant's canonical menu catalog; availability changes are persisted and immediately affect customers."
+      />
+      <div className={s.menuGrid}>
+        {categories
+          .flatMap((category) => category.items)
+          .map((item) => (
+            <div
+              className={`${s.menuItem} ${!item.available ? s.unavailable : ""}`}
+              key={item.id}
+            >
+              <h3>{item.name}</h3>
+              <p>
+                {item.category} · {item.description}
+              </p>
+              <div className={s.menuPrice}>
+                <span>{money(item.price)}</span>
+                <button
+                  aria-label={`Toggle ${item.name}`}
+                  className={s.toggle}
+                  data-on={item.available}
+                  onClick={async () => {
+                    await setMenuAvailability(item, !item.available);
+                    setCategories((old) =>
+                      old.map((category) => ({
+                        ...category,
+                        items: category.items.map((value) =>
+                          value.id === item.id
+                            ? { ...value, available: !value.available }
+                            : value,
+                        ),
+                      })),
+                    );
+                  }}
+                />
+              </div>
+            </div>
+          ))}
+      </div>
+      {!categories.length && (
+        <div className={s.card}>
+          No menu categories are configured. Use the canonical menu-management
+          workflow to create the catalog.
+        </div>
+      )}
+    </div>
+  );
+}
+function QrCodes({ slug, screens }: { slug: string; screens: CinemaScreen[] }) {
+  const [screenId, setScreenId] = useState(screens[0]?.id || "");
+  const screen = screenFor(screens, screenId) || screens[0];
+  if (!screen)
+    return (
+      <div className={s.page}>
+        <Header
+          title="QR Codes"
+          subtitle="Create a screen before generating seat QR codes."
+        />
+      </div>
+    );
+  return (
+    <div className={s.page}>
+      <Header
+        title="QR Codes"
+        subtitle="Canonical public destinations for every active physical chair."
+        action={
+          <button className={s.button} onClick={() => window.print()}>
+            Print active seat QRs
+          </button>
+        }
+      />
+      <select
+        className={s.select}
+        value={screen.id}
+        onChange={(e) => setScreenId(e.target.value)}
+      >
+        {screens.map((value) => (
+          <option value={value.id} key={value.id}>
+            {value.name}
+          </option>
+        ))}
+      </select>
+      <div className={s.qrGrid}>
+        {activeSeats(screen).map((seat) => (
+          <div className={s.qrTile} key={seat.id}>
+            <QrCard slug={slug} screen={screen} seat={seat} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
-function AddScreen({onClose,onAdd}:{onClose:()=>void;onAdd:(screen:CinemaScreen)=>void}){ const [name,setName]=useState("Screen 4"),[code,setCode]=useState("S4"),[rows,setRows]=useState(8),[seats,setSeats]=useState(12); const submit=async(e:React.FormEvent)=>{e.preventDefault();onAdd(await addScreen({name,code:code.toUpperCase(),rows,seats_per_row:seats,aisles_after:[4,8]}))}; return <div className={s.modalBackdrop}><form className={s.modal} onSubmit={submit}><div className={s.modalHead}><div><h2>Add a screen</h2><p>Start with a sensible layout, then tune individual seats.</p></div><button type="button" className={s.iconButton} onClick={onClose}>×</button></div><div className={s.formGrid}><label className={`${s.field} ${s.wide}`}>Screen name<input className={s.input} value={name} onChange={e=>setName(e.target.value)} required/></label><label className={`${s.field} ${s.wide}`}>Screen code<input className={s.input} value={code} onChange={e=>setCode(e.target.value)} required/></label><label className={s.field}>Rows<input className={s.input} type="number" min="1" max="20" value={rows} onChange={e=>setRows(+e.target.value)}/></label><label className={s.field}>Seats per row<input className={s.input} type="number" min="1" max="24" value={seats} onChange={e=>setSeats(+e.target.value)}/></label></div><div className={s.notice} style={{marginTop:14}}>Aisles will be placed after seats 4 and 8 where the row permits. You can adjust the layout after generation.</div><div className={s.modalActions}><button type="button" className={s.buttonSecondary} onClick={onClose}>Cancel</button><button className={s.button}>Generate layout</button></div></form></div> }
-
-function QrCodes({screens}:{screens:CinemaScreen[]}){const[screenId,setScreenId]=useState("screen-2"),[selected,setSelected]=useState<string[]>([]),[preview,setPreview]=useState<CinemaSeat|null>(null);const screen=screenFor(screens,screenId),seats=activeSeats(screen);return <div className={s.page}><Header eyebrow="Physical seat identity" title="QR Codes" subtitle="Preview, select and print the QR assigned to every active cinema chair." action={<div className={s.rowActions}><button className={s.buttonSecondary} onClick={()=>setSelected(seats.map(x=>x.id))}>Select all active</button><button className={s.button} onClick={()=>window.print()}>Print {selected.length?`${selected.length} selected`:`all ${seats.length}`}</button></div>}/><div className={s.toolbar}><select aria-label="Choose screen" className={s.select} value={screenId} onChange={e=>{setScreenId(e.target.value);setSelected([])}}>{screens.map(x=><option key={x.id} value={x.id}>{x.name} · {activeSeats(x).length} active seats</option>)}</select><span className={s.orderMeta}>Disabled seats are excluded by default.</span></div><div className={s.qrGrid}>{seats.filter(x=>!selected.length||selected.includes(x.id)).map(seat=><div className={s.qrTile} data-selected={selected.includes(seat.id)} key={seat.id} onClick={()=>setSelected(old=>old.includes(seat.id)?old.filter(x=>x!==seat.id):[...old,seat.id])}><QrGraphic value={qrDestination(screen,seat)}/><div><strong>{seat.code}</strong><small>{screen.name} · Ready to print</small><button onClick={e=>{e.stopPropagation();setPreview(seat)}}>View QR card</button></div></div>)}</div>{preview&&<div className={s.modalBackdrop} onClick={()=>setPreview(null)}><div className={s.modal} onClick={e=>e.stopPropagation()}><div className={s.modalHead}><h2>Print-ready QR</h2><button className={s.iconButton} onClick={()=>setPreview(null)}>×</button></div><QrCard screen={screen} seat={preview}/><div className={s.modalActions}><button className={s.button} onClick={()=>window.print()}>Print card</button></div></div></div>}</div>}
-
-function Orders({orders,setOrders,screens}:{orders:CinemaOrder[];setOrders:React.Dispatch<React.SetStateAction<CinemaOrder[]>>;screens:CinemaScreen[]}){const[filter,setFilter]=useState("all"),[query,setQuery]=useState(""),[id,setId]=useState(orders[0].id);const visible=orders.filter(o=>(filter==="all"||o.status===filter)&&`${o.id} ${screenFor(screens,o.screenId).name} ${o.seatCode}`.toLowerCase().includes(query.toLowerCase()));const order=orders.find(o=>o.id===id)??visible[0];return <div className={s.page}><Header title="Cinema Orders" subtitle="Track every concession order from placement to delivery at the correct screen and seat."/><div className={s.toolbar}><input aria-label="Search orders" className={`${s.input} ${s.search}`} placeholder="Search order, screen or seat" value={query} onChange={e=>setQuery(e.target.value)}/>{["all","new","preparing","ready","out-for-delivery","delivered"].map(x=><button data-active={filter===x} className={s.screenTab} onClick={()=>setFilter(x)} key={x}>{x==="all"?"All":statusLabels[x as CinemaOrderStatus]}</button>)}</div><div className={s.ordersLayout}><div className={s.tableCard}>{visible.map(o=><div key={o.id} className={s.orderRow} data-active={o.id===order?.id} onClick={()=>setId(o.id)}><strong>#{o.id}</strong><div className={s.location}>{screenFor(screens,o.screenId).name}<small>Seat {o.seatCode}</small></div><div className={s.orderMeta}>{o.items.reduce((n,x)=>n+x.quantity,0)} items<br/>{o.placedMinutesAgo} min ago</div><div className={s.money}>{money(orderTotal(o))}</div><span className={s.pill} data-status={o.status}>{statusLabels[o.status]}</span></div>)}</div>{order&&<aside className={`${s.card} ${s.orderDetail}`}><div className={s.cardHead}><div><p className={s.eyebrow}>Order #{order.id}</p><h2>{screenFor(screens,order.screenId).name} · {order.seatCode}</h2></div><span className={s.pill} data-status={order.status}>{statusLabels[order.status]}</span></div><div className={s.orderItems}>{order.items.map((item,i)=><div className={s.orderItem} key={i}><span>{item.quantity}×</span><span>{item.name}{item.note&&<small style={{display:"block",color:"#a35b00"}}>{item.note}</small>}</span><b>{money(item.price*item.quantity)}</b></div>)}</div><div className={s.total}><span>Total</span><span>{money(orderTotal(order))}</span></div><button className={s.button} style={{width:"100%",marginTop:16}} onClick={()=>setOrders(old=>old.map(o=>o.id===order.id?{...o,status:o.status==="ready"?"out-for-delivery":o.status==="out-for-delivery"?"delivered":"preparing"}:o))}>Advance order</button></aside>}</div></div>}
-
-function Kds({orders,setOrders,screens}:{orders:CinemaOrder[];setOrders:React.Dispatch<React.SetStateAction<CinemaOrder[]>>;screens:CinemaScreen[]}){const advance=(id:string,status:CinemaOrderStatus)=>setOrders(old=>old.map(o=>o.id===id?{...o,status}:o));const lanes:[string,CinemaOrderStatus[],CinemaOrderStatus,string][]=[["New orders",["new"],"accepted","Accept"],["In preparation",["accepted","preparing"],"ready","Mark ready"],["Ready at counter",["ready"],"out-for-delivery","Send for delivery"],["With runners",["out-for-delivery"],"delivered","Mark delivered"]];return <div className={s.kds}><div className={s.kdsHead}><div><h1>Concession KDS</h1><p>Location-first fulfilment · Nadha Cinemas</p></div><span className={s.pill}>Live mock board</span></div><div className={s.kdsLanes}>{lanes.map(([name,statuses,next,label])=><div className={s.lane} key={name}><div className={s.laneHead}>{name}<span>{orders.filter(o=>statuses.includes(o.status)).length}</span></div>{orders.filter(o=>statuses.includes(o.status)).map(o=><div className={o.status==="out-for-delivery"?s.runner:s.ticket} data-status={o.status} key={o.id}><div className={s.ticketTop}><b className={s.ticketId}>#{o.id}</b><span>{o.placedMinutesAgo} min</span></div><div className={s.ticketLocation}><strong>{screenFor(screens,o.screenId).name.toUpperCase()}</strong><b>{o.seatCode}</b></div><div className={s.ticketItems}>{o.items.map((x,i)=><div key={i}>{x.quantity} × {x.name}</div>)}</div>{o.items.some(x=>x.note)&&<div className={s.ticketNote}>Note: {o.items.find(x=>x.note)?.note}</div>}{o.bagCount&&<p>{o.bagCount} sealed bag{o.bagCount>1?"s":""} · Seat delivery</p>}<button className={s.button} onClick={()=>advance(o.id,next)}>{label.toUpperCase()}</button></div>)}</div>)}</div></div>}
-
-function Menu(){const[items,setItems]=useState(menuItems);return <div className={s.page}><Header title="Concession Menu" subtitle="Manage cinema-specific categories, combos, variants and availability without changing Restaurant menus." action={<button className={s.button}>+ Add item</button>}/><div className={s.toolbar}>{["All","Popcorn","Combos","Cold Drinks","Snacks","Nachos","Water"].map((x,i)=><button className={s.screenTab} data-active={i===0} key={x}>{x}</button>)}</div><div className={s.menuGrid}>{items.map(item=><div className={`${s.menuItem} ${!item.available?s.unavailable:""}`} key={item.id}><div className={s.menuItemTop}><div className={s.menuThumb}>{item.name.slice(0,2).toUpperCase()}</div>{item.badge&&<span className={s.pill}>{item.badge}</span>}</div><h3>{item.name}</h3><p>{item.description}</p><div className={s.menuPrice}><span>{money(item.price)}</span><button aria-label={`Toggle ${item.name}`} className={s.toggle} data-on={item.available} onClick={()=>setItems(old=>old.map(x=>x.id===item.id?{...x,available:!x.available}:x))}/></div></div>)}</div></div>}
-
-function Staff(){const staff=[["AN","Anjali Nair","Owner","Online"],["VK","Vikram Kumar","Concession Staff","Online"],["RM","Riya Menon","Kitchen","Online"],["AS","Arun S","Runner","Delivering C1045"],["NP","Neha Pillai","Runner","Available"],["JK","Jishnu K","Admin","Offline"]];return <div className={s.page}><Header title="Cinema Staff" subtitle="A clear preview of cinema operations roles. Production RBAC remains unchanged." action={<button className={s.button}>+ Invite staff</button>}/><div className={s.staffGrid}>{staff.map(x=><div className={s.staffCard} key={x[1]}><div className={s.staffAvatar}>{x[0]}</div><div><strong>{x[1]}</strong><small>{x[2]}</small><small style={{display:"block",marginTop:6}}><i className={s.dot}/>{x[3]}</small></div></div>)}</div></div>}
-
-function Reports(){return <div className={s.page}><Header eyebrow="Today · All screens" title="Cinema Reports" subtitle="Commercial and operational performance across concession ordering and seat delivery." action={<button className={s.buttonSecondary}>Export report</button>}/><div className={s.metricGrid}>{[["Revenue today","₹27,580"],["Orders","84"],["Average order value","₹328"],["Items sold","176"],["Average preparation","4m 12s"],["Ready → delivered","2m 05s"],["Order → seat","6m 17s"],["Delivery success","99.1%"]].map(x=><div className={s.metric} key={x[0]}><div className={s.metricLabel}>{x[0]}</div><div className={s.metricValue}>{x[1]}</div></div>)}</div><div className={s.grid2}><div className={s.card}><div className={s.cardHead}><h2>Orders by hour</h2><span className={s.orderMeta}>Peak 8–9 PM</span></div><div className={s.chart}>{[20,28,38,51,76,100,82,54].map((h,i)=><div className={s.chartBar} key={i}><i style={{height:`${h}%`}}/><span>{i+3} PM</span></div>)}</div></div><div className={s.card}><div className={s.cardHead}><h2>Orders by screen</h2></div><div className={s.bars}>{[["Screen 1",26,65],["Screen 2",39,100],["Screen 3",19,49]].map(x=><div key={x[0] as string}><div className={s.barLabel}><span>{x[0]}</span><span>{x[1]} orders</span></div><div className={s.bar}><i style={{width:`${x[2]}%`}}/></div></div>)}</div></div></div></div>}
-
-function Printing(){return <div className={s.page}><Header title="Cinema Printing" subtitle="Preview future Cinema printer roles without changing the production OMLU Printer Bridge."/><div className={s.printingGrid}>{[["▣","Concession printer","Online · Kitchen counter","Order tickets with screen and seat emphasised"],["▤","Receipt printer","Online · Box office counter","Customer receipts and GST presentation"],["▥","Seat QR printing","Browser print · A4 sticker sheets","Individual, selected or full-screen QR cards"],["⌁","OMLU Printer Bridge","Detected on this device","Future Cinema routing configuration"]].map(x=><div className={`${s.card} ${s.printer}`} key={x[1]}><div className={s.printerIcon}>{x[0]}</div><div><h3>{x[1]}</h3><span className={s.pill}>{x[2]}</span><p style={{marginTop:10}}>{x[3]}</p><button className={s.buttonSecondary} style={{marginTop:13}}>Configure preview</button></div></div>)}</div></div>}
-
-function Settings(){const[settings,setSettings]=useState(initialSettings);const toggle=(key:"orderingEnabled"|"seatDeliveryEnabled"|"pickupEnabled")=>setSettings(x=>({...x,[key]:!x[key]}));return <div className={s.page}><Header title="Cinema Settings" subtitle="Local prototype settings only. Nothing here is saved to production." action={<button className={s.button} onClick={()=>setSettings(current=>({...current}))}>Save preview</button>}/><div className={s.settingsGrid}><div className={s.card}><div className={s.settingsFields}><label className={s.field}>Cinema name<input className={s.input} value={settings.name} onChange={e=>setSettings(x=>({...x,name:e.target.value}))}/></label><label className={s.field}>Public slug<input className={s.input} value={settings.slug} onChange={e=>setSettings(x=>({...x,slug:e.target.value}))}/></label><label className={`${s.field} ${s.wide}`}>Contact information<input className={s.input} value={settings.contact} onChange={e=>setSettings(x=>({...x,contact:e.target.value}))}/></label><label className={s.field}>Currency<select className={s.select} value={settings.currency} onChange={e=>setSettings(x=>({...x,currency:e.target.value}))}><option>INR (₹)</option></select></label><label className={s.field}>GST presentation<select className={s.select} value={settings.gstPresentation} onChange={e=>setSettings(x=>({...x,gstPresentation:e.target.value}))}><option>Prices inclusive of GST</option><option>Show GST separately</option></select></label></div></div><div className={s.card}><div className={s.cardHead}><h2>Ordering & fulfilment</h2></div>{[["orderingEnabled","Ordering enabled","Customers can place concession orders"],["seatDeliveryEnabled","Seat delivery enabled","Runners deliver to screen and seat"],["pickupEnabled","Pickup enabled","Customers may collect at counter"]].map(x=><div className={s.settingToggle} key={x[0]}><div><strong>{x[1]}</strong><small>{x[2]}</small></div><button className={s.toggle} data-on={settings[x[0] as keyof typeof settings]} onClick={()=>toggle(x[0] as "orderingEnabled")}/></div>)}<div style={{marginTop:18}}><QrCard screen={initialScreens[1]} seat={initialScreens[1].seats.find(x=>x.code==="G12")!}/></div></div></div></div>}
-
-export default function CinemaAdminClient({section}:{section:string}) { const valid=pages.some(x=>x[0]===section)?section:"dashboard";const[screens,setScreens]=useState<CinemaScreen[]>([]),[orders,setOrders]=useState<CinemaOrder[]>([]),[error,setError]=useState("");useEffect(()=>{Promise.all([loadScreens(),loadOrders()]).then(([nextScreens,nextOrders])=>{setScreens(nextScreens);setOrders(nextOrders)}).catch(e=>setError(e.message))},[]);if(error)return <div className={s.cinema}><main className={s.page}><h1>Cinema data unavailable</h1><p>{error}</p></main></div>;if(!screens.length)return <div className={s.cinema}><main className={s.page}><h1>No cinema screens yet</h1><p>Create your first screen through the Cinema API or seed setup.</p></main></div>;let content:React.ReactNode;switch(valid){case"screens":content=<ScreenDesigner screens={screens} setScreens={setScreens}/>;break;case"qr-codes":content=<QrCodes screens={screens}/>;break;case"orders":content=<Orders orders={orders} setOrders={setOrders} screens={screens}/>;break;case"kds":content=<Kds orders={orders} setOrders={setOrders} screens={screens}/>;break;case"menu":content=<Menu/>;break;case"staff":content=<Staff/>;break;case"reports":content=<Reports/>;break;case"printing":content=<Printing/>;break;case"settings":content=<Settings/>;break;default:content=<Dashboard orders={orders} screens={screens}/>}
-  return <div className={s.cinema}><div className={s.shell}><aside className={s.sidebar}><div className={s.brand}><div className={s.brandMark}>O</div><div><strong>OMLU Cinema</strong><span>Operations</span></div></div><nav className={s.nav}>{pages.map(([path,label,icon])=><Link data-active={valid===path} href={`/cinema-admin/${path}`} key={path}><span className={s.navIcon}>{icon}</span><span>{label}</span></Link>)}</nav><div className={s.preview}><small>Development preview</small><Link href="/c/demo-cinema/S2/G12">Open customer demo →</Link></div></aside><main className={s.content}><header className={s.topbar}><div className={s.venue}><i/>Nadha Cinemas <span className={s.pill}>Preview</span></div><div className={s.avatar}>KN</div></header>{content}</main></div></div>;
+export default function CinemaAdminClient({ section }: { section: string }) {
+  const valid = pages.some((x) => x[0] === section) ? section : "dashboard",
+    [screens, setScreens] = useState<CinemaScreen[]>([]),
+    [orders, setOrders] = useState<CinemaOrder[]>([]),
+    [dashboard, setDashboard] = useState<CinemaDashboard | null>(null),
+    [menu, setMenu] = useState<CinemaMenuCategory[]>([]),
+    [loading, setLoading] = useState(true),
+    [error, setError] = useState("");
+  const refresh = useCallback(async () => {
+    try {
+      const [nextScreens, nextOrders, nextDashboard, nextMenu] =
+        await Promise.all([
+          loadScreens(),
+          loadOrders(),
+          loadDashboard(),
+          loadMenu(),
+        ]);
+      setScreens(nextScreens);
+      setOrders(nextOrders);
+      setDashboard(nextDashboard);
+      setMenu(nextMenu);
+      setError("");
+    } catch (value) {
+      setError(
+        value instanceof Error ? value.message : "Cinema data unavailable",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+  useEffect(() => {
+    void refresh();
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") void refresh();
+    }, 15000);
+    return () => window.clearInterval(timer);
+  }, [refresh]);
+  const realtimeStatus = useRealtime({
+    target: { kind: "staff", channel: "cinema" },
+    onEvent: () => void refresh(),
+    onReconnect: () => void refresh(),
+  });
+  if (loading)
+    return (
+      <div className={s.cinema}>
+        <main className={s.page}>
+          <h1>Loading Cinema operations…</h1>
+        </main>
+      </div>
+    );
+  if (error || !dashboard)
+    return (
+      <div className={s.cinema}>
+        <main className={s.page}>
+          <h1>Cinema data unavailable</h1>
+          <p>{error}</p>
+          <button className={s.button} onClick={() => void refresh()}>
+            Retry
+          </button>
+        </main>
+      </div>
+    );
+  let content: React.ReactNode;
+  switch (valid) {
+    case "screens":
+      content = <Screens screens={screens} setScreens={setScreens} />;
+      break;
+    case "qr-codes":
+      content = <QrCodes slug={dashboard.cinemaSlug} screens={screens} />;
+      break;
+    case "orders":
+      content = (
+        <Orders orders={orders} setOrders={setOrders} screens={screens} />
+      );
+      break;
+    case "kds":
+      content = <Kds orders={orders} setOrders={setOrders} screens={screens} />;
+      break;
+    case "menu":
+      content = <Menu categories={menu} setCategories={setMenu} />;
+      break;
+    case "reports":
+      content = <Reports data={dashboard} />;
+      break;
+    case "staff":
+      content = (
+        <Notice title="Cinema Staff">
+          Cinema staff management is not configured here. Existing authenticated
+          roles continue to control access.
+        </Notice>
+      );
+      break;
+    case "printing":
+      content = (
+        <Notice title="Cinema Printing">
+          Cinema Printer Bridge routing is planned for Phase 3. No printer
+          connection is being claimed.
+        </Notice>
+      );
+      break;
+    case "settings":
+      content = (
+        <Notice title="Cinema Settings">
+          Cinema-specific fulfilment settings are not yet persisted. Current
+          tenant identity: {dashboard.cinemaName}.
+        </Notice>
+      );
+      break;
+    default:
+      content = <Dashboard data={dashboard} orders={orders} />;
+  }
+  return (
+    <div className={s.cinema}>
+      <div className={s.shell}>
+        <aside className={s.sidebar}>
+          <div className={s.brand}>
+            <div className={s.brandMark}>O</div>
+            <div>
+              <strong>OMLU Cinema</strong>
+              <span>Operations</span>
+            </div>
+          </div>
+          <nav className={s.nav}>
+            {pages.map(([path, label, icon]) => (
+              <Link
+                data-active={valid === path}
+                href={`/cinema-admin/${path}`}
+                key={path}
+              >
+                <span className={s.navIcon}>{icon}</span>
+                <span>{label}</span>
+              </Link>
+            ))}
+          </nav>
+        </aside>
+        <main className={s.content}>
+          <header className={s.topbar}>
+            <div className={s.venue}>
+              <i />
+              {dashboard.cinemaName}{" "}
+              <span className={s.pill}>{realtimeStatus}</span>
+            </div>
+          </header>
+          {content}
+        </main>
+      </div>
+    </div>
+  );
 }

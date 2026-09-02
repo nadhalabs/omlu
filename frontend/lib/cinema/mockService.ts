@@ -1,3 +1,4 @@
+// Test/demo fixtures only. Production Cinema routes do not import this module.
 import type { CinemaMenuItem, CinemaOrder, CinemaOrderStatus, CinemaScreen, CinemaSeat, CinemaSettings } from "./types";
 
 const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -40,9 +41,9 @@ export const menuItems: CinemaMenuItem[] = [
 
 export const initialOrders: CinemaOrder[] = [
   { id: "C1048", screenId: "screen-2", seatCode: "G12", status: "preparing", placedMinutesAgo: 2, bagCount: 1, items: [{ name: "Large Popcorn", quantity: 2, price: 220 }, { name: "Pepsi", quantity: 1, price: 110, note: "No ice" }] },
-  { id: "C1047", screenId: "screen-1", seatCode: "D06", status: "new", placedMinutesAgo: 1, items: [{ name: "Popcorn + Pepsi Combo", quantity: 1, price: 390 }] },
+  { id: "C1047", screenId: "screen-1", seatCode: "D06", status: "pending", placedMinutesAgo: 1, items: [{ name: "Popcorn + Pepsi Combo", quantity: 1, price: 390 }] },
   { id: "C1046", screenId: "screen-3", seatCode: "B04", status: "ready", placedMinutesAgo: 6, bagCount: 2, items: [{ name: "Loaded Nachos", quantity: 2, price: 210 }, { name: "Mineral Water", quantity: 2, price: 50 }] },
-  { id: "C1045", screenId: "screen-2", seatCode: "H08", status: "out-for-delivery", placedMinutesAgo: 9, bagCount: 1, items: [{ name: "Family Movie Combo", quantity: 1, price: 799 }] },
+  { id: "C1045", screenId: "screen-2", seatCode: "H08", status: "out_for_delivery", placedMinutesAgo: 9, bagCount: 1, items: [{ name: "Family Movie Combo", quantity: 1, price: 799 }] },
   { id: "C1044", screenId: "screen-1", seatCode: "F11", status: "delivered", placedMinutesAgo: 18, items: [{ name: "Regular Popcorn", quantity: 1, price: 160 }, { name: "Pepsi", quantity: 2, price: 110 }] },
 ];
 
@@ -53,7 +54,7 @@ export const initialSettings: CinemaSettings = {
 };
 
 export const statusLabels: Record<CinemaOrderStatus, string> = {
-  new: "New", accepted: "Accepted", preparing: "Preparing", ready: "Ready", "out-for-delivery": "Out for delivery", delivered: "Delivered",
+  pending: "New", accepted: "Accepted", preparing: "Preparing", ready: "Ready", out_for_delivery: "Out for delivery", delivered: "Delivered",
 };
 
 export function screenFor(screens: CinemaScreen[], id: string) { return screens.find((screen) => screen.id === id) ?? screens[0]; }

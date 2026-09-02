@@ -15,6 +15,7 @@ from app.services.cinema import apply_layout, create_seat_session, load_authorit
 from app.services.idempotency import ensure_same_request, request_hash
 from app.services.menu_options import serialize_item_option_groups
 from app.services.order_pricing import validate_and_price_order_items
+from app.services.realtime import EVENT_ORDER_CREATED, EVENT_ORDER_STATUS_CHANGED, order_channel, publish_event, restaurant_channel
 from app.utils.auth import get_current_staff_user
 from app.utils.business_date import current_business_day_bounds_utc, restaurant_business_date
 
@@ -128,7 +129,20 @@ def update_seat(screen_id: int, seat_id: int, body: SeatUpdate, db: Session = De
 
 
 def public_payload(restaurant, screen, seat, token=None, expires_at=None):
-    return {"cinema_name": restaurant.name, "cinema_slug": restaurant.slug, "screen": screen, "seat": seat, "authority_token": token, "authority_expires_at": expires_at}
+    return {
+        "cinema_name": restaurant.name,
+        "cinema_slug": restaurant.slug,
+        "screen": {"id": screen.id, "name": screen.name, "code": screen.code},
+        "seat": {
+            "id": seat.id,
+            "row_label": seat.row_label,
+            "seat_number": seat.seat_number,
+            "public_code": seat.public_code,
+            "is_accessible": seat.is_accessible,
+        },
+        "authority_token": token,
+        "authority_expires_at": expires_at,
+    }
 
 
 @router.get("/public/cinemas/{slug}/screens/{screen_code}/seats/{seat_code}")
@@ -151,14 +165,32 @@ def public_cinema_menu(slug: str, screen_code: str, seat_code: str, db: Session 
     return {"cinema": {"name": restaurant.name, "slug": restaurant.slug}, "categories": [{"id": c.id, "name_en": c.name_en, "items": [{"id": i.id, "name_en": i.name_en, "description_en": i.description_en, "price": str(i.price), "image_url": i.image_url, "option_groups": serialize_item_option_groups(i)} for i in sorted(c.items, key=lambda x: (x.display_order, x.id)) if i.is_available]} for c in categories]}
 
 
+@router.get("/api/cinema/menu")
+def admin_cinema_menu(db: Session = Depends(get_db), staff: StaffUser = Depends(cinema_staff)):
+    categories = db.query(MenuCategory).options(selectinload(MenuCategory.items).selectinload(MenuItem.option_group_links).selectinload(MenuItemOptionGroup.group).selectinload(MenuOptionGroup.options)).filter(MenuCategory.restaurant_id == staff.restaurant_id).order_by(MenuCategory.display_order, MenuCategory.id).all()
+    return {"categories": [{"id": c.id, "name": c.name_en, "is_active": c.is_active, "items": [{"id": i.id, "name": i.name_en, "description": i.description_en, "price": str(i.price), "is_available": i.is_available, "display_order": i.display_order, "option_groups": serialize_item_option_groups(i)} for i in sorted(c.items, key=lambda x: (x.display_order, x.id))]} for c in categories]}
+
+
+@router.patch("/api/cinema/menu/items/{item_id}/availability")
+def update_cinema_item_availability(item_id: int, body: dict, db: Session = Depends(get_db), staff: StaffUser = Depends(cinema_staff)):
+    item = db.query(MenuItem).filter(MenuItem.id == item_id, MenuItem.restaurant_id == staff.restaurant_id).first()
+    if not item:
+        raise HTTPException(404, "Cinema menu item not found")
+    if not isinstance(body.get("is_available"), bool):
+        raise HTTPException(422, "is_available must be a boolean")
+    item.is_available = body["is_available"]
+    db.commit()
+    return {"id": item.id, "is_available": item.is_available}
+
+
 def serialize_order(order: Order):
     seat = order.cinema_seat
     screen = seat.screen
-    return {"id": order.id, "order_number": order.order_number, "public_token": order.public_token, "status": order.status, "subtotal": str(order.subtotal), "screen_id": screen.id, "screen_name": screen.name, "screen_code": screen.code, "seat_id": seat.id, "seat_code": seat.public_code, "created_at": order.created_at, "customer_note": order.customer_note, "items": [{"id": i.id, "menu_item_id": i.menu_item_id, "name": i.item_name, "quantity": i.quantity, "unit_price": str(i.unit_price), "total_price": str(i.total_price), "note": i.item_note} for i in order.items]}
+    return {"id": order.id, "order_number": order.order_number, "public_token": order.public_token, "status": order.status, "subtotal": str(order.subtotal), "screen_id": screen.id, "screen_name": screen.name, "screen_code": screen.code, "seat_id": seat.id, "seat_code": seat.public_code, "created_at": order.created_at, "customer_note": order.customer_note, "items": [{"id": i.id, "menu_item_id": i.menu_item_id, "name": i.item_name, "quantity": i.quantity, "unit_price": str(i.unit_price), "total_price": str(i.total_price), "note": i.item_note, "options": [{"name": o.kitchen_display_name or o.option_name, "quantity": o.quantity} for o in i.selected_options]} for i in order.items]}
 
 
 def load_cinema_order(db, *filters):
-    return db.query(Order).options(selectinload(Order.items), selectinload(Order.cinema_seat).selectinload(CinemaSeat.screen)).filter(Order.order_context_type == "cinema", *filters)
+    return db.query(Order).options(selectinload(Order.items).selectinload(OrderItem.selected_options), selectinload(Order.cinema_seat).selectinload(CinemaSeat.screen)).filter(Order.order_context_type == "cinema", *filters)
 
 
 @router.post("/public/cinemas/orders", status_code=201)
@@ -194,7 +226,9 @@ def create_cinema_order(body: CinemaOrderCreate, authorization: str = Header(...
         if not existing: raise
         ensure_same_request(existing.idempotency_request_hash, digest)
         order = existing
-    return serialize_order(load_cinema_order(db, Order.id == order.id).one())
+    persisted = load_cinema_order(db, Order.id == order.id).one()
+    publish_event(EVENT_ORDER_CREATED, restaurant_id=restaurant.id, channels=[restaurant_channel(restaurant.id, "cinema"), order_channel(order.public_token)], resource_id=order.id, state={"order_number": order.order_number, "status": order.status, "context": "cinema"})
+    return serialize_order(persisted)
 
 
 @router.get("/public/cinemas/orders/{public_token}")
@@ -228,7 +262,9 @@ def transition_order(order_id: int, body: StatusUpdate, db: Session = Depends(ge
     if body.status not in TRANSITIONS.get(order.status, set()): raise HTTPException(409, "Invalid Cinema order transition")
     old = order.status; order.status = body.status
     db.add(OrderStatusHistory(order_id=order.id, old_status=old, new_status=body.status, changed_by_staff_id=staff.id)); db.commit()
-    return serialize_order(load_cinema_order(db, Order.id == order.id).one())
+    persisted = load_cinema_order(db, Order.id == order.id).one()
+    publish_event(EVENT_ORDER_STATUS_CHANGED, restaurant_id=staff.restaurant_id, channels=[restaurant_channel(staff.restaurant_id, "cinema"), order_channel(order.public_token)], resource_id=order.id, state={"order_number": order.order_number, "status": order.status, "context": "cinema"})
+    return serialize_order(persisted)
 
 
 @router.get("/api/cinema/dashboard")
@@ -243,4 +279,12 @@ def cinema_dashboard(db: Session = Depends(get_db), staff: StaffUser = Depends(c
         statuses[order.status] = statuses.get(order.status, 0) + 1
         screens[order.cinema_seat.screen.name] = screens.get(order.cinema_seat.screen.name, 0) + order.subtotal
         for item in order.items: items[item.item_name] = items.get(item.item_name, 0) + item.quantity
-    return {"revenue": str(revenue), "order_count": len(orders), "average_order_value": str(revenue / len(orders) if orders else 0), "status_counts": statuses, "revenue_by_screen": [{"screen": k, "revenue": str(v)} for k, v in screens.items()], "top_items": [{"name": k, "quantity": v} for k, v in sorted(items.items(), key=lambda x: -x[1])[:5]]}
+    all_screens = screen_query(db, staff).all()
+    seats = [seat for screen in all_screens for seat in screen.seats]
+    orders_by_screen = {}
+    orders_by_seat = {}
+    for order in orders:
+        orders_by_screen[order.cinema_seat.screen.name] = orders_by_screen.get(order.cinema_seat.screen.name, 0) + 1
+        seat_key = f"{order.cinema_seat.screen.name} · {order.cinema_seat.public_code}"
+        orders_by_seat[seat_key] = orders_by_seat.get(seat_key, 0) + 1
+    return {"cinema_name": staff.restaurant.name, "cinema_slug": staff.restaurant.slug, "revenue": str(revenue), "order_count": len(orders), "active_order_count": sum(statuses.get(s, 0) for s in ("pending", "accepted", "preparing", "ready", "out_for_delivery")), "average_order_value": str(revenue / len(orders) if orders else 0), "active_screens": sum(1 for s in all_screens if s.is_active), "active_seats": sum(1 for s in seats if s.is_active), "disabled_seats": sum(1 for s in seats if not s.is_active), "status_counts": statuses, "revenue_by_screen": [{"screen": k, "revenue": str(v)} for k, v in screens.items()], "orders_by_screen": [{"screen": k, "orders": v} for k, v in orders_by_screen.items()], "orders_by_seat": [{"seat": k, "orders": v} for k, v in sorted(orders_by_seat.items(), key=lambda x: -x[1])], "top_items": [{"name": k, "quantity": v} for k, v in sorted(items.items(), key=lambda x: -x[1])[:5]]}

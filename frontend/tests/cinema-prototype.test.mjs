@@ -21,20 +21,37 @@ test("Cinema mock screen generation preserves seat identity",()=>{
   assert.match(source,/aislesAfter/);
 });
 
-test("Seat designer supports resizing, selection, disabling, editing and QR preview",()=>{
+test("Seat designer persists creation, resizing, disabling, editing and QR identity",()=>{
   const source=read("app/cinema-admin/CinemaAdminClient.tsx");
-  for(const behavior of [/Reduce this seat layout/,/setSeatId\(x\.id\)/,/Disable seat/,/Public seat code/,/View QR/,/activeSeats\(screen\)/]) assert.match(source,behavior);
+  for(const behavior of [/No screens yet/,/Create first screen/,/saveLayout/,/Disable seat/,/Public seat code/,/qrDestination/,/activeSeats\(screen\)/]) assert.match(source,behavior);
 });
 
-test("KDS, filters and customer cart preserve cinema location",()=>{
+test("KDS, orders and customer tracking use authoritative Cinema services",()=>{
   const admin=read("app/cinema-admin/CinemaAdminClient.tsx");
   const customer=read("app/c/[cinemaSlug]/[screenCode]/[seatCode]/CinemaCustomerClient.tsx");
   assert.match(admin,/Send for delivery/);
   assert.match(admin,/Mark delivered/);
-  assert.match(admin,/Search order, screen or seat/);
+  assert.match(admin,/advanceOrder/);
+  assert.match(admin,/Server-authoritative concession orders/);
+  assert.match(admin,/useRealtime/);
   assert.match(customer,/screenCode/);
   assert.match(customer,/Seat \{seat\.code\}/);
   assert.match(customer,/Place order/);
+});
+
+test("production Cinema admin does not import mock runtime data",()=>{
+  const source=read("app/cinema-admin/CinemaAdminClient.tsx");
+  assert.doesNotMatch(source,/mockService|initialOrders|initialScreens|initialSettings|menuItems/);
+  assert.match(source,/loadDashboard/);
+  assert.match(source,/loadMenu/);
+  assert.match(source,/No printer\s+connection is being claimed/);
+});
+
+test("failed Cinema transitions retain server state and expose an error",()=>{
+  const source=read("app/cinema-admin/CinemaAdminClient.tsx");
+  assert.match(source,/onSaved\(await advanceOrder\(order,\s*next\)\)/);
+  assert.match(source,/Transition failed/);
+  assert.doesNotMatch(source,/setOrders\(old=>old\.map\(o=>o\.id===id\?\{\.\.\.o,status\}/);
 });
 
 test("new Cinema TypeScript transpiles without parser errors",()=>{

@@ -21,7 +21,7 @@ type PublicTarget =
 
 type StaffTarget = {
   kind: "staff";
-  channel: "operations" | "kitchen" | "staff" | "admin" | "availability";
+  channel: "operations" | "kitchen" | "staff" | "admin" | "availability" | "cinema";
 };
 
 type UseRealtimeOptions = {

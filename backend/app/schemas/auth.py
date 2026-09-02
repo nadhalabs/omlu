@@ -14,6 +14,7 @@ class StaffSummaryResponse(BaseModel):
     must_change_password: bool = False
     restaurant_name: str
     restaurant_slug: str
+    venue_type: str
 
 
 class WebTenantScopeResponse(BaseModel):
@@ -47,6 +48,7 @@ class CurrentStaffResponse(BaseModel):
     must_change_password: bool = False
     restaurant_name: str
     restaurant_slug: str
+    venue_type: str
     scope: WebTenantScopeResponse
     access_token: str | None = None
     expires_in: int | None = None

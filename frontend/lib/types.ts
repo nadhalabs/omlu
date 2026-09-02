@@ -172,6 +172,7 @@ export interface PublicDiningSessionResponse {
   status: DiningSessionStatus;
   restaurant_name: string;
   restaurant_slug: string;
+  venue_type: "restaurant" | "cinema";
   table_number: string;
   table_code: string;
   opened_at: string;
@@ -488,6 +489,7 @@ export interface CurrentStaffResponse {
   must_change_password: boolean;
   restaurant_name: string;
   restaurant_slug: string;
+  venue_type: "restaurant" | "cinema";
   scope: {
     restaurant_id: number;
     actor_id: number;

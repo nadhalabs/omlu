@@ -46,10 +46,10 @@ from app.services.realtime import (
     table_channel,
 )
 from app.services.table_participants import invalidate_session_participants
-from app.utils.auth import OperationalWriteChecker, RoleChecker
+from app.utils.auth import OperationalWriteChecker, RoleChecker, get_current_restaurant_staff_user
 
 
-router = APIRouter(prefix="/staff/tables")
+router = APIRouter(prefix="/staff/tables", dependencies=[Depends(get_current_restaurant_staff_user)])
 _staff_roles = RoleChecker(["owner", "admin", "staff"])
 _staff_write_roles = OperationalWriteChecker(["owner", "admin", "staff"])
 _report_role = OperationalWriteChecker(["staff"])

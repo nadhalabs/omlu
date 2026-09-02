@@ -1,5 +1,5 @@
 export type CinemaSeatStatus = "active" | "disabled" | "accessible";
-export type CinemaOrderStatus = "new" | "accepted" | "preparing" | "ready" | "out-for-delivery" | "delivered";
+export type CinemaOrderStatus = "pending" | "accepted" | "preparing" | "ready" | "out_for_delivery" | "delivered";
 
 export interface CinemaSeat {
   id: string;
@@ -19,7 +19,7 @@ export interface CinemaScreen {
   seats: CinemaSeat[];
 }
 
-export interface CinemaOrderItem { name: string; quantity: number; price: number; note?: string }
+export interface CinemaOrderItem { name: string; quantity: number; price: number; note?: string; options?: {name:string;quantity:number}[] }
 export interface CinemaOrder {
   id: string;
   backendId?: string;
@@ -53,3 +53,12 @@ export interface CinemaSettings {
   gstPresentation: string;
   defaultFulfilment: string;
 }
+
+export interface CinemaDashboard {
+  cinemaName:string; cinemaSlug:string; revenue:number; orderCount:number; activeOrderCount:number; averageOrderValue:number;
+  activeScreens:number; activeSeats:number; disabledSeats:number; statusCounts:Record<CinemaOrderStatus,number>;
+  revenueByScreen:{screen:string;revenue:number}[]; ordersByScreen:{screen:string;orders:number}[];
+  ordersBySeat:{seat:string;orders:number}[]; topItems:{name:string;quantity:number}[];
+}
+
+export interface CinemaMenuCategory { id:number;name:string;isActive:boolean;items:CinemaMenuItem[] }

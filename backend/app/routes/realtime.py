@@ -39,12 +39,12 @@ from app.services.table_participants import load_participant
 
 router = APIRouter()
 
-STAFF_CHANNELS = {"operations", "kitchen", "staff", "admin", "availability"}
+STAFF_CHANNELS = {"operations", "kitchen", "staff", "admin", "availability", "cinema"}
 ROLE_CHANNELS = {
     "owner": STAFF_CHANNELS,
     "admin": STAFF_CHANNELS,
-    "staff": {"operations", "staff", "availability"},
-    "kitchen": {"kitchen"},
+    "staff": {"operations", "staff", "availability", "cinema"},
+    "kitchen": {"kitchen", "cinema"},
 }
 _active_total = 0
 _active_by_ip: Counter[str] = Counter()
@@ -319,6 +319,8 @@ def _staff_handshake_sync(
         context = _staff_context_from_token(db, token)
         if context is None:
             return None
+        if requested == "cinema" and context.actor.restaurant.venue_type != "cinema":
+            return None
         if requested not in ROLE_CHANNELS.get(context.scope.role, set()):
             return None
         authority = _connection_authority(context, requested)
@@ -414,6 +416,10 @@ def _order_handshake_sync(
     try:
         order = db.query(Order).options(joinedload(Order.dining_session)).filter(Order.public_token == public_token).first()
         if not order:
+            return None
+        # Cinema tracking requires the seat authority token and remains on the
+        # dedicated HTTP endpoint; an opaque order token alone is insufficient.
+        if order.order_context_type == "cinema":
             return None
         participant_session_token: str | None = None
         if order.dining_session:
