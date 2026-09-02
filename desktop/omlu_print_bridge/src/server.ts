@@ -470,7 +470,6 @@ export class PrintBridgeServer {
       }
 
       // ── Legacy Setup Endpoints ────────────────────────────────────────────────
-
       if (method === 'POST' && path === '/v1/kitchen-printer/setup') {
         const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
         const sec = verifySignedToken(token, 'printer:configure');
@@ -540,7 +539,6 @@ export class PrintBridgeServer {
         }, config, billingTransport);
         return this.json(res, result.state === 'completed' ? 200 : 503, { success: result.state === 'completed', message: result.state === 'completed' ? 'Billing printer test completed.' : 'Billing printer unavailable.' });
       }
-
       if (method === 'POST' && path === '/v1/printers/test') {
         const authHeader = req.headers.authorization || '';
         const token = authHeader.replace(/^Bearer\s+/i, '');

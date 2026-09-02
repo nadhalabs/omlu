@@ -617,7 +617,7 @@ export default function AdminSettingsClient() {
             <div className="space-y-2 border-t border-[var(--omlu-border)] px-4 py-4 text-xs leading-5 text-[var(--omlu-text-secondary)]">
               <p>The Desktop Printer Bridge HTTP service runs locally at <code className="font-mono">127.0.0.1:24242</code> and supports Windows RAW Spooler, Driver Spooler, TCP/LAN, and Bluetooth COM transports.</p>
               <p>The Kitchen Printer and Billing Printer are separate network printers with independent IP addresses. Both may use port <code className="font-mono">9100</code>. The bridge port <code className="font-mono">24242</code> is the local HTTP API — do not confuse it with ESC/POS printer ports.</p>
-              <p>Browser printing remains available when the bridge is offline. The developer / hardware test package requires Node.js v18+ and uses <code className="font-mono">npm install --omit=dev && npm start</code>.</p>
+              <p>Browser printing remains available when the bridge is offline. The developer / hardware test package requires Node.js v18+ and uses <code className="font-mono">npm install --omit=dev &amp;&amp; npm start</code>.</p>
               <p>Thermal printers must be connected to the same local network as this device.</p>
             </div>
           </details>

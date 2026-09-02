@@ -24,6 +24,7 @@ export async function printIssuedBill(
   });
 }
 
+
 export async function printCompletedQuickSale(options: { orderNumber: string; publicToken: string; forceIframe?: boolean }): Promise<PrintResult> {
   return printDocument({
     billNumber: options.orderNumber,
@@ -294,7 +295,7 @@ async function browserPrint(options: {
         resolve({ success: false, method: "none", error: "Failed to load printable receipt frame." });
       };
 
-      iframe.src = printUrl;
+      iframe.src = options.printUrl;
       document.body.appendChild(iframe);
     } catch (err) {
       resolve({

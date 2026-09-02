@@ -150,7 +150,7 @@ test("pairing uses existing challenge, exchange, public-key, and local confirmat
     assert.match(settings, new RegExp(`${call}\\(`));
   }
   assert.doesNotMatch(settings, /console\.(?:log|error).*exchange|console\.(?:log|error).*credential/i);
-  assert.match(settings, /INVALID_PAIRING\|WRONG_PAIRING\|expired\|pairing code/i);
+  assert.match(settings, /INVALID_PAIRING|WRONG_PAIRING|expired|pairing code/i);
   assert.match(settings, /Printer Bridge is not paired yet\./);
 });
 

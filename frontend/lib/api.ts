@@ -1869,7 +1869,6 @@ export async function getPrintBridgePublicKey(): Promise<{ public_key_pem: strin
   if (!res.ok || typeof body.public_key_pem !== "string") throw new ApiError(res.status, "Could not load Printer Bridge security key.");
   return { public_key_pem: body.public_key_pem };
 }
-
 export async function listBridgeInstallations(): Promise<{
   installations: PrintBridgeInstallation[];
 }> {

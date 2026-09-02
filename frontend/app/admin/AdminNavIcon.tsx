@@ -51,7 +51,6 @@ function IconPrinter(props: IconProps) {
     </svg>
   );
 }
-
 function Icon({ d, className = "", ...rest }: IconProps & { d: string | string[] }) {
   const paths = Array.isArray(d) ? d : [d];
   return (

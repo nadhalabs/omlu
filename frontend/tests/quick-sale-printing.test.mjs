@@ -21,7 +21,6 @@ test("only completed Takeaway and Late Entry records receive print actions", () 
   const quickSale = read("app/admin/quick-sale/QuickSaleClient.tsx");
   const handlerGuard = quickSale.match(/if \(\(sale\.sale_type[^;]+return;/s)?.[0] || "";
   const actionGuard = quickSale.match(/printSale && \(sale\.sale_type[^}]+/s)?.[0] || "";
-
   // The handler blocks incomplete records and unrelated sale types.
   assert.match(handlerGuard, /sale\.sale_type !== "takeaway" && sale\.sale_type !== "late_entry"/);
   assert.match(handlerGuard, /sale\.status !== "completed"/);
