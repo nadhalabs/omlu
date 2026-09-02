@@ -50,7 +50,7 @@ test("public journey keeps venue context through product, pricing, and registrat
 test("authoritative venue type controls login and reciprocal workspace routing", () => {
   const routes = read("lib/roleRoutes.ts");
   const admin = read("app/admin/layout.tsx");
-  const cinema = read("app/cinema-admin/[[...section]]/page.tsx");
+  const cinema = read("app/cinema-admin/layout.tsx");
   const publicAuth = read("lib/publicAuth.ts");
   const loginPage = read("app/login/page.tsx");
   const registerPage = read("app/register/page.tsx");

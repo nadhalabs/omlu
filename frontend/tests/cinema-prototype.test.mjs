@@ -8,10 +8,27 @@ const root=process.cwd();
 const read=(file)=>fs.readFileSync(path.join(root,file),"utf8");
 
 test("Cinema routes are isolated from Restaurant admin",()=>{
-  assert.match(read("app/cinema-admin/[[...section]]/page.tsx"),/CinemaAdminClient/);
+  const layout=read("app/cinema-admin/layout.tsx");
+  assert.match(layout,/CinemaAdminClient/);
+  assert.match(layout,/staff\.venue_type !== "cinema"/);
   assert.match(read("app/c/[cinemaSlug]/[screenCode]/[seatCode]/page.tsx"),/CinemaCustomerClient/);
   const changedCinemaFiles=["app/cinema-admin/CinemaAdminClient.tsx","lib/cinema/mockService.ts"];
   changedCinemaFiles.forEach(file=>assert.ok(fs.existsSync(path.join(root,file))));
+});
+
+test("Cinema admin uses a persistent Restaurant-style shell for client navigation",()=>{
+  const layout=read("app/cinema-admin/layout.tsx");
+  const page=read("app/cinema-admin/[[...section]]/page.tsx");
+  const client=read("app/cinema-admin/CinemaAdminClient.tsx");
+  assert.match(layout,/<CinemaAdminClient staffName=\{staff\.name\}>\{children\}<\/CinemaAdminClient>/);
+  assert.match(client,/usePathname/);
+  assert.match(client,/AdminSidebarLink/);
+  assert.match(client,/OMLU Admin/);
+  assert.match(client,/lg:w-64/);
+  assert.doesNotMatch(client,/Loading Cinema operations/);
+  assert.doesNotMatch(client,/window\.location(?:\.href)?\s*=/);
+  assert.doesNotMatch(page,/CinemaAdminClient/);
+  assert.match(page,/redirect\("\/cinema-admin\/dashboard"\)/);
 });
 
 test("Cinema mock screen generation preserves seat identity",()=>{

@@ -1,8 +1,9 @@
 "use client";
 /* eslint-disable react-hooks/set-state-in-effect -- async server refreshes reconcile controlled UI state */
 
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
+import type { ReactNode } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import {
   addScreen,
@@ -27,19 +28,21 @@ import type {
   CinemaSeat,
 } from "@/lib/cinema/types";
 import { useRealtime } from "@/lib/realtime";
+import AdminSidebarLink from "@/app/admin/AdminSidebarLink";
+import AdminLogoutButton from "@/app/admin/AdminLogoutButton";
 import s from "./cinema.module.css";
 
 const pages = [
-  ["dashboard", "Dashboard", "⌁"],
-  ["orders", "Orders", "▤"],
-  ["kds", "Concession KDS", "▦"],
-  ["screens", "Screens & Seats", "◫"],
-  ["qr-codes", "QR Codes", "▥"],
-  ["menu", "Menu", "≡"],
-  ["staff", "Staff", "♙"],
-  ["reports", "Reports", "⌇"],
-  ["printing", "Printing", "▣"],
-  ["settings", "Settings", "⚙"],
+  ["dashboard", "Dashboard", "dashboard", "Operations"],
+  ["orders", "Orders", "history", "Operations"],
+  ["kds", "Kitchen Dashboard", "kitchen", "Operations"],
+  ["screens", "Screens & Seats", "tables", "Cinema"],
+  ["qr-codes", "Seat QR Codes", "billing", "Cinema"],
+  ["menu", "Concession Menu", "menu", "Cinema"],
+  ["staff", "Staff", "staff", "Management"],
+  ["reports", "Reports", "performance", "Management"],
+  ["printing", "Printing", "printing", "Management"],
+  ["settings", "Settings", "settings", "Management"],
 ] as const;
 const labels: Record<CinemaOrderStatus, string> = {
   pending: "New",
@@ -914,8 +917,10 @@ function QrCodes({ slug, screens }: { slug: string; screens: CinemaScreen[] }) {
   );
 }
 
-export default function CinemaAdminClient({ section }: { section: string }) {
-  const valid = pages.some((x) => x[0] === section) ? section : "dashboard",
+export default function CinemaAdminClient({ children, staffName }: { children: ReactNode; staffName: string }) {
+  const pathname = usePathname();
+  const requestedSection = pathname.split("/").filter(Boolean)[1] ?? "dashboard";
+  const valid = pages.some((x) => x[0] === requestedSection) ? requestedSection : "dashboard",
     [screens, setScreens] = useState<CinemaScreen[]>([]),
     [orders, setOrders] = useState<CinemaOrder[]>([]),
     [dashboard, setDashboard] = useState<CinemaDashboard | null>(null),
@@ -956,28 +961,19 @@ export default function CinemaAdminClient({ section }: { section: string }) {
     onEvent: () => void refresh(),
     onReconnect: () => void refresh(),
   });
-  if (loading)
-    return (
-      <div className={s.cinema}>
-        <main className={s.page}>
-          <h1>Loading Cinema operations…</h1>
-        </main>
-      </div>
-    );
-  if (error || !dashboard)
-    return (
-      <div className={s.cinema}>
-        <main className={s.page}>
-          <h1>Cinema data unavailable</h1>
-          <p>{error}</p>
-          <button className={s.button} onClick={() => void refresh()}>
-            Retry
-          </button>
-        </main>
-      </div>
-    );
   let content: React.ReactNode;
-  switch (valid) {
+  if (loading) {
+    content = (
+      <div className="flex flex-col gap-6" aria-label="Loading Cinema dashboard">
+        <div className="space-y-3"><div className="omlu-skeleton h-7 w-52 rounded" /><div className="omlu-skeleton h-4 w-80 max-w-full rounded" /></div>
+        <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 lg:grid-cols-4">{Array.from({ length: 8 }).map((_, index) => <div key={index} className="rounded-2xl border border-[var(--omlu-border-strong)] bg-[var(--omlu-primary-surface)] p-5"><div className="omlu-skeleton h-3 w-24 rounded" /><div className="omlu-skeleton mt-4 h-8 w-20 rounded" /></div>)}</div>
+      </div>
+    );
+  } else if (error || !dashboard) {
+    content = (
+      <div className="flex flex-1 items-center justify-center py-20"><div className="max-w-md rounded-2xl border border-[var(--omlu-destructive-border)] bg-[var(--omlu-destructive-background)] p-8 text-center"><h1 className="text-lg font-black">Cinema data unavailable</h1><p className="mt-2 text-sm text-[var(--omlu-destructive-text)]">{error}</p><button className="mt-6 rounded-xl bg-orange-600 px-6 py-2.5 text-sm font-bold text-white" onClick={() => void refresh()}>Retry</button></div></div>
+    );
+  } else switch (valid) {
     case "screens":
       content = <Screens screens={screens} setScreens={setScreens} />;
       break;
@@ -1026,40 +1022,17 @@ export default function CinemaAdminClient({ section }: { section: string }) {
       content = <Dashboard data={dashboard} orders={orders} />;
   }
   return (
-    <div className={s.cinema}>
-      <div className={s.shell}>
-        <aside className={s.sidebar}>
-          <div className={s.brand}>
-            <div className={s.brandMark}>O</div>
-            <div>
-              <strong>OMLU Cinema</strong>
-              <span>Operations</span>
-            </div>
-          </div>
-          <nav className={s.nav}>
-            {pages.map(([path, label, icon]) => (
-              <Link
-                data-active={valid === path}
-                href={`/cinema-admin/${path}`}
-                key={path}
-              >
-                <span className={s.navIcon}>{icon}</span>
-                <span>{label}</span>
-              </Link>
-            ))}
+    <div className={`${s.cinema} flex min-h-screen min-w-0 flex-col bg-[var(--omlu-page-background)] text-[var(--omlu-text-primary)] lg:flex-row`}>
+      <aside className="sticky top-0 z-30 flex w-full shrink-0 flex-col justify-between border-b border-[var(--omlu-border)] bg-[var(--omlu-primary-surface)] p-4 shadow-sm lg:h-dvh lg:w-64 lg:border-b-0 lg:border-r lg:p-6 lg:shadow-none print:hidden">
+        <div className="lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
+          <div className="mb-3 min-w-0 lg:mb-8"><span className="text-[10px] font-extrabold uppercase tracking-widest text-orange-500">OMLU Admin</span><h2 className="mt-1 text-lg font-black">Cinema Operations</h2><p className="mt-1 flex items-center gap-1.5 truncate text-[10px] font-bold text-[var(--omlu-text-secondary)]"><span className="size-2 shrink-0 rounded-full bg-emerald-500" />{dashboard?.cinemaName ?? "Loading venue…"}</p></div>
+          <nav className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 lg:mx-0 lg:flex-col lg:overflow-y-auto lg:px-0 lg:pb-0" aria-label="Cinema admin navigation">
+            {(["Operations", "Cinema", "Management"] as const).map((group) => <div className="contents lg:block" key={group}><p className="mb-2 mt-4 hidden px-4 text-[10px] font-black uppercase tracking-[0.16em] text-[var(--omlu-text-muted)] first:mt-0 lg:block">{group}</p>{pages.filter((page) => page[3] === group).map(([path, label, icon]) => <AdminSidebarLink href={`/cinema-admin/${path}`} label={label} icon={icon} key={path} />)}</div>)}
           </nav>
-        </aside>
-        <main className={s.content}>
-          <header className={s.topbar}>
-            <div className={s.venue}>
-              <i />
-              {dashboard.cinemaName}{" "}
-              <span className={s.pill}>{realtimeStatus}</span>
-            </div>
-          </header>
-          {content}
-        </main>
-      </div>
+        </div>
+        <div className="mt-6 hidden border-t border-[var(--omlu-border)] pt-4 lg:block"><div className="mb-3 flex items-center justify-between text-xs font-bold text-[var(--omlu-text-secondary)]"><span className="truncate">{staffName}</span><span className="rounded-md bg-[var(--omlu-muted-surface)] px-2 py-1 uppercase text-[10px] text-orange-500">{realtimeStatus}</span></div><AdminLogoutButton /></div>
+      </aside>
+      <main className="flex min-w-0 flex-1 flex-col overflow-y-auto p-4 sm:p-6 print:p-0">{content}{children}</main>
     </div>
   );
 }
