@@ -86,6 +86,8 @@ const seat = (value: ApiSeat): CinemaSeat => ({
   layoutX: value.layout_x,
   layoutY: value.layout_y,
   displayOrder: value.position_index,
+  isActive: value.is_active,
+  isAccessible: value.is_accessible,
   status: !value.is_active
     ? "disabled"
     : value.is_accessible

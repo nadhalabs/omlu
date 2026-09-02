@@ -8,7 +8,7 @@ export function generateSeats(screenId: string, rowLabels: string[], seatsPerRow
   return rowLabels.flatMap((row) => Array.from({ length: seatsPerRow }, (_, index) => {
     const number = index + 1;
     const previous = byPosition.get(`${row}:${number}`);
-    return previous ?? { id: `${screenId}-${row}-${number}`, row, number, code: `${row}${number}`, layoutX: index * 64, layoutY: rowLabels.indexOf(row) * 56, displayOrder: rowLabels.indexOf(row) * seatsPerRow + index, status: "active" as const };
+    return previous ?? { id: `${screenId}-${row}-${number}`, row, number, code: `${row}${number}`, layoutX: index * 64, layoutY: rowLabels.indexOf(row) * 56, displayOrder: rowLabels.indexOf(row) * seatsPerRow + index, isActive: true, isAccessible: false, status: "active" as const };
   }));
 }
 

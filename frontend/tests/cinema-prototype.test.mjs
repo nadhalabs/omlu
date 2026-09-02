@@ -40,7 +40,19 @@ test("Cinema mock screen generation preserves seat identity",()=>{
 
 test("Seat designer persists creation, resizing, disabling, editing and QR identity",()=>{
   const source=read("app/cinema-admin/CinemaAdminClient.tsx");
-  for(const behavior of [/No screens yet/,/Create first screen/,/Save Changes/,/Disable seat/,/Public code/,/qrDestination/,/activeSeats\(value\)/]) assert.match(source,behavior);
+  for(const behavior of [/No screens yet/,/Create first screen/,/Save Changes/,/Disable/,/Seat code/,/qrDestination/,/activeSeats\(value\)/]) assert.match(source,behavior);
+});
+
+test("seat editor keeps controls compact and seat fields understandable",()=>{
+  const admin=read("app/cinema-admin/CinemaAdminClient.tsx");
+  const styles=read("app/cinema-admin/cinema.module.css");
+  for(const label of [/Seat code/,/>Row</,/>Seat number</,/>Display order</,/Availability/,/Accessibility/]) assert.match(admin,label);
+  assert.doesNotMatch(admin,/Durable ID/);
+  assert.match(admin,/screenPicker/);
+  assert.match(admin,/editorActions/);
+  assert.match(admin,/screenSettings/);
+  assert.match(styles,/\.screenPicker \.select\{width:190px/);
+  assert.match(styles,/grid-template-columns:minmax\(0,1fr\) 270px/);
 });
 
 test("flexible editor supports uneven rows, manual seats, gaps, selection and persisted dragging",()=>{

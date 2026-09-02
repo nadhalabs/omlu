@@ -16,6 +16,8 @@ export interface CinemaSeat {
   layoutX: number;
   layoutY: number;
   displayOrder: number;
+  isActive: boolean;
+  isAccessible: boolean;
   status: CinemaSeatStatus;
 }
 
