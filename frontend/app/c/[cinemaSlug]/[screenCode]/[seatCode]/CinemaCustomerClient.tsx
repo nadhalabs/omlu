@@ -3,6 +3,8 @@ import { useEffect, useMemo, useState } from "react";
 import { openSeat, placeOrder, trackOrder } from "@/lib/cinema/api";
 import styles from "@/app/cinema-admin/cinema.module.css";
 import type { MenuOptionGroup } from "@/lib/types";
+import { cinemaOperationalStatus } from "@/lib/cinema/types";
+import type { CinemaOrderStatus, CinemaOperationalStatus } from "@/lib/cinema/types";
 type Item = {
   id: number;
   name_en: string;
@@ -16,7 +18,12 @@ type SeatData = {
   screen: { name: string };
   seat: { public_code: string };
 };
-type OrderData = { order_number: string; public_token: string; status: string };
+type OrderData = { order_number: string; public_token: string; status: CinemaOrderStatus };
+const trackingSteps: Array<{ status: CinemaOperationalStatus; label: string }> = [
+  { status: "pending", label: "Order received" },
+  { status: "ready", label: "Ready" },
+  { status: "delivered", label: "Delivered" },
+];
 const money = (n: number) => `₹${n.toLocaleString("en-IN")}`;
 export default function CinemaCustomerClient({
   cinemaSlug,
@@ -145,20 +152,13 @@ export default function CinemaCustomerClient({
             <strong>{location}</strong>
           </div>
           <div className={styles.steps}>
-            {[
-              "pending",
-              "accepted",
-              "preparing",
-              "ready",
-              "out_for_delivery",
-              "delivered",
-            ].map((x) => (
+            {trackingSteps.map((step, index) => (
               <div
                 className={styles.step}
-                data-done={x === order?.status}
-                key={x}
+                data-done={order ? index <= trackingSteps.findIndex((item) => item.status === cinemaOperationalStatus(order.status)) : false}
+                key={step.status}
               >
-                {x.replaceAll("_", " ")}
+                {step.label}
               </div>
             ))}
           </div>

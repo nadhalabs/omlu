@@ -70,9 +70,10 @@ def test_screen_layout_public_authority_and_order_flow(cinema_data):
     again = client.post("/public/cinemas/orders", headers=headers, json=body)
     assert again.json()["id"] == first.json()["id"]
     order_id = first.json()["id"]
-    assert client.patch(f"/api/cinema/orders/{order_id}/status", headers=auth(d["restaurant_token"]), json={"status":"accepted"}).status_code == 403
-    assert client.patch(f"/api/cinema/orders/{order_id}/status", headers=auth(d["other_token"]), json={"status":"accepted"}).status_code == 404
-    for state in ["accepted","preparing","ready","out_for_delivery","delivered"]:
+    assert client.patch(f"/api/cinema/orders/{order_id}/status", headers=auth(d["restaurant_token"]), json={"status":"ready"}).status_code == 403
+    assert client.patch(f"/api/cinema/orders/{order_id}/status", headers=auth(d["other_token"]), json={"status":"ready"}).status_code == 404
+    assert client.patch(f"/api/cinema/orders/{order_id}/status", headers=auth(d["cinema_token"]), json={"status":"accepted"}).status_code == 409
+    for state in ["ready", "delivered"]:
         response = client.patch(f"/api/cinema/orders/{order_id}/status", headers=auth(d["cinema_token"]), json={"status":state})
         assert response.status_code == 200, response.text
     assert client.patch(f"/api/cinema/orders/{order_id}/status", headers=auth(d["cinema_token"]), json={"status":"ready"}).status_code == 409
@@ -84,6 +85,24 @@ def test_screen_layout_public_authority_and_order_flow(cinema_data):
     assert dashboard["active_seats"] == 2
     assert dashboard["disabled_seats"] == 4
     assert dashboard["orders_by_screen"] == [{"screen": "Screen 1", "orders": 1}]
+
+
+@pytest.mark.parametrize(("legacy_status", "next_status"), [("accepted", "ready"), ("preparing", "ready"), ("out_for_delivery", "delivered")])
+def test_legacy_cinema_orders_can_enter_the_simplified_workflow(cinema_data, legacy_status, next_status):
+    db = SessionLocal()
+    source = db.query(Order).filter(Order.restaurant_id == cinema_data["cinema"].id).first()
+    source.status = legacy_status
+    db.commit()
+    order_id = source.id
+    db.close()
+
+    response = client.patch(
+        f"/api/cinema/orders/{order_id}/status",
+        headers=auth(cinema_data["cinema_token"]),
+        json={"status": next_status},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == next_status
 
 
 def test_authority_revocation_and_disabled_seat(cinema_data):

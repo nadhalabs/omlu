@@ -4,6 +4,7 @@ import type {
   CinemaMenuCategory,
   CinemaMenuItem,
   CinemaOrder,
+  CinemaOperationalStatus,
   CinemaOrderStatus,
   CinemaScreen,
   CinemaSeat,
@@ -53,7 +54,7 @@ type ApiDashboard = {
   active_screens: number;
   active_seats: number;
   disabled_seats: number;
-  status_counts: Record<CinemaOrderStatus, number>;
+  status_counts: Record<CinemaOperationalStatus, number>;
   revenue_by_screen: { screen: string; revenue: string }[];
   orders_by_screen: { screen: string; orders: number }[];
   orders_by_seat: { seat: string; orders: number }[];

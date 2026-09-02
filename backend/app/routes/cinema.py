@@ -22,8 +22,13 @@ from app.utils.business_date import current_business_day_bounds_utc, restaurant_
 router = APIRouter()
 ADMIN_ROLES = {"owner", "admin", "staff", "kitchen"}
 TRANSITIONS = {
-    "pending": {"accepted"}, "accepted": {"preparing"}, "preparing": {"ready"},
-    "ready": {"out_for_delivery"}, "out_for_delivery": {"delivered"}, "delivered": set(),
+    "pending": {"ready"},
+    # Legacy Cinema orders remain actionable without exposing the retired stages.
+    "accepted": {"ready"},
+    "preparing": {"ready"},
+    "ready": {"delivered"},
+    "out_for_delivery": {"delivered"},
+    "delivered": set(),
 }
 
 
@@ -287,4 +292,9 @@ def cinema_dashboard(db: Session = Depends(get_db), staff: StaffUser = Depends(c
         orders_by_screen[order.cinema_seat.screen.name] = orders_by_screen.get(order.cinema_seat.screen.name, 0) + 1
         seat_key = f"{order.cinema_seat.screen.name} · {order.cinema_seat.public_code}"
         orders_by_seat[seat_key] = orders_by_seat.get(seat_key, 0) + 1
-    return {"cinema_name": staff.restaurant.name, "cinema_slug": staff.restaurant.slug, "revenue": str(revenue), "order_count": len(orders), "active_order_count": sum(statuses.get(s, 0) for s in ("pending", "accepted", "preparing", "ready", "out_for_delivery")), "average_order_value": str(revenue / len(orders) if orders else 0), "active_screens": sum(1 for s in all_screens if s.is_active), "active_seats": sum(1 for s in seats if s.is_active), "disabled_seats": sum(1 for s in seats if not s.is_active), "status_counts": statuses, "revenue_by_screen": [{"screen": k, "revenue": str(v)} for k, v in screens.items()], "orders_by_screen": [{"screen": k, "orders": v} for k, v in orders_by_screen.items()], "orders_by_seat": [{"seat": k, "orders": v} for k, v in sorted(orders_by_seat.items(), key=lambda x: -x[1])], "top_items": [{"name": k, "quantity": v} for k, v in sorted(items.items(), key=lambda x: -x[1])[:5]]}
+    simplified_statuses = {
+        "pending": sum(statuses.get(s, 0) for s in ("pending", "accepted", "preparing")),
+        "ready": sum(statuses.get(s, 0) for s in ("ready", "out_for_delivery")),
+        "delivered": statuses.get("delivered", 0),
+    }
+    return {"cinema_name": staff.restaurant.name, "cinema_slug": staff.restaurant.slug, "revenue": str(revenue), "order_count": len(orders), "active_order_count": simplified_statuses["pending"] + simplified_statuses["ready"], "average_order_value": str(revenue / len(orders) if orders else 0), "active_screens": sum(1 for s in all_screens if s.is_active), "active_seats": sum(1 for s in seats if s.is_active), "disabled_seats": sum(1 for s in seats if not s.is_active), "status_counts": simplified_statuses, "revenue_by_screen": [{"screen": k, "revenue": str(v)} for k, v in screens.items()], "orders_by_screen": [{"screen": k, "orders": v} for k, v in orders_by_screen.items()], "orders_by_seat": [{"seat": k, "orders": v} for k, v in sorted(orders_by_seat.items(), key=lambda x: -x[1])], "top_items": [{"name": k, "quantity": v} for k, v in sorted(items.items(), key=lambda x: -x[1])[:5]]}

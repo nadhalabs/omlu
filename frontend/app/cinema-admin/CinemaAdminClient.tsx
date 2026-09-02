@@ -22,11 +22,13 @@ import {
 import type {
   CinemaDashboard,
   CinemaMenuCategory,
+  CinemaOperationalStatus,
   CinemaOrder,
   CinemaOrderStatus,
   CinemaScreen,
   CinemaSeat,
 } from "@/lib/cinema/types";
+import { cinemaOperationalStatus } from "@/lib/cinema/types";
 import { useRealtime } from "@/lib/realtime";
 import AdminSidebarLink from "@/app/admin/AdminSidebarLink";
 import AdminLogoutButton from "@/app/admin/AdminLogoutButton";
@@ -35,7 +37,7 @@ import s from "./cinema.module.css";
 const pages = [
   ["dashboard", "Dashboard", "dashboard", "Operations"],
   ["orders", "Orders", "history", "Operations"],
-  ["kds", "Kitchen Dashboard", "kitchen", "Operations"],
+  ["kds", "Concession Orders", "kitchen", "Operations"],
   ["screens", "Screens & Seats", "tables", "Cinema"],
   ["qr-codes", "Seat QR Codes", "billing", "Cinema"],
   ["menu", "Concession Menu", "menu", "Cinema"],
@@ -46,26 +48,27 @@ const pages = [
 ] as const;
 const labels: Record<CinemaOrderStatus, string> = {
   pending: "New",
-  accepted: "Accepted",
-  preparing: "Preparing",
+  accepted: "New",
+  preparing: "New",
   ready: "Ready",
-  out_for_delivery: "Out for delivery",
+  out_for_delivery: "Ready",
   delivered: "Delivered",
 };
 const nextStatus: Partial<Record<CinemaOrderStatus, CinemaOrderStatus>> = {
-  pending: "accepted",
-  accepted: "preparing",
+  pending: "ready",
+  accepted: "ready",
   preparing: "ready",
-  ready: "out_for_delivery",
+  ready: "delivered",
   out_for_delivery: "delivered",
 };
 const nextLabel: Partial<Record<CinemaOrderStatus, string>> = {
-  pending: "Accept",
-  accepted: "Start preparing",
-  preparing: "Mark ready",
-  ready: "Send for delivery",
-  out_for_delivery: "Mark delivered",
+  pending: "Mark Ready",
+  accepted: "Mark Ready",
+  preparing: "Mark Ready",
+  ready: "Mark Delivered",
+  out_for_delivery: "Mark Delivered",
 };
+const operationalStatuses: CinemaOperationalStatus[] = ["pending", "ready", "delivered"];
 const money = (value: number) => `₹${value.toLocaleString("en-IN")}`;
 const total = (order: CinemaOrder) =>
   order.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -531,8 +534,8 @@ function Orders({
   setOrders: React.Dispatch<React.SetStateAction<CinemaOrder[]>>;
   screens: CinemaScreen[];
 }) {
-  const [filter, setFilter] = useState<"all" | CinemaOrderStatus>("all");
-  const visible = orders.filter((x) => filter === "all" || x.status === filter),
+  const [filter, setFilter] = useState<"all" | CinemaOperationalStatus>("all");
+  const visible = orders.filter((x) => filter === "all" || cinemaOperationalStatus(x.status) === filter),
     save = (value: CinemaOrder) =>
       setOrders((old) =>
         old.map((x) => (x.backendId === value.backendId ? value : x)),
@@ -544,17 +547,7 @@ function Orders({
         subtitle="Server-authoritative concession orders. Every transition is persisted before the UI changes."
       />
       <div className={s.toolbar}>
-        {(
-          [
-            "all",
-            "pending",
-            "accepted",
-            "preparing",
-            "ready",
-            "out_for_delivery",
-            "delivered",
-          ] as const
-        ).map((value) => (
+        {(["all", ...operationalStatuses] as const).map((value) => (
           <button
             className={s.screenTab}
             data-active={filter === value}
@@ -609,47 +602,34 @@ function Kds({
   setOrders: React.Dispatch<React.SetStateAction<CinemaOrder[]>>;
   screens: CinemaScreen[];
 }) {
-  const active = orders.filter((x) => x.status !== "delivered"),
-    save = (value: CinemaOrder) =>
+  const save = (value: CinemaOrder) =>
       setOrders((old) =>
         old.map((x) => (x.backendId === value.backendId ? value : x)),
       );
-  const lanes: CinemaOrderStatus[] = [
-    "pending",
-    "accepted",
-    "preparing",
-    "ready",
-    "out_for_delivery",
-  ];
   return (
     <div className={s.kds}>
       <div className={s.kdsHead}>
         <div>
-          <h1>Concession KDS</h1>
-          <p>Persistent screen-and-seat fulfilment</p>
+          <h1>Concession Orders</h1>
+          <p>Prepare and deliver orders to seats</p>
         </div>
         <span className={s.pill}>Backend live</span>
       </div>
       <div className={s.kdsLanes}>
-        {lanes.map((status) => (
+        {operationalStatuses.map((status) => (
           <div className={s.lane} key={status}>
             <div className={s.laneHead}>
               {labels[status]}
-              <span>{active.filter((x) => x.status === status).length}</span>
+              <span>{orders.filter((x) => cinemaOperationalStatus(x.status) === status).length}</span>
             </div>
-            {active
-              .filter((x) => x.status === status)
+            {orders
+              .filter((x) => cinemaOperationalStatus(x.status) === status)
               .map((order) => (
                 <div className={s.ticket} key={order.backendId}>
-                  <div className={s.ticketTop}>
-                    <b className={s.ticketId}>#{order.id}</b>
-                    <span>{order.placedMinutesAgo} min</span>
-                  </div>
                   <div className={s.ticketLocation}>
                     <strong>
-                      {screenFor(screens, order.screenId)?.name.toUpperCase()}
+                      {screenFor(screens, order.screenId)?.name || "Screen"} · Seat {order.seatCode}
                     </strong>
-                    <b>{order.seatCode}</b>
                   </div>
                   <div className={s.ticketItems}>
                     {order.items.map((item) => (
@@ -669,6 +649,10 @@ function Kds({
                       Note: {order.items.find((x) => x.note)?.note}
                     </div>
                   )}
+                  <div className={s.ticketTop}>
+                    <b>Order #{order.id}</b>
+                    <span>Placed {order.placedMinutesAgo} min ago</span>
+                  </div>
                   <TransitionButton order={order} onSaved={save} />
                 </div>
               ))}
@@ -713,16 +697,7 @@ function Dashboard({
           <h2>Current fulfilment</h2>
         </div>
         <div className={s.statusStrip}>
-          {(
-            [
-              "pending",
-              "accepted",
-              "preparing",
-              "ready",
-              "out_for_delivery",
-              "delivered",
-            ] as CinemaOrderStatus[]
-          ).map((status) => (
+          {operationalStatuses.map((status) => (
             <div className={s.statusStat} key={status}>
               <strong>{data.statusCounts[status] || 0}</strong>
               <span>{labels[status]}</span>

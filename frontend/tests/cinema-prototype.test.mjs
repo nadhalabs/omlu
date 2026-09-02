@@ -46,14 +46,19 @@ test("Seat designer persists creation, resizing, disabling, editing and QR ident
 test("KDS, orders and customer tracking use authoritative Cinema services",()=>{
   const admin=read("app/cinema-admin/CinemaAdminClient.tsx");
   const customer=read("app/c/[cinemaSlug]/[screenCode]/[seatCode]/CinemaCustomerClient.tsx");
-  assert.match(admin,/Send for delivery/);
-  assert.match(admin,/Mark delivered/);
+  assert.match(admin,/Concession Orders/);
+  assert.match(admin,/Prepare and deliver orders to seats/);
+  assert.match(admin,/pending: "ready"/);
+  assert.match(admin,/ready: "delivered"/);
+  assert.match(admin,/Mark Delivered/);
   assert.match(admin,/advanceOrder/);
   assert.match(admin,/Server-authoritative concession orders/);
   assert.match(admin,/useRealtime/);
   assert.match(customer,/screenCode/);
   assert.match(customer,/Seat \{seat\.code\}/);
   assert.match(customer,/Place order/);
+  assert.match(customer,/Order received/);
+  assert.doesNotMatch(customer,/"accepted"|"preparing"|"out_for_delivery"/);
 });
 
 test("production Cinema admin does not import mock runtime data",()=>{

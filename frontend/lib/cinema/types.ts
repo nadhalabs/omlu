@@ -1,5 +1,12 @@
 export type CinemaSeatStatus = "active" | "disabled" | "accessible";
 export type CinemaOrderStatus = "pending" | "accepted" | "preparing" | "ready" | "out_for_delivery" | "delivered";
+export type CinemaOperationalStatus = "pending" | "ready" | "delivered";
+
+export const cinemaOperationalStatus = (status: CinemaOrderStatus): CinemaOperationalStatus => {
+  if (status === "accepted" || status === "preparing") return "pending";
+  if (status === "out_for_delivery") return "ready";
+  return status;
+};
 
 export interface CinemaSeat {
   id: string;
@@ -56,7 +63,7 @@ export interface CinemaSettings {
 
 export interface CinemaDashboard {
   cinemaName:string; cinemaSlug:string; revenue:number; orderCount:number; activeOrderCount:number; averageOrderValue:number;
-  activeScreens:number; activeSeats:number; disabledSeats:number; statusCounts:Record<CinemaOrderStatus,number>;
+  activeScreens:number; activeSeats:number; disabledSeats:number; statusCounts:Record<CinemaOperationalStatus,number>;
   revenueByScreen:{screen:string;revenue:number}[]; ordersByScreen:{screen:string;orders:number}[];
   ordersBySeat:{seat:string;orders:number}[]; topItems:{name:string;quantity:number}[];
 }
